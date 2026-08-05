@@ -1,0 +1,526 @@
+schema_version: 2
+matrix_id: cassette-first-complete-release
+scope_mode: GENERAL_PRODUCT
+initial_status: NOT_RUN
+amended: 2026-08-05
+remit_authority: ../ORIGINAL_REMIT.md (amended 2026-08-05)
+thesis: >-
+  Frontier-class capability on consumer Apple hardware: the cartridge carries the parameter mass,
+  the consumer machine does the work it was built to do. Release gates measure the machine against
+  its own unaided ceiling (B_native) and the model's own reference (B_teacher); the laboratory gap
+  is measured and published, never gated.
+
+completion_rule:
+  required_status: PASS
+  forbidden_terminal_substitutes:
+    - NOT_RUN
+    - BLOCKED
+    - SKIPPED
+    - SUBSTITUTED
+    - SIMULATED
+    - REMOTE
+    - FAIL
+  require_live_evidence: true
+  require_one_reproducible_completion_digest: true
+  expression: >-
+    every required expanded row is PASS and LIVE_PROVEN under its declared gate tier
+    (FRONTIER_CLASS for thesis rows, floors plus Q17 PARITY tier for mild-transform rows,
+    correctness for TEACHER_CORRECTNESS rows), the F4 and F5 gates passed before any frontier
+    compiled row ran, Q78 exact accounting is PASS, Q79 offline proof is PASS, and no required
+    row used a remote model at runtime or a personal-device anecdote
+
+threshold_contracts:
+  quality: Q17 (tiered)
+  long_tail_and_capacity: Q18 (tiered)
+  working_set: Q19
+  thermal: Q48
+  service_gates: Q68 (floors / FRONTIER_CLASS / PARITY)
+  tails: Q69
+  training: Q70
+
+baselines:
+  b_teacher_per_model:
+    contract: Q13
+    definition: the model's own full-capacity reference execution (hosted or declared server class)
+    manifest: required_at_freeze
+  b_hosted_per_model:
+    contract: Q13
+    definition: laboratory service where an equivalent one exists; Q67 field statuses recorded
+    manifest: required_at_freeze_or_marked_non_equivalent
+  b_native_c1:
+    contract: Q13 selection rule over NativeSet(c1_air_32)
+    definition: strongest openly downloadable model executing natively within c1 with no cartridge
+    pinned: required_at_freeze
+  b_native_c2:
+    contract: Q13 selection rule over NativeSet(c2_max_128)
+    definition: strongest openly downloadable model executing natively within c2 with no cartridge
+    pinned: required_at_freeze
+
+compute_provenance:
+  runtime_inference_and_training: apple_hardware_plus_cartridge_only
+  frontier_compilation: >-
+    external compute permitted once per transform, recorded completely in the open reproducible
+    transform manifest; the resulting cartridge verifies by identity like any acquired artifact
+    (remit ruling 2026-08-05)
+
+immutable_models:
+  kimi_k3:
+    source: huggingface
+    locator: moonshotai/Kimi-K3
+    revision: 9f62e4e9fffbd0a83ddd60e1c209d828994b3569
+    artifact_bytes: 1560936091448
+    role: frontier_level_exemplar
+    required_capabilities:
+      - text
+      - vision
+      - reasoning_history
+      - tools
+      - structured_output
+      - multi_turn
+      - long_context
+  llama_4_scout:
+    source: huggingface
+    locator: meta-llama/Llama-4-Scout-17B-16E-Instruct
+    revision: 92f3b1597a195b523d8d9e5700e57e4fbb8f20d3
+    repository_artifact_bytes: 217315712145
+    required_capabilities:
+      - text
+      - reasoning
+      - tools
+      - structured_output
+      - multi_turn
+      - long_context
+  qwen3_235b_a22b:
+    source: huggingface
+    locator: Qwen/Qwen3-235B-A22B-Instruct-2507
+    revision: ac9c66cc9b46af7306746a9250f23d47083d689e
+    repository_artifact_bytes: 470211497053
+    required_capabilities:
+      - text
+      - reasoning
+      - tools
+      - structured_output
+      - multi_turn
+      - long_context
+
+frontier_reference_rule:
+  definition: open downloadable revision with total_bytes >= 1e12 and native_active_state > M_ceiling(target class)
+  exemplar: kimi_k3
+  substitution: >-
+    an equal-or-greater-level open model with a smaller fixed-path fraction may replace the
+    exemplar as a recorded remit-level decision; a conveniently smaller model remains forbidden
+
+apple_classes:
+  c1_air_32:
+    role: THESIS
+    chip_family: M5
+    product_class: MacBook Air
+    unified_memory_bytes: 34359738368
+    specified_memory_bandwidth_bytes_per_second: 153000000000
+    cooling: fanless
+    required_os_build: recorded_at_run
+  c2_max_128:
+    role: CONSUMER_PRO
+    chip_family: M5 Max
+    product_class: MacBook Pro
+    unified_memory_bytes: 137438953472
+    specified_memory_bandwidth_bytes_per_second: 614000000000
+    cooling: active
+    required_os_build: recorded_at_run
+  c3_ultra_512:
+    role: INFRASTRUCTURE
+    chip_family: M3 Ultra
+    product_class: Mac Studio
+    unified_memory_bytes: 549755813888
+    specified_memory_bandwidth_bytes_per_second: 819000000000
+    cooling: active
+    required_os_build: recorded_at_run
+
+storage_classes:
+  s1_usb4_nvme_2tb:
+    media: NVMe_SSD
+    filesystem: APFS
+    transport: USB4_40Gbps
+    minimum_decimal_capacity_bytes: 2000000000000
+    profile_contract: Q41-Q44
+    measured_profile_digest: required_at_run
+    endurance_profile_digest: required_at_run
+    writable_training: true
+  s2_tb5_nvme_2tb:
+    media: NVMe_SSD
+    filesystem: APFS
+    transport: Thunderbolt_5
+    minimum_decimal_capacity_bytes: 2000000000000
+    profile_contract: Q41-Q44
+    measured_profile_digest: required_at_run
+    writable_training: false
+  s3_tb5_nvme_4tb_writable:
+    media: NVMe_SSD
+    filesystem: APFS
+    transport: Thunderbolt_5
+    minimum_decimal_capacity_bytes: 4000000000000
+    profile_contract: Q41-Q44
+    measured_profile_digest: required_at_run
+    endurance_profile_digest: required_at_run
+    writable_training: true
+
+fixture_gate_rows:
+  - id: f4_gate
+    required: true
+    blocking: [exec_c1_s1_frontier_compiled, exec_c3_s3_k3_compiled_portability]
+    contract: Q36 F4 GATE
+    model_class: 3-8B dense, permissive license
+    pass_condition: >-
+      compiled prompt-persistent revision with touched_bytes_per_token <= 0.25 * native_active_bytes
+      passes Q19 stability and paired lower95CI(Qc/Q_teacher) >= 0.95 across Q15 strata within a
+      predeclared training budget
+    failure_consequence: Q38 record and mechanism revision before any frontier work
+  - id: f5_gate
+    required: true
+    blocking: [exec_c1_s1_frontier_compiled, exec_c3_s3_k3_compiled_portability]
+    contract: Q36 F5 GATE plus Q37 curves
+    model_class: 20-120B sparse
+    pass_condition: >-
+      F4 predicates at scale plus retention-versus-compression curves whose predicted frontier
+      point clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget
+    failure_consequence: Q38 record and mechanism revision; frontier compiled rows remain refused
+
+source_rows:
+  - id: source_huggingface_all_immutable_models
+    required: true
+    operation: direct_to_cartridge_acquisition
+    model_set:
+      - kimi_k3
+      - llama_4_scout
+      - qwen3_235b_a22b
+    assertions:
+      - immutable_revision_locked
+      - exact_capacity_admitted_before_transfer
+      - ranged_resume_pass
+      - final_source_digest_pass
+      - no_internal_model_file
+  - id: source_ollama_content_addressed_reimport
+    required: true
+    operation: direct_to_cartridge_acquisition
+    input: pinned_ollama_manifest_and_blobs_generated_from_llama_4_scout_revision
+    generated_identity_digest: required_at_run
+    assertions:
+      - manifest_and_blob_digests_preserved
+      - semantic_manifest_complete
+      - no_source_specific_lifecycle_fork
+  - id: source_tinker_export_reimport
+    required: true
+    operation: direct_to_cartridge_acquisition
+    input: pinned_tinker_export_of_q70_child_revision
+    generated_identity_digest: required_at_run
+    assertions:
+      - exported_weight_identity_preserved
+      - parent_and_training_provenance_preserved
+      - no_source_specific_lifecycle_fork
+
+execution_rows:
+  - id: exec_c1_s1_frontier_compiled
+    required: true
+    role: THESIS_HEADLINE
+    apple_class: c1_air_32
+    storage_class: s1_usb4_nvme_2tb
+    model: frontier_reference (exemplar kimi_k3)
+    mode: COMPILED_PROMPT_PERSISTENT
+    precondition: f5_gate PASS
+    gate_tier: FRONTIER_CLASS
+    gates:
+      - q68_usability_floors
+      - q68_value_gate_vs_b_native_c1
+      - q68_position_gate_vs_b_teacher
+      - q18_capacity_proof
+      - q68_honesty_vector_published
+    required_context_tests:
+      - ordinary
+      - 131072_tokens
+    training_tiers:
+      - A
+      - B
+  - id: exec_c1_s1_scout_least_invasive
+    required: true
+    role: CONSUMER_GENERAL
+    apple_class: c1_air_32
+    storage_class: s1_usb4_nvme_2tb
+    model: llama_4_scout
+    mode: LEAST_INVASIVE_PASSING_Q40_MODE
+    gate_tier: floors_plus_q17_parity_tier
+    required_context_tests:
+      - ordinary
+      - declared_maximum
+    training_tiers:
+      - A
+  - id: exec_c2_s2_qwen_least_invasive
+    required: true
+    role: CONSUMER_PRO
+    apple_class: c2_max_128
+    storage_class: s2_tb5_nvme_2tb
+    model: qwen3_235b_a22b
+    mode: LEAST_INVASIVE_PASSING_Q40_MODE
+    gate_tier: floors_plus_q17_parity_tier
+    required_context_tests:
+      - ordinary
+      - declared_maximum
+    training_tiers: []
+  - id: exec_c3_s2_k3_native_teacher
+    required: true
+    role: TEACHER_CORRECTNESS
+    apple_class: c3_ultra_512
+    storage_class: s2_tb5_nvme_2tb
+    model: kimi_k3
+    mode: NATIVE_SOURCE_ROUTING
+    gate_tier: correctness_and_honest_reporting_only
+    falsified_parity_claim: E-011
+    duties:
+      - native_routing_correctness
+      - declared_capability_correctness_including_1048576_context
+      - teacher_trace_generation_for_compilation
+      - absolute_service_report
+    forbidden_labels:
+      - FRONTIER_CLASS
+      - PARITY
+      - NEAR_LABORATORY
+    required_context_tests:
+      - ordinary
+      - 131072_tokens
+      - 1048576_tokens
+    training_tiers: []
+  - id: exec_c3_s3_k3_compiled_portability
+    required: true
+    role: PORTABILITY_AND_TRAINING
+    apple_class: c3_ultra_512
+    storage_class: s3_tb5_nvme_4tb_writable
+    model: kimi_k3
+    mode: COMPILED_PROMPT_PERSISTENT
+    precondition: f5_gate PASS
+    gate_tier: q68_usability_floors_plus_portability
+    portability_assertions:
+      - same_cartridge_pages_as_c1_row_no_weight_duplication (Q11, Q59)
+    required_context_tests:
+      - ordinary
+      - 131072_tokens
+      - 1048576_tokens
+    training_tiers:
+      - A
+      - B
+
+workload_suites:
+  - id: capability_complete_q16
+    required: true
+    expand_over: execution_rows
+    cases:
+      - ordinary_warm
+      - ordinary_cold
+      - reasoning
+      - coding_with_executable_tests
+      - tool_round_trip
+      - structured_output_schema
+      - multi_turn_state
+      - declared_context_boundaries
+      - declared_modalities
+      - cancellation
+      - recovery
+    assertions:
+      - q10_semantics
+      - q17_quality_at_row_tier
+      - q18_long_tail_at_row_tier
+      - q19_working_set
+      - q68_gate_tier_service
+      - q69_tail_latency
+  - id: sustained_q48
+    required: true
+    expand_over: execution_rows
+    minimum_minutes: 120
+    minimum_generated_tokens: 20000
+    assertions:
+      - every_post_warmup_window_passes_row_gate_tier
+      - throughput_decay_at_most_10_percent
+      - no_integrity_error
+
+agent_clients:
+  codex:
+    authority: pinned_openai_responses_and_codex_schema
+  ollama:
+    authority: pinned_ollama_api_schema
+  openclaw:
+    authority: pinned_openclaw_http_and_gateway_schema
+  hermes:
+    authority: pinned_hermes_agent_api_schema
+  custom:
+    authority: cassette_q31_schema
+
+protocol_cross_product:
+  id: every_execution_row_every_named_agent
+  required: true
+  expand:
+    execution_rows: all
+    agent_clients: all
+  required_traces:
+    - discovery_and_negotiation
+    - text_stream
+    - reasoning_stream_when_declared
+    - tool_call_and_result_when_declared
+    - structured_output_when_declared
+    - cancellation
+    - typed_error
+    - status
+  assertions:
+    - q76_bidirectional_conformance
+    - q77_capability_stability
+    - no_fabricated_feature
+
+training_rows:
+  - id: train_c1_s1_frontier_tier_a
+    required: true
+    execution_row: exec_c1_s1_frontier_compiled
+    operations:
+      - adapter_sft_131072_tokens
+      - offline_adapter_dpo_1024_pairs
+      - adapter_continued_pretraining_1048576_tokens
+  - id: train_c1_s1_frontier_tier_b
+    required: true
+    execution_row: exec_c1_s1_frontier_compiled
+    operations:
+      - prompt_router_recovery_32768_traces
+      - every_precision_tier_recovery
+  - id: train_c1_s1_scout_tier_a
+    required: true
+    execution_row: exec_c1_s1_scout_least_invasive
+    operations:
+      - adapter_sft_131072_tokens
+      - offline_adapter_dpo_1024_pairs
+      - adapter_continued_pretraining_1048576_tokens
+  - id: train_c3_s3_frontier_tier_a
+    required: true
+    execution_row: exec_c3_s3_k3_compiled_portability
+    operations:
+      - adapter_sft_131072_tokens
+      - offline_adapter_dpo_1024_pairs
+      - adapter_continued_pretraining_1048576_tokens
+  - id: train_c3_s3_frontier_tier_b
+    required: true
+    execution_row: exec_c3_s3_k3_compiled_portability
+    operations:
+      - prompt_router_recovery_32768_traces
+      - every_precision_tier_recovery
+  - id: train_dense_fixture_tier_a
+    required: true
+    fixture_stage: F4
+    operations:
+      - adapter_sft_131072_tokens
+      - offline_adapter_dpo_1024_pairs
+      - adapter_continued_pretraining_1048576_tokens
+    assertion: same_drive_resident_dataflow_and_commit_path_as_frontier_rows
+
+training_assertions:
+  required_for_every_training_row:
+    - q23_placement
+    - q25_interrupt_resume
+    - q28_write_meter
+    - q53_capacity_reservation
+    - q70_quality
+    - q71_dataflow
+    - q72_optimizer_equivalence
+    - q73_atomic_child
+    - q74_endurance_admission
+    - resulting_revision_callable_through_all_agent_clients
+
+failure_rows:
+  required: true
+  expand_over_operations:
+    - acquisition
+    - compilation
+    - inference_prefill
+    - inference_decode
+    - training
+    - export
+    - repair
+  injections:
+    - process_death_at_every_durable_boundary
+    - cartridge_disconnect
+    - reconnect_same_identity
+    - reconnect_wrong_identity
+    - sleep_wake
+    - bus_reset
+    - port_migration
+    - readonly_remount
+    - insufficient_capacity_before_start
+    - insufficient_capacity_during_candidate_write
+    - corrupt_page
+    - corrupt_index
+    - corrupt_root
+    - source_revision_change_during_transfer
+    - invalid_gradient_nan_inf
+    - cancellation
+  assertions:
+    - no_partial_callable_revision
+    - exact_typed_error
+    - parent_or_exact_child_recovery
+    - no_stale_handle_use
+    - no_uncommitted_token
+    - no_internal_model_file
+
+offline_and_privacy_rows:
+  - id: offline_inference_all_execution_rows
+    required: true
+    expand_over: execution_rows
+    external_network: disabled
+    allowed_network:
+      - loopback_agent_protocol
+    assertions:
+      - no_remote_model_request
+      - no_dns_or_external_socket
+      - source_and_page_identity_verified
+      - no_internal_full_checkpoint
+      - prompt_and_output_persistence_matches_manifest
+  - id: offline_training_all_training_rows
+    required: true
+    expand_over: training_rows
+    external_network: disabled
+    allowed_network:
+      - loopback_agent_protocol
+    assertions:
+      - all_model_dataset_optimizer_checkpoint_and_journal_state_on_cartridge
+      - no_remote_gradient_or_model_request
+      - credential_isolation
+
+minimum_code_rows:
+  - id: q78_exact_accounting
+    required: true
+    assertions:
+      - clean_build_reproduces_metric_J
+      - no_new_general_numerical_kernel
+      - no_duplicate_identity_or_transaction_authority
+      - every_model_specific_variation_is_data_or_justified
+      - every_remaining_original_component_has_removal_failure
+
+falsified_claims:
+  - id: former_exec_c3_s2_k3_native_parity
+    date: 2026-08-05
+    mechanism: NATIVE_SOURCE_ROUTING service parity on c3_ultra_512
+    bound: >-
+      139,431,402,496 active bytes per token / 819e9 B/s = 170.2 ms per token, a 5.87 tok/s
+      ceiling at 100% utilization, below the Q68 10 tok/s floor
+    evidence: E-011
+    disposition: row reclassified TEACHER_CORRECTNESS per Q38/Q39 reopen machinery; boundary not lowered
+
+forbidden_completion_evidence:
+  - paper
+  - literature_review
+  - simulator_only
+  - benchmark_harness_only
+  - diagnostic_fixture_below_F6
+  - small_model_only
+  - personal_device_anecdote
+  - human_facing_demonstration
+  - remote_inference_substitution
+  - manually_overridden_status
+  - suppressed_honesty_vector_component
+
+result:
+  status: NOT_RUN
+  completion_digest: null
+  evidence_bundle: null
