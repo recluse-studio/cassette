@@ -80,7 +80,7 @@ steps:
     expected_size: small
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
-    status: DONE 2026-08-05 — step commit 8cf0d10; reopened by review R1, repaired in d763d74 (clean-checkout clone proof, tracked-artifact check, exact-pin parser, citation resolution); pins pytest==9.1.1 / python ==3.13.* (revisit recorded at S06)
+    status: DONE 2026-08-05 — step commit 8cf0d10; reopened by review R1 (repaired d763d74) and review R2 (repaired 3958650: fail-closed checks, no wildcard pins, assertion authorities, mechanical commit law); pins pytest==9.1.1 / python ==3.13.* (revisit recorded at S06)
 
   - id: S02
     title: Canonical error vocabulary
@@ -90,7 +90,7 @@ steps:
     expected_size: small
     done_when: full suite + ledger green
     depends: [S01]
-    status: DONE 2026-08-05 — step commit 28bca29; reopened by review R1, repaired in d763d74 (Q6 payload type enforcement); suite 5 passed, ledger clean. Environment note: the sandbox mount permits rename but not unlink on git lock files, so agents sweep them into .git/stale-locks/ before and after git operations. No principal action required.
+    status: DONE 2026-08-05 — step commit 28bca29; reopened by review R1 (repaired d763d74: Q6 payload type enforcement), R2 clean for S02 rows; suite 5 passed, ledger clean. Environment note: the sandbox mount permits rename but not unlink on git lock files, so agents sweep them into .git/stale-locks/ before and after git operations. No principal action required.
 
   - id: S03
     title: Generated schemas and validators
