@@ -83,7 +83,7 @@ steps:
     expected_size: small
     done_when: full suite + ledger green
     depends: [S01]
-    status: TODO
+    status: DONE 2026-08-05 — ledger clean, suite 5 passed, 25 product LOC; COMMIT PENDING: stale host git locks (.git/index.lock, HEAD.lock, objects/maintenance.lock) block git from the sandbox; principal clears with rm, then commit "S02" lands
 
   - id: S03
     title: Generated schemas and validators
