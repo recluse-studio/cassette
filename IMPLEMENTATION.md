@@ -73,7 +73,7 @@ steps:
     expected_size: small
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
-    status: TODO
+    status: DONE 2026-08-05 — ledger clean (exit 0), suite 2 passed, pins pytest==9.1.1 / python ==3.13.* (product pin, revisit recorded at S06); commit "S01"
 
   - id: S02
     title: Canonical error vocabulary

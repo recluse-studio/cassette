@@ -1,0 +1,16 @@
+# pyproject.toml — project identity and the J dependency record (AGENTS.md: pins are part of J); depends on (none).
+[project]
+name = "cassette"
+version = "0.0.1"
+description = "Frontier-class models on consumer Apple hardware from an external drive-resident cartridge."
+license = { text = "Apache-2.0" }
+# Product interpreter pin (macOS runners). env:any steps are additionally exercised on the
+# sandbox interpreter (3.10); this pin is confirmed or revised, with recorded cause, at the
+# first env:macos step (S06).
+requires-python = "==3.13.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
