@@ -21,6 +21,7 @@ import ast
 import io
 import json
 import re
+import subprocess
 import sys
 import tokenize
 from pathlib import Path
@@ -42,7 +43,22 @@ ALLOWED_EDGES = {
 }
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
 HEADER_RE = re.compile(r"^# (?P<name>\S+) — .+; depends on (?P<deps>.+)\.\s*$")
-CITATION_RE = re.compile(r"Q\d+|exec_[a-z0-9_]+|train_[a-z0-9_]+|source_[a-z0-9_]+|f[45]_gate|q7[89]_[a-z_]+")
+CITATION_RE = re.compile(r"Q\d+|[a-z][a-z0-9_]*_[a-z0-9_]+")
+# Exact pin: name, optional extras, ==version; an optional environment marker may follow ';'.
+PIN_RE = re.compile(r"^[A-Za-z0-9_.\-]+(\[[A-Za-z0-9_,\-]+\])?==[A-Za-z0-9_.\-+*!]+$")
+TRACKED_ARTIFACT_RE = re.compile(r"(^|/)__pycache__(/|$)|\.py[co]$|(^|/)\.pytest_cache(/|$)")
+
+
+def load_authorities(root: Path) -> set[str]:
+    """The real citation targets: question_ids from RESEARCH.md, row ids from the matrix."""
+    authorities: set[str] = set()
+    research = root / "research" / "RESEARCH.md"
+    if research.exists():
+        authorities |= set(re.findall(r"question_id: (Q\d+)", research.read_text(encoding="utf-8")))
+    matrix = root / "research" / "ACCEPTANCE_MATRIX.yaml"
+    if matrix.exists():
+        authorities |= set(re.findall(r"^\s*-?\s*id: ([A-Za-z0-9_]+)\s*$", matrix.read_text(encoding="utf-8"), re.M))
+    return authorities
 
 
 def classify(path: Path) -> str:
@@ -153,31 +169,59 @@ def check_pins(root: Path) -> tuple[list[str], list[str]]:
         for block in dep_blocks:
             deps.extend(re.findall(r'"([^"]+)"', block))
         python_pin = next(iter(re.findall(r'requires-python\s*=\s*"([^"]+)"', text)), "")
-    violations = [f"pyproject.toml: dependency '{d}' lacks an exact == pin" for d in deps if "==" not in d]
-    if "==" not in python_pin:
+    violations = [
+        f"pyproject.toml: dependency '{d}' is not an exact name==version pin"
+        for d in deps
+        if not PIN_RE.match(d.split(";")[0].strip())
+    ]
+    if not re.match(r"^==\d+\.\d+(\.\*|\.\d+)?$", python_pin.strip()):
         violations.append("pyproject.toml: requires-python lacks an exact minor pin")
     return sorted(deps), violations
 
 
-def check_test_citations(root: Path, rel: Path) -> list[str]:
+def check_tracked_artifacts(root: Path) -> list[str]:
+    """Build artifacts must never be tracked: caches inflate shipped bytes and evade the LOC scan."""
+    if not (root / ".git").exists():
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "ls-files"], capture_output=True, text=True, timeout=30
+        )
+    except OSError:
+        return []
+    if proc.returncode != 0:
+        return []
+    bad = sorted(f for f in proc.stdout.splitlines() if TRACKED_ARTIFACT_RE.search(f))
+    return [f"tracked build artifact (untrack it and keep it ignored): {f}" for f in bad]
+
+
+def check_test_citations(root: Path, rel: Path, authorities: set[str]) -> list[str]:
+    """A citation must resolve to a real authority (Q29/Tests law); Q999 is not a citation."""
     violations = []
     tree = ast.parse((root / rel).read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
             doc = ast.get_docstring(node) or ""
-            if not CITATION_RE.search(node.name) and not CITATION_RE.search(doc):
+            cited = set(CITATION_RE.findall(node.name)) | set(CITATION_RE.findall(doc))
+            if not authorities:
+                if not cited:
+                    violations.append(f"{rel}::{node.name}: orphan test — no invariant cited")
+                continue
+            if not (cited & authorities):
                 violations.append(
-                    f"{rel}::{node.name}: orphan test — cite the Qn acceptance_check or matrix row it executes"
+                    f"{rel}::{node.name}: orphan test — citations {sorted(cited) or ['(none)']} "
+                    "resolve to no Qn acceptance_check or matrix row id"
                 )
     return violations
 
 
 def run(root: Path) -> dict:
     files = discover(root)
+    authorities = load_authorities(root)
     repo_modules = PRODUCT_MODULES | {"schema", "adapters", "tools", "tests"} | {f.stem for f in files if len(f.parts) == 1}
     loc = {"product": 0, "tools": 0, "tests": 0}
     generated_loc = 0
-    violations: list[str] = []
+    violations: list[str] = list(check_tracked_artifacts(root))
 
     for rel in files:
         cls = classify(rel)
@@ -202,7 +246,7 @@ def run(root: Path) -> dict:
             if imports_mlx(root, rel) and rel.name not in MLX_ALLOWED_FILES:
                 violations.append(f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)")
         if cls == "tests":
-            violations.extend(check_test_citations(root, rel))
+            violations.extend(check_test_citations(root, rel, authorities))
 
     pins, pin_violations = check_pins(root)
     violations.extend(pin_violations)

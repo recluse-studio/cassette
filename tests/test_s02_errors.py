@@ -29,9 +29,13 @@ def test_error_shape_is_q6_exactly_and_round_trips():
 
 
 def test_vocabulary_is_closed_q6_q32():
-    """Q6/Q32: one error authority — unknown codes, retryabilities, and empty fields are defects."""
+    """Q6/Q32: one error authority — unknown codes, retryabilities, wrong types, and empty fields are defects."""
     with pytest.raises(ValueError):
         make(code="SOMETHING_NEW")
+    with pytest.raises(ValueError):
+        CassetteError(code="PAGE_CORRUPT", object_id=123, failed_invariant="x", retryability="terminal")
+    with pytest.raises(ValueError):
+        CassetteError(code="PAGE_CORRUPT", object_id="x", failed_invariant="x", retryability="terminal", detail=None)
     with pytest.raises(ValueError):
         make(retryability="maybe")
     with pytest.raises(ValueError):

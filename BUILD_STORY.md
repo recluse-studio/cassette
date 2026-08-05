@@ -393,3 +393,21 @@ Entries belong here at step closeouts worth remembering, at every gate outcome �
 at blocked reports and their resolutions, at the phase boundary, and at any moment where Drew’s
 correction changes the course of the work, because the chapters above demonstrate that the
 corrections are the story. It begins with the first command against the queue.
+
+### Entry 1 — 2026-08-05, review R1 reopens the first two steps
+
+S01 and S02 closed green in under an hour, and Drew did the correct thing with that speed: he
+distrusted it, and sent a second agent to review the work statically. Six findings came back, all
+correct, the sharpest one meta: "the stages wrote narrow checks, passed those checks, and
+overlooked defects in the checks themselves." The reproducibility test had never seen a clean
+checkout. Tracked bytecode caches were invisible to the very accounting that exists to count
+shipped bytes. The pin check grepped for `==` and would have blessed a marker-masked unpinned
+dependency. Citations were recognized by shape rather than resolved against authority — Q999
+would have passed. The error payload validated membership but not types. And the DONE ritual as
+written was impossible, because a commit cannot contain its own hash. The repairs closed classes,
+not instances, and the ritual became two commits. Between the findings sat a smaller lesson from
+the same day: an environment quirk (a mount that permits rename but not unlink) was escalated to
+Drew one workaround too early, and his one-line question — "delete an artifact you made?" — sent
+the agent back to find `mv` where `rm` failed. First lessons of Chapter 2, recorded for the
+paper: one agent’s green is a hypothesis, a second agent’s review is part of the machine, and the
+human’s questions keep finding the assumption underneath the answer.

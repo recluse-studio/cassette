@@ -65,6 +65,9 @@ class CassetteError(Exception):
     detail: str = ""
 
     def __post_init__(self) -> None:
+        for name in ("code", "object_id", "failed_invariant", "retryability", "detail"):
+            if not isinstance(getattr(self, name), str):
+                raise ValueError(f"{name} must be str — the Q6 payload is a machine contract")
         if self.code not in CODES:
             raise ValueError(f"unknown error code {self.code!r}; the vocabulary is closed (Q6/Q32)")
         if self.retryability not in RETRYABILITY:
