@@ -44,9 +44,12 @@ ALLOWED_EDGES = {
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
 HEADER_RE = re.compile(r"^# (?P<name>\S+) — .+; depends on (?P<deps>.+)\.\s*$")
 CITATION_RE = re.compile(r"Q\d+|[a-z][a-z0-9_]*_[a-z0-9_]+")
-# Exact pin: name, optional extras, ==version; an optional environment marker may follow ';'.
-PIN_RE = re.compile(r"^[A-Za-z0-9_.\-]+(\[[A-Za-z0-9_,\-]+\])?==[A-Za-z0-9_.\-+*!]+$")
+# Exact pin: name, optional extras, ==version with no wildcards; a marker may follow ';'.
+PIN_RE = re.compile(r"^[A-Za-z0-9_.\-]+(\[[A-Za-z0-9_,\-]+\])?==[A-Za-z0-9_.\-+!]+$")
 TRACKED_ARTIFACT_RE = re.compile(r"(^|/)__pycache__(/|$)|\.py[co]$|(^|/)\.pytest_cache(/|$)")
+# First commit written under AGENTS.md commit law; every later commit must answer the commit test.
+COMMIT_LAW_BASELINE = "bb2fbd0546309b82fa2dbf81e8512dea0a4d3822"
+COMMIT_LAW_MARKERS = ("Failed before", "Reused", "Deleted")
 
 
 def load_authorities(root: Path) -> set[str]:
@@ -57,7 +60,11 @@ def load_authorities(root: Path) -> set[str]:
         authorities |= set(re.findall(r"question_id: (Q\d+)", research.read_text(encoding="utf-8")))
     matrix = root / "research" / "ACCEPTANCE_MATRIX.yaml"
     if matrix.exists():
-        authorities |= set(re.findall(r"^\s*-?\s*id: ([A-Za-z0-9_]+)\s*$", matrix.read_text(encoding="utf-8"), re.M))
+        text = matrix.read_text(encoding="utf-8")
+        authorities |= set(re.findall(r"^\s*-?\s*id: ([A-Za-z0-9_]+)\s*$", text, re.M))
+        # Assertion, duty, case, and operation list entries are citable authorities too
+        # (AGENTS.md Tests law: "a Qn acceptance_check or a matrix row assertion").
+        authorities |= set(re.findall(r"^\s+- ([a-z0-9][a-z0-9_]*_[a-z0-9_]+)\s*$", text, re.M))
     return authorities
 
 
@@ -179,20 +186,48 @@ def check_pins(root: Path) -> tuple[list[str], list[str]]:
     return sorted(deps), violations
 
 
-def check_tracked_artifacts(root: Path) -> list[str]:
-    """Build artifacts must never be tracked: caches inflate shipped bytes and evade the LOC scan."""
-    if not (root / ".git").exists():
-        return []
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess | None:
+    """Run git; None means git itself was unavailable or timed out (callers fail closed)."""
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(root), "ls-files"], capture_output=True, text=True, timeout=30
+        return subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30
         )
-    except OSError:
-        return []
-    if proc.returncode != 0:
-        return []
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def check_tracked_artifacts(root: Path) -> tuple[str, list[str]]:
+    """Build artifacts must never be tracked. A check that cannot run is a violation, not a pass."""
+    if not (root / ".git").exists():
+        return "skipped: not a git repository", []
+    proc = _git(root, "ls-files")
+    if proc is None or proc.returncode != 0:
+        reason = "git unavailable or timed out" if proc is None else proc.stderr.strip() or "git ls-files failed"
+        return "failed", [f"tracked-artifact check could not run (fail-closed): {reason}"]
     bad = sorted(f for f in proc.stdout.splitlines() if TRACKED_ARTIFACT_RE.search(f))
-    return [f"tracked build artifact (untrack it and keep it ignored): {f}" for f in bad]
+    return "ran", [f"tracked build artifact (untrack it and keep it ignored): {f}" for f in bad]
+
+
+def check_commit_law(root: Path) -> tuple[str, list[str]]:
+    """Every commit after the baseline answers the AGENTS.md commit test; unverifiable is a violation."""
+    if not (root / ".git").exists():
+        return "skipped: not a git repository", []
+    proc = _git(root, "log", "--format=%H%n%B%x00", f"{COMMIT_LAW_BASELINE}..HEAD")
+    if proc is None or proc.returncode != 0:
+        reason = "git unavailable or timed out" if proc is None else proc.stderr.strip() or "git log failed"
+        return "failed", [f"commit-law check could not run (fail-closed): {reason}"]
+    violations = []
+    for block in proc.stdout.split("\x00"):
+        block = block.strip()
+        if not block:
+            continue
+        sha, _, message = block.partition("\n")
+        missing = [m for m in COMMIT_LAW_MARKERS if m not in message]
+        if missing:
+            violations.append(
+                f"commit {sha[:7]} violates the AGENTS.md commit test — missing: {', '.join(missing)}"
+            )
+    return "ran", sorted(violations)
 
 
 def check_test_citations(root: Path, rel: Path, authorities: set[str]) -> list[str]:
@@ -221,7 +256,9 @@ def run(root: Path) -> dict:
     repo_modules = PRODUCT_MODULES | {"schema", "adapters", "tools", "tests"} | {f.stem for f in files if len(f.parts) == 1}
     loc = {"product": 0, "tools": 0, "tests": 0}
     generated_loc = 0
-    violations: list[str] = list(check_tracked_artifacts(root))
+    artifact_status, artifact_violations = check_tracked_artifacts(root)
+    commit_status, commit_violations = check_commit_law(root)
+    violations: list[str] = [*artifact_violations, *commit_violations]
 
     for rel in files:
         cls = classify(rel)
@@ -252,6 +289,7 @@ def run(root: Path) -> dict:
     violations.extend(pin_violations)
 
     return {
+        "checks": {"tracked_artifacts": artifact_status, "commit_law": commit_status},
         "j_partial": {
             "authored_executable_loc": loc,
             "generated_loc_reported_separately": generated_loc,

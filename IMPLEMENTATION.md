@@ -22,9 +22,13 @@ preference, style, or refactoring appetite.
 3. Run done_when: the full test suite plus tools/ledger, not just the step's tests. Green means
    green everywhere — regressions never accumulate silently.
 4. Close in two commits, because a commit cannot contain its own hash: first the step commit
-   (code and tests; message is the step id plus the AGENTS.md commit test answers), then a close
-   commit that sets this file's status to DONE with date and the step commit's hash. The queue
-   authority is never left dirty. Move to the next step immediately.
+   (code and tests), then a close commit that sets this file's status to DONE with date and the
+   step commit's hash. Every commit — step, close, repair, docs — answers the AGENTS.md commit
+   test; close-commit answers may be short but must exist, and tools/ledger enforces this
+   mechanically for every commit after the law baseline. The queue authority is never left dirty.
+5. DONE means green, unreviewed. It hardens only when an independent static review of the step's
+   rows is recorded; review findings reopen rows through the straight-line rule. Move to the next
+   step immediately after close — review may lag the work without stopping it.
 
 **Resume ritual (agent restart, platform restart, new session).**
 1. Read this file top to bottom. The queue statuses are ground truth; git log corroborates.

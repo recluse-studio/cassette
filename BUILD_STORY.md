@@ -411,3 +411,18 @@ Drew one workaround too early, and his one-line question — "delete an artifact
 the agent back to find `mv` where `rm` failed. First lessons of Chapter 2, recorded for the
 paper: one agent’s green is a hypothesis, a second agent’s review is part of the machine, and the
 human’s questions keep finding the assumption underneath the answer.
+
+### Entry 2 — 2026-08-05, review R2: the remediation needed remediating
+
+The second review found four residual defects in the repairs themselves, and their pattern is
+the entry worth keeping: every one lived where the repairing agent had not thought to look. The
+tracked-artifact check failed open — in a codebase whose entire philosophy is fail-closed. The
+pin regex still admitted wildcards. The authority loader knew rows but not assertions. And the
+close commit broke the very commit law its author had written into AGENTS.md two hours earlier.
+Drew named the tension directly: the most capable model available, failing simple foundations
+twice. The honest reply is that capability does not remove the single-grader blind spot — an
+agent verifies the paths it anticipated, and defects concentrate precisely in the unanticipated
+ones. So the fix was structural, not promissory: checks now fail closed as law, the commit test
+is enforced mechanically by the ledger for every commit after the baseline, and the ritual now
+says what "done" meant all along — green, unreviewed — hardening only under an independent
+review. Trust in this project is priced per claim, and the machine now audits its own auditors.
