@@ -28,6 +28,9 @@ Consumer Apple classes are therefore the target of the thesis. Larger Apple clas
 512 GB Mac Studio, are build and teacher infrastructure — legitimate tools for compiling, tracing,
 and verifying cartridges — not the machine the result is for.
 
+The values this work serves, and the machinery that enforces each one, are recorded in
+PHILOSOPHY.md.
+
 ## Components
 
 Cassette begins with these components:
