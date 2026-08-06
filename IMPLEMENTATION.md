@@ -21,7 +21,11 @@ preference, style, or refactoring appetite.
 2. Make the step's invariants pass with the smallest change (AGENTS.md workflow).
 3. Run done_when: the full test suite plus tools/ledger, not just the step's tests. Green means
    green everywhere — regressions never accumulate silently.
-4. Close in two commits, because a commit cannot contain its own hash: first the step commit
+4. Before marking the step DONE, list every acceptance clause named by the step. For each clause,
+   record the exact test or probe, the exact input changed or failure injected, the expected
+   result, and the observed result. A test name or total passing-test count is not evidence. Any
+   missing clause keeps the step IN_PROGRESS.
+5. Close in two commits, because a commit cannot contain its own hash: first the step commit
    (code and tests), then a close commit that sets this file's status to DONE with date and the
    step commit's hash. Every commit — step, close, repair, docs — answers the AGENTS.md commit
    test; close-commit answers may be short but must exist, and tools/ledger enforces this
