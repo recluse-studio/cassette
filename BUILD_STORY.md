@@ -478,8 +478,10 @@ loop was correctly designed and wrongly staffed; its operating cost had been bil
 involvement was the failure. Review moved inside the line in response — and then, in an irony
 the record should keep, the agent immediately spawned a reviewer to demonstrate the new
 protocol, and Drew vetoed the spawn. The mechanism of internal review — a fresh subagent at
-every close, batched reviews at stage boundaries, or his own auditors on his own schedule —
-stands as the one open decision this session hands to the next.
+every close — was never actually open: the amended plan already said so, and when the agent
+re-asked anyway, Drew named it exactly — manufacturing decisions for the principal is the same
+contract failure through another door, and most of the session's cost had gone to conversing
+about failure instead of executing the unambiguous plan. The plan is explicit. Follow it.
 
 State of record at the boundary. Commits: 8cf0d10 (S01), 28bca29 (S02), d763d74 (R1 repairs),
 a954162 (close, amended into law-compliance), 3958650 (R2 repairs), aadad9a (R2 close), plus the

@@ -43,17 +43,23 @@ ALLOWED_EDGES = {
 }
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
 HEADER_RE = re.compile(r"^# (?P<name>\S+) — .+; depends on (?P<deps>.+)\.\s*$")
-CITATION_RE = re.compile(r"Q\d+|[a-z][a-z0-9_]*_[a-z0-9_]+")
+CITATION_RE = re.compile(r"Q\d+|[A-Za-z][A-Za-z0-9_]*_[A-Za-z0-9_]+")
 # Exact pin: name, optional extras, ==version with no wildcards; a marker may follow ';'.
 PIN_RE = re.compile(r"^[A-Za-z0-9_.\-]+(\[[A-Za-z0-9_,\-]+\])?==[A-Za-z0-9_.\-+!]+$")
 TRACKED_ARTIFACT_RE = re.compile(r"(^|/)__pycache__(/|$)|\.py[co]$|(^|/)\.pytest_cache(/|$)")
 # First commit written under AGENTS.md commit law; every later commit must answer the commit test.
 COMMIT_LAW_BASELINE = "bb2fbd0546309b82fa2dbf81e8512dea0a4d3822"
-COMMIT_LAW_MARKERS = ("Failed before", "Reused", "Deleted")
+COMMIT_LAW_FIELDS = (
+    ("Failed before", re.compile(r"^Failed before:[ \t]+\S.*$", re.M)),
+    ("Reused instead of authored", re.compile(r"^Reused instead of authored:[ \t]+\S.*$", re.M)),
+    ("Deleted", re.compile(r"^Deleted:[ \t]+\S.*$", re.M)),
+)
+ASSERTION_LIST_KEYS = {"assertions", "portability_assertions", "required_for_every_training_row"}
+AUTHORITY_VALUE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)\b")
 
 
 def load_authorities(root: Path) -> set[str]:
-    """The real citation targets: question_ids from RESEARCH.md, row ids from the matrix."""
+    """Load only Q acceptance checks, matrix row IDs, and explicit matrix assertions."""
     authorities: set[str] = set()
     research = root / "research" / "RESEARCH.md"
     if research.exists():
@@ -62,9 +68,27 @@ def load_authorities(root: Path) -> set[str]:
     if matrix.exists():
         text = matrix.read_text(encoding="utf-8")
         authorities |= set(re.findall(r"^\s*-?\s*id: ([A-Za-z0-9_]+)\s*$", text, re.M))
-        # Assertion, duty, case, and operation list entries are citable authorities too
-        # (AGENTS.md Tests law: "a Qn acceptance_check or a matrix row assertion").
-        authorities |= set(re.findall(r"^\s+- ([a-z0-9][a-z0-9_]*_[a-z0-9_]+)\s*$", text, re.M))
+        assertion_indent = None
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            indent = len(line) - len(stripped)
+            if assertion_indent is not None and stripped and indent <= assertion_indent:
+                assertion_indent = None
+            scalar = re.match(r"assertion:\s+(.+)$", stripped)
+            if scalar:
+                value = AUTHORITY_VALUE_RE.match(scalar.group(1))
+                if value:
+                    authorities.add(value.group(1))
+                continue
+            key = re.match(r"([a-z_]+):\s*$", stripped)
+            if key and key.group(1) in ASSERTION_LIST_KEYS:
+                assertion_indent = indent
+                continue
+            if assertion_indent is not None and indent > assertion_indent:
+                item = re.match(r"-\s+(.+)$", stripped)
+                value = AUTHORITY_VALUE_RE.match(item.group(1)) if item else None
+                if value:
+                    authorities.add(value.group(1))
     return authorities
 
 
@@ -199,7 +223,7 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess | None:
 def check_tracked_artifacts(root: Path) -> tuple[str, list[str]]:
     """Build artifacts must never be tracked. A check that cannot run is a violation, not a pass."""
     if not (root / ".git").exists():
-        return "skipped: not a git repository", []
+        return "failed", ["tracked-artifact check could not run (fail-closed): not a git repository"]
     proc = _git(root, "ls-files")
     if proc is None or proc.returncode != 0:
         reason = "git unavailable or timed out" if proc is None else proc.stderr.strip() or "git ls-files failed"
@@ -208,11 +232,11 @@ def check_tracked_artifacts(root: Path) -> tuple[str, list[str]]:
     return "ran", [f"tracked build artifact (untrack it and keep it ignored): {f}" for f in bad]
 
 
-def check_commit_law(root: Path) -> tuple[str, list[str]]:
+def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[str, list[str]]:
     """Every commit after the baseline answers the AGENTS.md commit test; unverifiable is a violation."""
     if not (root / ".git").exists():
-        return "skipped: not a git repository", []
-    proc = _git(root, "log", "--format=%H%n%B%x00", f"{COMMIT_LAW_BASELINE}..HEAD")
+        return "failed", ["commit-law check could not run (fail-closed): not a git repository"]
+    proc = _git(root, "log", "--format=%H%n%B%x00", f"{baseline}..HEAD")
     if proc is None or proc.returncode != 0:
         reason = "git unavailable or timed out" if proc is None else proc.stderr.strip() or "git log failed"
         return "failed", [f"commit-law check could not run (fail-closed): {reason}"]
@@ -222,10 +246,11 @@ def check_commit_law(root: Path) -> tuple[str, list[str]]:
         if not block:
             continue
         sha, _, message = block.partition("\n")
-        missing = [m for m in COMMIT_LAW_MARKERS if m not in message]
+        missing = [label for label, pattern in COMMIT_LAW_FIELDS if not pattern.search(message)]
         if missing:
             violations.append(
-                f"commit {sha[:7]} violates the AGENTS.md commit test — missing: {', '.join(missing)}"
+                f"commit {sha[:7]} violates the AGENTS.md commit test — missing or empty: "
+                f"{', '.join(missing)}"
             )
     return "ran", sorted(violations)
 
@@ -245,7 +270,7 @@ def check_test_citations(root: Path, rel: Path, authorities: set[str]) -> list[s
             if not (cited & authorities):
                 violations.append(
                     f"{rel}::{node.name}: orphan test — citations {sorted(cited) or ['(none)']} "
-                    "resolve to no Qn acceptance_check or matrix row id"
+                    "resolve to no Qn acceptance_check, matrix row id, or matrix assertion"
                 )
     return violations
 
