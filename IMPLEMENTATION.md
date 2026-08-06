@@ -107,7 +107,7 @@ steps:
     expected_size: small
     done_when: full suite + ledger green
     depends: [S03]
-    status: TODO
+    status: DONE 2026-08-06 — step commit 8b8f094 defines the single Q1 identity authority in store.py; canonical alias-resolved tuples converge, tensor, semantic, precision, and ancestry changes diverge, and incomplete or mutable-only tuples terminate with the canonical PROVENANCE_VIOLATION; pinned Python 3.13 / pytest 9.1.1 suite 15 passed after the step commit, ledger clean
 
   - id: S05
     title: Content pages, segments, TensorMap
