@@ -255,6 +255,39 @@ def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[s
     return "ran", sorted(violations)
 
 
+def check_generated_integrity(root: Path) -> tuple[str, list[str]]:
+    """Generated files must match their manifest digests; drift or a missing manifest fails.
+    A tree with no generated directory has nothing to verify (vacuously clean, not fail-open)."""
+    import hashlib
+
+    gen_dir = root / "schema"
+    if not gen_dir.exists():
+        return "skipped: no generated directory", []
+    files = sorted(
+        p
+        for p in gen_dir.rglob("*")
+        if p.is_file() and p.name != "MANIFEST.json" and "__pycache__" not in p.parts
+    )
+    manifest_path = gen_dir / "MANIFEST.json"
+    if not manifest_path.exists():
+        return "failed", ["generated integrity: schema/ exists without MANIFEST.json (fail-closed)"]
+    try:
+        recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return "failed", [f"generated integrity: MANIFEST.json unreadable (fail-closed): {exc}"]
+    violations = []
+    actual_names = {p.relative_to(gen_dir).as_posix() for p in files}
+    for name in sorted(actual_names - set(recorded)):
+        violations.append(f"generated integrity: schema/{name} is not in MANIFEST.json")
+    for name in sorted(set(recorded) - actual_names):
+        violations.append(f"generated integrity: schema/{name} recorded but missing")
+    for name in sorted(actual_names & set(recorded)):
+        digest = hashlib.sha256((gen_dir / name).read_bytes()).hexdigest()
+        if digest != recorded[name]:
+            violations.append(f"generated integrity: schema/{name} hand-edited or drifted from generator")
+    return "ran", violations
+
+
 def check_test_citations(root: Path, rel: Path, authorities: set[str]) -> list[str]:
     """A citation must resolve to a real authority (Q29/Tests law); Q999 is not a citation."""
     violations = []
@@ -283,7 +316,8 @@ def run(root: Path) -> dict:
     generated_loc = 0
     artifact_status, artifact_violations = check_tracked_artifacts(root)
     commit_status, commit_violations = check_commit_law(root)
-    violations: list[str] = [*artifact_violations, *commit_violations]
+    generated_status, generated_violations = check_generated_integrity(root)
+    violations: list[str] = [*artifact_violations, *commit_violations, *generated_violations]
 
     for rel in files:
         cls = classify(rel)
@@ -314,7 +348,11 @@ def run(root: Path) -> dict:
     violations.extend(pin_violations)
 
     return {
-        "checks": {"tracked_artifacts": artifact_status, "commit_law": commit_status},
+        "checks": {
+            "tracked_artifacts": artifact_status,
+            "commit_law": commit_status,
+            "generated_integrity": generated_status,
+        },
         "j_partial": {
             "authored_executable_loc": loc,
             "generated_loc_reported_separately": generated_loc,
