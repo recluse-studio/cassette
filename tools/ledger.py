@@ -23,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import tokenize
 from pathlib import Path
 
@@ -256,8 +257,7 @@ def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[s
 
 
 def check_generated_integrity(root: Path) -> tuple[str, list[str]]:
-    """Generated files must match their manifest digests; drift or a missing manifest fails.
-    A tree with no generated directory has nothing to verify (vacuously clean, not fail-open)."""
+    """Generated files must match both their digests and fresh generator output."""
     import hashlib
 
     gen_dir = root / "schema"
@@ -275,6 +275,11 @@ def check_generated_integrity(root: Path) -> tuple[str, list[str]]:
         recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return "failed", [f"generated integrity: MANIFEST.json unreadable (fail-closed): {exc}"]
+    if not isinstance(recorded, dict) or any(
+        not isinstance(name, str) or not isinstance(digest, str)
+        for name, digest in getattr(recorded, "items", lambda: ())()
+    ):
+        return "failed", ["generated integrity: MANIFEST.json must map file names to digests"]
     violations = []
     actual_names = {p.relative_to(gen_dir).as_posix() for p in files}
     for name in sorted(actual_names - set(recorded)):
@@ -285,6 +290,43 @@ def check_generated_integrity(root: Path) -> tuple[str, list[str]]:
         digest = hashlib.sha256((gen_dir / name).read_bytes()).hexdigest()
         if digest != recorded[name]:
             violations.append(f"generated integrity: schema/{name} hand-edited or drifted from generator")
+
+    generator = root / "tools" / "genschema.py"
+    if not generator.is_file():
+        violations.append("generated integrity: schema/ exists without tools/genschema.py (fail-closed)")
+        return "failed", violations
+    try:
+        with tempfile.TemporaryDirectory(prefix="cassette-schema-") as temp:
+            expected_dir = Path(temp) / "schema"
+            proc = subprocess.run(
+                [sys.executable, "-B", str(generator), str(expected_dir)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if proc.returncode != 0:
+                reason = proc.stderr.strip() or proc.stdout.strip() or "generator failed"
+                violations.append(f"generated integrity: regeneration failed (fail-closed): {reason}")
+                return "failed", violations
+            actual = {
+                p.relative_to(gen_dir).as_posix(): p.read_bytes()
+                for p in gen_dir.rglob("*")
+                if p.is_file() and "__pycache__" not in p.parts
+            }
+            expected = {
+                p.relative_to(expected_dir).as_posix(): p.read_bytes()
+                for p in expected_dir.rglob("*")
+                if p.is_file() and "__pycache__" not in p.parts
+            }
+            for name in sorted(set(actual) | set(expected)):
+                if actual.get(name) != expected.get(name):
+                    violations.append(
+                        f"generated integrity: schema/{name} hand-edited or drifted from tools/genschema.py"
+                    )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        violations.append(f"generated integrity: regeneration could not run (fail-closed): {exc}")
+        return "failed", violations
     return "ran", violations
 
 

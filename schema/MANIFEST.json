@@ -1,10 +1,15 @@
 {
-  "error.json": "83f9b3fbcdcd6c7aac47443399b144129ad320715353626792fdb6c64c40e374",
-  "operation.json": "59c0577291b82eafd1573b8aa3968e231ea854e7a60217f8f759da456b773e4e",
-  "remote_metadata_field.json": "58d0172a1c06d18abd7c7b11ffa720bf380e994d54291bc52d238f7b539719a7",
-  "request.json": "8e81c6b3627075ff3b26918d0d914c2b61b1ba1e33aa3b59966166ca98c3d10e",
-  "root.json": "b9cf46b549c85eaabfce0773fc450d6813a3d02b640583875cabb594499883d1",
-  "run_event.json": "aa13018e0bc3d39c9105138ba77dc04df56b41f4030ce4109b239139adf5c47f",
-  "source_descriptor.json": "ec6391ca43b4d885c7a1a301982d2516e501873ac5d597e7a836952d3b8f1c1d",
-  "validator.py": "45c63a8dd8b165fb4ca9efdc3b995efdf743aab2721cb2d2e02a252a7c4ef3fe"
+  "capability_profile.json": "ebbd55731f03a6095b8aafe8b8bee658a06605f1ad11f47ab38f8050f9848ebf",
+  "error.json": "4665d53782b610a7e36c9164d03e805f7d8fe5cd74bdf2727610a7d2d5ff2072",
+  "operation.json": "5c76e77a1adbd4568546c640c6f8ef0c08f6c1fb5dbfebcaa43ed4a936b20463",
+  "remote_metadata.json": "3da766417388bd6d34499dd760aaf110cb469a8f43314c368b42f893dbd01ab6",
+  "remote_metadata_field.json": "50a2e4af1faf3412eee88283d1560599e9802d9f5f9b5bde2142f3fb876c6162",
+  "request.json": "d237ea9b1c2696fdd2630c939b65abdca360bfe1f2d11fb55b109aca71da958a",
+  "root.json": "d688a7d1998bac2396937120132e8d690eeaeaa5009663dcee1d7f4b8769d44d",
+  "run_event.json": "d33c75a4b235b4f975ab662ae6dfd69128a7ab62d17de3d9304e89af9e1833a7",
+  "run_request.json": "0462fd01a44433f04df26cfa952654eaa3a3a1c9c3c7afa278b45c549924fd48",
+  "source_descriptor.json": "febc9b9c3ffa590ee7741038300b995943bd6af45c0599dee6e21ee978e7af69",
+  "tensor_map.json": "e8c4c07ecbb65f7920e9e5593e2523d8f5c24055d27e1b4d4081063b57182637",
+  "tensor_span.json": "c8262fe8a7944ea216c72469dc4b421391b34a74f5b60fa12459e7a114a14335",
+  "validator.py": "d690117596e19fe2a9f3f5a5f4951427f20d2855ce73516a3ea3b0cffa6c0efb"
 }
