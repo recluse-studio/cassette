@@ -289,7 +289,7 @@ def check_generated_integrity(root: Path) -> tuple[str, list[str]]:
 
 
 def check_test_citations(root: Path, rel: Path, authorities: set[str]) -> list[str]:
-    """A citation must resolve to a real authority (Q29/Tests law); Q999 is not a citation."""
+    """Require one real authority; other identifiers may accurately name fixture data."""
     violations = []
     tree = ast.parse((root / rel).read_text(encoding="utf-8"))
     for node in ast.walk(tree):

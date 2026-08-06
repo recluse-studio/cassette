@@ -86,12 +86,20 @@ def test_authorities_are_rows_and_assertions_not_neighboring_lists(tmp_path):
     research.mkdir()
     (research / "RESEARCH.md").write_text("question_id: Q1\n")
     (research / "ACCEPTANCE_MATRIX.yaml").write_text(
+        "fixture_gate_rows:\n"
+        "  - id: f4_gate\n"
         "source_rows:\n"
         "  - id: source_fixture\n"
         "    cases:\n"
         "      - ordinary_warm\n"
         "    assertions:\n"
         "      - exact_assertion\n"
+        "    gates:\n"
+        "      - q68_usability_floors\n"
+        "    duties:\n"
+        "      - native_routing_correctness\n"
+        "    required_traces:\n"
+        "      - discovery_and_negotiation\n"
         "    portability_assertions:\n"
         "      - portable_assertion (Q11, Q59)\n"
         "training_rows:\n"
@@ -113,6 +121,7 @@ def test_authorities_are_rows_and_assertions_not_neighboring_lists(tmp_path):
     authorities = load_authorities(tmp_path)
     assert authorities == {
         "Q1",
+        "f4_gate",
         "source_fixture",
         "training_fixture",
         "minimum_code_fixture",
@@ -127,14 +136,19 @@ def test_authorities_are_rows_and_assertions_not_neighboring_lists(tmp_path):
     citation_fixture = tests / "test_citations.py"
     citation_fixture.write_text(
         'def test_question():\n    """Q1"""\n    pass\n'
+        'def test_gate_row():\n    """f4_gate"""\n    pass\n'
         'def test_row():\n    """source_fixture"""\n    pass\n'
         'def test_assertion():\n    """clean_build_reproduces_metric_J"""\n    pass\n'
+        'def test_fixture_context():\n    """Q1 uses cartridge_disconnect."""\n    pass\n'
         'def test_case():\n    """ordinary_warm"""\n    pass\n'
         'def test_operation():\n    """adapter_sft_131072_tokens"""\n    pass\n'
         'def test_injection():\n    """cartridge_disconnect"""\n    pass\n'
+        'def test_nested_gate():\n    """q68_usability_floors"""\n    pass\n'
+        'def test_duty():\n    """native_routing_correctness"""\n    pass\n'
+        'def test_trace():\n    """discovery_and_negotiation"""\n    pass\n'
     )
     violations = check_test_citations(tmp_path, citation_fixture.relative_to(tmp_path), authorities)
-    assert len(violations) == 3
+    assert len(violations) == 6
     assert any("test_case" in violation and "ordinary_warm" in violation for violation in violations)
     assert any(
         "test_operation" in violation and "adapter_sft_131072_tokens" in violation
@@ -142,6 +156,18 @@ def test_authorities_are_rows_and_assertions_not_neighboring_lists(tmp_path):
     )
     assert any(
         "test_injection" in violation and "cartridge_disconnect" in violation
+        for violation in violations
+    )
+    assert any(
+        "test_nested_gate" in violation and "q68_usability_floors" in violation
+        for violation in violations
+    )
+    assert any(
+        "test_duty" in violation and "native_routing_correctness" in violation
+        for violation in violations
+    )
+    assert any(
+        "test_trace" in violation and "discovery_and_negotiation" in violation
         for violation in violations
     )
 
