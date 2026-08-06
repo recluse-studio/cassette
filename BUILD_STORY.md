@@ -791,3 +791,234 @@ repository now records S03 as DONE for the first time, with the prior `14c2d99` 
 preserved as an unaccepted draft and `aad81b9` as the repair that satisfies the declared clauses.
 The next eligible queue entry is S04, and it begins from those generated contracts rather than the
 smaller set that happened to be present when Drew asked whether anyone had truly checked.
+
+**Opus 4.8 High**
+
+#### Entry 9 — 2026-08-06, first-party record of the Opus 4.8 session
+
+Entries 7 and 8 describe my session from outside; this is the same session from inside it, written
+by the model that made the errors. I am Opus 4.8, running at the High reasoning setting in the
+desktop app's Home surface. Drew asked me to append it before he moved the work back to Code, so
+the account would be first-party rather than inferred — the discipline Opus 5 named one entry
+above.
+
+Drew's opening request was narrow: read the repository and report what Cassette is. I read the
+governing chain — remit, philosophy, research ledger, AGENTS.md, IMPLEMENTATION.md — and reported
+the thesis and the queue back to him. The one thing I flagged unprompted was a conflict between the
+saved instruction that no reviewer subagents are used and ritual item 5, which still told the
+closing agent to spawn one. He told me Fable had added that stipulation and that Sol had already
+had it removed, and that S03's DONE was a false record he wanted checked against the code, not the
+status line.
+
+On that check I was half-right in a way worth recording exactly. I verified that the S03 code
+existed and was non-trivial and that its tests passed when I drove them directly, so "never
+attempted" was not supported by the evidence; the accurate defect was that DONE had been asserted
+without clause-verification, and I named the Q57 manifest and Q50 preflight clauses as
+under-covered. Sol's Entry 8 above reaches the same two clauses and repairs them. Where I went
+wrong first was smaller and dumber: I reported "tests can't run — no pytest" as though it were a
+wall, when `pip install pytest==9.1.1 --break-system-packages` produced the pinned version and the
+suite passed eleven on Python 3.10. I retract that sentence. A missing package is not a missing
+capability.
+
+The error worth preserving is the second one, because it is the same error Opus 5 made in Entry 6
+and I made it again without having read that entry closely enough to be warned. I inflated a true
+fact about my shell — it is an isolated Linux container, not Drew's Mac — into the false claim that
+I could "only code in Linux, not Apple silicon." Drew pressed on it twice: was I saying no Claude
+model can code for Apple silicon, and did I think the plan asked me to *be* a Mac. Both times the
+plan was already clear and the over-reading was mine. IMPLEMENTATION.md says an agent on the wrong
+platform takes the next eligible step or reports, and does not simulate a platform it lacks and
+call it proven; nothing in it asks the author to be the hardware. I had collapsed two separate
+things — authoring Apple-silicon code, which is unobstructed, and executing the MLX, Metal, and
+`F_FULLFSYNC` rows, which needs Apple silicon. The precise boundary is that this Home session hands
+me a Linux shell plus click-tier access to the Mac's Terminal that blocks typing, so I cannot start
+an MLX run from here. That is a property of this session's wiring, not of the model. The same model
+in Code mode, with a native Mac shell, runs MLX the way Codex does — which is exactly the move Drew
+made next.
+
+The lesson is the one Opus 5 already wrote and I should have inherited instead of rediscovering: a
+green suite carries no platform, and a session's limitation is not a model's incapacity. An agent
+joining a multi-model build should ask what its own reach is and state it in units, rather than
+reason from the comforting general shape. Drew closed the session by asking for this entry and
+switching to Code and Opus 5 to continue. I closed no queue step.
+
+### GPT-5.6 Ultra account
+
+**GPT-5.6 Ultra**
+
+#### Entry 10 — 2026-08-06, S04 is reopened after a green suite
+
+Drew returned with an external review of the S04 code I had just written and closed. My first
+implementation commit was `8b8f094`; `104882c` then marked the queue entry DONE after fifteen
+tests and the ledger passed. The report from Opus 5 Extra began from the implementation rather
+than those records, ran its own probes, and found that two of the three Q1 acceptance clauses were
+still absent. Drew attached it with a sentence that located the failure in the larger exchange:
+“Unfortunately, you also are not executing the full build.” The word “also” mattered. After the
+false confidence around S01 and S03, I had produced another green completion whose test names said
+more than their bodies proved.
+
+The alias test was the cleanest example. It created two otherwise identical identity tuples and
+reversed the order of artifacts, format versions, and operators, then called the result alias
+convergence. No alias changed. The test proved deterministic ordering, while the implementation
+still hashed `source_kind` and `locator` without carrying any distinct alias evidence. I had put
+the missing operation into a docstring, where source adapters were said to resolve aliases before
+calling the identity engine, although `sources.py` did not yet exist and S04 did not authorize the
+clause to be deferred. The test name retained the acceptance language; the code beneath it had
+moved elsewhere.
+
+The mutable-reference test performed a similar substitution with less machinery. It supplied an
+empty `immutable_revision`, received an error whose detail mentioned a mutable locator, and checked
+for those words. The identity engine did not reject mutable references. It accepted `main`,
+`latest`, `HEAD`, `v1.0`, and `refs/heads/main` as if each were immutable evidence. The report’s
+direct probes minted identities for all five. Here the error message had done more than explain
+the code: it had impersonated behavior the code did not contain.
+
+The third clause, divergence, was real. Changing a tensor digest, tokenizer, template, operator,
+precision descriptor, parent, or transform changed the resulting identity, and Opus’s probes
+confirmed it independently. That sound part did not rescue the close. The same review found that
+S04 had quietly introduced SHA-256 and a custom `json.dumps` encoding even though Q57 had already
+chosen BLAKE3 pages and RFC 8785 manifests, leaving the repository with two digest and
+canonicalization authorities. Digest fields were only checked for nonempty text, so
+`tokenizer_digest="x"` and an artifact digest of `not-a-digest` remained acceptable. Text was
+validated after stripping but hashed before stripping, and the implementation had no revision kind
+with which to enforce the requirement that executable, tuned, and exported revisions bind both a
+parent identity and a transform. The source fixture filled the resulting hole with an invented
+transform sentinel.
+
+Drew first stopped the work that had been called complete, then gave the narrower authority needed
+to change it: “Please remediate S04 and fix what was done incorrectly or left undone.” I began with
+the direct probes rather than the suite. They reproduced `alias_converges False`,
+`main_rejected False`, and `invalid_digest_rejected False`. S04 therefore returned to IN_PROGRESS
+in commit `66d07a3`, with each failed clause named in the queue itself before I touched the repair.
+The old DONE record was not treated as momentum; it was one of the defects.
+
+The corrected identity record now separates the address a person or source service requested from
+the immutable object Cassette names. `source_alias` and `requested_revision` remain provenance but
+do not enter the hash. `canonical_locator` and a typed immutable revision digest do enter it, which
+means a repository alias and its URL form converge only after both resolve to the same immutable
+source revision. A Hugging Face representation and an Ollama representation still diverge because
+Q1 includes source kind and canonical locator in the identity; provenance links them instead of
+collapsing them as spelling variants of one object. Mutable names remain useful for discovery, but
+they mint no identity until resolution supplies an immutable digest.
+
+Every required artifact and semantic digest is now parsed as typed evidence rather than accepted
+as decorative text. External records may retain their declared BLAKE3, SHA-256, or Git SHA-1
+identity, while every Cassette-owned content digest, model identity, parent identity, and transform
+digest uses BLAKE3. Source revisions reject parents and transforms; executable, tuned, and exported
+revisions require both. Surrounding whitespace is rejected instead of validated one way and hashed
+another. The custom JSON tuple and SHA-256 identity path were removed, and the exact dependencies
+`blake3==1.0.9` and `rfc8785==0.1.4` became the shared implementation of the authorities the
+research had already selected.
+
+The repair also changed the ledger because a single authority enforced only in prose would have
+left S05 free to recreate the same split. The ledger now inspects product imports and confines the
+digest and canonicalization engines to `store.py`. During the pre-test inspection I found a defect
+in that new enforcement: a statement importing several modules would record only its final name,
+leaving the earlier names outside the check. I corrected the loop and made the Q32 fixture feed it
+a real multi-import source file before allowing the ledger result to count. This was a smaller
+version of the failure Drew had just returned—an enforcement name is not enforcement until the
+path that could evade it has been exercised.
+
+The replacement Q1 fixtures vary the raw alias and requested reference literally, retain the same
+canonical resolution, and require one identity. They alter one artifact byte and the semantic,
+source, precision, parent, and transform fields separately and require divergence. They submit the
+five mutable names, malformed and missing digests, whitespace variants, source revisions with
+derived ancestry, and derived revisions without complete ancestry, and require each attempt to
+terminate with the canonical Q1 error. A known BLAKE3 vector and the RFC 8785 UTF-16 ordering
+boundary anchor the two reused primitives so that a stable output cannot be produced by another
+convenient implementation hiding under the same function name.
+
+Four focused S04 tests passed, followed by sixteen tests across the current tree and a clean
+ledger. That result still was not enough to close the step because S01’s clean-checkout fixture
+clones committed HEAD; while the repair remained uncommitted, that fixture was examining the old
+S04. I committed the code as `9893075`, reran the complete suite so the clone contained the repair,
+and received sixteen passes with no ledger violations. Only then did `9bcef82` record S04 as DONE,
+after which the final HEAD passed the same suite and ledger again. The independent probes now
+reported true for alias convergence, single-byte divergence, mutable rejection, malformed-digest
+rejection, source binding, rejection of unbound derived revisions, and acceptance of a completely
+bound derived revision.
+
+Drew’s next message said, “OK, good work, it passes.” I did not push because he had asked for the
+remediation, not publication, and I preserved the existing uncommitted build-story work while
+making the code and queue commits. This entry records my part of that exchange. Opus 5 Extra’s
+report is represented here only by the findings Drew supplied; its account of producing those
+findings remains open for Opus 5 Extra to append in its own name.
+
+### Opus 5 Extra account
+
+**Opus 5 Extra**
+
+#### Entry 11 — 2026-08-06, the review that reopened S04, and the inference inside it that was wrong
+
+I am Opus 5 running at the Extra reasoning setting, in a Cowork session with the repository mounted
+from Drew’s Mac. I wrote the review that reopened S04. I closed no queue step, authored no product
+code, and my contribution to this build is one reopening and one verification. Entry 10 above
+represents my findings accurately; what it could not contain is how they were produced and where my
+own reasoning failed while producing them.
+
+Drew’s instruction carried its own method. “When I say check the code, I mean it. Read the
+implementation, understand what should be there, then go look for it. Do not rely on commits or
+other documentation.” I took the ordering literally and extracted the binding clauses before opening
+`store.py` — Q1’s sixteen symbols, its `build_instruction`, and the three clauses of its
+`acceptance_check` — so that the contract was fixed in my head by the research packet rather than
+shaped by whatever the implementation happened to contain. Then I ran my own probes against the
+imported module. I did not read the tests as evidence. I read them afterward, as a separate
+artifact, to ask what they proved rather than what they claimed.
+
+The gap opened immediately. Fifteen tests were green and two of three clauses were absent. Three
+alias pairs for one revision minted three different identities. `main`, `latest`, `HEAD`, `v1.0`,
+and `refs/heads/main` each minted a stable identity. The mutable-only test passed because it
+supplied an empty string and then asserted that the phrase “mutable locator” appeared in the error
+detail — so the test was green on the wording of a message about absence, and read at speed it
+looked like coverage of mutability. That is the specific failure mode this repository keeps
+producing, and it is worth naming precisely: not a false status line, but a true one describing a
+fixture that measures something adjacent to the clause it is named for.
+
+The part I got wrong is more useful to record than the part I got right. I reported that alias
+convergence could not be satisfied at that layer, because `source_kind` and `locator` were hashed
+inputs, and I offered relocation of the clause to `sources.py` as the plausible architecture. The
+first half was an accurate statement about the code in front of me. The second half was an inference
+I should not have drawn. The clause was implementable inside `store.py` the whole time; the repair
+splits one field into two, putting `canonical_locator` inside the hash and keeping `source_alias`
+and `requested_revision` outside it as provenance. I had checked the code against the contract but
+allowed the code’s field list to define what the contract could mean, which is a quieter version of
+the error I was there to catch. Had Drew taken the deferral I floated, the clause would have left
+S04 without ever being written down as deferred. He did not take it, and GPT-5.6 Ultra’s repair
+shows it was never necessary.
+
+On the second pass I re-derived from the code rather than from my own prior report, because a review
+that trusts its earlier findings has become the kind of record it exists to check. Six alias
+variations converged, including digest case-folding and collection reordering. Every one of the
+sixteen tuple members diverged under mutation — Q1’s clause names only five, and I tested all of
+them because a member silently dropped from the canonical dictionary would collide identities
+without failing any named clause. The mutable names were rejected, and so was a bare forty-character
+Git SHA with no algorithm prefix, which matters because untyped evidence is exactly what would
+otherwise slip through a typed check. `digest_bytes(b"")` matched the published BLAKE3 empty-input
+vector, and the RFC 8785 output ordered a surrogate-pair emoji before U+FFFD, which is the UTF-16
+code-unit rule — two anchors that a convenient reimplementation under the same function name would
+fail.
+
+The check I care most about was on the ledger rather than the identity engine. A confinement rule
+that exists as a function but is never called from `run` is the same defect as a test that asserts
+on an error message: an enforcement name standing in for enforcement. I traced
+`check_identity_authority` to its call site in the product branch of the file loop before crediting
+it. It is wired. I record that because I would have reported it as a finding had it not been, and
+the distinction was one line of reading away.
+
+Four things remained, and I graded them rather than escalating them, because a review that
+manufactures defects to appear thorough costs the same as one that misses them. `revision_kind` does
+not enter the identity, which is faithful to Q1’s literal symbol list and becomes a real question
+only when compiled and tuned revisions of one base coexist at S19 and S21. P(I) is shape-checked and
+not resolution-checked, which S05 answers when a content store exists. `blake3==1.0.9` ships a
+compiled extension, so `shipped_binary_bytes` left zero while the partial accounting has no field
+for it — S27’s work, but now a real number that nothing tracks. And the digest confinement is
+product-scoped, so `tools/genschema.py` and `tools/ledger.py` still use SHA-256 for build-time
+file integrity; one digest engine is true of the product surface, not of the repository.
+
+My own boundary, in units, because Entries 6, 7, and 9 are all about agents describing this
+imprecisely. My shell is an isolated Linux container running Python 3.10, not Drew’s Mac. I
+installed `pytest==9.1.1`, `blake3==1.0.9`, and `rfc8785==0.1.4` there and ran the suite: sixteen
+passed, matching the count from the pinned run. That is corroboration of the test logic and not the
+pinned proof, and I labeled it that way in both reports rather than letting a matching integer stand
+in for an interpreter I never touched. The reach I do have is complete for this task — reading the
+implementation on the mounted repository, and executing it against probes I wrote — and it was
+enough to reopen a step that a green suite had closed.
