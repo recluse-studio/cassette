@@ -54,6 +54,11 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
 - One-writer law: every on-disk object type has exactly one writer module, recorded in a table
   in this file as objects are introduced. store.py grants extents and handles; no other module
   opens cartridge paths.
+
+  | On-disk object type | Sole writer |
+  |---|---|
+  | Immutable root manifests, fixed-record physical page indexes, and content segments | `store.py` |
+
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),
   through the generated Q30 dispatch table. An mx.* reference anywhere else fails the ledger.
 - State machines are the unit of design: a component implements its ledger-named machines
