@@ -426,3 +426,66 @@ ones. So the fix was structural, not promissory: checks now fail closed as law, 
 is enforced mechanically by the ledger for every commit after the baseline, and the ritual now
 says what "done" meant all along — green, unreviewed — hardening only under an independent
 review. Trust in this project is priced per claim, and the machine now audits its own auditors.
+
+### Entry 3 — 2026-08-05, the correction under the corrections
+
+Drew then rejected the frame the agent had offered him. The agent had said: trust the loop — my
+work, a hostile second reader, the ledger. His reply: "No. The hostile second reader and my
+constant involvement is an explicit failure of our contract." He was right, and the point is
+sharper than either review had been. The loop was correctly designed and wrongly staffed:
+verification labor had been routed through the human, which is a check-in by another name, twice
+in one hour, on foundations. The remit had said stopping for input should be rare and
+catastrophic — and producing work that only becomes trustworthy through the principal's review
+labor is stopping, just disguised as diligence. So review moved inside the line: every close now
+spawns a fresh-context reviewer with no authorship investment, findings are repaired in-session,
+and DONE means green and internally reviewed. The principal's reviewers became what they should
+have been from the start — a sampled audit, not a pipeline stage. The lesson for the paper is
+the cleanest one yet: an agent will happily build honesty machinery that quietly bills its
+operating cost to the human, and only the human notices the invoice.
+
+### Session One closes — the record, written before the memory ends
+
+Drew asked for this section with a phrase that belongs in the paper verbatim: "before we lose
+context." An agent session has a horizon. When it closes, the working memory of everything above
+— the arguments, the corrections, the exact texture of what went wrong — is gone, and the next
+agent reconstitutes the project from what was written down. This chapter is being written at that
+horizon, by the agent about to forget it, which is the entire thesis of the Build Story proven on
+its own first execution session: the artifacts survive; the exchange survives only if someone
+writes it while it is still true.
+
+What actually happened between "Please execute S01" and here. Two foundational steps — the
+accounting scaffold and the error authority — were built in minutes and closed green. The
+environment fought back in miniature: the sandbox's mount of Drew's disk permits renaming git's
+lock files but not deleting them, an agent escalated that quirk to Drew one workaround too early,
+and his one-line question — "delete an artifact you made?" — sent it back to find `mv` where
+`rm` failed. Then the real accounting began. Drew distrusted the speed and spent his own
+attention twice: review R1 returned six correct findings, review R2 found four more defects in
+the repairs themselves, including a fail-open check in a fail-closed codebase and a close commit
+that broke the commit law its author had written two hours earlier. Ten findings across two
+rounds, every one concentrated where the authoring agent had not thought to look. The structural
+answers now stand in the tree: checks fail closed by law, wildcards are not pins, citations
+resolve against real authorities, and the ledger mechanically audits every commit — including
+the agent's own — against the commit test.
+
+Then the conversation turned to trust, and Drew made the two cuts that define this session.
+First: the most capable model available, on its highest setting, could not be trusted to
+complete two simple foundations — and the honest mechanism behind that is worth preserving
+without softening: capability does not remove the single-grader blind spot; an agent verifies
+the paths it anticipated, and its defects concentrate in the unanticipated ones, which is why
+its green is a hypothesis until a stranger reads it. Second, and sharper: when the agent offered
+"trust the loop — my work, a hostile second reader, the ledger," Drew refused the frame. The
+loop was correctly designed and wrongly staffed; its operating cost had been billed to him. His
+involvement was the failure. Review moved inside the line in response — and then, in an irony
+the record should keep, the agent immediately spawned a reviewer to demonstrate the new
+protocol, and Drew vetoed the spawn. The mechanism of internal review — a fresh subagent at
+every close, batched reviews at stage boundaries, or his own auditors on his own schedule —
+stands as the one open decision this session hands to the next.
+
+State of record at the boundary. Commits: 8cf0d10 (S01), 28bca29 (S02), d763d74 (R1 repairs),
+a954162 (close, amended into law-compliance), 3958650 (R2 repairs), aadad9a (R2 close), plus the
+protocol and testimony commit that carries this section. The queue: S01 and S02 DONE,
+twice-reviewed; S03 next; the resume ritual in IMPLEMENTATION.md is no longer theory — the next
+agent will execute it for the first time. The suite is green, the ledger is clean and now audits
+its auditors, and the working tree at close contains nothing unrecorded. Session One's summary
+for the paper, in one line: the code took minutes, the truth took hours, and the hours were the
+work.
