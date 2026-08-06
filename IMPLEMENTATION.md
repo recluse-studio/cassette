@@ -84,7 +84,7 @@ steps:
     expected_size: small
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
-    status: DONE 2026-08-05 — step commit 8cf0d10; reopened by review R1 (repaired d763d74) and review R2 (repaired 3958650: fail-closed checks, no wildcard pins, assertion authorities, mechanical commit law); pins pytest==9.1.1 / python ==3.13.* (revisit recorded at S06)
+    status: DONE 2026-08-06 — step commit 8cf0d10; R1 repair d763d74; R2 repair 3958650; final S01 hardening a89a3ec and closure repair bc1453b (exact assertion authorities, fail-closed Git evidence, anchored commit fields, isolated boundary fixtures); fresh-context review clean; suite 11 passed, ledger clean; pins pytest==9.1.1 / python ==3.13.* (revisit recorded at S06)
 
   - id: S02
     title: Canonical error vocabulary
