@@ -121,7 +121,23 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S04]
-    status: TODO
+    status: DONE 2026-08-06 — step commit b38456c; committed-HEAD suite 17 passed; ledger clean with 453 product LOC and no added dependency
+    closeout:
+      - clause: "SafeTensors import"
+        test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution plus an independent safetensors==0.6.2 writer probe"
+        input: "Two v0.6.2 shards supplied in reverse filename order: head=4,194,301 U8 bytes and crossing=10 U8 bytes in shard 1; tail=13 U8 bytes in shard 2. The independent writer supplied one 4,194,311-byte U8 tensor."
+        expected: "One schema-valid logical root; source-order-independent artifact order; three tensor maps and three unique pages; every imported byte recoverable."
+        observed: "Root blake3:55551243bc42dccbef8b51559c1be97511b1b0719100370192779c1bc5129a8a contained crossing/head/tail and three pages; every fixture read was exact. The independent writer root blake3:bff5267093ba08a2d73af059a87c45995b30bcea864465872106d9f8eac88921 recovered all 4,194,311 bytes exactly."
+      - clause: "Relocate without logical change"
+        test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution and the matching direct layout probe"
+        input: "Reverse the active order of all three page digests and repack the scratch cartridge."
+        expected: "Physical segment identity or page offsets change; logical root, tensor maps, and resolved bytes do not change."
+        observed: "Active segment changed from blake3:d8468d3ddbace21feb32173f2882bfd9e3d9215a55e04e7ea243b4a97a4653c7 to blake3:cb8d67ca90694c59a2af8b774c601c913efd214a2a57db9f91a6fa83932aed83; physical_layout_changed=true; the root remained blake3:55551243bc42dccbef8b51559c1be97511b1b0719100370192779c1bc5129a8a; every post-repack read was exact."
+      - clause: "Span resolution"
+        test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution and the matching direct span probe"
+        input: "Place the 10-byte tensor 3 bytes before the 4 MiB page boundary, then resolve it before and after repacking."
+        expected: "Spans (offset=4,194,301,length=3,tensor_offset=0) and (offset=0,length=7,tensor_offset=3) reconstruct b'0123456789'."
+        observed: "The emitted spans matched both tuples exactly, and the reconstructed tensor equaled b'0123456789' before and after repacking."
 
   - id: S06
     title: Transaction journal and atomic generations
