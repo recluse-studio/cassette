@@ -26,13 +26,6 @@ preference, style, or refactoring appetite.
    step commit's hash. Every commit — step, close, repair, docs — answers the AGENTS.md commit
    test; close-commit answers may be short but must exist, and tools/ledger enforces this
    mechanically for every commit after the law baseline. The queue authority is never left dirty.
-5. Review is internal to the step, never routed through the principal: before close, the working
-   agent spawns a fresh-context review agent with no authorship investment, gives it the step's
-   rows and changes, and repairs its findings in-session. DONE means green and internally
-   reviewed. The principal's own review agents are a sampled audit that may reopen any row at any
-   time — welcome, never required for the line to keep moving. Producing work whose verification
-   requires the principal's labor is equivalent to stopping, and stopping is rare and
-   catastrophic (contract failure recorded 2026-08-05).
 
 **Resume ritual (agent restart, platform restart, new session).**
 1. Read this file top to bottom. The queue statuses are ground truth; git log corroborates.

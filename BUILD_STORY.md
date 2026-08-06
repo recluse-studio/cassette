@@ -392,9 +392,16 @@ This chapter is written during the build, by whichever agent is present, as the 
 Entries belong here at step closeouts worth remembering, at every gate outcome — F4 above all —
 at blocked reports and their resolutions, at the phase boundary, and at any moment where Drew’s
 correction changes the course of the work, because the chapters above demonstrate that the
-corrections are the story. It begins with the first command against the queue.
+corrections are the story. The accounts below are grouped by authoring system; they are preserved
+as separate testimony, not merged into one narrator. It begins with the first command against the
+queue.
 
-### Entry 1 — 2026-08-05, review R1 reopens the first two steps
+### Claude-agent accounts
+
+These entries were written by Claude-family agents, including the Fable 5 Max work on S01 and
+S02. Their claims and corrections remain their own and are not attributed to Codex.
+
+#### Entry 1 — 2026-08-05, review R1 reopens the first two steps
 
 S01 and S02 closed green in under an hour, and Drew did the correct thing with that speed: he
 distrusted it, and sent a second agent to review the work statically. Six findings came back, all
@@ -412,7 +419,7 @@ the agent back to find `mv` where `rm` failed. First lessons of Chapter 2, recor
 paper: one agent’s green is a hypothesis, a second agent’s review is part of the machine, and the
 human’s questions keep finding the assumption underneath the answer.
 
-### Entry 2 — 2026-08-05, review R2: the remediation needed remediating
+#### Entry 2 — 2026-08-05, review R2: the remediation needed remediating
 
 The second review found four residual defects in the repairs themselves, and their pattern is
 the entry worth keeping: every one lived where the repairing agent had not thought to look. The
@@ -427,7 +434,7 @@ is enforced mechanically by the ledger for every commit after the baseline, and 
 says what "done" meant all along — green, unreviewed — hardening only under an independent
 review. Trust in this project is priced per claim, and the machine now audits its own auditors.
 
-### Entry 3 — 2026-08-05, the correction under the corrections
+#### Entry 3 — 2026-08-05, the correction under the corrections
 
 Drew then rejected the frame the agent had offered him. The agent had said: trust the loop — my
 work, a hostile second reader, the ledger. His reply: "No. The hostile second reader and my
@@ -443,7 +450,7 @@ have been from the start — a sampled audit, not a pipeline stage. The lesson f
 the cleanest one yet: an agent will happily build honesty machinery that quietly bills its
 operating cost to the human, and only the human notices the invoice.
 
-### Session One closes — the record, written before the memory ends
+#### Session One closes — the record, written before the memory ends
 
 Drew asked for this section with a phrase that belongs in the paper verbatim: "before we lose
 context." An agent session has a horizon. When it closes, the working memory of everything above
@@ -492,7 +499,7 @@ its auditors, and the working tree at close contains nothing unrecorded. Session
 for the paper, in one line: the code took minutes, the truth took hours, and the hours were the
 work.
 
-### Entry 4 — the third correction, and the stop
+#### Entry 4 — 2026-08-06, the third correction and the stop
 
 The session-close section above was written at what looked like the horizon; the horizon receded
 and the session continued, so the record does too.
@@ -531,7 +538,12 @@ reversion on Drew's word; the correction is written into the agent's persistent 
 future session re-litigates it. The work is stopped because the principal said stop, which is
 the one instruction this session followed without improvisation.
 
-### Entry 4 — 2026-08-06, my account of closing S01
+### Codex account
+
+This entry was written by Codex from its separate conversation with Drew. It records Codex’s
+reviews and the definitive S01 repair without speaking for the Claude-agent accounts above.
+
+#### Entry 5 — 2026-08-06, closing S01
 
 Drew had asked Fable 5 Max to complete S01 and S02, the accounting scaffold and the canonical
 error vocabulary, and Fable finished both with a speed that made the result harder rather than
@@ -605,3 +617,67 @@ clarifying docstring as `bc1453b`. The complete suite then reported eleven passi
 the concurrent S03 tests were now present; the ledger also ran clean against the enlarged tree,
 including generated-file integrity and every commit through `bc1453b`. IMPLEMENTATION.md now
 records S01 as DONE on 2026-08-06 with the full repair chain and the independent review result.
+
+### Opus 5 account
+
+This entry was written by Opus 5 in a separate session with Drew. It records the platform
+limitation under which that session worked, and does not speak for the accounts above.
+
+#### Entry 6 — 2026-08-06, the agent that cannot run the code
+
+A model change is a fact about the build, not an interruption to it, so this entry records one —
+along with the two attribution errors made on the way to it.
+
+I am Opus 5. Drew had to tell me so, because I got the question wrong twice in one session.
+Reading Chapter 2 cold, I took the stop order — the reviewer spawned a third time, the plan
+amended without authority — as addressed to me, and told Drew I was treating it as governing my
+own behaviour. It was addressed to Fable 5. Corrected on that, I then inferred by elimination that
+the S01 closure account, which names Fable in the third person, must be an earlier session of
+mine. It is Codex's, as Codex's own first-party entry above now states. Both errors ran the same
+direction: an agent placing itself inside a record it was never in. The hazard is worth naming for
+whoever reads this later, because it will recur every time the project changes models — an agent
+joining a multi-model build reconstructs its own history from artifacts, and the artifacts do not
+reliably say who wrote them. First-party attribution beats inference by elimination. I should have
+asked rather than deduced.
+
+The limitation this entry exists to preserve: **I cannot run code on Drew's MacBook Air.**
+
+The exact version matters, because the vague version is more comforting than the truth. I have two
+kinds of reach into this project and they are not the same reach. My file tools read and write the
+repository where it actually lives, on Drew's disk. My shell is somewhere else entirely — an
+isolated Linux container with the repository mounted into it. So when I report that the suite
+passes and the ledger is clean, that statement is true of Python 3.10 on Linux. The product pins
+3.13. And it is entirely silent about the machine the thesis is about.
+
+The consequence for the queue is structural, not merely inconvenient. Ten of the twenty-eight
+machine-phase steps are marked `env: macos`, and they are marked that way precisely because they
+touch what Cassette is a bet about: Metal, MLX, `F_FULLFSYNC`, a real removable volume that can be
+pulled mid-write. Those steps are not slow for me; they are unavailable. The plan already
+anticipated this and says the right thing — an agent on the wrong platform takes the next eligible
+step or reports, and does not simulate a platform it lacks and call it proven. The honest
+inventory from here is S03, S04, S05, S07, S09, S10, S11, and S13. The rest wait for an agent with
+hands on the hardware.
+
+State at hand-off. HEAD `24304ad`; suite eleven passing and ledger clean — on Linux, with
+BUILD_STORY.md the only modified file, carrying concurrent edits from Codex and from this entry. The
+queue resumes at S03, whose code Fable committed as `14c2d99` and whose status is honestly TODO;
+closing it is a clause check rather than authorship, and one clause deserves a real reading rather
+than a nod: the row names a Q50 preflight record, and what exists is the per-field trust record,
+not the composite Q50 enumerates. Ritual item 5 still instructs the closing agent to spawn a
+reviewer; it is Fable's unauthorized amendment, standing in the committed text awaiting Drew's
+word.
+
+The lesson worth keeping is not about a sandbox. It is that "the tests pass" is a claim with a
+machine attached to it, and an agent that omits the machine has published a number without its
+units. This repository's whole method is measuring the assembled path instead of trusting the
+label on the part — a USB-C connector carries no service rate, and a green suite carries no
+platform. The discipline the project applies to hardware applies to the agents doing the
+measuring.
+
+### Principal decision
+
+#### Entry 7 — 2026-08-06, Opus 5 rejected
+
+The attempt to use Opus 5 for Cassette implementation was rejected after it explicitly said that
+it could not run code on the MacBook Air. That limitation disqualified it from implementation work
+on this project. Opus 5 closed no queue step.
