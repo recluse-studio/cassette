@@ -97,7 +97,7 @@ steps:
     expected_size: medium
     done_when: generated validators round-trip golden fixtures; hand-edit detection in ledger
     depends: [S02]
-    status: TODO
+    status: DONE 2026-08-06 — prior draft 14c2d99 was not accepted; definitive repair aad81b9 emits the complete Q6/Q9/Q31/Q50/Q57 Draft 2020-12 contract set, validates full golden JSON round-trips and malformed F0 records, and regenerates during ledger integrity checks; pinned Python 3.13 / pytest 9.1.1 suite 12 passed after the repair commit, all 12 schemas passed Draft 2020-12 metaschema validation, ledger clean
 
   - id: S04
     title: Identity engine
