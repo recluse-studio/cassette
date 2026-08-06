@@ -6,9 +6,10 @@ Checks (AGENTS.md):
   2. Header truth (product and tools files): declared intra-repo dependencies equal actual imports.
   3. Layer law (product files): imports point downward only; L2 siblings never import each other.
   4. Runtime confinement: `mlx` imports exist only in pager.py and trainer.py.
-  5. Test citation law: every test function cites a ledger invariant (Qn or a matrix row id).
-  6. Pin law: every dependency in pyproject.toml carries an exact `==` pin.
-  7. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
+  5. Identity authority confinement: product digest and RFC 8785 imports exist only in store.py.
+  6. Test citation law: every test function cites a ledger invariant (Qn or a matrix row id).
+  7. Pin law: every dependency in pyproject.toml carries an exact `==` pin.
+  8. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
      separately and never counted as authored.
 
 Output is deterministic. Exit 0 when clean, 1 when any violation exists. Usage:
@@ -43,6 +44,7 @@ ALLOWED_EDGES = {
     "adapters": {"errors", "schema", "broker"},
 }
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
+IDENTITY_AUTHORITY_IMPORTS = {"blake3", "hashlib", "rfc8785"}
 HEADER_RE = re.compile(r"^# (?P<name>\S+) — .+; depends on (?P<deps>.+)\.\s*$")
 CITATION_RE = re.compile(r"Q\d+|[A-Za-z][A-Za-z0-9_]*_[A-Za-z0-9_]+")
 # Exact pin: name, optional extras, ==version with no wildcards; a marker may follow ';'.
@@ -138,30 +140,24 @@ def logical_loc(root: Path, rel: Path) -> int:
     return max(newlines - docstrings, 0)
 
 
-def intra_repo_imports(root: Path, rel: Path, repo_modules: set[str]) -> set[str]:
+def top_level_imports(root: Path, rel: Path) -> set[str]:
     tree = ast.parse((root / rel).read_text(encoding="utf-8"))
     found = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                top = alias.name.split(".")[0]
-                if top in repo_modules:
-                    found.add(top)
+                found.add(alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom) and node.module:
-            top = node.module.split(".")[0]
-            if top in repo_modules:
-                found.add(top)
+            found.add(node.module.split(".")[0])
     return found
 
 
-def imports_mlx(root: Path, rel: Path) -> bool:
-    tree = ast.parse((root / rel).read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import) and any(a.name.split(".")[0] == "mlx" for a in node.names):
-            return True
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] == "mlx":
-            return True
-    return False
+def check_identity_authority(rel: Path, imported: set[str]) -> list[str]:
+    """Q32: only store.py may import product digest or canonicalization engines."""
+    forbidden = sorted(imported & IDENTITY_AUTHORITY_IMPORTS)
+    if classify(rel) == "product" and rel.name != "store.py" and forbidden:
+        return [f"{rel}: imports {forbidden} outside store.py (Q32 identity authority confinement)"]
+    return []
 
 
 def check_header(root: Path, rel: Path) -> tuple[set[str] | None, str | None]:
@@ -371,7 +367,8 @@ def run(root: Path) -> dict:
         declared, header_violation = check_header(root, rel)
         if header_violation:
             violations.append(header_violation)
-        actual = intra_repo_imports(root, rel, repo_modules)
+        imported = top_level_imports(root, rel)
+        actual = imported & repo_modules
         if cls in {"product", "tools"} and declared is not None and declared != actual:
             violations.append(
                 f"{rel}: header declares deps {sorted(declared) or ['(none)']} but imports {sorted(actual) or ['(none)']}"
@@ -381,8 +378,9 @@ def run(root: Path) -> dict:
             allowed = ALLOWED_EDGES.get(owner, set())
             for target in sorted(actual - allowed - {owner}):
                 violations.append(f"{rel}: illegal import of '{target}' (allowed: {sorted(allowed) or 'none'})")
-            if imports_mlx(root, rel) and rel.name not in MLX_ALLOWED_FILES:
+            if "mlx" in imported and rel.name not in MLX_ALLOWED_FILES:
                 violations.append(f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)")
+            violations.extend(check_identity_authority(rel, imported))
         if cls == "tests":
             violations.extend(check_test_citations(root, rel, authorities))
 

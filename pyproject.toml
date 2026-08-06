@@ -8,7 +8,12 @@ license = { text = "Apache-2.0" }
 # sandbox interpreter (3.10); this pin is confirmed or revised, with recorded cause, at the
 # first env:macos step (S06).
 requires-python = "==3.13.*"
-dependencies = []
+# Q1/Q51/Q57/Q62: blake3.blake3 is the one Cassette content and identity digest primitive.
+# Q1/Q57: rfc8785.dumps is the one canonical model and manifest serializer.
+dependencies = [
+    "blake3==1.0.9",
+    "rfc8785==0.1.4",
+]
 
 [dependency-groups]
 dev = [
