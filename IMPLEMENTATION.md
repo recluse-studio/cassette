@@ -107,7 +107,7 @@ steps:
     expected_size: small
     done_when: full suite + ledger green
     depends: [S03]
-    status: IN_PROGRESS 2026-08-06 — reopened by review against Q1: the alias fixture proved collection-order invariance, the mutable-only fixture proved only empty-field rejection, arbitrary digest text minted identities, and the SHA-256/custom-JSON authority was not reconciled with Q57 BLAKE3/RFC8785; direct probes reproduced all three defects before remediation
+    status: DONE 2026-08-06 — remediation step commit 9893075; literal source_alias and requested_revision probes converge after one canonical locator and immutable digest, a one-byte artifact change diverges, mutable references and malformed digest evidence mint no identity, and derived revisions require both BLAKE3 parent identities and a BLAKE3 transform digest; exact blake3==1.0.9 and rfc8785==0.1.4 dependencies replace the split SHA-256/custom-JSON authority; discovered scope records those pins in pyproject.toml, confines product identity primitives through tools/ledger.py, and executes the Q1/Q32 clauses in tests/test_s04_identity.py; committed-HEAD suite 16 passed, ledger clean with 147 product LOC and no violations
 
   - id: S05
     title: Content pages, segments, TensorMap
