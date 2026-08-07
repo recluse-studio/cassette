@@ -121,18 +121,18 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S04]
-    status: IN_PROGRESS 2026-08-06 — reopened by review: the SafeTensors import accepted an opaque Q1 digest, discarded the artifact evidence needed to verify it, and emitted root semantic/operator bindings unrelated to that identity; prior byte-layout evidence remains valid
+    status: DONE 2026-08-06 — repair step commit 12719d9; Python 3.13 full suite 17 passed; ledger clean with 540 product LOC and no new dependency; official safetensors==0.6.2 writer probe recovered 4,194,311 exact bytes
     closeout:
       - clause: "SafeTensors import"
         test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution plus an independent safetensors==0.6.2 writer probe"
-        input: "Two v0.6.2 shards supplied in reverse filename order: head=4,194,301 U8 bytes and crossing=10 U8 bytes in shard 1; tail=13 U8 bytes in shard 2. The independent writer supplied one 4,194,311-byte U8 tensor."
-        expected: "One schema-valid logical root; source-order-independent artifact order; three tensor maps and three unique pages; every imported byte recoverable."
-        observed: "Root blake3:55551243bc42dccbef8b51559c1be97511b1b0719100370192779c1bc5129a8a contained crossing/head/tail and three pages; every fixture read was exact. The independent writer root blake3:bff5267093ba08a2d73af059a87c45995b30bcea864465872106d9f8eac88921 recovered all 4,194,311 bytes exactly."
+        input: "Two v0.6.2 shards supplied by canonical path in reverse insertion order: head=4,194,301 U8 bytes and crossing=10 U8 bytes in shard 1; tail=13 U8 bytes in shard 2. First supply a complete Q1 tuple with one unrelated artifact digest, then the tuple whose paths, sizes, and digests match the files. Bind a parent, three operators, and tokenizer/processor/template digests. The independent writer supplies one 4,194,311-byte U8 tensor."
+        expected: "Reject the unrelated Q1 evidence without publishing a root. For valid evidence, derive the identity inside the importer; retain the canonical Q1 preimage; bind parents, operators, and semantic assets from it; cover pages, manifests, and semantic assets with the root aggregate; produce the same logical root for either source-map order; recover every byte."
+        observed: "The false tuple terminated with IDENTITY_MISMATCH and produced no root. Both source orders produced root blake3:0354082adb25adf24c6984743663095844df91151e8bbd0dca4aa7a3e51f6347 with identity blake3:a43cccce52c8101e1859c78dcb66d35232e55f1836ed39e6e9dd83031d944f88 and integrity root blake3:f630a6c61097a6c632a891f9344f7021f37f8f36e842345028597ea5cda27b2b. Reload rejected an identity mutation and a manifest mutation omitted from the aggregate. The independent writer produced root blake3:1295b2f03f7471b87654a5db0c51d80f36e98089fe6a029d1be97e23200e5f0e and recovered all 4,194,311 bytes."
       - clause: "Relocate without logical change"
         test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution and the matching direct layout probe"
         input: "Reverse the active order of all three page digests and repack the scratch cartridge."
         expected: "Physical segment identity or page offsets change; logical root, tensor maps, and resolved bytes do not change."
-        observed: "Active segment changed from blake3:d8468d3ddbace21feb32173f2882bfd9e3d9215a55e04e7ea243b4a97a4653c7 to blake3:cb8d67ca90694c59a2af8b774c601c913efd214a2a57db9f91a6fa83932aed83; physical_layout_changed=true; the root remained blake3:55551243bc42dccbef8b51559c1be97511b1b0719100370192779c1bc5129a8a; every post-repack read was exact."
+        observed: "Active segment changed from blake3:d8468d3ddbace21feb32173f2882bfd9e3d9215a55e04e7ea243b4a97a4653c7 to blake3:cb8d67ca90694c59a2af8b774c601c913efd214a2a57db9f91a6fa83932aed83; the root remained blake3:0354082adb25adf24c6984743663095844df91151e8bbd0dca4aa7a3e51f6347; identity, integrity aggregate, tensor maps, and every resolved byte remained exact."
       - clause: "Span resolution"
         test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution and the matching direct span probe"
         input: "Place the 10-byte tensor 3 bytes before the 4 MiB page boundary, then resolve it before and after repacking."
