@@ -58,6 +58,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   | On-disk object type | Sole writer |
   |---|---|
   | Immutable root manifests, fixed-record physical page indexes, and content segments | `store.py` |
+  | Transaction journals, candidate-generation temporaries, and immutable generation pointers | `store.py` |
 
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),
   through the generated Q30 dispatch table. An mx.* reference anywhere else fails the ledger.

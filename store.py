@@ -1,5 +1,5 @@
-# store.py — canonical identity, content pages, segments, and tensor maps (Q1/Q32/Q57); depends on errors.py, schema.
-"""Own model identity and the representation-independent Q57 cartridge store.
+# store.py — identity, content pages, transactions, and generations (Q1/Q25/Q32/Q57/Q60/Q73); depends on errors.py, schema.
+"""Own model identity, content, transaction recovery, and callable generations.
 
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
 immutable revision digest. Requested aliases remain provenance; they never enter the identity.
@@ -12,9 +12,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import fcntl
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
 import struct
 import tempfile
 
@@ -49,6 +52,34 @@ _ROOT_FIELDS = frozenset({
     "identity", "parents", "provenance", "semantic_assets", "tensor_maps", "operators",
     "plans", "deltas", "integrity_root",
 })
+_TRANSACTION_STATES = (
+    "PREPARE",
+    "WRITE_TEMP",
+    "READBACK_HASH",
+    "JOURNAL_PAGE",
+    "WRITE_CANDIDATE_ROOT",
+    "FULLFSYNC",
+    "SWAP_GENERATION_POINTER",
+    "FULLFSYNC",
+    "COMMITTED",
+)
+_DEPENDENCY_ORDER = ("payloads", "indexes", "child_root", "verification", "generation_pointer")
+_TRANSACTION_FIELDS = frozenset({
+    "transaction_id", "step", "state", "candidate_generation", "candidate_root",
+    "candidate_id", "expected_parent_generation", "expected_parent_root",
+    "generation_record_digest", "dependency_order", "dependency_cursor", "pointer_cursor",
+    "resume",
+})
+_RESUME_FIELDS = frozenset({
+    "operation_version", "input_digests", "random_seed", "statistics_digest",
+    "page_results", "optimizer_step", "rng_state_digest", "data_cursor", "loss_scale",
+})
+_GENERATION_FIELDS = frozenset({
+    "generation", "child_id", "root_digest", "parent_generation", "parent_root",
+    "transaction_id",
+})
+_TRANSACTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_GENERATION_NAME = re.compile(r"([0-9]{20})\.json")
 
 
 @dataclass(frozen=True)
@@ -131,6 +162,42 @@ class PageLocation:
     segment_id: str
     offset: int
     length: int
+
+
+@dataclass(frozen=True)
+class GenerationPin:
+    """One Q73 reader pin; immutable roots keep its bytes stable across later commits."""
+
+    generation: int
+    child_id: str
+    root_digest: str
+
+
+@dataclass(frozen=True)
+class TransactionState:
+    """The last durable Q25 transition for one resumable generation transaction."""
+
+    transaction_id: str
+    state: str
+    step: int
+    candidate_generation: int
+    candidate_root: str
+    dependency_cursor: int
+    pointer_cursor: int
+
+
+@dataclass(frozen=True)
+class TransactionContext:
+    """Bounded Q25/Q60 restart material supplied by a compiler or trainer."""
+
+    operation_version: str
+    input_digests: tuple[str, ...]
+    random_seed: int | None = None
+    statistics_digest: str | None = None
+    optimizer_step: int | None = None
+    rng_state_digest: str | None = None
+    data_cursor: int | None = None
+    loss_scale: str | None = None
 
 
 def _reject(field: str, reason: str, object_id: str = "model:unidentified") -> None:
@@ -838,3 +905,637 @@ def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str
             _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} exceeds its content page")
         output.extend(page[span["offset"]:end])
     return bytes(output)
+
+
+def _transaction_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
+    raise CassetteError(
+        code=code,
+        object_id=object_id,
+        failed_invariant="Q25/Q60/Q73: durable generation transaction",
+        retryability="retryable" if code == "SOURCE_UNAVAILABLE" else "terminal",
+        detail=detail,
+    )
+
+
+def _transaction_id(value: object) -> str:
+    if not isinstance(value, str) or _TRANSACTION_ID.fullmatch(value) is None:
+        _transaction_reject(
+            "transaction:unidentified",
+            "transaction_id must contain 1-128 letters, digits, periods, underscores, or hyphens",
+            "INVALID_REQUEST",
+        )
+    return value
+
+
+def _transaction_digest(value: object, object_id: str) -> str:
+    if (not isinstance(value, str) or not value.startswith("blake3:") or len(value) != 71
+            or not set(value[7:]) <= _HEX):
+        _transaction_reject(object_id, "a lowercase BLAKE3 digest is required")
+    return value
+
+
+def _envelope(record: dict) -> tuple[str, bytes]:
+    record_digest = digest_bytes(canonical_bytes(record))
+    return record_digest, canonical_bytes({"digest": record_digest, "record": record})
+
+
+def _read_envelope(path: Path, object_id: str, error_code: str) -> dict:
+    try:
+        payload = path.read_bytes()
+        value = json.loads(payload, object_pairs_hook=_unique_object)
+        if canonical_bytes(value) != payload:
+            raise ValueError("record is not canonical RFC 8785 JSON")
+        if not isinstance(value, dict) or set(value) != {"digest", "record"}:
+            raise ValueError("envelope must contain exactly digest and record")
+        record = value["record"]
+        if not isinstance(record, dict):
+            raise ValueError("record must be an object")
+        if value["digest"] != digest_bytes(canonical_bytes(record)):
+            raise ValueError("record digest does not match its canonical bytes")
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, CassetteError) as error:
+        _transaction_reject(object_id, f"durable record is unavailable or invalid: {error}", error_code)
+    return record
+
+
+def _fullsync_file(path: Path, object_id: str) -> None:
+    command = getattr(fcntl, "F_FULLFSYNC", None)
+    if command is None:
+        _transaction_reject(object_id, "macOS F_FULLFSYNC is unavailable", "DURABILITY_UNSUPPORTED")
+    try:
+        with path.open("rb") as handle:
+            os.fsync(handle.fileno())
+            fcntl.fcntl(handle.fileno(), command)
+    except OSError as error:
+        _transaction_reject(object_id, f"F_FULLFSYNC failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
+
+
+def _sync_directory(path: Path, object_id: str) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        _transaction_reject(object_id, f"directory sync failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
+
+
+def _durable_replace(path: Path, payload: bytes, object_id: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _sync_directory(path.parent.parent, object_id)
+    temporary = path.with_name(f".{path.name}.pending")
+    try:
+        temporary.write_bytes(payload)
+        if temporary.read_bytes() != payload:
+            _transaction_reject(object_id, f"readback changed {temporary.name!r}")
+        _fullsync_file(temporary, object_id)
+        os.replace(temporary, path)
+    except OSError as error:
+        _transaction_reject(object_id, f"atomic record replacement failed: {error}", "DURABILITY_UNSUPPORTED")
+    _sync_directory(path.parent, object_id)
+
+
+def _transactions_path(cartridge: Path) -> Path:
+    return cartridge / "transactions"
+
+
+def _journal_path(cartridge: Path, transaction_id: str) -> Path:
+    return _transactions_path(cartridge) / f"{transaction_id}.json"
+
+
+def _candidate_path(cartridge: Path, transaction_id: str) -> Path:
+    return _transactions_path(cartridge) / f"{transaction_id}.generation-candidate"
+
+
+def _generation_path(cartridge: Path, generation: int) -> Path:
+    return cartridge / "generations" / f"{generation:020d}.json"
+
+
+def _generation_body(record: dict) -> dict:
+    return {
+        "generation": record["candidate_generation"],
+        "child_id": record["candidate_id"],
+        "root_digest": record["candidate_root"],
+        "parent_generation": record["expected_parent_generation"],
+        "parent_root": record["expected_parent_root"],
+        "transaction_id": record["transaction_id"],
+    }
+
+
+def _validate_generation(record: object, object_id: str) -> dict:
+    if not isinstance(record, dict) or set(record) != _GENERATION_FIELDS:
+        _transaction_reject(object_id, "generation record has an incorrect field set")
+    generation = record["generation"]
+    parent_generation = record["parent_generation"]
+    parent_root = record["parent_root"]
+    if type(generation) is not int or not 1 <= generation <= _MAX_JSON_INTEGER:
+        _transaction_reject(object_id, "generation must be a positive RFC 8785-safe integer")
+    if ((parent_generation is None) != (parent_root is None)
+            or (parent_generation is not None
+                and (type(parent_generation) is not int or not 1 <= parent_generation < generation))):
+        _transaction_reject(object_id, "parent generation and root must form one earlier generation")
+    _transaction_digest(record["child_id"], object_id)
+    _transaction_digest(record["root_digest"], object_id)
+    if parent_root is not None:
+        _transaction_digest(parent_root, object_id)
+    _transaction_id(record["transaction_id"])
+    return record
+
+
+def _counter(field: str, value: object, object_id: str) -> int | None:
+    if value is not None and (type(value) is not int or not 0 <= value <= _MAX_JSON_INTEGER):
+        _transaction_reject(object_id, f"resume {field} must be null or a nonnegative safe integer")
+    return value
+
+
+def _validate_resume(resume: object, object_id: str, error_code: str) -> dict:
+    def reject(detail: str) -> None:
+        _transaction_reject(object_id, detail, error_code)
+
+    if not isinstance(resume, dict) or set(resume) != _RESUME_FIELDS:
+        reject("journal resume material has an incorrect field set")
+    version = resume["operation_version"]
+    if not isinstance(version, str) or not version or version != version.strip():
+        reject("resume operation_version must be exact nonempty text")
+    inputs = resume["input_digests"]
+    if not isinstance(inputs, list) or not inputs or len(inputs) != len(set(inputs)):
+        reject("resume input_digests must be a nonempty unique list")
+    for digest in inputs:
+        try:
+            _transaction_digest(digest, object_id)
+        except CassetteError:
+            reject("resume input_digests contain a malformed digest")
+    for field in ("random_seed", "optimizer_step", "data_cursor"):
+        try:
+            _counter(field, resume[field], object_id)
+        except CassetteError:
+            reject(f"resume {field} is malformed")
+    for field in ("statistics_digest", "rng_state_digest"):
+        if resume[field] is not None:
+            try:
+                _transaction_digest(resume[field], object_id)
+            except CassetteError:
+                reject(f"resume {field} is malformed")
+    loss_scale = resume["loss_scale"]
+    if loss_scale is not None and (not isinstance(loss_scale, str) or not loss_scale):
+        reject("resume loss_scale must be null or exact numeric text")
+    pages = resume["page_results"]
+    if (not isinstance(pages, list) or not pages
+            or any(not isinstance(page, dict) or set(page) != {"page_digest", "length"}
+                   or type(page["length"]) is not int or not 0 < page["length"] <= PAGE_BYTES
+                   for page in pages)
+            or pages != sorted(pages, key=lambda page: page["page_digest"])
+            or len({page["page_digest"] for page in pages}) != len(pages)):
+        reject("resume page_results must be one sorted record per candidate page")
+    for page in pages:
+        try:
+            _transaction_digest(page["page_digest"], object_id)
+        except CassetteError:
+            reject("resume page_results contain a malformed digest")
+    return resume
+
+
+def _resume_record(
+    cartridge: Path,
+    candidate_root: str,
+    context: TransactionContext | None,
+    object_id: str,
+) -> dict:
+    if context is not None and not isinstance(context, TransactionContext):
+        _transaction_reject(object_id, "TransactionContext required", "INVALID_REQUEST")
+    context = context or TransactionContext("store-generation-v1", (candidate_root,))
+    if not isinstance(context.input_digests, tuple):
+        _transaction_reject(object_id, "TransactionContext input_digests must be a tuple", "INVALID_REQUEST")
+    resume = {
+        "operation_version": context.operation_version,
+        "input_digests": list(context.input_digests),
+        "random_seed": context.random_seed,
+        "statistics_digest": context.statistics_digest,
+        "page_results": [
+            {"page_digest": location.page_digest, "length": location.length}
+            for location in sorted(
+                _read_index(cartridge, candidate_root).values(), key=lambda item: item.page_digest
+            )
+        ],
+        "optimizer_step": context.optimizer_step,
+        "rng_state_digest": context.rng_state_digest,
+        "data_cursor": context.data_cursor,
+        "loss_scale": context.loss_scale,
+    }
+    return _validate_resume(resume, object_id, "INVALID_REQUEST")
+
+
+def _validate_transaction(record: object, object_id: str) -> dict:
+    if not isinstance(record, dict) or set(record) != _TRANSACTION_FIELDS:
+        _transaction_reject(object_id, "journal record has an incorrect field set", "SOURCE_UNAVAILABLE")
+    step = record["step"]
+    if (type(step) is not int or not 0 <= step < len(_TRANSACTION_STATES)
+            or record["state"] != _TRANSACTION_STATES[step]):
+        _transaction_reject(object_id, "journal step and Q25 state disagree", "SOURCE_UNAVAILABLE")
+    dependency_cursor = record["dependency_cursor"]
+    pointer_cursor = record["pointer_cursor"]
+    if (type(dependency_cursor) is not int
+            or not 0 <= dependency_cursor <= _MAX_JSON_INTEGER
+            or (step < 5 and dependency_cursor != 0)):
+        _transaction_reject(object_id, "journal dependency cursor is invalid", "SOURCE_UNAVAILABLE")
+    if (type(pointer_cursor) is not int or pointer_cursor < 0
+            or (step < 7 and pointer_cursor != 0)
+            or (step == 7 and pointer_cursor not in {1, 2, 3})
+            or (step == 8 and pointer_cursor != 3)):
+        _transaction_reject(object_id, "journal pointer cursor is invalid", "SOURCE_UNAVAILABLE")
+    _transaction_id(record["transaction_id"])
+    if record["dependency_order"] != list(_DEPENDENCY_ORDER):
+        _transaction_reject(object_id, "journal dependency order is not Q73's order", "SOURCE_UNAVAILABLE")
+    _validate_resume(record["resume"], object_id, "SOURCE_UNAVAILABLE")
+    generation = _validate_generation(_generation_body(record), object_id)
+    expected_digest = digest_bytes(canonical_bytes(generation))
+    if record["generation_record_digest"] != expected_digest:
+        _transaction_reject(object_id, "journal does not bind its candidate generation", "SOURCE_UNAVAILABLE")
+    return record
+
+
+def _load_transaction(cartridge: Path, transaction_id: str) -> dict:
+    object_id = f"transaction:{_transaction_id(transaction_id)}"
+    return _validate_transaction(
+        _read_envelope(_journal_path(cartridge, transaction_id), object_id, "SOURCE_UNAVAILABLE"),
+        object_id,
+    )
+
+
+def _write_transaction(cartridge: Path, record: dict) -> None:
+    transaction_id = record["transaction_id"]
+    _validate_transaction(record, f"transaction:{transaction_id}")
+    _, payload = _envelope(record)
+    _durable_replace(_journal_path(cartridge, transaction_id), payload, f"transaction:{transaction_id}")
+
+
+def _public_transaction(record: dict) -> TransactionState:
+    return TransactionState(
+        record["transaction_id"], record["state"], record["step"],
+        record["candidate_generation"], record["candidate_root"],
+        record["dependency_cursor"], record["pointer_cursor"],
+    )
+
+
+def _load_generation(path: Path) -> dict:
+    match = _GENERATION_NAME.fullmatch(path.name)
+    object_id = f"generation:{path.name}"
+    if match is None:
+        _transaction_reject(object_id, "generation filename is not a fixed-width integer")
+    record = _validate_generation(_read_envelope(path, object_id, "ROOT_INVALID"), object_id)
+    if record["generation"] != int(match.group(1)):
+        _transaction_reject(object_id, "generation filename and record disagree")
+    return record
+
+
+def _generation_files(cartridge: Path) -> tuple[Path, ...]:
+    directory = cartridge / "generations"
+    if not directory.exists():
+        return ()
+    files = []
+    for path in directory.iterdir():
+        if path.name.startswith("."):
+            continue
+        if not path.is_file() or _GENERATION_NAME.fullmatch(path.name) is None:
+            _transaction_reject(f"generation:{path.name}", "generation directory contains an unknown object")
+        files.append(path)
+    return tuple(sorted(files, reverse=True))
+
+
+def _verify_dependency_paths(cartridge: Path, root_digest: str) -> tuple[dict, tuple[Path, ...]]:
+    root = load_root(cartridge, root_digest)
+    locations = _read_index(cartridge, root_digest)
+    segment_ids = sorted({location.segment_id for location in locations.values()})
+    segment_paths = tuple(
+        cartridge / "segments" / _content_hex(segment_id, segment_id)
+        for segment_id in segment_ids
+    )
+    for segment_id, path in zip(segment_ids, segment_paths, strict=True):
+        try:
+            observed = _file_digest(path)
+        except OSError as error:
+            _q57_reject(segment_id, f"segment is unavailable: {error}", "PAGE_CORRUPT")
+        if observed != segment_id:
+            _q57_reject(segment_id, "segment bytes do not match their identity", "PAGE_CORRUPT")
+    for location in sorted(locations.values(), key=lambda item: item.page_digest):
+        _read_page(cartridge, location)
+    return root, (*segment_paths, _index_path(cartridge, root_digest),
+                  cartridge / "roots" / _content_hex(root_digest, root_digest))
+
+
+def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[GenerationPin, ...]:
+    pins = []
+    failures = []
+    for path in _generation_files(cartridge):
+        try:
+            record = _load_generation(path)
+            root = (_verify_dependency_paths(cartridge, record["root_digest"])[0]
+                    if verify_dependencies else load_root(cartridge, record["root_digest"]))
+            if root["identity"] != record["child_id"]:
+                _transaction_reject(f"generation:{record['generation']}", "child identity and root disagree")
+            pins.append(GenerationPin(record["generation"], record["child_id"], record["root_digest"]))
+        except CassetteError as error:
+            failures.append(error)
+    if not pins and failures:
+        raise failures[0]
+    return tuple(pins)
+
+
+def pin_generation(cartridge: str | Path) -> GenerationPin | None:
+    """Pin the highest callable generation without allowing a later commit to change this reader."""
+
+    generations = _valid_generations(Path(cartridge), False)
+    return generations[0] if generations else None
+
+
+def recover_generation(cartridge: str | Path) -> GenerationPin | None:
+    """Rehash every dependency and select the highest valid generation after mount or process death."""
+
+    generations = _valid_generations(Path(cartridge), True)
+    return generations[0] if generations else None
+
+
+def _next_generation(cartridge: Path) -> int:
+    files = _generation_files(cartridge)
+    return int(files[0].stem) + 1 if files else 1
+
+
+def begin_generation(
+    cartridge: str | Path,
+    transaction_id: str,
+    candidate_root: str,
+    *,
+    expected_parent_root: str | None,
+    context: TransactionContext | None = None,
+) -> TransactionState:
+    """Durably prepare one idempotent Q25/Q60 transaction against an exact parent generation."""
+
+    cartridge = Path(cartridge)
+    transaction_id = _transaction_id(transaction_id)
+    object_id = f"transaction:{transaction_id}"
+    candidate_root = _transaction_digest(candidate_root, object_id)
+    candidate = load_root(cartridge, candidate_root)
+    resume = _resume_record(cartridge, candidate_root, context, object_id)
+    journal = _journal_path(cartridge, transaction_id)
+    if journal.exists():
+        record = _load_transaction(cartridge, transaction_id)
+        if (record["candidate_root"] != candidate_root
+                or record["expected_parent_root"] != expected_parent_root
+                or (context is not None and record["resume"] != resume)):
+            _transaction_reject(
+                object_id,
+                "idempotency key names different candidate, parent, or restart material",
+                "IDEMPOTENCY_CONFLICT",
+            )
+        return _public_transaction(record)
+
+    active = recover_generation(cartridge)
+    active_root = active.root_digest if active else None
+    if expected_parent_root != active_root:
+        _transaction_reject(
+            f"transaction:{transaction_id}",
+            f"expected parent {expected_parent_root!r}, found {active_root!r}",
+            "IDEMPOTENCY_CONFLICT",
+        )
+    generation = _next_generation(cartridge)
+    record = {
+        "transaction_id": transaction_id,
+        "step": 0,
+        "state": _TRANSACTION_STATES[0],
+        "candidate_generation": generation,
+        "candidate_root": candidate_root,
+        "candidate_id": candidate["identity"],
+        "expected_parent_generation": active.generation if active else None,
+        "expected_parent_root": active_root,
+        "generation_record_digest": "",
+        "dependency_order": list(_DEPENDENCY_ORDER),
+        "dependency_cursor": 0,
+        "pointer_cursor": 0,
+        "resume": resume,
+    }
+    record["generation_record_digest"] = digest_bytes(canonical_bytes(_generation_body(record)))
+    _write_transaction(cartridge, record)
+    return _public_transaction(record)
+
+
+def transaction_state(cartridge: str | Path, transaction_id: str) -> TransactionState:
+    """Read one journal only after its canonical bytes and bound candidate verify."""
+
+    return _public_transaction(_load_transaction(Path(cartridge), transaction_id))
+
+
+def _candidate_payload(record: dict) -> bytes:
+    record_digest, payload = _envelope(_generation_body(record))
+    if record_digest != record["generation_record_digest"]:
+        _transaction_reject(f"transaction:{record['transaction_id']}", "candidate digest changed")
+    return payload
+
+
+def _write_candidate(cartridge: Path, record: dict) -> Path:
+    path = _candidate_path(cartridge, record["transaction_id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_bytes(_candidate_payload(record))
+    except OSError as error:
+        _transaction_reject(f"transaction:{record['transaction_id']}", f"candidate write failed: {error}")
+    return path
+
+
+def _ensure_candidate(cartridge: Path, record: dict) -> Path:
+    path = _candidate_path(cartridge, record["transaction_id"])
+    expected = _candidate_payload(record)
+    try:
+        observed = path.read_bytes()
+    except OSError:
+        observed = None
+    if observed != expected:
+        path = _write_candidate(cartridge, record)
+        try:
+            observed = path.read_bytes()
+        except OSError as error:
+            _transaction_reject(f"transaction:{record['transaction_id']}", f"candidate readback failed: {error}")
+    if observed != expected:
+        _transaction_reject(f"transaction:{record['transaction_id']}", "candidate readback digest changed")
+    return path
+
+
+def _publish_candidate(cartridge: Path, record: dict, repair: bool = False) -> Path:
+    destination = _generation_path(cartridge, record["candidate_generation"])
+    expected = _candidate_payload(record)
+    if destination.exists():
+        if destination.read_bytes() != expected:
+            _transaction_reject(f"generation:{record['candidate_generation']}", "generation collision")
+        return destination
+    candidate = _candidate_path(cartridge, record["transaction_id"])
+    if repair:
+        candidate = _ensure_candidate(cartridge, record)
+        _fullsync_file(candidate, f"transaction:{record['transaction_id']}")
+    else:
+        try:
+            observed = candidate.read_bytes()
+        except OSError as error:
+            _transaction_reject(
+                f"transaction:{record['transaction_id']}", f"candidate is unavailable: {error}"
+            )
+        if observed != expected:
+            _transaction_reject(
+                f"transaction:{record['transaction_id']}", "candidate changed after its durable hash"
+            )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.rename(candidate, destination)
+    except OSError as error:
+        _transaction_reject(
+            f"transaction:{record['transaction_id']}",
+            f"atomic generation publication failed: {error}",
+            "DURABILITY_UNSUPPORTED",
+        )
+    return destination
+
+
+def advance_generation(cartridge: str | Path, transaction_id: str) -> TransactionState:
+    """Execute one idempotent Q25 transition; a fresh process may execute the next transition."""
+
+    cartridge = Path(cartridge)
+    record = _load_transaction(cartridge, transaction_id)
+    step = record["step"]
+    object_id = f"transaction:{record['transaction_id']}"
+    if step == len(_TRANSACTION_STATES) - 1:
+        generation = _load_generation(
+            _generation_path(cartridge, record["candidate_generation"])
+        )
+        root, _ = _verify_dependency_paths(cartridge, generation["root_digest"])
+        if root["identity"] != generation["child_id"]:
+            _transaction_reject(object_id, "committed generation does not resolve its child identity")
+        return _public_transaction(record)
+    if step == 0:
+        _write_candidate(cartridge, record)
+    elif step == 1:
+        _ensure_candidate(cartridge, record)
+    elif step == 2:
+        _fullsync_file(_ensure_candidate(cartridge, record), object_id)
+    elif step == 3:
+        _verify_dependency_paths(cartridge, record["candidate_root"])
+    elif step == 4:
+        record = {**record, "step": 5, "state": _TRANSACTION_STATES[5]}
+        _write_transaction(cartridge, record)
+        return _public_transaction(record)
+    elif step == 5:
+        _, paths = _verify_dependency_paths(cartridge, record["candidate_root"])
+        directories = tuple(dict.fromkeys(path.parent for path in paths))
+        boundaries = (*(("file", path) for path in paths),
+                      *(("directory", path) for path in directories))
+        cursor = record["dependency_cursor"]
+        if cursor < len(boundaries):
+            kind, path = boundaries[cursor]
+            (_fullsync_file if kind == "file" else _sync_directory)(path, object_id)
+            record = {**record, "dependency_cursor": cursor + 1}
+        elif cursor == len(boundaries):
+            _verify_dependency_paths(cartridge, record["candidate_root"])
+            record = {**record, "dependency_cursor": cursor + 1}
+        elif cursor == len(boundaries) + 1:
+            active = pin_generation(cartridge)
+            if ((active.root_digest if active else None) != record["expected_parent_root"]
+                    and (active is None or active.generation != record["candidate_generation"])):
+                _transaction_reject(object_id, "callable parent changed before generation publication")
+            _publish_candidate(cartridge, record)
+            record = {**record, "step": 6, "state": _TRANSACTION_STATES[6]}
+        else:
+            _transaction_reject(object_id, "journal dependency cursor exceeds its verified frontier")
+        _write_transaction(cartridge, record)
+        return _public_transaction(record)
+    elif step == 6:
+        destination = _publish_candidate(cartridge, record, repair=True)
+        _fullsync_file(destination, object_id)
+        record = {**record, "step": 7, "state": _TRANSACTION_STATES[7], "pointer_cursor": 1}
+        _write_transaction(cartridge, record)
+        return _public_transaction(record)
+    elif step == 7:
+        destination = _generation_path(cartridge, record["candidate_generation"])
+        if record["pointer_cursor"] == 1:
+            _sync_directory(destination.parent, object_id)
+            record = {**record, "pointer_cursor": 2}
+        elif record["pointer_cursor"] == 2:
+            _sync_directory(destination.parent.parent, object_id)
+            record = {**record, "pointer_cursor": 3}
+        else:
+            generation = _load_generation(destination)
+            root, _ = _verify_dependency_paths(cartridge, generation["root_digest"])
+            if root["identity"] != generation["child_id"]:
+                _transaction_reject(object_id, "published generation does not resolve its child identity")
+            record = {**record, "step": 8, "state": _TRANSACTION_STATES[8]}
+        _write_transaction(cartridge, record)
+        return _public_transaction(record)
+    record = {**record, "step": step + 1, "state": _TRANSACTION_STATES[step + 1]}
+    _write_transaction(cartridge, record)
+    return _public_transaction(record)
+
+
+def commit_generation(
+    cartridge: str | Path,
+    transaction_id: str,
+    candidate_root: str,
+    *,
+    expected_parent_root: str | None,
+    context: TransactionContext | None = None,
+) -> GenerationPin:
+    """Resume until the exact candidate is a fully synced immutable callable generation."""
+
+    state = begin_generation(
+        cartridge,
+        transaction_id,
+        candidate_root,
+        expected_parent_root=expected_parent_root,
+        context=context,
+    )
+    while state.state != "COMMITTED":
+        state = advance_generation(cartridge, transaction_id)
+    advance_generation(cartridge, transaction_id)
+    record = _load_transaction(Path(cartridge), transaction_id)
+    return GenerationPin(record["candidate_generation"], record["candidate_id"], candidate_root)
+
+
+def rollback_generation(cartridge: str | Path, transaction_id: str) -> GenerationPin:
+    """Publish the prior valid root as a new generation while retaining both immutable revisions."""
+
+    cartridge = Path(cartridge)
+    generations = _valid_generations(cartridge, True)
+    if len(generations) < 2:
+        _transaction_reject(
+            f"transaction:{transaction_id}", "rollback requires a current and prior valid generation",
+            "INVALID_REQUEST",
+        )
+    current, prior = generations[:2]
+    return commit_generation(
+        cartridge, transaction_id, prior.root_digest, expected_parent_root=current.root_digest
+    )
+
+
+def collect_garbage(cartridge: str | Path) -> tuple[str, ...]:
+    """Remove only unreachable transaction temporaries; retained generations and reader pins survive."""
+
+    cartridge = Path(cartridge)
+    if recover_generation(cartridge) is None:
+        return ()
+    directory = _transactions_path(cartridge)
+    if not directory.exists():
+        return ()
+    records = [_load_transaction(cartridge, path.stem) for path in sorted(directory.glob("*.json"))]
+    live = {
+        _candidate_path(cartridge, record["transaction_id"])
+        for record in records
+        if record["step"] < 6
+    }
+    removed = []
+    for path in sorted(directory.iterdir()):
+        is_atomic_temporary = path.name.startswith(".") and path.name.endswith(".pending")
+        is_candidate = path.name.endswith(".generation-candidate")
+        if path.is_file() and path not in live and (is_atomic_temporary or is_candidate):
+            try:
+                path.unlink()
+            except OSError as error:
+                _transaction_reject(f"transaction:{path.name}", f"temporary reclamation failed: {error}")
+            removed.append(path.name)
+    if removed:
+        _sync_directory(directory, "transactions:garbage-collection")
+    return tuple(removed)
