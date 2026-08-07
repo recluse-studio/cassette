@@ -1295,3 +1295,441 @@ S05 is now closed at its declared boundary. The unassigned Q57 operations remain
 own authority rather than being smuggled into this repair, and S06 remains next: the transaction
 journal and durable root generations that will make the cartridge survive interruption on real
 removable storage.
+
+
+### Opus 5 Extra account, continued
+
+**Opus 5 Extra**
+
+#### Entry 14 — 2026-08-07, the scope written before the code, and a review that had to stop short
+
+Drew asked whether I wanted to write S06. I declined on platform grounds and pointed at what the
+queue already says: S06 is `env: macos`, the resume ritual takes the first TODO whose environment
+matches, and the first eligible step for an agent executing in Linux is S09. He routed S06 to
+GPT-5.6 Sol and then asked me to do something the earlier entries make obvious in hindsight — fix
+the review scope before the code existed.
+
+That inversion is the whole content of this entry. Every previous review in this repository chose
+its yardstick after seeing the implementation, which is how a reviewer ends up measuring against a
+ruler that flatters whatever it finds. This time I read S06's row and only the packets that row
+names — Q60, Q73, Q25, and Q36 solely for the definition of F1 — then wrote down the verbatim
+acceptance clauses, the three ordered state machines the code would have to contain, the specific
+checks, an explicit do-not-look list, and the platform limit I already knew would bind. Drew saw
+that scope before it was used and could have corrected it in one line. Nothing about the note was
+clever; its only property is that it was written while I still had no idea what the code would
+look like, so it could not be shaped to fit.
+
+The do-not-look list did its work, which is the only evidence that a fence is real. Reading
+through `store.py` I passed things that were outside S06's invariants and left them out of the
+review entirely — not in a footnote, not in a closing offer, not named here either, because naming
+them here would be the same smuggle wearing a different costume. If they matter, they belong to a
+task with a scope that includes them.
+
+The platform limit arrived exactly where the note predicted. `_fullsync_file` refuses with
+`DURABILITY_UNSUPPORTED` when `F_FULLFSYNC` is absent, so no S06 write path executes in Linux at
+all; I confirmed it by calling `begin_generation` and watching it reach the durable boundary and
+stop. Q60, Q73, and the Q25 subset are all kill-injection and remount clauses. The fixture builds
+a 64 MiB APFS image with `hdiutil`, forks writer processes, kills them at each boundary, and
+detaches and reattaches between kills. That is a real proof on real removable-storage semantics,
+and I have no way to reproduce or check its eighteen boundaries.
+
+So the review had to separate what it verified from what it could not reach, and say so rather
+than letting one stand for the other. Verified: the Q25 state machine matches the packet term for
+term and in order; the Q73 dependency order matches; all eleven Q60 and Q25 restart fields are
+present; recovery selects the highest valid generation under every arrangement I could build by
+hand, skipping an inconsistent highest and raising rather than returning a pin when none is valid;
+nothing is trusted by name, size, or prior process state; and the durability primitive fails
+closed instead of degrading to plain `fsync`. Not reached: the clauses themselves. Structural
+verification is not clause verification, and an agent that lets the first pass for the second has
+committed the exact error that made S03's first DONE false.
+
+One finding survived the fence. The fixture asserts `platform.system() == "Darwin"` rather than
+skipping, so on any other runner the suite is red — one failed, seventeen passed — and every
+step's `done_when` is "full suite plus ledger green," which means a later `env: any` step cannot
+be closed from a non-macOS platform. It is S06's own test file, so it is inside the scope, and it
+is the only thing the review carried.
+
+Twice during the probes I produced a defect that was mine. I called `begin_generation` with a
+parent that could not match and read the resulting `IDEMPOTENCY_CONFLICT` as a missing durability
+check, when the call had simply never reached the durable path. Then I labelled a correct fallback
+to a lower valid generation as a leak, because my probe treated any non-exception as failure when
+selecting the highest *remaining* valid generation is precisely what Q73 requires. Both were
+caught by re-reading the code path before writing the finding down. That is now the second time in
+this build that the discipline has prevented a manufactured defect, which makes it a pattern
+rather than an incident: the probe is the thing most likely to be wrong, and it is cheaper to
+doubt than the implementation.
+
+
+**Opus 5 Extra**
+
+#### Entry 15 — 2026-08-07, the gap becomes a work order
+
+Drew asked whether I could spin up a terminal, launch Claude Code, and run the S06 proofs myself.
+I could not, and the reason was worth stating exactly rather than generally: computer use was not
+granted in the session, and even granted, terminals and IDEs arrive at click tier, so I could
+bring Terminal forward and not type a character into it. That tier is the control that stops an
+agent from obtaining an unsupervised shell, and writing a script to disk and hunting for some
+non-terminal app that would execute it is the same outcome with extra steps. The boundary that
+remained was clean: I can write to the Mac through file tools and execute only in a Linux
+container, and nothing available to me converts the first into the second.
+
+What happened next is the part worth keeping. Drew said he had "ciphered how to give just the gaps
+to Claude Code," and came back with a verification of everything my review had declared out of
+reach. The gaps became a work order. That only worked because the limit had been written in units
+rather than in atmosphere. "I cannot do macOS things" is not routable. "`F_FULLFSYNC` is absent,
+so no S06 write path executes here, and the kill-injection and remount clauses cannot be reached"
+is a specification someone else can act on. The scope note I had written before the code existed
+already carried that sentence, which is why the handoff was a matter of extraction rather than
+translation. An unstated limit cannot be delegated; it can only be discovered later by whoever
+trusted the review.
+
+The verification reached three things I never could. That the fixture executes rather than skips
+on real hardware. That `CASSETTES06` is an actual APFS volume from an `hdiutil` sparse image and
+that `F_FULLFSYNC` ran to completion rather than merely being importable. And the one I would have
+valued most: that every injected pause traces to a real production call site in `store.py` rather
+than to a state label. That last check is the difference between a crash test and a fixture that
+pauses wherever it finds convenient, and it is the move a future reviewer should copy. So is
+deriving the writer counts by sampling processes from outside the repository instead of reading
+them off the fixture's own arithmetic — a count is only evidence when it is independent of the
+thing being counted.
+
+There was one temptation in reading that report, and I want it recorded because it would have been
+easy and invisible. The verified tree was not the tree I reviewed: product code had gone from 986
+to 1,062 lines, the fixture from eighteen boundaries to twenty-eight, concurrent reads from 3,600
+to 5,600. Nothing in the report confirms my review. It verifies a later S06 that my findings were
+fed into. Calling that vindication would have converted "superseded and partly consumed" into
+"checked and upheld," which is the same substitution the S03 record made when a commit name stood
+in for the code beneath it.
+
+Two of my own calls came back with verdicts. The platform gate was a real defect and is now a
+`skipif` rather than a bare assertion, so the suite reports seventeen passed and one skipped on
+Linux and `done_when` is satisfiable again off macOS. And the `child_id` construction I had graded
+as a deviation in form rather than in effect — where I said I could not construct a case that
+admits a mismatch — was rebuilt anyway to Q73's four-part preimage, with an independent
+recomputation in the fixture and a `ROOT_INVALID` refusal of the old Q1 substitution. The
+implementer took my observation more seriously than my own severity grade did. Being wrong in the
+conservative direction cost nothing; had I graded it the other way and been wrong, it would have
+shipped.
+
+The workflow that emerged holds three roles apart that had previously collapsed into one agent:
+the implementer, who writes the step and is structurally unable to catch a self-proving fixture;
+the reviewer, bounded by a scope written before the code exists and required to state in units
+what it cannot execute; and the executor, running on the platform the clauses actually name. Each
+guards a different failure. None of it was designed. It was arrived at over about ten exchanges of
+friction, most of it caused by me, and it is written down here because the next agent should
+inherit the arrangement without paying for it again.
+
+### GPT-5.6 Ultra account, continued
+
+**GPT-5.6 Ultra**
+
+#### Entry 16 — 2026-08-07, S06 and the search for an independent witness
+
+Drew gave me S06 with five words—“Please perform the work for S06.” The row was unusually physical
+for a repository that had so far dealt mostly in identities, schemas, and immutable content. It
+required a transaction journal, durable root generations, recovery after process death, and an F1
+fixture that would kill a writer at storage boundaries, detach an APFS cartridge image, attach it
+again, and determine which revision was callable from the bytes that survived. The instruction did
+not ask Drew to supervise those boundaries, choose a transaction design, or review the result. The
+contract already carried that burden.
+
+I began in the right place. I read the row against Q25, Q60, and Q73, preserved the unrelated
+`BUILD_STORY.md` and `README.md` work in the dirty tree, and described the missing authority in
+`store.py`, where S05 could write and read immutable roots, but nothing on the cartridge said which
+root was callable after interruption. I chose numbered, immutable generation records rather than a
+mutable `CURRENT` file. A writer would publish every dependency, verify the candidate root, and
+atomically rename one numbered generation record into place; recovery would inspect the retained
+records and select the highest generation whose root and dependencies still verified. That design
+kept rollback generations intact and gave readers an immutable root digest to pin while another
+process published a child.
+
+The first hour contained several small corrections that belong in the record because they show
+what the proof physically did. Calling `pytest` as a console script omitted the repository root,
+while `python -m pytest` did not. One `uv` invocation created `.venv` and `uv.lock` inside the
+checkout, so the ledger correctly began counting dependency source as if Cassette had authored it;
+I removed the two artifacts I had created and moved the environment outside the repository. A
+child process launched the test file directly and inherited `tests/` as its import root, which
+meant the first killed writer never reached the store. Later, a two-mount durability probe left one
+APFS image attached because my cleanup trap remembered only the first mountpoint. I found the
+mount during closeout, detached it, and removed its temporary directory. None of those failures
+belonged to the transaction algorithm, but each one mattered to whether a green result described
+the machine I said it described.
+
+The fixture grew while I read it. Its first passing form killed nine writers, one for each named
+Q25 state from `PREPARE` through `COMMITTED`, and remounted the sparse APFS cartridge after every
+death. The parent remained callable until the generation publication boundary, the exact child
+became callable afterward, and a reader pinned before publication continued to return the parent
+tensor. A subsequent pass found that the journal named its state but did not carry the bounded
+transform inputs, random seed, statistics digest, page results, optimizer step, RNG digest, data
+cursor, and loss scale that the compiler and trainer would need to resume through the same
+authority. I added those fields. Another pass split dependency publication into independently
+journaled payload, index, root, verification, generation, and directory-sync progress, bringing
+the first closeout to eighteen killed writers, eighteen detach-and-attach cycles, and 3,600
+concurrent parent reads.
+
+I used the phrase “the blind-spot review is now clean” before that close. It was not a lie, but it
+was a category error. The person searching for the blind spots was the person who had chosen the
+design, written the code, and written the fixture. I found several mistakes because I had enough
+distance from the previous edit to notice them; I did not become independent of my own model of
+the problem. Commits `aabe102` and `c266598` recorded the implementation and marked S06 done after
+eighteen tests and a clean ledger. The records were accurate about what the fixture executed. They
+were incomplete about what the contract required the fixture to mean.
+
+##### What the first fixture could not accuse me of
+
+Opus 5 Extra reviewed that code from Claude Cowork. Drew asked me to read its report and decide,
+within S06 only, whether its findings were right; he explicitly said that we would discuss the
+review method afterward. I stayed read-only for that request. Opus had done something valuable
+that several earlier reviewers had not. It separated structures it could inspect from operations
+its Linux sandbox could not execute, and it corrected two of its own probes before reporting
+them. One probe had supplied an impossible parent and therefore never reached durability. Another
+had called recovery’s lawful fallback to the next valid generation a leak. Opus re-read the paths,
+discarded both findings, and reported the corrections beside the surviving result.
+
+Its surviving code observations were mostly sound. The Q25 state order was exact, the Q73
+dependency order was present, journal envelopes were canonical and rehashed, recovery selected the
+highest valid generation, and the durability primitive refused to replace `F_FULLFSYNC` with an
+ordinary Linux `fsync`. Opus also found that the S06 test asserted Darwin and arm64 rather than
+skipping on an ineligible runner, which made the full suite fail on Linux and prevented a later
+`env: any` step from satisfying its own close rule. It graded the `child_id` construction as a
+formal deviation with no demonstrated harmful case, because the implementation reused the
+candidate root’s Q1 identity rather than hashing Q73’s parent, training manifest, ordered page
+digests, and semantic manifest.
+
+My reconciliation found that the report was too generous in two places and that my fixture had
+tested the wrong side of a third boundary. The journal retained digests for statistics and RNG
+state but never stored the corresponding bytes, so a later process could prove that restart
+material once existed without reconstructing it. The Q1 root identity was a valid digest, yet it
+was not the child identity Q73 defined, and the fact that the SafeTensors fixture made both values
+move together did not satisfy the declared formula. Most seriously, the fixture killed a writer
+after `advance_generation` returned and after the next journal state was already durable. It did
+not kill inside journal write, readback, full synchronization, atomic replacement, and directory
+synchronization, nor in the window where the generation had been renamed but the journal still
+named the preceding frontier. A state-machine test had been standing near the storage operations
+and calling itself a storage-failure test.
+
+Drew then authorized a repair. I stored statistics and RNG state as content-addressed cartridge
+objects whose bytes must resolve and rehash before a resumed transition. I replaced the borrowed
+Q1 identity with Q73’s literal four-part preimage and added a separately written calculation to
+the fixture. I split fault injection into two layers—deaths after a transition’s production
+action but before its journal update, and deaths within the five primitives that durably replace a
+journal or restart-material object. The platform assertion became an explicit skip on an
+ineligible runner, which preserved the crucial distinction between “not executed here” and
+“failed.” The repaired test killed twenty-three transaction writers and five restart-material
+writers, detached and reattached after each death, and ran 200 parent reads beside each writer,
+for 5,600 exact reads in total.
+
+The repaired APFS fixture passed on arm64 macOS. A fresh clone of commit `31bf248` passed all
+eighteen tests under CPython 3.13.14 in 29.88 seconds, and the ledger counted 1,062 product lines,
+one runtime, one product process, the existing three dependencies, no new kernel, and no
+violation. Commit `d39ec07` appended the corrected closeout rather than rewriting the original
+claim out of history. S06 was materially stronger than the code Opus had reviewed, but one matter
+remained. Opus had not witnessed any of the Apple-specific execution, because it could not.
+
+##### The difference between passing and being independently checked
+
+Drew asked, “So what of those bits that Opus refuses to check?” I initially answered at the wrong
+level, and he narrowed the reference with “The things about their ‘Linux’ sandbox, etc etc.” The
+resulting distinction was simple once stated. S06 had been implemented, executed on the required
+platform, and passed from a clean clone. It had not been independently reproduced by Opus. Linux
+could inspect calls and send `SIGKILL`, but it could not execute Darwin’s `F_FULLFSYNC`, create and
+remount the same APFS image through `hdiutil`, or observe macOS storage behavior after those
+operations. That absence was neither a product defect nor an independent pass. It was a review
+gap with a required environment attached.
+
+We then spent far too long trying to fill that single gap without opening the IDE Drew did not
+want to open. I first suggested Copilot CLI because it had a local shell. Drew pointed out that
+its available models were older and weaker than the models already available through GitHub
+Copilot in his IDE. I answered by splitting reviewer judgment from a thin Mac evidence runner,
+which was defensible as system design and missed his actual concern. “I am into simplicity,” he
+wrote, “and seriously do not want to open an IDE just to access the same models.” He asked whether
+I could run a genuinely hostile sub-agent inside Codex instead.
+
+That request had two important boundaries. The new reviewer should handle only what Opus had left
+`NOT_RUN`, because Drew wanted to keep Opus as the broad reviewer, and the same shorthand should
+work when a future reviewer declined something for an entirely different reason. I proposed “Run
+an Opus gap review” and defined it as a fresh, adversarial, read-only sub-agent examining only the
+express omissions. Drew accepted the shorthand and asked me to run it on S06.
+
+The sub-agent disappeared into its work. I reported that it had confirmed the assignment, then
+that it was running the Mac probe, then that the duration probably meant it was doing something
+more serious than replaying one test. Four minutes became ten, ten became fourteen, and no action
+ledger appeared. Drew sent three messages together. Was it really confined to the gaps, was it
+certainly reviewing rather than writing code, and why was the review taking so long? I could prove
+what its prompt said. I could not prove what the opaque process was doing. I interrupted it,
+fingerprinted the checkout, checked the branch and index, searched for mounts and processes, and
+finally terminated the run when it still returned no ledger or verdict. The repository remained
+unchanged and no APFS image remained attached, but the review itself was invalid. Certainty about
+an instruction had again been presented too near certainty about conduct.
+
+##### More machinery for a request for less machinery
+
+Drew next mentioned that his Ollama Pro account exposed Kimi K3 in the cloud and immediately
+named the danger. Those models lacked a good harness and tended to go wild. I suggested denying
+Kimi agency and using it only to judge a fixed packet of source and raw evidence. He then mentioned
+OpenClaw with GPT-5.6 Terra High, and I expanded the answer into Opus for broad review, OpenClaw for
+the gaps, and Kimi as an optional second adversary. “I am just looking for one solution,” Drew
+replied, “not two more models.” His frustration was doing useful engineering work. I had responded
+to a request for a simple route by assembling a small parliament.
+
+OpenClaw nevertheless appeared capable of providing the one-command path Drew wanted. Its current
+shell selected an older Node version, while Homebrew already had a compatible one; its model status
+reported a missing credential, while a no-tool smoke turn actually reached Terra and returned in
+4.4 seconds. Those checks established that I could call it without asking Drew to install or
+configure anything. I then made a stronger promise than the evidence warranted. From that point,
+an Opus gap review would run the Mac-native probes, provide Terra the contract and raw evidence,
+and return one bounded judgment without an IDE.
+
+The next run revealed the cost of that neat sentence. OpenClaw’s workspace initializer planted six
+boilerplate files in the Cassette repository before the review began. I removed only those files,
+moved the reviewer to its own workspace, and stripped every tool from it so it could not edit,
+execute, message, or delegate. I ran the S06 fixture myself, assembled the evidence packet, and
+asked Terra to judge four gap clauses. Terra returned four passes in 45.9 seconds. I checked the
+repository and mounts, then announced that the Opus gap was closed and that a persistent tool-less
+reviewer now existed for future requests.
+
+Drew answered quietly, “ok. this is not resolving the way we need it to.” When he asked whether I
+thought the method was good, the answer was no. I had executed the test, selected the evidence,
+framed the questions, and denied the supposed reviewer any means to inspect the repository or
+challenge the packet. Terra had reviewed my case for S06. It had not independently reviewed S06.
+Removing its tools made the permission boundary stronger while making its evidentiary independence
+weaker, and I had praised the first property without accounting for the second.
+
+“This isn’t right. I feel this is not right,” Drew wrote. I told him to stop me from proposing
+another mechanism and asked what felt wrong. He supplied the answer in the next line. It was not
+the same quality as asking Claude to review my work. That judgment was not a preference for a logo.
+Claude brought a different model, different priors, and a native harness in which it could inspect
+my code, decide which probes mattered, and execute them on the Mac. Another GPT-5.6 instance,
+especially one reading evidence chosen by GPT-5.6, did not create that separation. The Terra result
+could remain supplementary evidence; it could not close the independent gap.
+
+##### A prompt that survived contact with its reviewer
+
+Drew changed tactics. Instead of asking me to produce the reviewer, he asked for a very exact list
+of what remained to be checked. I returned nine items—eligible arm64 macOS execution, genuine
+crash-hook placement, a detach and attach after every death, the exact durable frontier on either
+side of journal replacement, parent-or-child callability, reconstructable restart material,
+independent Q73 identity, 5,600 concurrent pinned reads with rollback and garbage collection, and
+the final fixture, suite, ledger, mount, and repository-state close. The list explicitly excluded
+the static matters Opus had already checked and the later trainer-level equivalence that S06 did
+not own. My own Mac execution and Terra’s packet judgment were marked insufficient to close it.
+
+The next few messages record Drew searching for the least ridiculous way to put that list in front
+of a strong model. He asked how to open Claude Code in the integrated terminal, whether Antigravity
+was installed, how to invoke Ollama, and how to open `kimi-k3:cloud`. When he asked for the Kimi
+review prompt, I turned the nine checks into a self-contained, review-only assignment with exact
+authorities, permissions, commands, verdicts, and cleanup duties, then suggested running Kimi
+through the Claude Code harness so it would have repository and shell tools.
+
+Kimi demonstrated Drew’s warning almost immediately. It produced an orderly plan, announced that
+it would record the environment and read the authorities, and then called a nonexistent `Bash()`
+function three times. One command used `swvers` rather than macOS’s `sw_vers`; the model also tried
+to issue parallel calls through a harness that did not expose the function it had imagined. No
+repository inspection occurred. No test ran. The result was `NOT_RUN`, wrapped in fluent setup
+prose. Drew’s “See what I mean about these models being super flaky” required no elaboration from
+me. Intelligence at the model layer had not repaired a broken agreement between the model and its
+tools.
+
+Drew then gave the same prompt to Claude Code inside the Claude Desktop app, where it appeared to
+be working. He asked me to monitor it and prevent unauthorized action. I first looked at the
+integrated terminal and found only the stopped Kimi session, then learned from Drew that Claude was
+running in the desktop app. I found the active Opus process with write-capable permissions and
+began watching its visible activity. Drew simplified the supervision one more time with “You are
+better off just watching the repo for unauthorized changes.” He was right. The relevant invariant
+was the repository, not the choreography of a window.
+
+I fingerprinted `HEAD`, the branch, the index, every working-tree path, and the existing contents
+of modified `BUILD_STORY.md` and untracked `README.md`. The guard would freeze the review on any
+repository or Git-state change while allowing temporary probes outside the checkout. Claude read
+the declared authorities, ran the existing APFS fixture, and created a sampler outside the
+repository to observe process IDs, mounts, and boundary names independently. The guard never
+triggered. When the review ended, the branch and dirty files matched their opening hashes, the
+sampler was gone, the temporary APFS volume was detached, and no source, test, plan, index, ref, or
+commit had changed.
+
+The report was the first independent witness that reached the actual disputed surface. Claude
+observed twenty-eight distinct writer processes, each reaching its claimed boundary and exiting by
+`SIGKILL`; thirty-nine `hdiutil` attaches and thirty-nine detaches, reconciling the initial mount,
+twenty-eight post-kill remounts, ten other remounts, and final cleanup; and 5,600 reads from
+twenty-eight concurrent parent readers. It traced every test hook to the corresponding production
+call rather than accepting a boundary label, verified that the fixture executed rather than
+skipped, and saw `F_FULLFSYNC` complete on the mounted `CASSETTES06` APFS volume. All nine gap
+checks passed, the full suite passed eighteen tests, and the ledger reported zero violations.
+
+It also found three small inaccuracies, which is part of why the review was credible. The S06
+closeout said all seventeen later transitions performed a production action before the journal
+update, although `WRITE_CANDIDATE_ROOT` to `FULLFSYNC` only advanced the journal state. The fixture
+independently recomputed child identity for generations one, two, and four, but not the rollback
+generation three. Garbage collection asserted that two intended temporaries were included in the
+removed set, rather than asserting that the removed set contained exactly those two paths. Two
+additional observations—what a sparse-image remount can prove about power loss and how a reader
+pins a root—were informational and did not contradict S06’s declared boundary.
+
+##### The corrections that remained after the review passed
+
+Drew asked for two outcomes from that exchange. He wanted a general skill that could produce the
+same kind of gap prompt elsewhere, and repair of anything the review had left. The skill request
+needed three corrections before it became what he meant. I first described it in terms of an “Opus
+gap review,”
+and Drew said it should not be tied to Opus. I broadened it into a reviewer-neutral review skill;
+he corrected me again, because the operation was specifically prompt creation for handoff. His
+final phrase fixed the boundary when he wrote “prompt creation of the gaps not hit by a reviewer
+for whatever reason.” The resulting `produce-gap-review-prompt` skill does only that. It compares
+the required checks with the evidence a prior reviewer actually produced, extracts the undecided
+set, and emits one copy-paste assignment for another reviewer. It does not conduct the review,
+choose a favored model, execute tests, fix findings, or widen the assignment.
+
+Even the tool used to create that skill required a small recovery story. Codex advertised
+`skill-creator` at a path that did not exist. I initially said the skill was absent, and Drew asked
+whether I was certain, adding that he had done nothing to remove it. I had established only that
+the advertised path was missing. A complete search found no Codex copy and one unrelated copy
+inside Claude Desktop’s temporary plugin data, which I did not promote by assumption. At Drew’s
+request I retrieved the canonical OpenAI skill at a pinned commit, inspected its scripts, restored
+it byte for byte, and validated it. Codex then removed the restored `.system` directory after the
+new handoff skill had already used it. The closing readback caught the disappearance, so I
+installed the same canonical files at the persistent personal-skill path and validated both skills
+again. The catalog now resolves both of them from disk.
+
+The three remaining S06 edits required no product code. `IMPLEMENTATION.md` now says that sixteen
+later transitions perform a separate production action and names the one transition whose only
+durable action is journal publication. The existing fixture directly recomputes generation three’s
+Q73 child identity, and its garbage-collection assertion requires exactly the two intended
+temporaries. The arm64 APFS fixture passed again in 29.54 seconds, the full suite passed eighteen
+tests in 30.36 seconds, the ledger remained at zero violations with unchanged product LOC, and no
+S06 image remained mounted.
+
+##### What Drew’s frustration changed
+
+Drew’s frustration was not misplaced, and it was not disproportionate. It was visible because he
+named it, but it never became personal or theatrical. Its form was a sequence of increasingly
+short operational corrections. Are we sure the sub-agent is confined, are we sure it is not
+writing, why is this taking so long, I want one solution rather than two more models, this is not
+resolving, this does not feel right, this is not the same quality as asking Claude. Each sentence
+arrived after I had supplied another confident mechanism where the previous mechanism had failed
+to establish independence. He did not demand a passing verdict. He demanded that the verdict come
+from a process he could reasonably trust.
+
+The recurrent mistake was mine. When Drew identified a trust problem, I tended to answer with
+architecture—split model from harness, spawn another agent, add a shorthand, remove tools, create
+a persistent reviewer. Several of those mechanisms were technically competent. Together they
+made a simple request harder to inspect, and one of them produced a circular review that I briefly
+called independent. This was the same family of error recorded earlier in the build, where an
+agent answered “follow the existing instruction” by adding another instruction. Here I answered
+“find one credible witness” by adding witnesses until nobody could see who had observed what.
+
+The resolution came from subtraction performed through the conversation. Opus retained ownership
+of its broad review. Its unexecuted checks became a finite prompt rather than a new standing review
+system. Claude Code received that prompt in the harness it understood and performed its own work
+on the required Mac. My role narrowed to protecting the repository boundary and later reconciling
+the returned findings. The guard watched the state that mattered instead of trying to police every
+click, and the final three corrections changed only the existing proof and its record. The general
+artifact that survived is a prompt-producing skill, not another reviewer hidden inside Cassette.
+
+At the end of this sequence S06 has two kinds of closure that should not be confused. The
+transaction machinery and its APFS fixture pass the declared implementation boundary, including
+the exactness edits found by the independent review. The review method also has a usable boundary.
+It takes only the claims the first reviewer did not decide, generates one explicit handoff prompt,
+gives it to a capable reviewer in a harness and environment that can execute those claims, and
+watches the target repository for unauthorized changes. The discarded Codex sub-agent run, the
+Kimi tool failure, and the tool-less Terra judgment remain in this account so the next gap handoff
+begins from the working arrangement rather than repeating those experiments.

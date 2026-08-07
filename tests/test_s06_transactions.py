@@ -354,6 +354,12 @@ def test_q25_q60_q73_process_death_remount_resume_and_reader_isolation(tmp_path)
 
         rolled_back = rollback_generation(cartridge, "rollback-child")
         assert rolled_back.generation == 3 and rolled_back.root_digest == parent_root
+        assert rolled_back.child_id == _q73_child_id(
+            cartridge,
+            parent_root,
+            child_pin.child_id,
+            _training_manifest(None, parent_root),
+        )
         assert recover_generation(cartridge) == rolled_back
         assert read_tensor(cartridge, child_pin.root_digest, "weight") == child_bytes
 
@@ -363,7 +369,8 @@ def test_q25_q60_q73_process_death_remount_resume_and_reader_isolation(tmp_path)
         orphan.write_bytes(b"unreachable")
         material_orphan.write_bytes(b"unreachable material")
         removed = collect_garbage(cartridge)
-        assert {".orphan.pending", ".material-orphan.pending"} <= set(removed)
+        assert len(removed) == 2
+        assert set(removed) == {".orphan.pending", ".material-orphan.pending"}
         assert not orphan.exists() and not material_orphan.exists()
         assert all((cartridge / "generations" / f"{number:020d}.json").exists()
                    for number in (1, 2, 3))
