@@ -147,7 +147,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S05]
-    status: DONE 2026-08-07 — step commit aabe102; committed-HEAD Python 3.13.14 suite 18 passed; ledger clean with 986 product LOC, one runtime, one product process, and no new dependency or numerical kernel
+    status: IN_PROGRESS 2026-08-07 — reopened after review named three failing clauses: Q60 restart digests did not resolve retained restart bytes; Q73 child_id did not implement its declared formula; the F1 fixture killed only after journaled transitions rather than inside every write/flush publication window. The fixture also hard-failed instead of reporting its macOS requirement on other platforms.
     closeout:
       - clause: "Q25 transaction subset and Q60/Q73 process death at every durable boundary"
         test_or_probe: "tests/test_s06_transactions.py::test_q25_q60_q73_process_death_remount_resume_and_reader_isolation"

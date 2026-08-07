@@ -66,7 +66,7 @@ _TRANSACTION_STATES = (
 _DEPENDENCY_ORDER = ("payloads", "indexes", "child_root", "verification", "generation_pointer")
 _TRANSACTION_FIELDS = frozenset({
     "transaction_id", "step", "state", "candidate_generation", "candidate_root",
-    "candidate_id", "expected_parent_generation", "expected_parent_root",
+    "candidate_id", "expected_parent_generation", "expected_parent_id", "expected_parent_root",
     "generation_record_digest", "dependency_order", "dependency_cursor", "pointer_cursor",
     "resume",
 })
@@ -74,9 +74,10 @@ _RESUME_FIELDS = frozenset({
     "operation_version", "input_digests", "random_seed", "statistics_digest",
     "page_results", "optimizer_step", "rng_state_digest", "data_cursor", "loss_scale",
 })
+_TRAINING_MANIFEST_FIELDS = _RESUME_FIELDS - {"page_results"}
 _GENERATION_FIELDS = frozenset({
-    "generation", "child_id", "root_digest", "parent_generation", "parent_root",
-    "transaction_id",
+    "generation", "child_id", "root_digest", "parent_generation", "parent_id",
+    "parent_root", "training_manifest", "transaction_id",
 })
 _TRANSACTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _GENERATION_NAME = re.compile(r"([0-9]{20})\.json")
@@ -188,14 +189,14 @@ class TransactionState:
 
 @dataclass(frozen=True)
 class TransactionContext:
-    """Bounded Q25/Q60 restart material supplied by a compiler or trainer."""
+    """Bounded Q25/Q60 restart material retained by digest and exact cartridge bytes."""
 
     operation_version: str
     input_digests: tuple[str, ...]
     random_seed: int | None = None
-    statistics_digest: str | None = None
+    statistics: bytes | None = None
     optimizer_step: int | None = None
-    rng_state_digest: str | None = None
+    rng_state: bytes | None = None
     data_cursor: int | None = None
     loss_scale: str | None = None
 
@@ -1007,8 +1008,16 @@ def _candidate_path(cartridge: Path, transaction_id: str) -> Path:
     return _transactions_path(cartridge) / f"{transaction_id}.generation-candidate"
 
 
+def _restart_material_path(cartridge: Path, digest: str) -> Path:
+    return _transactions_path(cartridge) / "material" / _content_hex(digest, digest)
+
+
 def _generation_path(cartridge: Path, generation: int) -> Path:
     return cartridge / "generations" / f"{generation:020d}.json"
+
+
+def _training_manifest(resume: dict) -> dict:
+    return {field: resume[field] for field in sorted(_TRAINING_MANIFEST_FIELDS)}
 
 
 def _generation_body(record: dict) -> dict:
@@ -1017,7 +1026,9 @@ def _generation_body(record: dict) -> dict:
         "child_id": record["candidate_id"],
         "root_digest": record["candidate_root"],
         "parent_generation": record["expected_parent_generation"],
+        "parent_id": record["expected_parent_id"],
         "parent_root": record["expected_parent_root"],
+        "training_manifest": _training_manifest(record["resume"]),
         "transaction_id": record["transaction_id"],
     }
 
@@ -1027,17 +1038,22 @@ def _validate_generation(record: object, object_id: str) -> dict:
         _transaction_reject(object_id, "generation record has an incorrect field set")
     generation = record["generation"]
     parent_generation = record["parent_generation"]
+    parent_id = record["parent_id"]
     parent_root = record["parent_root"]
     if type(generation) is not int or not 1 <= generation <= _MAX_JSON_INTEGER:
         _transaction_reject(object_id, "generation must be a positive RFC 8785-safe integer")
-    if ((parent_generation is None) != (parent_root is None)
+    if (len({parent_generation is None, parent_id is None, parent_root is None}) != 1
             or (parent_generation is not None
                 and (type(parent_generation) is not int or not 1 <= parent_generation < generation))):
-        _transaction_reject(object_id, "parent generation and root must form one earlier generation")
+        _transaction_reject(
+            object_id, "parent generation, identity, and root must form one earlier generation"
+        )
     _transaction_digest(record["child_id"], object_id)
     _transaction_digest(record["root_digest"], object_id)
     if parent_root is not None:
+        _transaction_digest(parent_id, object_id)
         _transaction_digest(parent_root, object_id)
+    _validate_training_manifest(record["training_manifest"], object_id, "ROOT_INVALID")
     _transaction_id(record["transaction_id"])
     return record
 
@@ -1048,16 +1064,16 @@ def _counter(field: str, value: object, object_id: str) -> int | None:
     return value
 
 
-def _validate_resume(resume: object, object_id: str, error_code: str) -> dict:
+def _validate_training_manifest(manifest: object, object_id: str, error_code: str) -> dict:
     def reject(detail: str) -> None:
         _transaction_reject(object_id, detail, error_code)
 
-    if not isinstance(resume, dict) or set(resume) != _RESUME_FIELDS:
-        reject("journal resume material has an incorrect field set")
-    version = resume["operation_version"]
+    if not isinstance(manifest, dict) or set(manifest) != _TRAINING_MANIFEST_FIELDS:
+        reject("training manifest has an incorrect field set")
+    version = manifest["operation_version"]
     if not isinstance(version, str) or not version or version != version.strip():
         reject("resume operation_version must be exact nonempty text")
-    inputs = resume["input_digests"]
+    inputs = manifest["input_digests"]
     if not isinstance(inputs, list) or not inputs or len(inputs) != len(set(inputs)):
         reject("resume input_digests must be a nonempty unique list")
     for digest in inputs:
@@ -1067,18 +1083,28 @@ def _validate_resume(resume: object, object_id: str, error_code: str) -> dict:
             reject("resume input_digests contain a malformed digest")
     for field in ("random_seed", "optimizer_step", "data_cursor"):
         try:
-            _counter(field, resume[field], object_id)
+            _counter(field, manifest[field], object_id)
         except CassetteError:
             reject(f"resume {field} is malformed")
     for field in ("statistics_digest", "rng_state_digest"):
-        if resume[field] is not None:
+        if manifest[field] is not None:
             try:
-                _transaction_digest(resume[field], object_id)
+                _transaction_digest(manifest[field], object_id)
             except CassetteError:
                 reject(f"resume {field} is malformed")
-    loss_scale = resume["loss_scale"]
+    loss_scale = manifest["loss_scale"]
     if loss_scale is not None and (not isinstance(loss_scale, str) or not loss_scale):
         reject("resume loss_scale must be null or exact numeric text")
+    return manifest
+
+
+def _validate_resume(resume: object, object_id: str, error_code: str) -> dict:
+    def reject(detail: str) -> None:
+        _transaction_reject(object_id, detail, error_code)
+
+    if not isinstance(resume, dict) or set(resume) != _RESUME_FIELDS:
+        reject("journal resume material has an incorrect field set")
+    _validate_training_manifest(_training_manifest(resume), object_id, error_code)
     pages = resume["page_results"]
     if (not isinstance(pages, list) or not pages
             or any(not isinstance(page, dict) or set(page) != {"page_digest", "length"}
@@ -1095,22 +1121,67 @@ def _validate_resume(resume: object, object_id: str, error_code: str) -> dict:
     return resume
 
 
+def _restart_material_digest(payload: object, field: str, object_id: str) -> str | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, bytes):
+        _transaction_reject(object_id, f"TransactionContext {field} must be bytes", "INVALID_REQUEST")
+    return digest_bytes(payload)
+
+
+def _write_restart_material(cartridge: Path, payload: bytes, digest: str, object_id: str) -> None:
+    path = _restart_material_path(cartridge, digest)
+    if path.exists():
+        try:
+            observed = path.read_bytes()
+        except OSError as error:
+            _transaction_reject(object_id, f"restart material is unavailable: {error}", "SOURCE_UNAVAILABLE")
+        if digest_bytes(observed) != digest:
+            _transaction_reject(object_id, "restart material does not match its identity", "SOURCE_UNAVAILABLE")
+        return
+    _durable_replace(path, payload, object_id)
+
+
+def _read_restart_material(
+    cartridge: Path, digest: str | None, field: str, object_id: str
+) -> bytes | None:
+    if digest is None:
+        return None
+    path = _restart_material_path(cartridge, digest)
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        _transaction_reject(object_id, f"resume {field} bytes are unavailable: {error}", "SOURCE_UNAVAILABLE")
+    if digest_bytes(payload) != digest:
+        _transaction_reject(object_id, f"resume {field} bytes do not match their digest", "SOURCE_UNAVAILABLE")
+    return payload
+
+
 def _resume_record(
     cartridge: Path,
     candidate_root: str,
     context: TransactionContext | None,
     object_id: str,
+    *,
+    persist_material: bool,
 ) -> dict:
     if context is not None and not isinstance(context, TransactionContext):
         _transaction_reject(object_id, "TransactionContext required", "INVALID_REQUEST")
     context = context or TransactionContext("store-generation-v1", (candidate_root,))
     if not isinstance(context.input_digests, tuple):
         _transaction_reject(object_id, "TransactionContext input_digests must be a tuple", "INVALID_REQUEST")
+    statistics_digest = _restart_material_digest(context.statistics, "statistics", object_id)
+    rng_state_digest = _restart_material_digest(context.rng_state, "rng_state", object_id)
+    if persist_material:
+        if statistics_digest is not None:
+            _write_restart_material(cartridge, context.statistics, statistics_digest, object_id)
+        if rng_state_digest is not None:
+            _write_restart_material(cartridge, context.rng_state, rng_state_digest, object_id)
     resume = {
         "operation_version": context.operation_version,
         "input_digests": list(context.input_digests),
         "random_seed": context.random_seed,
-        "statistics_digest": context.statistics_digest,
+        "statistics_digest": statistics_digest,
         "page_results": [
             {"page_digest": location.page_digest, "length": location.length}
             for location in sorted(
@@ -1118,7 +1189,7 @@ def _resume_record(
             )
         ],
         "optimizer_step": context.optimizer_step,
-        "rng_state_digest": context.rng_state_digest,
+        "rng_state_digest": rng_state_digest,
         "data_cursor": context.data_cursor,
         "loss_scale": context.loss_scale,
     }
@@ -1156,17 +1227,31 @@ def _validate_transaction(record: object, object_id: str) -> dict:
 
 def _load_transaction(cartridge: Path, transaction_id: str) -> dict:
     object_id = f"transaction:{_transaction_id(transaction_id)}"
-    return _validate_transaction(
+    record = _validate_transaction(
         _read_envelope(_journal_path(cartridge, transaction_id), object_id, "SOURCE_UNAVAILABLE"),
         object_id,
     )
+    _read_restart_material(
+        cartridge, record["resume"]["statistics_digest"], "statistics", object_id
+    )
+    _read_restart_material(
+        cartridge, record["resume"]["rng_state_digest"], "rng_state", object_id
+    )
+    return record
 
 
 def _write_transaction(cartridge: Path, record: dict) -> None:
     transaction_id = record["transaction_id"]
-    _validate_transaction(record, f"transaction:{transaction_id}")
+    object_id = f"transaction:{transaction_id}"
+    _validate_transaction(record, object_id)
+    _read_restart_material(
+        cartridge, record["resume"]["statistics_digest"], "statistics", object_id
+    )
+    _read_restart_material(
+        cartridge, record["resume"]["rng_state_digest"], "rng_state", object_id
+    )
     _, payload = _envelope(record)
-    _durable_replace(_journal_path(cartridge, transaction_id), payload, f"transaction:{transaction_id}")
+    _durable_replace(_journal_path(cartridge, transaction_id), payload, object_id)
 
 
 def _public_transaction(record: dict) -> TransactionState:
@@ -1223,6 +1308,46 @@ def _verify_dependency_paths(cartridge: Path, root_digest: str) -> tuple[dict, t
                   cartridge / "roots" / _content_hex(root_digest, root_digest))
 
 
+def _semantic_manifest(root: dict) -> dict:
+    return {
+        "root_identity": root["identity"],
+        "parents": root["parents"],
+        "semantic_assets": root["semantic_assets"],
+        "tensor_maps": root["tensor_maps"],
+        "operators": root["operators"],
+        "deltas": root["deltas"],
+    }
+
+
+def _generation_identity(
+    root: dict,
+    parent_id: str | None,
+    training_manifest: dict,
+    ordered_page_digests: list[str],
+) -> str:
+    return digest_bytes(canonical_bytes({
+        "parent_id": parent_id,
+        "training_manifest": training_manifest,
+        "ordered_page_or_delta_digests": ordered_page_digests,
+        "semantic_manifest": _semantic_manifest(root),
+    }))
+
+
+def _verify_generation_binding(cartridge: Path, record: dict, root: dict) -> None:
+    object_id = f"generation:{record['generation']}"
+    if record["parent_generation"] is not None:
+        parent = _load_generation(_generation_path(cartridge, record["parent_generation"]))
+        if (parent["child_id"] != record["parent_id"]
+                or parent["root_digest"] != record["parent_root"]):
+            _transaction_reject(object_id, "generation parent binding is inconsistent")
+    pages = sorted(_read_index(cartridge, record["root_digest"]), key=str)
+    expected = _generation_identity(
+        root, record["parent_id"], record["training_manifest"], pages
+    )
+    if expected != record["child_id"]:
+        _transaction_reject(object_id, "child identity does not match the Q73 preimage")
+
+
 def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[GenerationPin, ...]:
     pins = []
     failures = []
@@ -1231,8 +1356,7 @@ def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[Gene
             record = _load_generation(path)
             root = (_verify_dependency_paths(cartridge, record["root_digest"])[0]
                     if verify_dependencies else load_root(cartridge, record["root_digest"]))
-            if root["identity"] != record["child_id"]:
-                _transaction_reject(f"generation:{record['generation']}", "child identity and root disagree")
+            _verify_generation_binding(cartridge, record, root)
             pins.append(GenerationPin(record["generation"], record["child_id"], record["root_digest"]))
         except CassetteError as error:
             failures.append(error)
@@ -1275,13 +1399,18 @@ def begin_generation(
     object_id = f"transaction:{transaction_id}"
     candidate_root = _transaction_digest(candidate_root, object_id)
     candidate = load_root(cartridge, candidate_root)
-    resume = _resume_record(cartridge, candidate_root, context, object_id)
     journal = _journal_path(cartridge, transaction_id)
     if journal.exists():
         record = _load_transaction(cartridge, transaction_id)
+        requested_resume = (
+            _resume_record(
+                cartridge, candidate_root, context, object_id, persist_material=False
+            )
+            if context is not None else None
+        )
         if (record["candidate_root"] != candidate_root
                 or record["expected_parent_root"] != expected_parent_root
-                or (context is not None and record["resume"] != resume)):
+                or (requested_resume is not None and record["resume"] != requested_resume)):
             _transaction_reject(
                 object_id,
                 "idempotency key names different candidate, parent, or restart material",
@@ -1297,15 +1426,26 @@ def begin_generation(
             f"expected parent {expected_parent_root!r}, found {active_root!r}",
             "IDEMPOTENCY_CONFLICT",
         )
+    resume = _resume_record(
+        cartridge, candidate_root, context, object_id, persist_material=True
+    )
     generation = _next_generation(cartridge)
+    parent_id = active.child_id if active else None
+    candidate_id = _generation_identity(
+        candidate,
+        parent_id,
+        _training_manifest(resume),
+        [page["page_digest"] for page in resume["page_results"]],
+    )
     record = {
         "transaction_id": transaction_id,
         "step": 0,
         "state": _TRANSACTION_STATES[0],
         "candidate_generation": generation,
         "candidate_root": candidate_root,
-        "candidate_id": candidate["identity"],
+        "candidate_id": candidate_id,
         "expected_parent_generation": active.generation if active else None,
+        "expected_parent_id": parent_id,
         "expected_parent_root": active_root,
         "generation_record_digest": "",
         "dependency_order": list(_DEPENDENCY_ORDER),
@@ -1322,6 +1462,31 @@ def transaction_state(cartridge: str | Path, transaction_id: str) -> Transaction
     """Read one journal only after its canonical bytes and bound candidate verify."""
 
     return _public_transaction(_load_transaction(Path(cartridge), transaction_id))
+
+
+def load_transaction_context(
+    cartridge: str | Path, transaction_id: str
+) -> TransactionContext:
+    """Reconstruct exact Q25/Q60 restart state only from verified cartridge objects."""
+
+    cartridge = Path(cartridge)
+    record = _load_transaction(cartridge, transaction_id)
+    resume = record["resume"]
+    object_id = f"transaction:{record['transaction_id']}"
+    return TransactionContext(
+        resume["operation_version"],
+        tuple(resume["input_digests"]),
+        random_seed=resume["random_seed"],
+        statistics=_read_restart_material(
+            cartridge, resume["statistics_digest"], "statistics", object_id
+        ),
+        optimizer_step=resume["optimizer_step"],
+        rng_state=_read_restart_material(
+            cartridge, resume["rng_state_digest"], "rng_state", object_id
+        ),
+        data_cursor=resume["data_cursor"],
+        loss_scale=resume["loss_scale"],
+    )
 
 
 def _candidate_payload(record: dict) -> bytes:
@@ -1405,8 +1570,7 @@ def advance_generation(cartridge: str | Path, transaction_id: str) -> Transactio
             _generation_path(cartridge, record["candidate_generation"])
         )
         root, _ = _verify_dependency_paths(cartridge, generation["root_digest"])
-        if root["identity"] != generation["child_id"]:
-            _transaction_reject(object_id, "committed generation does not resolve its child identity")
+        _verify_generation_binding(cartridge, generation, root)
         return _public_transaction(record)
     if step == 0:
         _write_candidate(cartridge, record)
@@ -1461,8 +1625,7 @@ def advance_generation(cartridge: str | Path, transaction_id: str) -> Transactio
         else:
             generation = _load_generation(destination)
             root, _ = _verify_dependency_paths(cartridge, generation["root_digest"])
-            if root["identity"] != generation["child_id"]:
-                _transaction_reject(object_id, "published generation does not resolve its child identity")
+            _verify_generation_binding(cartridge, generation, root)
             record = {**record, "step": 8, "state": _TRANSACTION_STATES[8]}
         _write_transaction(cartridge, record)
         return _public_transaction(record)
@@ -1527,10 +1690,10 @@ def collect_garbage(cartridge: str | Path) -> tuple[str, ...]:
         if record["step"] < 6
     }
     removed = []
-    for path in sorted(directory.iterdir()):
+    for path in sorted(item for item in directory.rglob("*") if item.is_file()):
         is_atomic_temporary = path.name.startswith(".") and path.name.endswith(".pending")
-        is_candidate = path.name.endswith(".generation-candidate")
-        if path.is_file() and path not in live and (is_atomic_temporary or is_candidate):
+        is_candidate = path.parent == directory and path.name.endswith(".generation-candidate")
+        if path not in live and (is_atomic_temporary or is_candidate):
             try:
                 path.unlink()
             except OSError as error:
