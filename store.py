@@ -1,5 +1,5 @@
-# store.py — identity, content pages, transactions, and generations (Q1/Q25/Q32/Q57/Q60/Q73); depends on errors.py, schema.
-"""Own model identity, content, transaction recovery, and callable generations.
+# store.py — identity, content, capacity, integrity, repair, transactions, and generations (Q1/Q25/Q32/Q53/Q57/Q60/Q62/Q73); depends on errors.py, schema.
+"""Own model identity, content, capacity, repair, transactions, and callable generations.
 
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
 immutable revision digest. Requested aliases remain provenance; they never enter the identity.
@@ -10,7 +10,7 @@ separate fixed-record index owns physical placement.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import fcntl
 import hashlib
@@ -31,6 +31,22 @@ _DIGEST_HEX_LENGTHS = {"blake3": 64, "sha256": 64, "git-sha1": 40}
 _HEX = frozenset("0123456789abcdef")
 _REVISION_KINDS = frozenset({"source", "executable", "tuned", "exported"})
 _MAX_JSON_INTEGER = 2**53 - 1
+_MAX_UNSIGNED_BYTES = 2**64 - 1
+_CAPACITY_FIELDS = (
+    "committed", "inflight", "candidate", "rollback", "optimizer", "master",
+    "dataset", "precision", "journal", "repair",
+)
+_INTEGRITY_STATES = frozenset({
+    "VALID", "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "UNAVAILABLE",
+})
+_INTEGRITY_TRANSITIONS = {
+    "VALID": frozenset({"SUSPECT"}),
+    "SUSPECT": frozenset({"VERIFYING"}),
+    "VERIFYING": frozenset({"VALID", "CORRUPT"}),
+    "CORRUPT": frozenset({"REPAIRING"}),
+    "REPAIRING": frozenset({"VALID", "UNAVAILABLE"}),
+    "UNAVAILABLE": frozenset(),
+}
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 _SAFETENSORS_HEADER_BYTES = 100_000_000
@@ -199,6 +215,151 @@ class TransactionContext:
     rng_state: bytes | None = None
     data_cursor: int | None = None
     loss_scale: str | None = None
+
+
+@dataclass(frozen=True)
+class CapacityPhase:
+    """One Q53 lifecycle phase, stated in exact unsigned bytes by storage owner."""
+
+    committed: int = 0
+    inflight: int = 0
+    candidate: int = 0
+    rollback: int = 0
+    optimizer: int = 0
+    master: int = 0
+    dataset: int = 0
+    precision: int = 0
+    journal: int = 0
+    repair: int = 0
+
+    def __post_init__(self) -> None:
+        for field in _CAPACITY_FIELDS:
+            _capacity_value(field, getattr(self, field), "capacity:phase")
+
+    @property
+    def total(self) -> int:
+        """Return this phase's checked Q53 sum."""
+
+        return _capacity_sum(
+            (getattr(self, field) for field in _CAPACITY_FIELDS), "capacity:phase"
+        )
+
+
+@dataclass(frozen=True)
+class CapacityReservation:
+    """A Q53 admission whose exact maximum was accepted by one verified preallocator."""
+
+    operation_id: str
+    device_bytes: int
+    safety_bytes: int
+    phase_totals: tuple[int, ...]
+    repair_bytes: int
+    required_bytes: int
+
+
+@dataclass(frozen=True)
+class RepairSet:
+    """The verified replica and parity identities declared for one immutable root."""
+
+    root_digest: str
+    manifest_digest: str
+    index_digest: str
+    parity_digests: tuple[str, ...]
+    required_bytes: int
+
+
+@dataclass(frozen=True)
+class IntegrityReport:
+    """One Q62 verification or repair result with every legal state transition retained."""
+
+    root_digest: str
+    states: tuple[tuple[str, str], ...]
+    transitions: tuple[tuple[str, str, str], ...]
+    unavailable_pages: tuple[str, ...]
+
+    @property
+    def available(self) -> bool:
+        """Whether a new run may address every page in this revision."""
+
+        return not self.unavailable_pages
+
+
+def _capacity_reject(operation_id: str, detail: str, code: str = "CAPACITY_EXCEEDED") -> None:
+    raise CassetteError(
+        code=code,
+        object_id=f"operation:{operation_id}",
+        failed_invariant="Q53: exact extent reservation before transfer or mutation",
+        retryability="terminal",
+        detail=detail,
+    )
+
+
+def _capacity_value(field: str, value: object, operation_id: str) -> int:
+    if type(value) is not int or not 0 <= value <= _MAX_UNSIGNED_BYTES:
+        _capacity_reject(
+            operation_id, f"{field} must be an unsigned 64-bit byte count", "INVALID_REQUEST"
+        )
+    return value
+
+
+def _capacity_sum(values, operation_id: str) -> int:
+    total = 0
+    for value in values:
+        value = _capacity_value("phase byte field", value, operation_id)
+        if value > _MAX_UNSIGNED_BYTES - total:
+            _capacity_reject(operation_id, "capacity arithmetic exceeds unsigned 64-bit bytes")
+        total += value
+    return total
+
+
+def reserve_capacity(
+    operation_id: str,
+    *,
+    device_bytes: int,
+    allocatable_verified_free: int,
+    phases: tuple[CapacityPhase, ...],
+    reserve_extent: Callable[[int], bool],
+) -> CapacityReservation:
+    """Admit Q53 only after one atomic preallocator reserves the exact phase maximum plus safety."""
+
+    if not isinstance(operation_id, str) or _TRANSACTION_ID.fullmatch(operation_id) is None:
+        _capacity_reject(
+            "unidentified", "operation_id must satisfy the durable identifier grammar", "INVALID_REQUEST"
+        )
+    device_bytes = _capacity_value("device_bytes", device_bytes, operation_id)
+    free = _capacity_value("allocatable_verified_free", allocatable_verified_free, operation_id)
+    if free > device_bytes:
+        _capacity_reject(
+            operation_id, "allocatable verified free bytes exceed device bytes", "INVALID_REQUEST"
+        )
+    if (not isinstance(phases, tuple) or not phases
+            or any(not isinstance(phase, CapacityPhase) for phase in phases)):
+        _capacity_reject(operation_id, "one or more CapacityPhase values are required", "INVALID_REQUEST")
+    if not callable(reserve_extent):
+        _capacity_reject(operation_id, "reserve_extent must be callable", "INVALID_REQUEST")
+    totals = tuple(phase.total for phase in phases)
+    five_percent = device_bytes // 20 + bool(device_bytes % 20)
+    safety = max(8 * 1024**3, five_percent)
+    required = _capacity_sum((max(totals), safety), operation_id)
+    if free < required:
+        _capacity_reject(operation_id, f"required {required} bytes; verified allocatable free is {free}")
+    try:
+        reserved = reserve_extent(required)
+    except OSError as error:
+        _capacity_reject(operation_id, f"preallocate failed for {required} bytes: {error}")
+    if reserved is not True:
+        _capacity_reject(
+            operation_id,
+            f"preallocate refused one exact {required}-byte extent despite {free} reported free bytes",
+        )
+    return CapacityReservation(
+        operation_id,
+        device_bytes,
+        safety,
+        totals,
+        max(phase.repair for phase in phases),
+        required,
+    )
 
 
 def _reject(field: str, reason: str, object_id: str = "model:unidentified") -> None:
@@ -564,12 +725,7 @@ def _write_index(cartridge: Path, root_digest: str, locations: tuple[PageLocatio
     path.write_bytes(payload)
 
 
-def _read_index(cartridge: Path, root_digest: str) -> dict[str, PageLocation]:
-    path = _index_path(cartridge, root_digest)
-    try:
-        payload = path.read_bytes()
-    except OSError as error:
-        _q57_reject(root_digest, f"physical page index is unavailable: {error}")
+def _decode_index(payload: bytes, root_digest: str) -> dict[str, PageLocation]:
     if len(payload) % _INDEX_RECORD.size:
         _q57_reject(root_digest, "physical page index has a partial fixed-schema record")
     locations = {}
@@ -580,6 +736,15 @@ def _read_index(cartridge: Path, root_digest: str) -> dict[str, PageLocation]:
             _q57_reject(root_digest, "physical page index has a duplicate or invalid page record")
         locations[location.page_digest] = location
     return locations
+
+
+def _read_index(cartridge: Path, root_digest: str) -> dict[str, PageLocation]:
+    path = _index_path(cartridge, root_digest)
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        _q57_reject(root_digest, f"physical page index is unavailable: {error}")
+    return _decode_index(payload, root_digest)
 
 
 def _read_page(cartridge: Path, location: PageLocation) -> bytes:
@@ -1702,3 +1867,521 @@ def collect_garbage(cartridge: str | Path) -> tuple[str, ...]:
     if removed:
         _sync_directory(directory, "transactions:garbage-collection")
     return tuple(removed)
+
+
+def _integrity_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
+    raise CassetteError(
+        code=code,
+        object_id=object_id,
+        failed_invariant="Q62: verify before use and restore the original content identity",
+        retryability="retryable" if code in {"PAGE_CORRUPT", "SOURCE_UNAVAILABLE"} else "terminal",
+        detail=detail,
+    )
+
+
+def _repair_manifest_path(cartridge: Path, root_digest: str) -> Path:
+    return cartridge / "repair" / f"{_content_hex(root_digest, root_digest)}.json"
+
+
+def _repair_object_path(cartridge: Path, digest: str) -> Path:
+    return cartridge / "repair" / "objects" / _content_hex(digest, digest)
+
+
+def _portable_directory_sync(path: Path, object_id: str) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        _integrity_reject(object_id, f"repair directory sync failed for {path.name!r}: {error}")
+
+
+def _quarantine(path: Path, object_id: str) -> None:
+    if not path.exists():
+        return
+    try:
+        payload = path.read_bytes()
+        observed = digest_bytes(payload)[7:]
+        directory = path.parents[1] / "quarantine"
+        directory.mkdir(parents=True, exist_ok=True)
+        os.replace(path, directory / f"{path.parent.name}-{path.name}-{observed}")
+        _portable_directory_sync(directory, object_id)
+    except OSError as error:
+        _integrity_reject(object_id, f"corrupt object quarantine failed: {error}")
+
+
+def _replace_exact(path: Path, payload: bytes, expected_digest: str, object_id: str) -> None:
+    if digest_bytes(payload) != expected_digest:
+        _integrity_reject(object_id, "repair candidate does not match the original digest")
+    try:
+        if path.exists() and path.read_bytes() == payload:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = tempfile.NamedTemporaryFile(
+            mode="w+b", dir=path.parent, prefix=f".{path.name}.repair-", delete=False
+        )
+        temporary_path = Path(temporary.name)
+        try:
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            command = getattr(fcntl, "F_FULLFSYNC", None)
+            if command is not None:
+                fcntl.fcntl(temporary.fileno(), command)
+        finally:
+            temporary.close()
+        if temporary_path.read_bytes() != payload:
+            _integrity_reject(object_id, "repair candidate changed during readback")
+        _quarantine(path, object_id)
+        os.replace(temporary_path, path)
+        _portable_directory_sync(path.parent, object_id)
+    except OSError as error:
+        _integrity_reject(object_id, f"exact repair replacement failed: {error}")
+    finally:
+        if "temporary_path" in locals():
+            temporary_path.unlink(missing_ok=True)
+
+
+def _xor_payloads(payloads: tuple[bytes, ...], length: int) -> bytes:
+    output = bytearray()
+    for offset in range(0, length, 64 * 1024):
+        width = min(64 * 1024, length - offset)
+        value = 0
+        for payload in payloads:
+            value ^= int.from_bytes(payload[offset:offset + width], "little")
+        output.extend(value.to_bytes(width, "little"))
+    return bytes(output)
+
+
+def _decode_root_copy(payload: bytes, root_digest: str, locations: dict[str, PageLocation]) -> dict:
+    try:
+        root = json.loads(payload, object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _integrity_reject(f"root:{root_digest}", f"repair root copy is malformed: {error}")
+    if digest_bytes(payload) != root_digest or canonical_bytes(root) != payload:
+        _integrity_reject(f"root:{root_digest}", "repair root copy does not match its identity")
+    _verify_root(root, root_digest, locations)
+    return root
+
+
+def _read_repair_object(cartridge: Path, digest: str, description: str) -> bytes:
+    path = _repair_object_path(cartridge, digest)
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        _integrity_reject(description, f"verified repair object is unavailable: {error}", "SOURCE_UNAVAILABLE")
+    if digest_bytes(payload) != digest:
+        _integrity_reject(description, "verified repair object does not match its identity", "PAGE_CORRUPT")
+    return payload
+
+
+def _repair_record(
+    cartridge: Path, root_digest: str
+) -> tuple[dict, bytes, bytes, dict[str, PageLocation]]:
+    path = _repair_manifest_path(cartridge, root_digest)
+    object_id = f"repair:{root_digest}"
+    try:
+        payload = path.read_bytes()
+        envelope = json.loads(payload, object_pairs_hook=_unique_object)
+        if (not isinstance(envelope, dict) or set(envelope) != {"digest", "record"}
+                or canonical_bytes(envelope) != payload
+                or not isinstance(envelope["record"], dict)
+                or envelope["digest"] != digest_bytes(canonical_bytes(envelope["record"]))):
+            raise ValueError("repair manifest envelope is not exact canonical content")
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _integrity_reject(object_id, f"repair manifest is unavailable or malformed: {error}")
+    record = envelope["record"]
+    if set(record) != {"root_digest", "index_digest", "pages", "stripes"}:
+        _integrity_reject(object_id, "repair manifest has an incorrect field set")
+    if record["root_digest"] != root_digest:
+        _integrity_reject(object_id, "repair manifest names another root")
+    root_copy = _read_repair_object(cartridge, root_digest, f"root-copy:{root_digest}")
+    index_digest = record["index_digest"]
+    _content_hex(index_digest, object_id)
+    index_copy = _read_repair_object(cartridge, index_digest, f"index-copy:{root_digest}")
+    locations = _decode_index(index_copy, root_digest)
+    root = _decode_root_copy(root_copy, root_digest, locations)
+    expected_pages = [
+        {
+            "page_digest": location.page_digest,
+            "segment_id": location.segment_id,
+            "offset": location.offset,
+            "length": location.length,
+            "parity_digest": next(
+                (stripe["parity_digest"] for stripe in record["stripes"]
+                 if location.page_digest in stripe.get("page_digests", [])),
+                None,
+            ),
+        }
+        for location in sorted(locations.values(), key=lambda item: item.page_digest)
+    ]
+    if record["pages"] != expected_pages or any(page["parity_digest"] is None for page in expected_pages):
+        _integrity_reject(object_id, "repair page map does not match the immutable root and index")
+    grouped = {}
+    for location in locations.values():
+        grouped.setdefault(location.segment_id, []).append(location)
+    expected_stripes = []
+    for segment_id, members in sorted(grouped.items()):
+        members.sort(key=lambda item: item.offset)
+        matching = [
+            stripe for stripe in record["stripes"] if stripe.get("segment_id") == segment_id
+        ]
+        if len(matching) != 1:
+            _integrity_reject(object_id, "repair manifest requires one parity stripe per segment")
+        stripe = matching[0]
+        if set(stripe) != {"segment_id", "page_digests", "lengths", "parity_digest", "length"}:
+            _integrity_reject(object_id, "parity stripe has an incorrect field set")
+        expected = {
+            "segment_id": segment_id,
+            "page_digests": [member.page_digest for member in members],
+            "lengths": [member.length for member in members],
+            "parity_digest": stripe["parity_digest"],
+            "length": max(member.length for member in members),
+        }
+        _content_hex(stripe["parity_digest"], object_id)
+        expected_stripes.append(expected)
+    if record["stripes"] != expected_stripes:
+        _integrity_reject(object_id, "repair parity map does not match physical segment membership")
+    return record, root_copy, index_copy, locations
+
+
+def create_repair_set(
+    cartridge: str | Path, root_digest: str, reservation: CapacityReservation
+) -> RepairSet:
+    """Create Q62 root/index replicas and one XOR parity stripe per segment after Q53 admission."""
+
+    if not isinstance(reservation, CapacityReservation):
+        _capacity_reject("repair-set", "a completed CapacityReservation is required", "INVALID_REQUEST")
+    cartridge = Path(cartridge)
+    _verify_dependency_paths(cartridge, root_digest)
+    locations = _read_index(cartridge, root_digest)
+    root_payload = (cartridge / "roots" / _content_hex(root_digest, root_digest)).read_bytes()
+    index_payload = _index_path(cartridge, root_digest).read_bytes()
+    index_digest = digest_bytes(index_payload)
+    grouped = {}
+    for location in locations.values():
+        grouped.setdefault(location.segment_id, []).append(location)
+    stripes = []
+    parity_payloads = {}
+    page_to_parity = {}
+    for segment_id, members in sorted(grouped.items()):
+        members.sort(key=lambda item: item.offset)
+        payloads = tuple(_read_page(cartridge, member) for member in members)
+        length = max(member.length for member in members)
+        parity = _xor_payloads(payloads, length)
+        parity_digest = digest_bytes(parity)
+        parity_payloads[parity_digest] = parity
+        for member in members:
+            page_to_parity[member.page_digest] = parity_digest
+        stripes.append({
+            "segment_id": segment_id,
+            "page_digests": [member.page_digest for member in members],
+            "lengths": [member.length for member in members],
+            "parity_digest": parity_digest,
+            "length": length,
+        })
+    pages = [
+        {
+            "page_digest": location.page_digest,
+            "segment_id": location.segment_id,
+            "offset": location.offset,
+            "length": location.length,
+            "parity_digest": page_to_parity[location.page_digest],
+        }
+        for location in sorted(locations.values(), key=lambda item: item.page_digest)
+    ]
+    record = {
+        "root_digest": root_digest,
+        "index_digest": index_digest,
+        "pages": pages,
+        "stripes": stripes,
+    }
+    _, manifest_payload = _envelope(record)
+    manifest_digest = digest_bytes(manifest_payload)
+    objects = {root_digest: root_payload, index_digest: index_payload, **parity_payloads}
+    required = _capacity_sum(
+        (*[len(payload) for payload in objects.values()], len(manifest_payload)),
+        reservation.operation_id,
+    )
+    if reservation.repair_bytes < required:
+        _capacity_reject(
+            reservation.operation_id,
+            f"repair phase reserves {reservation.repair_bytes} bytes; exact repair set needs {required}",
+        )
+    for digest, payload in objects.items():
+        _replace_exact(_repair_object_path(cartridge, digest), payload, digest, f"repair-object:{digest}")
+    _replace_exact(
+        _repair_manifest_path(cartridge, root_digest),
+        manifest_payload,
+        manifest_digest,
+        f"repair:{root_digest}",
+    )
+    _repair_record(cartridge, root_digest)
+    return RepairSet(
+        root_digest,
+        manifest_digest,
+        index_digest,
+        tuple(stripe["parity_digest"] for stripe in stripes),
+        required,
+    )
+
+
+def _transition(
+    states: dict[str, str], transitions: list[tuple[str, str, str]], object_id: str, state: str
+) -> None:
+    prior = states.setdefault(object_id, "VALID")
+    if state not in _INTEGRITY_STATES or state not in _INTEGRITY_TRANSITIONS[prior]:
+        _integrity_reject(object_id, f"illegal integrity transition {prior} -> {state}")
+    states[object_id] = state
+    transitions.append((object_id, prior, state))
+
+
+def _mark_corrupt(
+    states: dict[str, str], transitions: list[tuple[str, str, str]], object_id: str
+) -> None:
+    for state in ("SUSPECT", "VERIFYING", "CORRUPT"):
+        _transition(states, transitions, object_id, state)
+
+
+def _normalize_source_pages(source_pages: Mapping[str, bytes] | None) -> dict[str, bytes]:
+    if source_pages is None:
+        return {}
+    if not isinstance(source_pages, Mapping):
+        _integrity_reject("repair:source", "source_pages must map page digests to bytes", "INVALID_REQUEST")
+    normalized = {}
+    for digest, payload in source_pages.items():
+        if (not isinstance(digest, str) or not isinstance(payload, bytes)
+                or digest_bytes(payload) != digest):
+            _integrity_reject("repair:source", "source page does not match its declared digest", "INVALID_REQUEST")
+        normalized[digest] = payload
+    return normalized
+
+
+def _integrity_operation(
+    cartridge: Path,
+    root_digest: str,
+    *,
+    repair: bool,
+    reservation: CapacityReservation | None,
+    source_pages: Mapping[str, bytes] | None,
+) -> IntegrityReport:
+    record, root_copy, index_copy, locations = _repair_record(cartridge, root_digest)
+    if repair:
+        if not isinstance(reservation, CapacityReservation):
+            _capacity_reject("repair", "repair requires a completed CapacityReservation", "INVALID_REQUEST")
+        repair_extent = max(
+            len(root_copy),
+            len(index_copy),
+            *(sum(location.length for location in locations.values()
+                  if location.segment_id == segment_id)
+              for segment_id in {location.segment_id for location in locations.values()}),
+            *(stripe["length"] for stripe in record["stripes"]),
+        )
+        if reservation.repair_bytes < repair_extent:
+            _capacity_reject(
+                reservation.operation_id,
+                f"repair phase reserves {reservation.repair_bytes} bytes; one replacement extent needs {repair_extent}",
+            )
+    states = {}
+    transitions = []
+    required_pages = tuple(sorted(locations))
+    root_id = f"root:{root_digest}"
+    index_id = f"index:{root_digest}"
+    states[root_id] = states[index_id] = "VALID"
+    for digest in required_pages:
+        states[f"page:{digest}"] = "VALID"
+    for stripe in record["stripes"]:
+        states[f"parity:{stripe['parity_digest']}"] = "VALID"
+
+    root_path = cartridge / "roots" / _content_hex(root_digest, root_digest)
+    index_path = _index_path(cartridge, root_digest)
+    for object_id, path, payload, digest in (
+        (root_id, root_path, root_copy, root_digest),
+        (index_id, index_path, index_copy, record["index_digest"]),
+    ):
+        try:
+            valid = path.read_bytes() == payload
+        except OSError:
+            valid = False
+        if not valid:
+            _mark_corrupt(states, transitions, object_id)
+            if repair:
+                _transition(states, transitions, object_id, "REPAIRING")
+                _replace_exact(path, payload, digest, object_id)
+                _transition(states, transitions, object_id, "VALID")
+
+    parity_payloads = {}
+    for stripe in record["stripes"]:
+        digest = stripe["parity_digest"]
+        object_id = f"parity:{digest}"
+        try:
+            payload = _repair_object_path(cartridge, digest).read_bytes()
+            valid = digest_bytes(payload) == digest and len(payload) == stripe["length"]
+        except OSError:
+            payload, valid = b"", False
+        if valid:
+            parity_payloads[digest] = payload
+        else:
+            _mark_corrupt(states, transitions, object_id)
+
+    page_payloads = {}
+    corrupt_pages = set()
+    segment_corrupt = set()
+    for segment_id in sorted({location.segment_id for location in locations.values()}):
+        path = cartridge / "segments" / _content_hex(segment_id, segment_id)
+        try:
+            segment = path.read_bytes()
+        except OSError:
+            segment = b""
+        members = sorted(
+            (location for location in locations.values() if location.segment_id == segment_id),
+            key=lambda item: item.offset,
+        )
+        if digest_bytes(segment) != segment_id:
+            segment_id_state = f"segment:{segment_id}"
+            states[segment_id_state] = "VALID"
+            _mark_corrupt(states, transitions, segment_id_state)
+            segment_corrupt.add(segment_id)
+        for location in members:
+            payload = segment[location.offset:location.offset + location.length]
+            if len(payload) == location.length and digest_bytes(payload) == location.page_digest:
+                page_payloads[location.page_digest] = payload
+            else:
+                object_id = f"page:{location.page_digest}"
+                _mark_corrupt(states, transitions, object_id)
+                corrupt_pages.add(location.page_digest)
+
+    sources = _normalize_source_pages(source_pages)
+    page_records = {page["page_digest"]: page for page in record["pages"]}
+    stripe_records = {stripe["parity_digest"]: stripe for stripe in record["stripes"]}
+    if repair:
+        for digest in sorted(corrupt_pages):
+            object_id = f"page:{digest}"
+            _transition(states, transitions, object_id, "REPAIRING")
+            page = page_records[digest]
+            candidate = None
+            local_path = _repair_object_path(cartridge, digest)
+            try:
+                local = local_path.read_bytes()
+                if len(local) == page["length"] and digest_bytes(local) == digest:
+                    candidate = local
+            except OSError:
+                pass
+            source = sources.get(digest)
+            if candidate is None and source is not None and len(source) == page["length"]:
+                candidate = source
+            parity_digest = page["parity_digest"]
+            stripe = stripe_records[parity_digest]
+            peers = [item for item in stripe["page_digests"] if item != digest]
+            if (candidate is None and parity_digest in parity_payloads
+                    and all(peer in page_payloads for peer in peers)):
+                candidate = _xor_payloads(
+                    (parity_payloads[parity_digest], *[page_payloads[peer] for peer in peers]),
+                    stripe["length"],
+                )[:page["length"]]
+            if candidate is not None and digest_bytes(candidate) == digest:
+                page_payloads[digest] = candidate
+            else:
+                _transition(states, transitions, object_id, "UNAVAILABLE")
+
+        for segment_id in sorted(segment_corrupt):
+            members = sorted(
+                (location for location in locations.values() if location.segment_id == segment_id),
+                key=lambda item: item.offset,
+            )
+            if all(member.page_digest in page_payloads for member in members):
+                cursor = 0
+                payload = bytearray()
+                for member in members:
+                    if member.offset != cursor:
+                        _integrity_reject(f"segment:{segment_id}", "segment page intervals are discontinuous")
+                    payload.extend(page_payloads[member.page_digest])
+                    cursor += member.length
+                _transition(states, transitions, f"segment:{segment_id}", "REPAIRING")
+                _replace_exact(
+                    cartridge / "segments" / _content_hex(segment_id, segment_id),
+                    bytes(payload),
+                    segment_id,
+                    f"segment:{segment_id}",
+                )
+                _transition(states, transitions, f"segment:{segment_id}", "VALID")
+                for member in members:
+                    object_id = f"page:{member.page_digest}"
+                    if states[object_id] == "REPAIRING":
+                        _transition(states, transitions, object_id, "VALID")
+
+        for stripe in record["stripes"]:
+            digest = stripe["parity_digest"]
+            object_id = f"parity:{digest}"
+            if states[object_id] != "CORRUPT":
+                continue
+            _transition(states, transitions, object_id, "REPAIRING")
+            if all(page in page_payloads for page in stripe["page_digests"]):
+                payload = _xor_payloads(
+                    tuple(page_payloads[page] for page in stripe["page_digests"]),
+                    stripe["length"],
+                )
+                if digest_bytes(payload) == digest:
+                    _replace_exact(_repair_object_path(cartridge, digest), payload, digest, object_id)
+                    parity_payloads[digest] = payload
+                    _transition(states, transitions, object_id, "VALID")
+                    continue
+            _transition(states, transitions, object_id, "UNAVAILABLE")
+
+    unavailable = {
+        digest for digest in required_pages
+        if states[f"page:{digest}"] in {"CORRUPT", "UNAVAILABLE"}
+    }
+    if any(states[object_id] != "VALID" for object_id in (root_id, index_id)):
+        unavailable.update(required_pages)
+    if repair and not unavailable:
+        load_root(cartridge, root_digest)
+        for location in locations.values():
+            _read_page(cartridge, location)
+    return IntegrityReport(
+        root_digest,
+        tuple(sorted(states.items())),
+        tuple(transitions),
+        tuple(sorted(unavailable)),
+    )
+
+
+def verify_revision(cartridge: str | Path, root_digest: str) -> IntegrityReport:
+    """Run Q62 verification without changing a corrupt object."""
+
+    return _integrity_operation(
+        Path(cartridge), root_digest, repair=False, reservation=None, source_pages=None
+    )
+
+
+def repair_revision(
+    cartridge: str | Path,
+    root_digest: str,
+    reservation: CapacityReservation,
+    *,
+    source_pages: Mapping[str, bytes] | None = None,
+) -> IntegrityReport:
+    """Repair exact Q62 identities from local copies, verified source pages, then declared parity."""
+
+    return _integrity_operation(
+        Path(cartridge), root_digest, repair=True, reservation=reservation,
+        source_pages=source_pages,
+    )
+
+
+def require_revision(cartridge: str | Path, root_digest: str) -> IntegrityReport:
+    """Reject a new run unless every potentially addressable page is presently valid."""
+
+    report = verify_revision(cartridge, root_digest)
+    if report.unavailable_pages:
+        joined = ",".join(report.unavailable_pages)
+        object_id = (
+            f"page:{report.unavailable_pages[0]}"
+            if len(report.unavailable_pages) == 1 else f"pages:{joined}"
+        )
+        _integrity_reject(
+            object_id, f"unavailable potentially addressable pages: {joined}", "PAGE_CORRUPT"
+        )
+    return report
