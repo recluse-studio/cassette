@@ -199,7 +199,48 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S06]
-    status: TODO
+    status: DONE 2026-08-07 — step commit 66af96f; committed clean-clone suite 20 passed in 27.74 seconds; ledger clean with 1,475 product LOC, 787 test LOC, 324 tool LOC, one process, one runtime, the three existing exact dependency pins, and no violation
+    closeout:
+      - clause: "Q53 exact-boundary capacity admission"
+        test_or_probe: "tests/test_s07_integrity_capacity.py::test_q53_exact_boundary_and_fragmented_reservation"
+        input: "Reserve one operation on a 200 GiB device with committed=23 bytes, inflight=41 bytes, candidate=59 bytes, repair=1 GiB, allocatable verified free bytes equal to the exact requirement, and one exact-extent preallocator."
+        expected: "Use checked unsigned arithmetic; compute safety as max(8 GiB, 5% of device bytes); admit equality only after preallocating the complete required extent."
+        observed: "The phase total was 1,073,741,947 bytes, safety was 10,737,418,240 bytes, and the sole preallocation request was the exact 11,811,160,187-byte requirement. Equality admitted the operation."
+      - clause: "Q53 fragmented and overflowing reservation fails before transfer or mutation"
+        test_or_probe: "tests/test_s07_integrity_capacity.py::test_q53_exact_boundary_and_fragmented_reservation"
+        input: "Offer the same 11,811,160,187 verified free bytes as fragments of 11,811,160,186 and 1 byte, then separately add 1 to the maximum unsigned 64-bit phase value while supplying an allocator that records any call."
+        expected: "Reject verified free space that cannot furnish the required extent; reject arithmetic overflow before preallocation, transfer, or model mutation."
+        observed: "Both cases returned CAPACITY_EXCEEDED. The fragmented case named failed preallocation; the overflow case named unsigned 64-bit arithmetic and never called the allocator. The sentinel model bytes remained unchanged."
+      - clause: "Q53 repair-set admission precedes repair-object mutation"
+        test_or_probe: "the insufficient and exact repair reservations in tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Attempt repair-set creation first with one repair byte, then with 1 GiB, for a two-page root whose exact root replica, index replica, parity object, and canonical repair manifest total 4,162 bytes."
+        expected: "Write no repair path unless the completed reservation covers every repair-set byte; admit the exact object set under the sufficient reservation."
+        observed: "The one-byte repair phase returned CAPACITY_EXCEEDED before the repair directory existed. The 1 GiB phase admitted one 4,162-byte immutable repair set with root blake3:3b021143f70becbf1b7d59ce4586b9d908b01840800a3cbd0e7305673c8ccbd2 and index blake3:05173b67ff0af5f9acfbd19449d5b6ba4bcb289733ba62aa83f02952fc06ca92."
+      - clause: "Q62 corrupt page detection, quarantine, parity repair, and exact digest restoration"
+        test_or_probe: "the page phases of tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Flip one byte inside page blake3:149d80aea7939e97b857b058b5e0efa787e6afc78c6468285d32b5fa62b9da74, attempt tensor use, verify without mutation, reject an insufficient replacement reservation, then repair from declared parity and its verified peer page."
+        expected: "Detection precedes use; integrity moves VALID to SUSPECT to VERIFYING to CORRUPT, then through REPAIRING to VALID only after new immutable bytes match the original digest; a failed reservation changes no corrupt byte."
+        observed: "The tensor read returned PAGE_CORRUPT before yielding bytes. Verification named only the exact page. The insufficient repair left the corrupt segment byte-identical. The admitted repair quarantined the corrupt object, restored the exact 37-byte segment digest blake3:d0d04c23dde3e5239ea24446bf3e410afafa6377f85443e3979b962536e0c487, and returned b'alpha-page-contents'."
+      - clause: "Q62 corrupt index repair"
+        test_or_probe: "the index phase of tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Flip one byte in the live fixed-record index, attempt root loading, and repair from the verified immutable index replica."
+        expected: "Reject the index before root use; follow the declared integrity states; restore bytes whose digest equals the recorded index digest."
+        observed: "Root loading returned ROOT_INVALID. Repair traversed SUSPECT, VERIFYING, CORRUPT, REPAIRING, and VALID; the restored index matched its original bytes and blake3:05173b67ff0af5f9acfbd19449d5b6ba4bcb289733ba62aa83f02952fc06ca92."
+      - clause: "Q62 corrupt root repair"
+        test_or_probe: "the root phase of tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Flip one byte in the live canonical root, attempt root loading, and repair from the verified immutable root replica."
+        expected: "Reject the root before use; follow the declared integrity states; restore canonical bytes whose digest equals the original root identity."
+        observed: "Root loading returned ROOT_INVALID. Repair traversed SUSPECT, VERIFYING, CORRUPT, REPAIRING, and VALID; the restored bytes matched root blake3:3b021143f70becbf1b7d59ce4586b9d908b01840800a3cbd0e7305673c8ccbd2 and decoded to the original root."
+      - clause: "Q62 corrupt parity repair"
+        test_or_probe: "the parity phase of tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Flip one byte in parity object blake3:2ab7f6d5ecb853c570c04c20a59b15c88d8b755125b8fde9128a168e025fa9fd while both source pages remain valid, verify the revision, and repair parity from those pages."
+        expected: "A corrupt optional parity object does not make valid model pages unavailable, but repair traverses the declared states and restores the declared parity digest."
+        observed: "Verification kept the revision available and marked the parity object CORRUPT. Repair traversed SUSPECT, VERIFYING, CORRUPT, REPAIRING, and VALID, then reproduced the original parity bytes and digest."
+      - clause: "Q62 unrecoverable page blocks affected runs with its exact identity"
+        test_or_probe: "the simultaneous page/parity and verified-source phases of tests/test_s07_integrity_capacity.py::test_q62_corrupt_page_index_root_and_parity_repair"
+        input: "Corrupt the alpha page and its sole parity object together, attempt repair and run admission, then supply the exact alpha payload as a digest-verified source page and repair again."
+        expected: "When local copy, verified source, and parity cannot produce the page, end at UNAVAILABLE and reject new use with its exact page ID. Once a higher-order source supplies exact bytes, restore the page and parity without changing logical identity."
+        observed: "Repair returned unavailable_pages containing only blake3:149d80aea7939e97b857b058b5e0efa787e6afc78c6468285d32b5fa62b9da74. Run admission returned PAGE_CORRUPT with object_id page:blake3:149d80aea7939e97b857b058b5e0efa787e6afc78c6468285d32b5fa62b9da74. The verified source then restored b'alpha-page-contents', the original parity digest, and the unchanged root."
 
   - id: S08
     title: Cartridge lifecycle state machine
