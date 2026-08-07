@@ -1,4 +1,4 @@
-# store.py — canonical identity, content pages, segments, and tensor maps (Q1/Q32/Q57); depends on errors.py.
+# store.py — canonical identity, content pages, segments, and tensor maps (Q1/Q32/Q57); depends on errors.py, schema.
 """Own model identity and the representation-independent Q57 cartridge store.
 
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
@@ -10,7 +10,9 @@ separate fixed-record index owns physical placement.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import struct
@@ -20,6 +22,7 @@ from blake3 import blake3
 import rfc8785
 
 from errors import CassetteError
+from schema.validator import validate
 
 _DIGEST_HEX_LENGTHS = {"blake3": 64, "sha256": 64, "git-sha1": 40}
 _HEX = frozenset("0123456789abcdef")
@@ -36,6 +39,16 @@ _SAFETENSORS_DTYPE_BITS = {
     "I64": 64, "U64": 64, "F64": 64,
 }
 _INDEX_RECORD = struct.Struct(">32s32sQI")
+_IDENTITY_RECORD_FIELDS = frozenset({
+    "source_kind", "locator", "immutable_revision", "artifacts", "format_versions",
+    "tensor_index_digest", "config_digest", "architecture", "operator_set",
+    "tokenizer_digest", "processor_digest", "template_digest", "precision_scheme",
+    "license_digest", "parent_ids", "transform_manifest_digest",
+})
+_ROOT_FIELDS = frozenset({
+    "identity", "parents", "provenance", "semantic_assets", "tensor_maps", "operators",
+    "plans", "deltas", "integrity_root",
+})
 
 
 @dataclass(frozen=True)
@@ -179,8 +192,8 @@ def canonical_bytes(value: object) -> bytes:
         _reject("canonical_value", str(error))
 
 
-def model_identity(material: IdentityTuple) -> str:
-    """Return I only when P(I) is complete, immutable, and correctly bound to its revision kind."""
+def _identity_record(material: IdentityTuple) -> dict:
+    """Validate Q1 material and return the exact JSON-native identity preimage."""
 
     if not isinstance(material, IdentityTuple):
         _reject("identity_tuple", "IdentityTuple required")
@@ -244,7 +257,7 @@ def model_identity(material: IdentityTuple) -> str:
         "locator": locator,
         "immutable_revision": immutable_revision,
         "artifacts": sorted(artifacts, key=lambda artifact: artifact["path"]),
-        "format_versions": sorted(formats),
+        "format_versions": [list(item) for item in sorted(formats)],
         "tensor_index_digest": _digest("tensor_index_digest", material.tensor_index_digest, object_id),
         "config_digest": _digest("config_digest", material.config_digest, object_id),
         "architecture": _text("architecture", material.architecture, object_id),
@@ -254,10 +267,16 @@ def model_identity(material: IdentityTuple) -> str:
         "template_digest": _digest("template_digest", material.template_digest, object_id),
         "precision_scheme": _text("precision_scheme", material.precision_scheme, object_id),
         "license_digest": _digest("license_digest", material.license_digest, object_id),
-        "parent_ids": parents,
+        "parent_ids": list(parents),
         "transform_manifest_digest": transform,
     }
-    return digest_bytes(canonical_bytes(canonical))
+    return canonical
+
+
+def model_identity(material: IdentityTuple) -> str:
+    """Return I only when P(I) is complete, immutable, and correctly bound to its revision kind."""
+
+    return digest_bytes(canonical_bytes(_identity_record(material)))
 
 
 def _q57_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
@@ -296,14 +315,30 @@ def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
     return bytes(payload)
 
 
-def _safetensors_header(handle, source: Path) -> tuple[int, int, dict, tuple[tuple, ...]]:
-    object_id = f"source:{source.name}"
+def _artifact_hasher(expected_digest: str, object_id: str):
+    algorithm = expected_digest.partition(":")[0]
+    if algorithm == "blake3":
+        return blake3()
+    if algorithm == "sha256":
+        return hashlib.sha256()
+    _reject(
+        "artifacts[].digest",
+        "SafeTensors byte verification requires a BLAKE3 or SHA-256 artifact digest",
+        object_id,
+    )
+
+
+def _safetensors_header(
+    handle, source: Path, object_id: str, artifact_hasher
+) -> tuple[int, int, dict, tuple[tuple, ...]]:
     prefix = _read_exact(handle, 8, object_id, "SafeTensors header length")
+    artifact_hasher.update(prefix)
     header_length = int.from_bytes(prefix, "little")
     file_size = source.stat().st_size
     if not 0 < header_length <= _SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
         _q57_reject(object_id, "SafeTensors header length is outside its file or 100 MB limit")
     encoded = _read_exact(handle, header_length, object_id, "SafeTensors header")
+    artifact_hasher.update(encoded)
     if encoded[:1] != b"{":
         _q57_reject(object_id, "SafeTensors header must be complete UTF-8 JSON beginning with '{'")
     try:
@@ -492,8 +527,119 @@ def _read_page(cartridge: Path, location: PageLocation) -> bytes:
     return payload
 
 
+def _material_from_provenance(provenance: object, root_digest: str) -> tuple[IdentityTuple, dict]:
+    fields = {"revision_kind", "source_alias", "requested_revision", "identity_material", "containers"}
+    if not isinstance(provenance, dict) or set(provenance) != fields:
+        _q57_reject(root_digest, "root provenance lacks the exact Q1 evidence fields")
+    record = provenance["identity_material"]
+    artifacts = record.get("artifacts") if isinstance(record, dict) else None
+    if (not isinstance(record, dict) or set(record) != _IDENTITY_RECORD_FIELDS
+            or not isinstance(artifacts, list)
+            or any(not isinstance(item, dict) or set(item) != {"path", "size", "digest"}
+                   for item in artifacts)):
+        _q57_reject(root_digest, "root provenance contains malformed Q1 identity material")
+    try:
+        material = IdentityTuple(
+            revision_kind=provenance["revision_kind"],
+            source_kind=record["source_kind"],
+            source_alias=provenance["source_alias"],
+            canonical_locator=record["locator"],
+            requested_revision=provenance["requested_revision"],
+            immutable_revision=record["immutable_revision"],
+            artifacts=tuple(ArtifactIdentity(**item) for item in artifacts),
+            format_versions=record["format_versions"],
+            tensor_index_digest=record["tensor_index_digest"],
+            config_digest=record["config_digest"],
+            architecture=record["architecture"],
+            operator_set=record["operator_set"],
+            tokenizer_digest=record["tokenizer_digest"],
+            processor_digest=record["processor_digest"],
+            template_digest=record["template_digest"],
+            precision_scheme=record["precision_scheme"],
+            license_digest=record["license_digest"],
+            parent_ids=record["parent_ids"],
+            transform_manifest_digest=record["transform_manifest_digest"],
+        )
+        normalized = _identity_record(material)
+    except (CassetteError, TypeError, ValueError) as error:
+        _q57_reject(root_digest, f"root Q1 identity evidence is invalid: {error}")
+    if normalized != record:
+        _q57_reject(root_digest, "root Q1 identity evidence is not in canonical form")
+
+    containers = provenance["containers"]
+    if (not isinstance(containers, list)
+            or any(not isinstance(item, dict) or set(item) != {"path", "format", "metadata"}
+                   or item["format"] != "safetensors"
+                   or not isinstance(item["metadata"], dict)
+                   or any(not isinstance(key, str) or not isinstance(value, str)
+                          for key, value in item["metadata"].items())
+                   for item in containers)
+            or [item["path"] for item in containers] != [item["path"] for item in artifacts]):
+        _q57_reject(root_digest, "root container provenance does not match its Q1 artifacts")
+    return material, record
+
+
+def _merkle_root(leaves: list[dict]) -> str:
+    encoded = sorted(canonical_bytes(leaf) for leaf in leaves)
+    layer = [blake3(b"\x00" + leaf).digest() for leaf in encoded]
+    while len(layer) > 1:
+        if len(layer) % 2:
+            layer.append(layer[-1])
+        layer = [
+            blake3(b"\x01" + layer[index] + layer[index + 1]).digest()
+            for index in range(0, len(layer), 2)
+        ]
+    return f"blake3:{layer[0].hex()}"
+
+
+def _root_integrity(root: dict, locations: tuple[PageLocation, ...]) -> str:
+    manifest = {
+        field: root[field]
+        for field in sorted(_ROOT_FIELDS - {"integrity_root", "semantic_assets"})
+    }
+    leaves = [{"kind": "manifest", "name": "root", "value": manifest}]
+    leaves.extend(
+        {"kind": "page", "digest": location.page_digest, "length": location.length}
+        for location in locations
+    )
+    leaves.extend(
+        {"kind": "semantic_asset", "name": name, "value": value}
+        for name, value in root["semantic_assets"].items()
+    )
+    return _merkle_root(leaves)
+
+
+def _verify_root(root: object, root_digest: str, locations: dict[str, PageLocation]) -> None:
+    defects = validate("root", root)
+    if defects or not isinstance(root, dict) or set(root) != _ROOT_FIELDS:
+        detail = "; ".join(defects[:3]) if defects else "root has an incorrect field set"
+        _q57_reject(root_digest, f"root schema validation failed: {detail}")
+    material, record = _material_from_provenance(root["provenance"], root_digest)
+    if model_identity(material) != root["identity"]:
+        _q57_reject(root_digest, "root Q1 identity does not match its recorded identity material")
+    semantic_assets = {
+        "processor": record["processor_digest"],
+        "template": record["template_digest"],
+        "tokenizer": record["tokenizer_digest"],
+    }
+    if (root["parents"] != record["parent_ids"]
+            or root["operators"] != record["operator_set"]
+            or root["semantic_assets"] != semantic_assets):
+        _q57_reject(root_digest, "root bindings disagree with their Q1 identity material")
+    required = {
+        span["page_digest"]
+        for tensor_map in root["tensor_maps"]
+        for span in tensor_map["spans"]
+    }
+    if set(locations) != required:
+        _q57_reject(root_digest, "physical page index does not match the logical root")
+    ordered_locations = tuple(sorted(locations.values(), key=lambda item: item.page_digest))
+    if root["integrity_root"] != _root_integrity(root, ordered_locations):
+        _q57_reject(root_digest, "root integrity aggregate does not cover its pages and manifests")
+
+
 def load_root(cartridge: str | Path, root_digest: str) -> dict:
-    """Load one immutable RFC 8785 root only when its bytes match the requested identity."""
+    """Load one immutable root only when its bytes, Q1 evidence, index, and aggregate agree."""
 
     cartridge = Path(cartridge)
     path = cartridge / "roots" / _content_hex(root_digest, root_digest)
@@ -504,52 +650,78 @@ def load_root(cartridge: str | Path, root_digest: str) -> dict:
         _q57_reject(root_digest, f"root manifest is unavailable or malformed: {error}")
     if digest_bytes(payload) != root_digest or canonical_bytes(root) != payload:
         _q57_reject(root_digest, "root manifest is not the requested canonical object")
+    _verify_root(root, root_digest, _read_index(cartridge, root_digest))
     return root
 
 
 def import_safetensors(
-    source: str | Path | tuple[str | Path, ...], cartridge: str | Path, identity: str
+    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
 ) -> str:
-    """Import a complete SafeTensors artifact set into one Q57 logical root."""
+    """Import SafeTensors only when their bytes prove the supplied complete Q1 material."""
 
-    sources = (Path(source),) if isinstance(source, (str, Path)) else tuple(map(Path, source))
-    if not sources or len({path.name for path in sources}) != len(sources):
-        _q57_reject("source:safetensors", "at least one uniquely named SafeTensors artifact is required")
-    sources = tuple(sorted(sources, key=lambda path: path.name))
+    identity_record = _identity_record(material)
+    identity = digest_bytes(canonical_bytes(identity_record))
+    expected_artifacts = {item["path"]: item for item in identity_record["artifacts"]}
+    if not isinstance(source, Mapping) or not source:
+        _q57_reject(identity, "canonical artifact paths must map to local SafeTensors files")
+    sources = []
+    for artifact_path, local_path in source.items():
+        if not isinstance(artifact_path, str) or not artifact_path or artifact_path != artifact_path.strip():
+            _q57_reject(identity, "every SafeTensors source requires one canonical artifact path")
+        try:
+            sources.append((artifact_path, Path(local_path)))
+        except TypeError:
+            _q57_reject(identity, f"artifact {artifact_path!r} has no local filesystem path")
+    sources = tuple(sorted(sources))
+    if {artifact_path for artifact_path, _ in sources} != set(expected_artifacts):
+        _reject(
+            "artifacts",
+            "SafeTensors source paths differ from the complete Q1 artifact set",
+            identity,
+        )
     cartridge = Path(cartridge)
-    identity = f"blake3:{_content_hex(identity, identity)}"
     artifacts = []
     tensor_names = set()
-    for path in sources:
+    for artifact_path, path in sources:
+        object_id = f"source:{artifact_path}"
+        expected_digest = expected_artifacts[artifact_path]["digest"]
+        artifact_hasher = _artifact_hasher(expected_digest, object_id)
         try:
             with path.open("rb") as handle:
-                data_start, data_size, metadata, tensors = _safetensors_header(handle, path)
+                data_start, data_size, metadata, tensors = _safetensors_header(
+                    handle, path, object_id, artifact_hasher
+                )
         except OSError as error:
-            _q57_reject(f"source:{path.name}", f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+            _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
         names = {tensor[0] for tensor in tensors}
         if tensor_names & names:
-            _q57_reject(f"source:{path.name}", "SafeTensors artifacts contain duplicate tensor names")
+            _q57_reject(object_id, "SafeTensors artifacts contain duplicate tensor names")
         tensor_names |= names
-        artifacts.append((path, data_start, data_size, metadata, tensors))
+        artifacts.append((
+            artifact_path, path, data_start, data_size, metadata, tensors,
+            expected_digest.partition(":")[0], artifact_hasher,
+        ))
 
     seen_pages = set()
     tensor_maps = []
 
     def unique_pages():
-        for path, data_start, data_size, _, tensors in artifacts:
+        for artifact_path, path, data_start, data_size, _, tensors, _, artifact_hasher in artifacts:
+            object_id = f"source:{artifact_path}"
             try:
                 handle = path.open("rb")
             except OSError as error:
-                _q57_reject(f"source:{path.name}", f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+                _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
             with handle:
                 handle.seek(data_start)
                 remaining = data_size
                 page_digests = []
                 while remaining:
                     payload = _read_exact(
-                        handle, min(PAGE_BYTES, remaining), f"source:{path.name}", "SafeTensors payload"
+                        handle, min(PAGE_BYTES, remaining), object_id, "SafeTensors payload"
                     )
                     remaining -= len(payload)
+                    artifact_hasher.update(payload)
                     page_digest = digest_bytes(payload)
                     page_digests.append(page_digest)
                     if page_digest not in seen_pages:
@@ -558,28 +730,48 @@ def import_safetensors(
                 tensor_maps.extend(_tensor_maps(tensors, page_digests))
 
     locations = _write_segments(cartridge, unique_pages())
+    observed_artifacts = [
+        {
+            "path": artifact_path,
+            "size": data_start + data_size,
+            "digest": f"{algorithm}:{artifact_hasher.hexdigest()}",
+        }
+        for artifact_path, _, data_start, data_size, _, _, algorithm, artifact_hasher in artifacts
+    ]
+    if observed_artifacts != identity_record["artifacts"]:
+        _reject(
+            "artifacts",
+            "SafeTensors path, size, or digest differs from the supplied Q1 evidence",
+            identity,
+        )
     root = {
         "identity": identity,
-        "parents": [],
+        "parents": identity_record["parent_ids"],
         "provenance": {
-            "container": "safetensors-v0.6.2",
-            "artifacts": [
-                {"name": path.name, "metadata": metadata}
-                for path, _, _, metadata, _ in artifacts
+            "revision_kind": material.revision_kind,
+            "source_alias": material.source_alias,
+            "requested_revision": material.requested_revision,
+            "identity_material": identity_record,
+            "containers": [
+                {"path": artifact_path, "format": "safetensors", "metadata": metadata}
+                for artifact_path, _, _, _, metadata, _, _, _ in artifacts
             ],
         },
-        "semantic_assets": {},
+        "semantic_assets": {
+            "processor": identity_record["processor_digest"],
+            "template": identity_record["template_digest"],
+            "tokenizer": identity_record["tokenizer_digest"],
+        },
         "tensor_maps": [tensor_map.record() for tensor_map in sorted(
             tensor_maps, key=lambda tensor_map: tensor_map.semantic_tensor_id
         )],
-        "operators": [],
+        "operators": identity_record["operator_set"],
         "plans": [],
         "deltas": [],
-        "integrity_root": digest_bytes(canonical_bytes([
-            {"page_digest": location.page_digest, "length": location.length}
-            for location in sorted(locations, key=lambda item: item.page_digest)
-        ])),
     }
+    root["integrity_root"] = _root_integrity(
+        root, tuple(sorted(locations, key=lambda item: item.page_digest))
+    )
     root_payload = canonical_bytes(root)
     root_digest = digest_bytes(root_payload)
     _write_index(cartridge, root_digest, locations)
@@ -590,6 +782,7 @@ def import_safetensors(
             _q57_reject(root_digest, "existing root bytes do not match their name")
     else:
         root_path.write_bytes(root_payload)
+    load_root(cartridge, root_digest)
     return root_digest
 
 

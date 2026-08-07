@@ -121,7 +121,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S04]
-    status: DONE 2026-08-06 — step commit b38456c; committed-HEAD suite 17 passed; ledger clean with 453 product LOC and no added dependency
+    status: IN_PROGRESS 2026-08-06 — reopened by review: the SafeTensors import accepted an opaque Q1 digest, discarded the artifact evidence needed to verify it, and emitted root semantic/operator bindings unrelated to that identity; prior byte-layout evidence remains valid
     closeout:
       - clause: "SafeTensors import"
         test_or_probe: "tests/test_s05_store.py::test_q57_safetensors_import_relocation_and_span_resolution plus an independent safetensors==0.6.2 writer probe"
