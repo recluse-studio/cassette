@@ -3,9 +3,10 @@
 
 from contextlib import contextmanager
 import hashlib
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import threading
+import time
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 _SECRET = "s09-fixture-secret-never-serialize"
@@ -55,15 +56,15 @@ def _artifact(kind: str, item: tuple[str, bytes, str]) -> dict:
     return {"key": name, "size_bytes": len(payload), "sha256": digest[7:], "download_url": uri, "validator": validator}
 
 
-def _manifest(kind: str) -> dict:
+def _manifest(kind: str, artifacts: tuple[tuple[str, bytes, str], ...] | None = None) -> dict:
     fixture = _FIXTURES[kind]
-    artifact = _artifact(kind, fixture["artifact"])
+    artifact_records = [_artifact(kind, item) for item in (artifacts or (fixture["artifact"],))]
     asset = _artifact(kind, fixture["asset"])
     if kind == "huggingface":
-        return {"sha": fixture["revision"][9:], "cassette_identity": fixture["identity"], "siblings": [artifact], "metadata_siblings": [asset], "auth": {"scope": fixture["auth_scope"]}, "license": {"digest": fixture["license"]}}
+        return {"sha": fixture["revision"][9:], "cassette_identity": fixture["identity"], "siblings": artifact_records, "metadata_siblings": [asset], "auth": {"scope": fixture["auth_scope"]}, "license": {"digest": fixture["license"]}}
     if kind == "ollama":
-        return {"digest": fixture["revision"], "cassette": {"identity": fixture["identity"]}, "layers": [artifact], "assets": [asset], "scope": fixture["auth_scope"], "license_digest": fixture["license"]}
-    return {"immutable_id": fixture["revision"], "provenance": {"identity": fixture["identity"]}, "files": [artifact], "metadata_files": [asset], "authorization": {"scope": fixture["auth_scope"]}, "license": {"sha256": fixture["license"]}}
+        return {"digest": fixture["revision"], "cassette": {"identity": fixture["identity"]}, "layers": artifact_records, "assets": [asset], "scope": fixture["auth_scope"], "license_digest": fixture["license"]}
+    return {"immutable_id": fixture["revision"], "provenance": {"identity": fixture["identity"]}, "files": artifact_records, "metadata_files": [asset], "authorization": {"scope": fixture["auth_scope"]}, "license": {"sha256": fixture["license"]}}
 
 
 def _replace_artifact_uri(kind: str, manifest: dict, uri: str) -> None:
@@ -93,18 +94,18 @@ def _replace_artifact_size(kind: str, manifest: dict, size: int) -> None:
         manifest["files"][0]["size_bytes"] = size
 
 
-def _metadata(kind: str) -> dict:
+def _metadata(kind: str, artifacts: tuple[tuple[str, bytes, str], ...] | None = None) -> dict:
     fixture = _FIXTURES[kind]
-    artifact = fixture["artifact"]
+    artifacts = artifacts or (fixture["artifact"],)
     absent = {"trust": "ABSENT", "authority": f"fixture:{kind}:absent"}
     result = {field: dict(absent) for field in _SOURCE_FIELDS}
     result.update({
         "identity": {"value": fixture["identity"], "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
-        "total_bytes": {"value": len(artifact[1]), "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
-        "artifact_count": {"value": 1, "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
-        "artifact_digests": {"value": [_sha(artifact[1])], "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
+        "total_bytes": {"value": sum(len(item[1]) for item in artifacts), "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
+        "artifact_count": {"value": len(artifacts), "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
+        "artifact_digests": {"value": [_sha(item[1]) for item in artifacts], "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:manifest"},
         "format": {"value": fixture["format"], "trust": "PARSED", "authority": f"fixture:{kind}:header"},
-        "source_validators": {"value": {"etag": artifact[2]}, "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:response"},
+        "source_validators": {"value": {"etag": artifacts[0][2]}, "trust": "EVIDENCE_DIGESTED", "authority": f"fixture:{kind}:response"},
         "conflicts": [],
     })
     wrapper = {"huggingface": "remote_metadata", "ollama": "model_info", "tinker": "evidence"}[kind]
@@ -160,6 +161,7 @@ class _Handler(BaseHTTPRequestHandler):
             kind, operation = parts[1], parts[2]
             query = parse_qs(parsed.query)
             fixture = _FIXTURES[kind]
+            artifacts = self.server.artifact_overrides.get(kind)
             if query.get("locator") != [fixture["locator"]] or operation not in {"resolve", "artifacts", "metadata", "requirements"}:
                 self._send(404, b"")
                 return
@@ -173,7 +175,16 @@ class _Handler(BaseHTTPRequestHandler):
             if operation == "resolve" and self.server.control_redirect_target is not None:
                 self._send(302, b"", {"Location": self.server.control_redirect_target})
                 return
-            response = _manifest(kind) if operation in {"resolve", "artifacts"} else _metadata(kind) if operation == "metadata" else _requirements(kind)
+            response = _manifest(kind, artifacts) if operation in {"resolve", "artifacts"} else _metadata(kind, artifacts) if operation == "metadata" else _requirements(kind)
+            if artifacts is not None:
+                validators = self.server.validator_overrides
+                collection = {"huggingface": response.get("siblings"), "ollama": response.get("layers"), "tinker": response.get("files")}.get(kind)
+                if collection is not None:
+                    validator_field = {"huggingface": "etag", "ollama": "etag", "tinker": "validator"}[kind]
+                    for item, source in zip(collection, artifacts, strict=True):
+                        validator = validators.get((kind, source[0]))
+                        if validator is not None:
+                            item[validator_field] = validator
             if operation == "resolve" and self.server.range_override is not None:
                 _replace_artifact_uri(kind, response, self.server.range_override)
             if operation == "artifacts" and self.server.revision_override is not None:
@@ -185,31 +196,61 @@ class _Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "bytes" and parts[1] in _FIXTURES:
             kind, name = parts[1], unquote(parts[2])
             fixture = _FIXTURES[kind]
-            matches = [item for item in (fixture["artifact"], fixture["asset"]) if item[0] == name]
+            artifacts = self.server.artifact_overrides.get(kind, (fixture["artifact"],))
+            matches = [item for item in (*artifacts, fixture["asset"]) if item[0] == name]
             if not matches:
                 self._send(404, b"")
                 return
             _, payload, validator = matches[0]
-            if self.headers.get("If-Match") != validator:
-                self._send(412, b"")
-                return
             try:
                 start, end = (int(value) for value in self.headers["Range"].removeprefix("bytes=").split("-", 1))
             except (KeyError, TypeError, ValueError):
                 self._send(400, b"")
                 return
+            validator = self.server.range_validator_overrides.get(
+                (kind, name, start),
+                self.server.validator_overrides.get((kind, name), validator),
+            )
+            if self.headers.get("If-Match") != validator:
+                self._send(412, b"")
+                return
             if start < 0 or end < start or end >= len(payload):
                 self._send(416, b"")
                 return
-            self._send(206, payload[start:end + 1], {"Content-Range": f"bytes {start}-{end}/{len(payload)}", "ETag": validator})
+            key = (kind, name, start)
+            with self.server.range_lock:
+                self.server.active_ranges += 1
+                self.server.max_active_ranges = max(self.server.max_active_ranges, self.server.active_ranges)
+                interruption = self.server.interrupt_ranges.pop(key, None)
+                corruption = self.server.corrupt_ranges.get(key)
+            try:
+                if self.server.range_delay:
+                    time.sleep(self.server.range_delay)
+                selected = bytearray(payload[start:end + 1])
+                if corruption is not None and selected:
+                    selected[corruption % len(selected)] ^= 1
+                if interruption is not None:
+                    cut = max(0, min(interruption, len(selected) - 1))
+                    self.send_response(206)
+                    self.send_header("Content-Length", str(len(selected)))
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{len(payload)}")
+                    self.send_header("ETag", validator)
+                    self.end_headers()
+                    self.wfile.write(selected[:cut])
+                    self.close_connection = True
+                    return
+                self._send(206, bytes(selected), {"Content-Range": f"bytes {start}-{end}/{len(payload)}", "ETag": validator})
+            finally:
+                with self.server.range_lock:
+                    self.server.active_ranges -= 1
             return
         self._send(404, b"")
 
 
 @contextmanager
-def source_fixture_server():
+def source_fixture_server(*, artifact_overrides=None):
     """Run one deterministic local server and remove its thread at the context boundary."""
-    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.requests = []
     server.base_url = f"http://127.0.0.1:{server.server_port}"
     server.range_override = None
@@ -217,6 +258,15 @@ def source_fixture_server():
     server.artifact_size_override = None
     server.control_redirect_target = None
     server.range_redirect_target = None
+    server.artifact_overrides = artifact_overrides or {}
+    server.validator_overrides = {}
+    server.range_validator_overrides = {}
+    server.interrupt_ranges = {}
+    server.corrupt_ranges = {}
+    server.range_delay = 0.0
+    server.range_lock = threading.Lock()
+    server.active_ranges = 0
+    server.max_active_ranges = 0
     thread = threading.Thread(target=server.serve_forever, name="s09-source-fixture", daemon=True)
     thread.start()
     try:
@@ -256,7 +306,7 @@ class _CredentialSink(BaseHTTPRequestHandler):
 @contextmanager
 def credential_sink_server(payload: bytes, validator: str):
     """Capture redirect headers and return one validator-bound range without requiring credentials."""
-    server = HTTPServer(("127.0.0.1", 0), _CredentialSink)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _CredentialSink)
     server.requests = []
     server.base_url = f"http://127.0.0.1:{server.server_port}"
     server.payload = payload

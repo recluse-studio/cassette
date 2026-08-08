@@ -24,6 +24,7 @@ import uuid
 
 from blake3 import blake3
 import rfc8785
+import resumablesha256
 
 from errors import CassetteError
 from schema.validator import validate
@@ -855,7 +856,12 @@ def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
     return bytes(payload)
 
 
-def _artifact_hasher(expected_digest: str, object_id: str):
+_RESUMABLE_SHA256_STATE = struct.Struct("@64sIQ8I")
+
+
+def artifact_hasher(expected_digest: str, object_id: str):
+    """Return the sole whole-artifact hasher for Q1/Q51/Q57 byte verification."""
+
     algorithm = expected_digest.partition(":")[0]
     if algorithm == "blake3":
         return blake3()
@@ -863,9 +869,63 @@ def _artifact_hasher(expected_digest: str, object_id: str):
         return hashlib.sha256()
     _reject(
         "artifacts[].digest",
-        "SafeTensors byte verification requires a BLAKE3 or SHA-256 artifact digest",
+        "artifact byte verification requires a BLAKE3 or SHA-256 digest",
         object_id,
     )
+
+
+def resumable_artifact_hasher(expected_digest: str, object_id: str):
+    """Return Q51's pinned SHA-256 hasher whose continuation state is durable."""
+
+    if expected_digest.partition(":")[0] != "sha256":
+        _reject(
+            "artifacts[].digest",
+            "resumable transfer requires an authoritative SHA-256 artifact digest",
+            object_id,
+        )
+    return resumablesha256.sha256()
+
+
+def artifact_hash_state(hasher, expected_digest: str, offset: int, object_id: str) -> str:
+    """Serialize and structurally verify one SHA-256 continuation at an exact byte offset."""
+
+    try:
+        payload = hasher.__getstate__()
+    except (AttributeError, TypeError, ValueError) as error:
+        _reject("serialized_hash_state", f"hasher state is unavailable: {error}", object_id)
+    _validate_artifact_hash_state(payload, expected_digest, offset, object_id)
+    return "sha256-state-v1:" + payload.hex()
+
+
+def resume_artifact_hasher(state: str, expected_digest: str, offset: int, object_id: str):
+    """Restore one validated Q51 SHA-256 continuation without evaluating serialized code."""
+
+    if not isinstance(state, str) or not state.startswith("sha256-state-v1:"):
+        _reject("serialized_hash_state", "a sha256-state-v1 value is required", object_id)
+    encoded = state[16:]
+    if len(encoded) != 2 * _RESUMABLE_SHA256_STATE.size or not set(encoded) <= _HEX:
+        _reject("serialized_hash_state", "state payload is not lowercase hexadecimal", object_id)
+    payload = bytes.fromhex(encoded)
+    _validate_artifact_hash_state(payload, expected_digest, offset, object_id)
+    hasher = resumable_artifact_hasher(expected_digest, object_id)
+    try:
+        hasher.__setstate__(payload)
+    except (TypeError, ValueError) as error:
+        _reject("serialized_hash_state", f"state restoration failed: {error}", object_id)
+    return hasher
+
+
+def _validate_artifact_hash_state(
+    payload: object, expected_digest: str, offset: int, object_id: str
+) -> None:
+    if (not isinstance(payload, bytes) or len(payload) != _RESUMABLE_SHA256_STATE.size
+            or type(offset) is not int or offset < 0):
+        _reject("serialized_hash_state", "state size and byte offset must be exact", object_id)
+    if expected_digest.partition(":")[0] != "sha256":
+        _reject("artifacts[].digest", "serialized state requires SHA-256", object_id)
+    _, buffered, processed_bits, *_ = _RESUMABLE_SHA256_STATE.unpack(payload)
+    if buffered != offset % 64 or processed_bits != (offset - buffered) * 8:
+        _reject("serialized_hash_state", "state counters do not match the contiguous byte offset", object_id)
 
 
 def _safetensors_header(
@@ -1229,11 +1289,11 @@ def import_safetensors(
     for artifact_path, path in sources:
         object_id = f"source:{artifact_path}"
         expected_digest = expected_artifacts[artifact_path]["digest"]
-        artifact_hasher = _artifact_hasher(expected_digest, object_id)
+        source_hasher = artifact_hasher(expected_digest, object_id)
         try:
             with path.open("rb") as handle:
                 data_start, data_size, metadata, tensors = _safetensors_header(
-                    handle, path, object_id, artifact_hasher
+                    handle, path, object_id, source_hasher
                 )
         except OSError as error:
             _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
@@ -1243,14 +1303,14 @@ def import_safetensors(
         tensor_names |= names
         artifacts.append((
             artifact_path, path, data_start, data_size, metadata, tensors,
-            expected_digest.partition(":")[0], artifact_hasher,
+            expected_digest.partition(":")[0], source_hasher,
         ))
 
     seen_pages = set()
     tensor_maps = []
 
     def unique_pages():
-        for artifact_path, path, data_start, data_size, _, tensors, _, artifact_hasher in artifacts:
+        for artifact_path, path, data_start, data_size, _, tensors, _, source_hasher in artifacts:
             object_id = f"source:{artifact_path}"
             try:
                 handle = path.open("rb")
@@ -1265,7 +1325,7 @@ def import_safetensors(
                         handle, min(PAGE_BYTES, remaining), object_id, "SafeTensors payload"
                     )
                     remaining -= len(payload)
-                    artifact_hasher.update(payload)
+                    source_hasher.update(payload)
                     page_digest = digest_bytes(payload)
                     page_digests.append(page_digest)
                     if page_digest not in seen_pages:
@@ -1278,9 +1338,9 @@ def import_safetensors(
         {
             "path": artifact_path,
             "size": data_start + data_size,
-            "digest": f"{algorithm}:{artifact_hasher.hexdigest()}",
+            "digest": f"{algorithm}:{source_hasher.hexdigest()}",
         }
-        for artifact_path, _, data_start, data_size, _, _, algorithm, artifact_hasher in artifacts
+        for artifact_path, _, data_start, data_size, _, _, algorithm, source_hasher in artifacts
     ]
     if observed_artifacts != identity_record["artifacts"]:
         _reject(
