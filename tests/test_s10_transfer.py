@@ -185,6 +185,16 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
                 first.path,
             )
             assert resumed_hash.hexdigest() == hashlib.sha256(first_payload).hexdigest()
+            changed_state = bytearray.fromhex(first_result.serialized_hash_state.removeprefix("sha256-state-v1:"))
+            changed_state[64:68] = b"\xff" * 4
+            with pytest.raises(CassetteError) as impossible_hash_offset:
+                resume_artifact_hasher(
+                    "sha256-state-v1:" + changed_state.hex(),
+                    first.digest,
+                    first_result.contiguous_source_hash_offset,
+                    first.path,
+                )
+            assert "state counters" in impossible_hash_offset.value.detail
             attempt_ranges = [
                 request["range"] for request in server.requests[request_start:]
                 if request["path"].endswith(first.path)

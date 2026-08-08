@@ -1,6 +1,7 @@
 # test_s02_errors.py — S02 fixtures for Q6 error schema conformance; depends on errors.py.
 """S02: the error vocabulary is closed, the shape is Q6's exactly, and payloads round-trip."""
 
+from contextlib import contextmanager
 import json
 
 import pytest
@@ -26,6 +27,15 @@ def test_error_shape_is_q6_exactly_and_round_trips():
     assert isinstance(err, Exception)
     with pytest.raises(CassetteError):
         raise err
+
+    @contextmanager
+    def generator_boundary():
+        yield
+
+    with pytest.raises(CassetteError) as propagated:
+        with generator_boundary():
+            raise err
+    assert propagated.value is err
 
 
 def test_vocabulary_is_closed_q6_q32():

@@ -54,9 +54,9 @@ CODES = frozenset({
 })
 
 
-@dataclass(frozen=True)
+@dataclass
 class CassetteError(Exception):
-    """Q6 error shape. Frozen: an error is a fact, not a mutable object."""
+    """Q6 error shape; standard Exception traceback metadata remains writable."""
 
     code: str
     object_id: str
