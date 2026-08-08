@@ -273,6 +273,7 @@ steps:
     files: [store.py, AGENTS.md]
     discovered_scope: "AGENTS.md records store.py as the sole writer of the Q49 identity marker."
     invariants: [Q49 acceptance (APFS-image state machine - unmount/remount, disconnect/reconnect, sleep/wake, bus reset, port migration, logical/filesystem UUID mismatch, read-only remount, verified cloned replacement, no stale access)]
+    acceptance_boundary: "S08 proves the shared Q49 lifecycle authority and APFS-image fixture against the store operations available at this step. Q49's injection at every concrete operation phase remains open for acquisition, compilation, inference prefill, inference decode, training, export, repair, and removal; S23 owns that matrix expansion after those operations exist."
     expected_size: small
     done_when: full suite + ledger green
     depends: [S07]
@@ -458,10 +459,10 @@ steps:
     title: Failure-row generator
     env: any
     files: [tests/ (generated harness)]
-    invariants: [matrix failure_rows injections x operations expanded from data; every simulable injection green]
+    invariants: [Q49 acceptance across every concrete operation phase - acquisition, compilation, inference prefill, inference decode, training, export, repair, and removal; matrix failure_rows injections x operations expanded from data; every simulable injection green]
     expected_size: medium
     done_when: full suite + ledger green; non-simulable injections enumerated for PHASE LIVE
-    depends: [S18, S20, S22]
+    depends: [S10, S18, S20, S22]
     status: TODO
 
   - id: S24

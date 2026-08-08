@@ -438,6 +438,7 @@ failure_rows:
     - training
     - export
     - repair
+    - removal
   injections:
     - process_death_at_every_durable_boundary
     - cartridge_disconnect
