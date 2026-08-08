@@ -81,7 +81,7 @@ steps:
     expected_size: small
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
-    status: DONE 2026-08-06 — step commit 8cf0d10; R1 repair d763d74; R2 repair 3958650; final S01 hardening a89a3ec and closure repair bc1453b (exact assertion authorities, fail-closed Git evidence, anchored commit fields, isolated boundary fixtures); fresh-context review clean; suite 11 passed, ledger clean; pins pytest==9.1.1 / python ==3.13.* (revisit recorded at S06)
+    status: IN_PROGRESS 2026-08-07 — Q29 reopened after the clean-checkout gate found published commits 413df64 and 72af6f3 missing exact commit-law labels; repair must preserve published history and remain fail-closed
 
   - id: S02
     title: Canonical error vocabulary
