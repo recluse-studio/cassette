@@ -81,7 +81,7 @@ steps:
     expected_size: small
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
-    status: IN_PROGRESS 2026-08-07 — Q29 reopened after the clean-checkout gate found published commits 413df64 and 72af6f3 missing exact commit-law labels; repair must preserve published history and remain fail-closed
+    status: DONE 2026-08-07 — repair b718da2 adds fail-closed append-only correction records for immutable published messages; full suite 20 passed in 27.37 seconds; ledger clean with 1,512 product LOC, 930 test LOC, 356 tool LOC, one process, one runtime, and the three existing exact dependency pins
 
   - id: S02
     title: Canonical error vocabulary
@@ -199,7 +199,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S06]
-    status: IN_PROGRESS 2026-08-07 — storage contract implemented at fa2a68c; a clean checkout passes both S07 fixtures, but done_when remains red only because published commits 413df64 and 72af6f3 violate the pre-existing commit-message ledger
+    status: DONE 2026-08-07 — reopened at a3d67a1; complete storage contract fa2a68c; closeout 425c384; independent mutation proof 1b14712; Q29 gate repair b718da2; full suite 20 passed in 27.37 seconds; ledger clean with 1,512 product LOC, 930 test LOC, 356 tool LOC, one process, one runtime, and the three existing exact dependency pins
     closeout:
       - clause: "Q53 exact boundary, phase maximum, safety floor, and terminal release"
         test_or_probe: "tests/test_s07_integrity_capacity.py::test_q53_exact_fragmented_concurrent_growing_training_and_repair_capacity"
@@ -261,6 +261,11 @@ steps:
         input: "Replace phase maximum with phase sum; force a corrupt primary manifest to report valid; undercount the two physical manifest copies as one."
         expected: "The Q53 fixture must reject the arithmetic mutation; the Q62 fixture must reject both manifest mutations."
         observed: "All three mutants failed at the intended independent assertion: exact required bytes, exact unavailable page IDs, and exact repair-set physical bytes, respectively. The disposable clones were then removed."
+      - clause: "S07 full regression and accounting gate"
+        test_or_probe: "the complete pinned Python 3.13 suite and tools/ledger.py from committed repair b718da2"
+        input: "Run every fixture, including the clean-checkout Q29 reproduction, then recompute J, tracked artifacts, generated integrity, commit law, imports, citations, pins, and runtime confinement."
+        expected: "Every test passes and the ledger reports no violation before S07 becomes DONE."
+        observed: "All 20 tests passed in 27.37 seconds. The ledger reported zero violations, 1,512 product LOC, 930 test LOC, 356 tool LOC, 58 generated LOC, one process, one Python runtime, and the three existing exact pins."
 
   - id: S08
     title: Cartridge lifecycle state machine
