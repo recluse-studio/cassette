@@ -187,7 +187,7 @@ def test_tracked_artifact_check_detects_real_git_index_entry(tmp_path):
 
 
 def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
-    """Q29 acceptance: commit-law labels are anchored, nonempty fields, not message substrings."""
+    """Q29 acceptance: commit-law fields and later repairs are exact, anchored, and fail-closed."""
     baseline = init_git(tmp_path)
     (tmp_path / "candidate.txt").write_text("candidate\n")
     git(tmp_path, "add", "candidate.txt")
@@ -218,3 +218,54 @@ def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
     status, violations = check_commit_law(tmp_path, baseline)
     assert status == "ran"
     assert violations == []
+
+    repair_repo = tmp_path / "append-only-repair"
+    repair_repo.mkdir()
+    repair_baseline = init_git(repair_repo)
+    (repair_repo / "broken.txt").write_text("published without fields\n")
+    git(repair_repo, "add", "broken.txt")
+    git(repair_repo, "commit", "--quiet", "-m", "Published fixture without fields")
+    broken_sha = git(repair_repo, "rev-parse", "HEAD")
+    (repair_repo / "repair.txt").write_text("append-only correction\n")
+    git(repair_repo, "add", "repair.txt")
+    git(
+        repair_repo,
+        "commit",
+        "--quiet",
+        "-m",
+        "Record published-message correction",
+        "-m",
+        "Failed before: the published fixture omitted all three required fields.\n"
+        "Reused instead of authored: the immutable target commit and Git history.\n"
+        "Deleted: nothing.\n\n"
+        f"Commit-law repair {broken_sha} Failed before: no candidate record existed.\n"
+        f"Commit-law repair {broken_sha} Reused instead of authored: Git's commit object.\n"
+        f"Commit-law repair {broken_sha} Deleted: nothing.",
+    )
+    repair_sha = git(repair_repo, "rev-parse", "HEAD")
+    status, violations = check_commit_law(repair_repo, repair_baseline)
+    assert status == "ran"
+    assert violations == []
+
+    git(
+        repair_repo,
+        "commit",
+        "--allow-empty",
+        "--quiet",
+        "-m",
+        "Reject invalid correction records",
+        "-m",
+        "Failed before: invalid correction cases lacked executable proof.\n"
+        "Reused instead of authored: the existing fixture repository.\n"
+        "Deleted: nothing.\n\n"
+        f"Commit-law repair {broken_sha} Deleted: duplicate correction.\n"
+        f"Commit-law repair {repair_sha} Deleted: field already answered.\n"
+        "Commit-law repair 0000000000000000000000000000000000000000 Deleted: unknown target.\n"
+        "Commit-law repair short Deleted: malformed target.",
+    )
+    status, violations = check_commit_law(repair_repo, repair_baseline)
+    assert status == "ran"
+    assert any("duplicate repair" in violation for violation in violations)
+    assert any("already answers Deleted" in violation for violation in violations)
+    assert any("target is not governed history" in violation for violation in violations)
+    assert any("malformed commit-law repair" in violation for violation in violations)

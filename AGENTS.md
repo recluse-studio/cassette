@@ -147,3 +147,9 @@ not whitespace.
 Every commit message answers three questions: (1) which row failed before this change; (2) what
 was reused instead of authored; (3) what was deleted. "Nothing was deleted" is an acceptable
 answer; an unanswered question is not.
+
+Published history is not rewritten merely to repair a malformed commit message. One later,
+otherwise compliant descendant commit may supply each missing answer exactly once as
+`Commit-law repair <full-commit-sha> <Failed before|Reused instead of authored|Deleted>: <answer>`.
+The target must be a governed ancestor, the named field must be absent from its original message,
+and malformed, duplicate, prospective, unknown-target, or already-answered repairs fail the ledger.

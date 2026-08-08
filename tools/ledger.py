@@ -57,6 +57,10 @@ COMMIT_LAW_FIELDS = (
     ("Reused instead of authored", re.compile(r"^Reused instead of authored:[ \t]+\S.*$", re.M)),
     ("Deleted", re.compile(r"^Deleted:[ \t]+\S.*$", re.M)),
 )
+COMMIT_LAW_REPAIR_RE = re.compile(
+    r"^Commit-law repair (?P<sha>[0-9a-f]{40}) "
+    r"(?P<label>Failed before|Reused instead of authored|Deleted):[ \t]+(?P<value>\S.*)$"
+)
 ASSERTION_LIST_KEYS = {"assertions", "portability_assertions", "required_for_every_training_row"}
 AUTHORITY_VALUE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)\b")
 
@@ -230,20 +234,63 @@ def check_tracked_artifacts(root: Path) -> tuple[str, list[str]]:
 
 
 def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[str, list[str]]:
-    """Every commit after the baseline answers the AGENTS.md commit test; unverifiable is a violation."""
+    """Require each governed commit's fields or one exact correction in later immutable history."""
     if not (root / ".git").exists():
         return "failed", ["commit-law check could not run (fail-closed): not a git repository"]
     proc = _git(root, "log", "--format=%H%n%B%x00", f"{baseline}..HEAD")
     if proc is None or proc.returncode != 0:
         reason = "git unavailable or timed out" if proc is None else proc.stderr.strip() or "git log failed"
         return "failed", [f"commit-law check could not run (fail-closed): {reason}"]
-    violations = []
+    commits = {}
     for block in proc.stdout.split("\x00"):
         block = block.strip()
         if not block:
             continue
         sha, _, message = block.partition("\n")
+        commits[sha] = message
+    violations = []
+    repairs = {}
+    field_patterns = dict(COMMIT_LAW_FIELDS)
+    for repair_sha, message in commits.items():
+        for line in message.splitlines():
+            if not line.startswith("Commit-law repair"):
+                continue
+            match = COMMIT_LAW_REPAIR_RE.fullmatch(line)
+            if match is None:
+                violations.append(
+                    f"commit {repair_sha[:7]} has a malformed commit-law repair"
+                )
+                continue
+            target = match.group("sha")
+            label = match.group("label")
+            key = (target, label)
+            if target not in commits:
+                violations.append(
+                    f"commit {repair_sha[:7]} commit-law repair target is not governed history: "
+                    f"{target[:7]}"
+                )
+                continue
+            ancestry = _git(root, "merge-base", "--is-ancestor", target, repair_sha)
+            if ancestry is None or ancestry.returncode != 0 or target == repair_sha:
+                violations.append(
+                    f"commit {repair_sha[:7]} commit-law repair is not later than target "
+                    f"{target[:7]}"
+                )
+                continue
+            if field_patterns[label].search(commits[target]):
+                violations.append(
+                    f"commit {target[:7]} already answers {label}; repair in {repair_sha[:7]} is invalid"
+                )
+                continue
+            if key in repairs:
+                violations.append(
+                    f"commit {target[:7]} has a duplicate repair for {label} in {repair_sha[:7]}"
+                )
+                continue
+            repairs[key] = repair_sha
+    for sha, message in commits.items():
         missing = [label for label, pattern in COMMIT_LAW_FIELDS if not pattern.search(message)]
+        missing = [label for label in missing if (sha, label) not in repairs]
         if missing:
             violations.append(
                 f"commit {sha[:7]} violates the AGENTS.md commit test — missing or empty: "
