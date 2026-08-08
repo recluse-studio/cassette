@@ -11,7 +11,7 @@ separate fixed-record index owns physical placement.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import fcntl
 import hashlib
 import json
@@ -247,7 +247,7 @@ class CapacityPhase:
 
 @dataclass(frozen=True)
 class CapacityReservation:
-    """A Q53 admission whose exact maximum was accepted by one verified preallocator."""
+    """A Q53 extent owned by one operation until its terminal cleanup releases it."""
 
     operation_id: str
     device_bytes: int
@@ -255,6 +255,8 @@ class CapacityReservation:
     phase_totals: tuple[int, ...]
     repair_bytes: int
     required_bytes: int
+    _release_extent: Callable[[int], bool] = field(repr=False, compare=False)
+    active: bool = field(default=True, init=False)
 
 
 @dataclass(frozen=True)
@@ -319,6 +321,7 @@ def reserve_capacity(
     allocatable_verified_free: int,
     phases: tuple[CapacityPhase, ...],
     reserve_extent: Callable[[int], bool],
+    release_extent: Callable[[int], bool],
 ) -> CapacityReservation:
     """Admit Q53 only after one atomic preallocator reserves the exact phase maximum plus safety."""
 
@@ -335,8 +338,12 @@ def reserve_capacity(
     if (not isinstance(phases, tuple) or not phases
             or any(not isinstance(phase, CapacityPhase) for phase in phases)):
         _capacity_reject(operation_id, "one or more CapacityPhase values are required", "INVALID_REQUEST")
-    if not callable(reserve_extent):
-        _capacity_reject(operation_id, "reserve_extent must be callable", "INVALID_REQUEST")
+    if not callable(reserve_extent) or not callable(release_extent):
+        _capacity_reject(
+            operation_id,
+            "reserve_extent and release_extent must be callable",
+            "INVALID_REQUEST",
+        )
     totals = tuple(phase.total for phase in phases)
     five_percent = device_bytes // 20 + bool(device_bytes % 20)
     safety = max(8 * 1024**3, five_percent)
@@ -359,7 +366,44 @@ def reserve_capacity(
         totals,
         max(phase.repair for phase in phases),
         required,
+        release_extent,
     )
+
+
+def _active_reservation(
+    reservation: CapacityReservation, operation_id: str
+) -> CapacityReservation:
+    if not isinstance(reservation, CapacityReservation) or not reservation.active:
+        _capacity_reject(
+            operation_id,
+            "an active completed CapacityReservation is required",
+            "INVALID_REQUEST",
+        )
+    return reservation
+
+
+def release_capacity(reservation: CapacityReservation) -> None:
+    """Release one Q53 extent exactly once during terminal operation cleanup."""
+
+    if not isinstance(reservation, CapacityReservation):
+        _capacity_reject(
+            "release", "a completed CapacityReservation is required", "INVALID_REQUEST"
+        )
+    if not reservation.active:
+        return
+    try:
+        released = reservation._release_extent(reservation.required_bytes)
+    except OSError as error:
+        _capacity_reject(
+            reservation.operation_id,
+            f"release failed for {reservation.required_bytes} bytes: {error}",
+        )
+    if released is not True:
+        _capacity_reject(
+            reservation.operation_id,
+            f"release refused the owned {reservation.required_bytes}-byte extent",
+        )
+    object.__setattr__(reservation, "active", False)
 
 
 def _reject(field: str, reason: str, object_id: str = "model:unidentified") -> None:
@@ -1883,6 +1927,10 @@ def _repair_manifest_path(cartridge: Path, root_digest: str) -> Path:
     return cartridge / "repair" / f"{_content_hex(root_digest, root_digest)}.json"
 
 
+def _repair_manifest_replica_path(cartridge: Path, root_digest: str) -> Path:
+    return cartridge / "repair" / "manifests" / _content_hex(root_digest, root_digest)
+
+
 def _repair_object_path(cartridge: Path, digest: str) -> Path:
     return cartridge / "repair" / "objects" / _content_hex(digest, digest)
 
@@ -1977,22 +2025,31 @@ def _read_repair_object(cartridge: Path, digest: str, description: str) -> bytes
     return payload
 
 
+def _decode_repair_manifest(payload: bytes) -> dict:
+    envelope = json.loads(payload, object_pairs_hook=_unique_object)
+    if (not isinstance(envelope, dict) or set(envelope) != {"digest", "record"}
+            or canonical_bytes(envelope) != payload
+            or not isinstance(envelope["record"], dict)
+            or envelope["digest"] != digest_bytes(canonical_bytes(envelope["record"]))):
+        raise ValueError("repair manifest envelope is not exact canonical content")
+    return envelope["record"]
+
+
 def _repair_record(
     cartridge: Path, root_digest: str
-) -> tuple[dict, bytes, bytes, dict[str, PageLocation]]:
-    path = _repair_manifest_path(cartridge, root_digest)
+) -> tuple[dict, bytes, bytes, dict[str, PageLocation], bytes, str, bool]:
     object_id = f"repair:{root_digest}"
     try:
-        payload = path.read_bytes()
-        envelope = json.loads(payload, object_pairs_hook=_unique_object)
-        if (not isinstance(envelope, dict) or set(envelope) != {"digest", "record"}
-                or canonical_bytes(envelope) != payload
-                or not isinstance(envelope["record"], dict)
-                or envelope["digest"] != digest_bytes(canonical_bytes(envelope["record"]))):
-            raise ValueError("repair manifest envelope is not exact canonical content")
+        manifest_payload = _repair_manifest_replica_path(cartridge, root_digest).read_bytes()
+        record = _decode_repair_manifest(manifest_payload)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-        _integrity_reject(object_id, f"repair manifest is unavailable or malformed: {error}")
-    record = envelope["record"]
+        _integrity_reject(object_id, f"verified repair manifest copy is unavailable or malformed: {error}")
+    try:
+        primary_payload = _repair_manifest_path(cartridge, root_digest).read_bytes()
+        primary_valid = primary_payload == manifest_payload
+    except OSError:
+        primary_valid = False
+    manifest_digest = digest_bytes(manifest_payload)
     if set(record) != {"root_digest", "index_digest", "pages", "stripes"}:
         _integrity_reject(object_id, "repair manifest has an incorrect field set")
     if record["root_digest"] != root_digest:
@@ -2044,7 +2101,15 @@ def _repair_record(
         expected_stripes.append(expected)
     if record["stripes"] != expected_stripes:
         _integrity_reject(object_id, "repair parity map does not match physical segment membership")
-    return record, root_copy, index_copy, locations
+    return (
+        record,
+        root_copy,
+        index_copy,
+        locations,
+        manifest_payload,
+        manifest_digest,
+        primary_valid,
+    )
 
 
 def create_repair_set(
@@ -2054,6 +2119,7 @@ def create_repair_set(
 
     if not isinstance(reservation, CapacityReservation):
         _capacity_reject("repair-set", "a completed CapacityReservation is required", "INVALID_REQUEST")
+    _active_reservation(reservation, reservation.operation_id)
     cartridge = Path(cartridge)
     _verify_dependency_paths(cartridge, root_digest)
     locations = _read_index(cartridge, root_digest)
@@ -2102,7 +2168,7 @@ def create_repair_set(
     manifest_digest = digest_bytes(manifest_payload)
     objects = {root_digest: root_payload, index_digest: index_payload, **parity_payloads}
     required = _capacity_sum(
-        (*[len(payload) for payload in objects.values()], len(manifest_payload)),
+        (*[len(payload) for payload in objects.values()], 2 * len(manifest_payload)),
         reservation.operation_id,
     )
     if reservation.repair_bytes < required:
@@ -2112,6 +2178,12 @@ def create_repair_set(
         )
     for digest, payload in objects.items():
         _replace_exact(_repair_object_path(cartridge, digest), payload, digest, f"repair-object:{digest}")
+    _replace_exact(
+        _repair_manifest_replica_path(cartridge, root_digest),
+        manifest_payload,
+        manifest_digest,
+        f"manifest-copy:{root_digest}",
+    )
     _replace_exact(
         _repair_manifest_path(cartridge, root_digest),
         manifest_payload,
@@ -2167,13 +2239,23 @@ def _integrity_operation(
     reservation: CapacityReservation | None,
     source_pages: Mapping[str, bytes] | None,
 ) -> IntegrityReport:
-    record, root_copy, index_copy, locations = _repair_record(cartridge, root_digest)
+    (
+        record,
+        root_copy,
+        index_copy,
+        locations,
+        manifest_payload,
+        manifest_digest,
+        manifest_valid,
+    ) = _repair_record(cartridge, root_digest)
     if repair:
         if not isinstance(reservation, CapacityReservation):
             _capacity_reject("repair", "repair requires a completed CapacityReservation", "INVALID_REQUEST")
+        _active_reservation(reservation, reservation.operation_id)
         repair_extent = max(
             len(root_copy),
             len(index_copy),
+            len(manifest_payload),
             *(sum(location.length for location in locations.values()
                   if location.segment_id == segment_id)
               for segment_id in {location.segment_id for location in locations.values()}),
@@ -2184,16 +2266,30 @@ def _integrity_operation(
                 reservation.operation_id,
                 f"repair phase reserves {reservation.repair_bytes} bytes; one replacement extent needs {repair_extent}",
             )
+    sources = _normalize_source_pages(source_pages)
     states = {}
     transitions = []
     required_pages = tuple(sorted(locations))
+    manifest_id = f"manifest:{root_digest}"
     root_id = f"root:{root_digest}"
     index_id = f"index:{root_digest}"
-    states[root_id] = states[index_id] = "VALID"
+    states[manifest_id] = states[root_id] = states[index_id] = "VALID"
     for digest in required_pages:
         states[f"page:{digest}"] = "VALID"
     for stripe in record["stripes"]:
         states[f"parity:{stripe['parity_digest']}"] = "VALID"
+
+    if not manifest_valid:
+        _mark_corrupt(states, transitions, manifest_id)
+        if repair:
+            _transition(states, transitions, manifest_id, "REPAIRING")
+            _replace_exact(
+                _repair_manifest_path(cartridge, root_digest),
+                manifest_payload,
+                manifest_digest,
+                manifest_id,
+            )
+            _transition(states, transitions, manifest_id, "VALID")
 
     root_path = cartridge / "roots" / _content_hex(root_digest, root_digest)
     index_path = _index_path(cartridge, root_digest)
@@ -2253,7 +2349,6 @@ def _integrity_operation(
                 _mark_corrupt(states, transitions, object_id)
                 corrupt_pages.add(location.page_digest)
 
-    sources = _normalize_source_pages(source_pages)
     page_records = {page["page_digest"]: page for page in record["pages"]}
     stripe_records = {stripe["parity_digest"]: stripe for stripe in record["stripes"]}
     if repair:
@@ -2334,7 +2429,7 @@ def _integrity_operation(
         digest for digest in required_pages
         if states[f"page:{digest}"] in {"CORRUPT", "UNAVAILABLE"}
     }
-    if any(states[object_id] != "VALID" for object_id in (root_id, index_id)):
+    if any(states[object_id] != "VALID" for object_id in (manifest_id, root_id, index_id)):
         unavailable.update(required_pages)
     if repair and not unavailable:
         load_root(cartridge, root_digest)
