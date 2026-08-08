@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from ipaddress import ip_address
 import json
 import re
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from errors import CassetteError
 from schema.validator import validate
@@ -18,6 +19,7 @@ from schema.validator import validate
 _CONTROL_BYTES = 8 * 1024 * 1024
 _DIGEST = re.compile(r"(?P<algorithm>blake3|sha256|git-sha1):(?P<hex>[0-9a-f]+)")
 _DIGEST_LENGTH = {"blake3": 64, "sha256": 64, "git-sha1": 40}
+_SENSITIVE_HEADERS = frozenset({"authorization", "x-cassette-license-acceptance"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +138,63 @@ def _fail(code: str, object_id: str, invariant: str, detail: str, retryability: 
     raise CassetteError(code, object_id, invariant, retryability, detail)
 
 
+def _origin(url: str) -> tuple[str, str, int] | None:
+    try:
+        parsed = urlparse(url)
+        port = parsed.port or {"http": 80, "https": 443}.get(parsed.scheme.lower())
+        host = parsed.hostname
+    except (TypeError, ValueError):
+        return None
+    if parsed.scheme.lower() not in {"http", "https"} or host is None or port is None or parsed.username or parsed.password:
+        return None
+    return parsed.scheme.lower(), host.lower(), port
+
+
+def _loopback_http(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "http":
+        return True
+    host = parsed.hostname
+    if host == "localhost":
+        return True
+    try:
+        return host is not None and ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+class _CredentialSafeRedirect(HTTPRedirectHandler):
+    """Keep control authority local and remove credentials before a range crosses origins."""
+
+    def __init__(self, object_id: str, allow_cross_origin: bool):
+        super().__init__()
+        self.object_id = object_id
+        self.allow_cross_origin = allow_cross_origin
+
+    def redirect_request(self, request, response, code, message, headers, target):
+        redirected = super().redirect_request(request, response, code, message, headers, target)
+        if redirected is None:
+            return None
+        source_origin = _origin(request.full_url)
+        target_origin = _origin(redirected.full_url)
+        if target_origin is None:
+            _fail("SOURCE_UNAVAILABLE", self.object_id, "Q9: redirects require an HTTP(S) authority", "source returned an invalid redirect target")
+        if source_origin != target_origin:
+            if not self.allow_cross_origin:
+                _fail("SOURCE_UNAVAILABLE", self.object_id, "Q9: control redirects must retain source authority", "cross-origin control redirect refused")
+            for collection in (redirected.headers, redirected.unredirected_hdrs):
+                for name in tuple(collection):
+                    if name.lower() in _SENSITIVE_HEADERS:
+                        del collection[name]
+        return redirected
+
+
+def _require_source_range(base_url: str, range_uri: str, object_id: str, path: str) -> None:
+    parsed = urlparse(range_uri)
+    if _origin(range_uri) != _origin(base_url) or parsed.query or parsed.fragment:
+        _fail("SOURCE_UNAVAILABLE", object_id, "Q9: credential-bearing range authority must remain on the selected source origin", path)
+
+
 def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     result = {}
     for name, value in pairs:
@@ -182,8 +241,10 @@ class SourceAdapter:
         if self.kind not in _WIRES:
             _fail("MODEL_UNSUPPORTED", self.kind or "source", "Q52: source kind must have a declared adapter wire", "no source wire is registered")
         origin = urlparse(self.base_url) if isinstance(self.base_url, str) else None
-        if origin is None or origin.scheme not in {"http", "https"} or not origin.netloc or origin.username or origin.password or origin.query or origin.fragment:
+        if origin is None or _origin(self.base_url) is None or origin.query or origin.fragment:
             _fail("INVALID_REQUEST", self.kind, "Q52: adapter endpoint must be HTTP(S)", "base_url is invalid")
+        if not _loopback_http(self.base_url):
+            _fail("INVALID_REQUEST", self.kind, "Q9: credential-bearing remote endpoints require HTTPS", "non-loopback HTTP base_url refused")
 
     async def resolve(self, descriptor: dict) -> ResolvedSource:
         """Resolve a Q9 descriptor to immutable source evidence."""
@@ -232,6 +293,7 @@ class SourceAdapter:
         self._revision(revision)
         if artifact not in (*revision.artifacts, *revision.metadata_assets):
             _fail("INVALID_REQUEST", revision.locator, "Q52: range artifact must belong to the resolved revision", artifact.path)
+        _require_source_range(self.base_url, artifact.range_uri, revision.locator, artifact.path)
         if isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0 or offset + length > artifact.size:
             _fail("INVALID_REQUEST", artifact.path, "Q52: range must fit the immutable artifact", f"offset={offset}, length={length}, size={artifact.size}")
         headers = {"Range": f"bytes={offset}-{offset + length - 1}", "If-Match": validator}
@@ -242,6 +304,7 @@ class SourceAdapter:
             headers,
             length,
             artifact.path,
+            allow_cross_origin_redirect=True,
         )
         expected_range = f"bytes {offset}-{offset + length - 1}/{artifact.size}"
         if status != 206 or response_headers.get("Content-Range") != expected_range or response_headers.get("ETag") != validator or len(payload) != length:
@@ -287,10 +350,7 @@ class SourceAdapter:
                 _fail("SOURCE_UNAVAILABLE", object_id, "Q9: artifact paths and sizes must be exact and unique", path)
             paths.add(path)
             range_uri = urljoin(self.base_url.rstrip("/") + "/", _text(_at(item, self._wire.artifact_uri, object_id), "artifact.range_uri", object_id))
-            base_origin = urlparse(self.base_url)
-            range_origin = urlparse(range_uri)
-            if (range_origin.scheme, range_origin.netloc) != (base_origin.scheme, base_origin.netloc) or range_origin.username or range_origin.password or range_origin.query or range_origin.fragment:
-                _fail("SOURCE_UNAVAILABLE", object_id, "Q9: credential-bearing range authority must remain on the selected source origin", path)
+            _require_source_range(self.base_url, range_uri, object_id, path)
             artifacts.append(Artifact(
                 path,
                 size,
@@ -351,6 +411,8 @@ class SourceAdapter:
         headers: dict[str, str],
         maximum: int,
         object_id: str,
+        *,
+        allow_cross_origin_redirect: bool = False,
     ) -> tuple[int, bytes, Mapping[str, str]]:
         request_headers = dict(headers)
         if credential_ref is not None:
@@ -365,7 +427,7 @@ class SourceAdapter:
             request_headers["Authorization"] = f"Bearer {secret}"
         if license_ref is not None:
             request_headers["X-Cassette-License-Acceptance"] = license_ref
-        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id)
+        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect)
 
     def _blocking_request(
         self,
@@ -373,9 +435,11 @@ class SourceAdapter:
         headers: dict[str, str],
         maximum: int,
         object_id: str,
+        allow_cross_origin_redirect: bool,
     ) -> tuple[int, bytes, Mapping[str, str]]:
         try:
-            with urlopen(Request(url, headers=headers), timeout=30) as response:
+            opener = build_opener(_CredentialSafeRedirect(object_id, allow_cross_origin_redirect))
+            with opener.open(Request(url, headers=headers), timeout=30) as response:
                 payload = response.read(maximum + 1)
                 if len(payload) > maximum:
                     _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source response must stay within the requested bound", f"response exceeds {maximum} bytes")

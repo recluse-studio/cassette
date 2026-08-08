@@ -3,7 +3,7 @@
 
 import ast
 import asyncio
-from dataclasses import fields
+from dataclasses import fields, replace
 import hashlib
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from errors import CassetteError
-from fixture_server import source_fixture_server
+from fixture_server import credential_sink_server, source_fixture_server
 from sources import SourceAdapter
 
 REPO = Path(__file__).resolve().parent.parent
@@ -123,6 +123,12 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
         assert changed_manifest.value.code == "SOURCE_REVISION_CHANGED"
         assert changed_manifest.value.object_id == resolved.locator
         server.revision_override = None
+        server.artifact_size_override = artifact.size + 1
+        with pytest.raises(CassetteError) as changed_artifact:
+            asyncio.run(results[0][1].enumerate(resolved))
+        assert changed_artifact.value.code == "SOURCE_REVISION_CHANGED"
+        assert changed_artifact.value.object_id == resolved.locator
+        server.artifact_size_override = None
 
 
 def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_path):
@@ -178,6 +184,43 @@ def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_
             asyncio.run(adapter.resolve(descriptor))
         assert foreign_range.value.code == "SOURCE_UNAVAILABLE"
         server.range_override = None
+
+        resolved = results[0][2]
+        artifact = resolved.artifacts[0]
+        with credential_sink_server(CASES["huggingface"]["payload"], artifact.validator) as sink:
+            server.range_override = f"{server.base_url}/redirect"
+            server.range_redirect_target = f"{sink.base_url}/range"
+            redirected = asyncio.run(adapter.resolve(descriptor))
+            redirected_payload = asyncio.run(adapter.open_range(
+                redirected,
+                redirected.artifacts[0],
+                0,
+                redirected.artifacts[0].size,
+                redirected.artifacts[0].validator,
+            ))
+            assert redirected_payload == CASES["huggingface"]["payload"]
+            assert sink.requests == [{"authorization": None, "license_ref": None, "path": "/range"}]
+            server.range_override = None
+            server.range_redirect_target = None
+
+            forged_artifact = replace(artifact, range_uri=f"{sink.base_url}/forged")
+            forged_revision = replace(resolved, artifacts=(forged_artifact,))
+            requests_before_forgery = len(sink.requests)
+            with pytest.raises(CassetteError) as forged:
+                asyncio.run(adapter.open_range(forged_revision, forged_artifact, 0, 1, forged_artifact.validator))
+            assert forged.value.code == "SOURCE_UNAVAILABLE"
+            assert len(sink.requests) == requests_before_forgery
+
+            server.control_redirect_target = f"{sink.base_url}/control"
+            with pytest.raises(CassetteError) as control_redirect:
+                asyncio.run(adapter.resolve(descriptor))
+            assert control_redirect.value.code == "SOURCE_UNAVAILABLE"
+            assert len(sink.requests) == requests_before_forgery
+            server.control_redirect_target = None
+
+        with pytest.raises(CassetteError) as cleartext_remote:
+            SourceAdapter("huggingface", "http://source.invalid", vault.get)
+        assert cleartext_remote.value.code == "INVALID_REQUEST"
 
         requests_before_provider_failure = len(server.requests)
         def failed_provider(_credential_ref):

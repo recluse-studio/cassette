@@ -84,6 +84,15 @@ def _replace_revision(kind: str, manifest: dict, revision: str) -> None:
         manifest["immutable_id"] = revision
 
 
+def _replace_artifact_size(kind: str, manifest: dict, size: int) -> None:
+    if kind == "huggingface":
+        manifest["siblings"][0]["size"] = size
+    elif kind == "ollama":
+        manifest["layers"][0]["size"] = size
+    else:
+        manifest["files"][0]["size_bytes"] = size
+
+
 def _metadata(kind: str) -> dict:
     fixture = _FIXTURES[kind]
     artifact = fixture["artifact"]
@@ -141,6 +150,12 @@ class _Handler(BaseHTTPRequestHandler):
         if not authorized:
             self._send(401, b"")
             return
+        if parsed.path == "/redirect":
+            if self.server.range_redirect_target is None:
+                self._send(500, b"")
+                return
+            self._send(302, b"", {"Location": self.server.range_redirect_target})
+            return
         if len(parts) == 3 and parts[0] == "source" and parts[1] in _FIXTURES:
             kind, operation = parts[1], parts[2]
             query = parse_qs(parsed.query)
@@ -155,11 +170,16 @@ class _Handler(BaseHTTPRequestHandler):
             if operation != "resolve" and revision != fixture["revision"]:
                 self._send(409, b"")
                 return
+            if operation == "resolve" and self.server.control_redirect_target is not None:
+                self._send(302, b"", {"Location": self.server.control_redirect_target})
+                return
             response = _manifest(kind) if operation in {"resolve", "artifacts"} else _metadata(kind) if operation == "metadata" else _requirements(kind)
             if operation == "resolve" and self.server.range_override is not None:
                 _replace_artifact_uri(kind, response, self.server.range_override)
             if operation == "artifacts" and self.server.revision_override is not None:
                 _replace_revision(kind, response, self.server.revision_override)
+            if operation == "artifacts" and self.server.artifact_size_override is not None:
+                _replace_artifact_size(kind, response, self.server.artifact_size_override)
             self._json(response)
             return
         if len(parts) == 3 and parts[0] == "bytes" and parts[1] in _FIXTURES:
@@ -194,7 +214,54 @@ def source_fixture_server():
     server.base_url = f"http://127.0.0.1:{server.server_port}"
     server.range_override = None
     server.revision_override = None
+    server.artifact_size_override = None
+    server.control_redirect_target = None
+    server.range_redirect_target = None
     thread = threading.Thread(target=server.serve_forever, name="s09-source-fixture", daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+class _CredentialSink(BaseHTTPRequestHandler):
+    def log_message(self, _format, *_args):
+        return
+
+    def do_GET(self):
+        self.server.requests.append({
+            "authorization": self.headers.get("Authorization"),
+            "license_ref": self.headers.get("X-Cassette-License-Acceptance"),
+            "path": self.path,
+        })
+        try:
+            start, end = (int(value) for value in self.headers["Range"].removeprefix("bytes=").split("-", 1))
+        except (KeyError, TypeError, ValueError):
+            self.send_response(400)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        payload = self.server.payload[start:end + 1]
+        self.send_response(206)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{len(self.server.payload)}")
+        self.send_header("ETag", self.server.validator)
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+@contextmanager
+def credential_sink_server(payload: bytes, validator: str):
+    """Capture redirect headers and return one validator-bound range without requiring credentials."""
+    server = HTTPServer(("127.0.0.1", 0), _CredentialSink)
+    server.requests = []
+    server.base_url = f"http://127.0.0.1:{server.server_port}"
+    server.payload = payload
+    server.validator = validator
+    thread = threading.Thread(target=server.serve_forever, name="s09-credential-sink", daemon=True)
     thread.start()
     try:
         yield server
