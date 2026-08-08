@@ -59,6 +59,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   |---|---|
   | Immutable root manifests, fixed-record physical page indexes, and content segments | `store.py` |
   | Transaction journals, candidate-generation temporaries, and immutable generation pointers | `store.py` |
+  | Immutable logical cartridge identity marker | `store.py` |
   | Integrity repair manifests, verified replicas, parity objects, and quarantined extents | `store.py` |
 
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),

@@ -1,5 +1,5 @@
-# store.py — identity, content, capacity, integrity, repair, transactions, and generations (Q1/Q25/Q32/Q53/Q57/Q60/Q62/Q73); depends on errors.py, schema.
-"""Own model identity, content, capacity, repair, transactions, and callable generations.
+# store.py — identity, content, lifecycle, capacity, integrity, repair, transactions, and generations (Q1/Q25/Q32/Q49/Q53/Q57/Q60/Q62/Q73); depends on errors.py, schema.
+"""Own model identity, content, cartridge lifecycle, repair, and callable generations.
 
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
 immutable revision digest. Requested aliases remain provenance; they never enter the identity.
@@ -20,6 +20,7 @@ from pathlib import Path
 import re
 import struct
 import tempfile
+import uuid
 
 from blake3 import blake3
 import rfc8785
@@ -47,6 +48,23 @@ _INTEGRITY_TRANSITIONS = {
     "REPAIRING": frozenset({"VALID", "UNAVAILABLE"}),
     "UNAVAILABLE": frozenset(),
 }
+_CARTRIDGE_TRANSITIONS = {
+    "UNMOUNTED": frozenset({"MOUNTED_UNVERIFIED"}),
+    "MOUNTED_UNVERIFIED": frozenset({"MOUNTED_VERIFIED", "READ_ONLY", "DISCONNECTED", "FAILED"}),
+    "MOUNTED_VERIFIED": frozenset({"ACTIVE", "UNMOUNTED", "DISCONNECTED", "SLEEPING", "REVALIDATING", "FAILED"}),
+    "ACTIVE": frozenset({"QUIESCING", "DISCONNECTED", "SLEEPING", "REVALIDATING", "FAILED"}),
+    "QUIESCING": frozenset({"MOUNTED_VERIFIED", "READ_ONLY", "DISCONNECTED", "SLEEPING", "REVALIDATING", "FAILED"}),
+    "DISCONNECTED": frozenset({"REVALIDATING"}),
+    "SLEEPING": frozenset({"REVALIDATING"}),
+    "REVALIDATING": frozenset({"MOUNTED_VERIFIED", "READ_ONLY", "DISCONNECTED", "SLEEPING", "FAILED"}),
+    "READ_ONLY": frozenset({"UNMOUNTED", "DISCONNECTED", "SLEEPING", "REVALIDATING", "FAILED"}),
+    "FAILED": frozenset({"UNMOUNTED", "DISCONNECTED", "REVALIDATING"}),
+}
+_CARTRIDGE_EVENTS = {
+    "disconnect": "DISCONNECTED", "sleep": "SLEEPING", "wake": "REVALIDATING",
+    "bus_reset": "REVALIDATING", "port_migration": "REVALIDATING",
+}
+_CARTRIDGE_IDENTITY_NAME = "cartridge.json"
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 _SAFETENSORS_HEADER_BYTES = 100_000_000
@@ -191,6 +209,25 @@ class GenerationPin:
 
 
 @dataclass(frozen=True)
+class CartridgeIdentity:
+    """The exact Q49 logical, physical, and callable identity verified at one mount epoch."""
+
+    cartridge_uuid: str
+    filesystem_uuid: str
+    root_generation: int | None
+    root_digest: str | None
+
+
+@dataclass(frozen=True)
+class CartridgeAccess:
+    """One epoch-bound Q49 operation authority; invalidation makes it unusable before I/O."""
+
+    operation_id: str
+    epoch: int
+    write: bool
+
+
+@dataclass(frozen=True)
 class TransactionState:
     """The last durable Q25 transition for one resumable generation transaction."""
 
@@ -284,6 +321,236 @@ class IntegrityReport:
         """Whether a new run may address every page in this revision."""
 
         return not self.unavailable_pages
+
+
+class CartridgeLifecycle:
+    """Own the exact Q49 state machine and issue no reusable filesystem handle."""
+
+    def __init__(self, cartridge_uuid: str):
+        self._cartridge_uuid = _normalize_uuid(cartridge_uuid, "cartridge_uuid")
+        self._state = "UNMOUNTED"
+        self._identity: CartridgeIdentity | None = None
+        self._path: Path | None = None
+        self._epoch = 0
+        self._access: CartridgeAccess | None = None
+        self._transitions: list[tuple[str, str]] = []
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    @property
+    def identity(self) -> CartridgeIdentity | None:
+        return self._identity
+
+    @property
+    def transitions(self) -> tuple[tuple[str, str], ...]:
+        return tuple(self._transitions)
+
+    def _move(self, state: str) -> None:
+        if state not in _CARTRIDGE_TRANSITIONS[self._state]:
+            _lifecycle_reject(
+                self._cartridge_uuid,
+                f"illegal cartridge lifecycle transition {self._state} -> {state}",
+                "INVALID_REQUEST",
+            )
+        prior = self._state
+        self._state = state
+        self._transitions.append((prior, state))
+
+    def _invalidate(self) -> None:
+        self._epoch += 1
+        self._path = None
+        self._access = None
+
+    def mount(
+        self,
+        cartridge: str | Path,
+        filesystem_uuid: str,
+        *,
+        replacement: bool = False,
+    ) -> CartridgeIdentity:
+        """Verify one mounted volume completely before publishing its path to an operation."""
+
+        filesystem_uuid = _normalize_uuid(filesystem_uuid, "filesystem_uuid")
+        if self._state == "UNMOUNTED":
+            self._invalidate()
+            self._move("MOUNTED_UNVERIFIED")
+        elif self._state in {"DISCONNECTED", "FAILED"}:
+            self._invalidate()
+            self._move("REVALIDATING")
+        elif self._state != "REVALIDATING":
+            _lifecycle_reject(
+                self._cartridge_uuid,
+                f"mount requires UNMOUNTED, DISCONNECTED, FAILED, or REVALIDATING; found {self._state}",
+                "INVALID_REQUEST",
+            )
+        path = Path(cartridge)
+        try:
+            observed_uuid = _read_cartridge_uuid(path)
+            if observed_uuid != self._cartridge_uuid:
+                _lifecycle_reject(
+                    self._cartridge_uuid,
+                    f"mounted cartridge UUID is {observed_uuid}",
+                    "CARTRIDGE_IDENTITY_MISMATCH",
+                )
+            identity, read_only = _cartridge_snapshot(path, observed_uuid, filesystem_uuid)
+            prior_filesystem = self._identity.filesystem_uuid if self._identity is not None else None
+            if prior_filesystem is not None and filesystem_uuid != prior_filesystem:
+                prior_root = (self._identity.root_generation, self._identity.root_digest)
+                replacement_root = (identity.root_generation, identity.root_digest)
+                if not replacement or identity.root_digest is None or replacement_root != prior_root:
+                    _lifecycle_reject(
+                        self._cartridge_uuid,
+                        f"filesystem UUID changed from {prior_filesystem} to {filesystem_uuid} "
+                        f"with root {replacement_root!r}; expected {prior_root!r}",
+                        "CARTRIDGE_IDENTITY_MISMATCH",
+                    )
+        except CassetteError:
+            self._path = None
+            self._access = None
+            if self._state != "FAILED":
+                self._move("FAILED")
+            raise
+        except OSError as error:
+            self._path = None
+            self._access = None
+            self._move("DISCONNECTED")
+            _lifecycle_reject(
+                self._cartridge_uuid, f"mounted cartridge is unavailable: {error}",
+                "CARTRIDGE_DISCONNECTED",
+            )
+        self._identity = identity
+        self._path = path
+        self._move("READ_ONLY" if read_only else "MOUNTED_VERIFIED")
+        return identity
+
+    def begin(self, operation_id: str, *, write: bool) -> CartridgeAccess:
+        """Start one serialized operation only from a verified mount epoch."""
+
+        if not isinstance(operation_id, str) or _TRANSACTION_ID.fullmatch(operation_id) is None:
+            _lifecycle_reject(
+                self._cartridge_uuid, "operation_id does not satisfy the durable identifier grammar",
+                "INVALID_REQUEST",
+            )
+        if type(write) is not bool:
+            _lifecycle_reject(self._cartridge_uuid, "write must be bool", "INVALID_REQUEST")
+        if self._access is not None:
+            _lifecycle_reject(
+                self._cartridge_uuid, f"operation {self._access.operation_id!r} already owns access",
+                "INVALID_REQUEST",
+            )
+        if self._state == "READ_ONLY" and write:
+            _lifecycle_reject(
+                self._cartridge_uuid, "mounted cartridge is read-only", "CARTRIDGE_READ_ONLY"
+            )
+        if self._state not in {"MOUNTED_VERIFIED", "READ_ONLY"} or self._path is None:
+            _lifecycle_reject(
+                self._cartridge_uuid, f"cartridge state {self._state} has no verified access",
+                "CARTRIDGE_DISCONNECTED",
+            )
+        access = CartridgeAccess(operation_id, self._epoch, write)
+        self._access = access
+        if self._state == "MOUNTED_VERIFIED":
+            self._move("ACTIVE")
+        return access
+
+    def resolve(self, access: CartridgeAccess) -> Path:
+        """Return the current path only while this exact access remains active and verified."""
+
+        if (not isinstance(access, CartridgeAccess) or access is not self._access
+                or access.epoch != self._epoch or self._path is None
+                or self._state not in {"ACTIVE", "READ_ONLY"}):
+            _lifecycle_reject(
+                self._cartridge_uuid, "operation access was invalidated before filesystem use",
+                "CARTRIDGE_DISCONNECTED",
+            )
+        return self._path
+
+    def finish(self, access: CartridgeAccess) -> CartridgeIdentity:
+        """Quiesce one operation and refresh the verified root before another operation starts."""
+
+        path = self.resolve(access)
+        if self._state == "READ_ONLY":
+            self._access = None
+            return self._identity
+        self._move("QUIESCING")
+        try:
+            identity, read_only = _cartridge_snapshot(
+                path, self._cartridge_uuid, self._identity.filesystem_uuid
+            )
+        except CassetteError:
+            self._access = None
+            self._path = None
+            self._move("FAILED")
+            raise
+        except OSError as error:
+            self._access = None
+            self._path = None
+            self._move("DISCONNECTED")
+            _lifecycle_reject(
+                self._cartridge_uuid, f"cartridge disappeared while quiescing: {error}",
+                "CARTRIDGE_DISCONNECTED",
+            )
+        self._identity = identity
+        self._access = None
+        self._move("READ_ONLY" if read_only else "MOUNTED_VERIFIED")
+        return identity
+
+    def unmount(self) -> None:
+        """Invalidate access before an intentional detach from a quiescent verified state."""
+
+        if self._access is not None or self._state not in {
+            "MOUNTED_VERIFIED", "READ_ONLY", "FAILED",
+        }:
+            _lifecycle_reject(
+                self._cartridge_uuid, f"unmount requires a quiescent verified state; found {self._state}",
+                "INVALID_REQUEST",
+            )
+        self._invalidate()
+        self._move("UNMOUNTED")
+
+    def event(self, event: str) -> None:
+        """Invalidate access and enter the exact Q49 state caused by one volume event."""
+
+        target = _CARTRIDGE_EVENTS.get(event)
+        if target is None or (event == "wake" and self._state != "SLEEPING"):
+            _lifecycle_reject(
+                self._cartridge_uuid, f"event {event!r} is undefined from {self._state}",
+                "INVALID_REQUEST",
+            )
+        if self._state == target:
+            return
+        if target not in _CARTRIDGE_TRANSITIONS[self._state]:
+            _lifecycle_reject(
+                self._cartridge_uuid, f"event {event!r} is undefined from {self._state}",
+                "INVALID_REQUEST",
+            )
+        self._invalidate()
+        self._move(target)
+
+
+def _lifecycle_reject(cartridge_uuid: str, detail: str, code: str) -> None:
+    retryable = code in {
+        "CARTRIDGE_DISCONNECTED", "CARTRIDGE_READ_ONLY", "CARTRIDGE_IDENTITY_MISMATCH",
+    }
+    raise CassetteError(
+        code=code,
+        object_id=f"cartridge:{cartridge_uuid}",
+        failed_invariant="Q49: removable-volume identity and verified mount epoch",
+        retryability="retryable" if retryable else "terminal",
+        detail=detail,
+    )
+
+
+def _normalize_uuid(value: object, field: str) -> str:
+    object_id = value if isinstance(value, str) and value else "unidentified"
+    if not isinstance(value, str) or not value or value != value.strip():
+        _lifecycle_reject(str(object_id), f"{field} must be exact nonempty UUID text", "INVALID_REQUEST")
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, AttributeError):
+        _lifecycle_reject(str(object_id), f"{field} is not a UUID", "INVALID_REQUEST")
 
 
 def _capacity_reject(operation_id: str, detail: str, code: str = "CAPACITY_EXCEEDED") -> None:
@@ -1586,6 +1853,97 @@ def recover_generation(cartridge: str | Path) -> GenerationPin | None:
 
     generations = _valid_generations(Path(cartridge), True)
     return generations[0] if generations else None
+
+
+def _cartridge_identity_path(cartridge: Path) -> Path:
+    return cartridge / _CARTRIDGE_IDENTITY_NAME
+
+
+def _read_cartridge_uuid(cartridge: Path) -> str:
+    path = _cartridge_identity_path(cartridge)
+    try:
+        payload = path.read_bytes()
+        record = json.loads(payload, object_pairs_hook=_unique_object)
+        if (not isinstance(record, dict) or set(record) != {"cartridge_uuid"}
+                or canonical_bytes(record) != payload):
+            raise ValueError("identity marker is not exact canonical content")
+        return _normalize_uuid(record["cartridge_uuid"], "cartridge_uuid")
+    except FileNotFoundError as error:
+        if not cartridge.is_dir():
+            raise
+        _lifecycle_reject(
+            "unidentified", f"cartridge identity marker is absent: {error}",
+            "CARTRIDGE_IDENTITY_MISMATCH",
+        )
+    except CassetteError as error:
+        _lifecycle_reject(
+            "unidentified", f"cartridge identity marker is invalid: {error.detail}",
+            "CARTRIDGE_IDENTITY_MISMATCH",
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _lifecycle_reject(
+            "unidentified", f"cartridge identity marker is unavailable or invalid: {error}",
+            "CARTRIDGE_IDENTITY_MISMATCH",
+        )
+
+
+def initialize_cartridge(cartridge: str | Path, cartridge_uuid: str | None = None) -> str:
+    """Create one immutable logical cartridge UUID with durable readback on a writable volume."""
+
+    cartridge = Path(cartridge)
+    path = _cartridge_identity_path(cartridge)
+    if path.exists():
+        observed = _read_cartridge_uuid(cartridge)
+        if cartridge_uuid is not None and observed != _normalize_uuid(
+            cartridge_uuid, "cartridge_uuid"
+        ):
+            _lifecycle_reject(
+                observed, "the immutable cartridge UUID cannot be replaced",
+                "CARTRIDGE_IDENTITY_MISMATCH",
+            )
+        return observed
+    if not cartridge.is_dir():
+        _lifecycle_reject(
+            "unidentified", "cartridge directory is unavailable", "CARTRIDGE_DISCONNECTED"
+        )
+    if os.statvfs(cartridge).f_flag & os.ST_RDONLY:
+        _lifecycle_reject(
+            "unidentified", "cannot initialize a cartridge on a read-only volume",
+            "CARTRIDGE_READ_ONLY",
+        )
+    logical_uuid = (
+        str(uuid.uuid4()) if cartridge_uuid is None
+        else _normalize_uuid(cartridge_uuid, "cartridge_uuid")
+    )
+    payload = canonical_bytes({"cartridge_uuid": logical_uuid})
+    _durable_replace(path, payload, f"cartridge:{logical_uuid}")
+    if _read_cartridge_uuid(cartridge) != logical_uuid:
+        _lifecycle_reject(
+            logical_uuid, "cartridge UUID changed during durable readback",
+            "CARTRIDGE_IDENTITY_MISMATCH",
+        )
+    return logical_uuid
+
+
+def _cartridge_snapshot(
+    cartridge: Path, cartridge_uuid: str, filesystem_uuid: str
+) -> tuple[CartridgeIdentity, bool]:
+    if _read_cartridge_uuid(cartridge) != cartridge_uuid:
+        _lifecycle_reject(
+            cartridge_uuid, "mounted volume contains another logical cartridge",
+            "CARTRIDGE_IDENTITY_MISMATCH",
+        )
+    pin = recover_generation(cartridge)
+    read_only = bool(os.statvfs(cartridge).f_flag & os.ST_RDONLY)
+    return (
+        CartridgeIdentity(
+            cartridge_uuid,
+            filesystem_uuid,
+            pin.generation if pin is not None else None,
+            pin.root_digest if pin is not None else None,
+        ),
+        read_only,
+    )
 
 
 def _next_generation(cartridge: Path) -> int:

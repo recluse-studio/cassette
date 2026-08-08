@@ -270,12 +270,13 @@ steps:
   - id: S08
     title: Cartridge lifecycle state machine
     env: macos
-    files: [store.py]
-    invariants: [Q49 acceptance (simulable subset - unmount, remount, identity mismatch, read-only, via disk images)]
+    files: [store.py, AGENTS.md]
+    discovered_scope: "AGENTS.md records store.py as the sole writer of the Q49 identity marker."
+    invariants: [Q49 acceptance (APFS-image state machine - unmount/remount, disconnect/reconnect, sleep/wake, bus reset, port migration, logical/filesystem UUID mismatch, read-only remount, verified cloned replacement, no stale access)]
     expected_size: small
     done_when: full suite + ledger green
     depends: [S07]
-    status: TODO
+    status: IN_PROGRESS 2026-08-07 — implementation and APFS proof are green; awaiting immutable step commit and clause-level closeout
 
   - id: S09
     title: Source adapter boundary and fixture server
