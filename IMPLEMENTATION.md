@@ -318,12 +318,14 @@ steps:
   - id: S09
     title: Source adapter boundary and fixture server
     env: any
-    files: [sources.py, tests/fixture_server.py]
+    files: [sources.py, tests/fixture_server.py, tests/test_s09_sources.py]
+    discovered_scope: "tests/test_s09_sources.py executes the Q9/Q52 invariants; the original row named its reusable fixture server but no collectible test module."
     invariants: [Q52 acceptance (fixture-server substitution, five operations), Q9 acceptance (secret-free descriptor)]
+    acceptance_boundary: "S09 proves that one kind-blind caller uses the same five-operation adapter contract over Hugging Face, Ollama, and Tinker fixture wires, with no adapter-owned lifecycle state. Q52's final production acquisition-state-machine reuse remains open until S16; S16 owns that Q5 machine after S10 supplies verified transfer."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03]
-    status: TODO
+    status: IN_PROGRESS 2026-08-08 — implementation and invariant fixtures are pending verification and immutable step commit
 
   - id: S10
     title: Resumable verified transfer
@@ -389,10 +391,10 @@ steps:
     title: Canonical broker
     env: any
     files: [broker.py]
-    invariants: [Q5 acceptance (interrupt every transition, idempotent replay), Q6 acceptance (double issue, cancel every phase, typed failures, monotonic events)]
+    invariants: [Q5 acceptance (interrupt every transition, idempotent replay), Q6 acceptance (double issue, cancel every phase, typed failures, monotonic events), Q52 acceptance (the production acquisition state machine is unchanged across every source adapter)]
     expected_size: large
     done_when: full suite + ledger green
-    depends: [S03, S07]
+    depends: [S03, S07, S10]
     status: TODO
 
   - id: S17
