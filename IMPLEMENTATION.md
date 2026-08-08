@@ -195,11 +195,11 @@ steps:
     title: Integrity, repair states, capacity reservation
     env: any
     files: [store.py]
-    invariants: [Q62 acceptance (corrupt page/index/root/parity), Q53 acceptance (exact-boundary and fragmented reservation)]
+    invariants: [Q62 acceptance (corrupt payload/index/manifest/root/parity, repair, exact unavailable pages), Q53 acceptance (exact-boundary, fragmented, concurrent-reservation, growing-transform, training, and repair)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S06]
-    status: DONE 2026-08-07 — step commit 66af96f; committed clean-clone suite 20 passed in 27.74 seconds; ledger clean with 1,475 product LOC, 787 test LOC, 324 tool LOC, one process, one runtime, the three existing exact dependency pins, and no violation
+    status: IN_PROGRESS 2026-08-07 — review reopened the omitted Q62 manifest and Q53 concurrent-reservation, growing-transform, and training clauses; the S07 fixture also derives one expected capacity value from the production property it must disprove
     closeout:
       - clause: "Q53 exact-boundary capacity admission"
         test_or_probe: "tests/test_s07_integrity_capacity.py::test_q53_exact_boundary_and_fragmented_reservation"
