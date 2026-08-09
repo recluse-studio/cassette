@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.metadata
 import math
 import platform
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
@@ -19,6 +20,8 @@ _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
 _GIB = 1024**3
 _MAX_ITEMS = 1_048_576
 _MAX_U64 = 2**64 - 1
+# Admit the complete finite binary64 span, then stop exact-scalar growth at that boundary.
+_MAX_EXACT_BITS = sys.float_info.max_exp + sys.float_info.mant_dig
 _ZERO = (Fraction(0), Fraction(0))
 _MLX = None
 
@@ -147,16 +150,28 @@ def _u64(value: object, object_id: str, label: str) -> int:
 
 
 def _fraction(value: object, object_id: str, label: str) -> Fraction:
-    if type(value) is int:
-        return Fraction(value)
-    if type(value) is float and math.isfinite(value):
-        return Fraction(str(value))
-    if isinstance(value, str) and 0 < len(value) <= 128:
+    candidate = None
+    if type(value) is int and value.bit_length() <= _MAX_EXACT_BITS:
+        candidate = Fraction(value)
+    elif type(value) is float and math.isfinite(value):
+        candidate = Fraction(str(value))
+    elif isinstance(value, str) and 0 < len(value) <= 128:
         try:
-            return Fraction(value)
-        except (ValueError, ZeroDivisionError):
-            pass
-    _reject_evidence(object_id, label, "requires a finite integer, number, or rational string")
+            exponent = value.lower().rpartition("e")
+            if exponent[1] and abs(int(exponent[2])) > _MAX_EXACT_BITS:
+                raise ValueError
+            candidate = Fraction(value)
+        except (OverflowError, ValueError, ZeroDivisionError):
+            candidate = None
+    if candidate is not None and max(
+        candidate.numerator.bit_length(), candidate.denominator.bit_length()
+    ) <= _MAX_EXACT_BITS:
+        return candidate
+    _reject_evidence(
+        object_id,
+        label,
+        "requires a finite integer, number, or rational string within the bounded exact-scalar domain",
+    )
 
 
 def _identifier(value: object, object_id: str, label: str) -> str:
@@ -332,7 +347,24 @@ def _document_digest(value: dict, identity_field: str) -> str:
 
 def _expect_number(value: object, expected: Fraction, object_id: str, label: str) -> None:
     observed = _fraction(value, object_id, label)
-    if float(observed) != float(expected):
+    try:
+        observed_number = float(observed)
+        expected_number = float(expected)
+    except OverflowError:
+        observed_number = expected_number = math.inf
+    if (
+        not math.isfinite(observed_number)
+        or not math.isfinite(expected_number)
+        or (observed_number == 0.0 and observed != 0)
+        or (expected_number == 0.0 and expected != 0)
+    ):
+        raise _error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            f"Q19: {label}",
+            "the certificate claim or canonical recomputation lies outside the finite certificate-number domain",
+        )
+    if observed_number != expected_number:
         raise _error(
             "CAPABILITY_MISMATCH",
             object_id,

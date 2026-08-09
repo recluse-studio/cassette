@@ -691,6 +691,37 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
             candidate_plan, candidate_certificate, candidate_evidence, candidate_profile
         )
 
+    for hostile_scalar in ("1e1000000000", "1e1000", 10**400):
+        scalar_plan, scalar_certificate, scalar_evidence, scalar_profile = _fixture()
+        scalar_evidence["target"]["source_values"][0] = hostile_scalar
+        with pytest.raises(CassetteError) as scalar_refused:
+            pager.admit_schedule(
+                scalar_plan,
+                scalar_certificate,
+                scalar_evidence,
+                scalar_profile,
+            )
+        assert scalar_refused.value.code == "INVALID_REQUEST"
+        assert scalar_refused.value.failed_invariant == "Q19: canonical source scalar"
+
+    range_plan, range_certificate, range_evidence, range_profile = _fixture()
+    range_evidence["target"]["source_values"][0] = "1e200"
+    range_target = copy.deepcopy(TARGET)
+    range_target[0][0] = "1e200"
+    range_certificate["target"]["target_digest"] = _digest(
+        {"field": "REAL", "shape": [3, 3], "values": _normal_matrix(range_target)}
+    )
+    _bind(range_plan, range_certificate, range_profile)
+    with pytest.raises(CassetteError) as range_refused:
+        pager.admit_schedule(
+            range_plan,
+            range_certificate,
+            range_evidence,
+            range_profile,
+        )
+    assert range_refused.value.code == "CAPABILITY_MISMATCH"
+    assert range_refused.value.failed_invariant == "Q19: witness loss condition.a"
+
     law_plan, law_certificate, law_evidence, law_profile = _fixture()
     law = law_evidence["execution_contract"]["sampling_laws"][0]["law"]
     law["atom_distributions"][0]["columns"] = [
