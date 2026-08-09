@@ -89,7 +89,18 @@ steps:
     done_when: ledger runs clean on the tree; interpreter and dependency pins recorded
     depends: []
     historical_status: "DONE 2026-08-07 — repair b718da2 adds fail-closed append-only correction records for immutable published messages; full suite 20 passed in 27.37 seconds; ledger clean with 1,512 product LOC, 930 test LOC, 356 tool LOC, one process, one runtime, and the three existing exact dependency pins"
-    status: IN_PROGRESS 2026-08-09 — reopened by the S00-S12 audit because recursive filesystem discovery counted foreign in-repository Python environments as Cassette source, corrupting J and runtime-confinement results
+    status: DONE 2026-08-09 — audit remediation 306055ddefb4e5d5a735c3dc5e4ae6e09b7d57c0 replaces recursive ownership with Git-governed source discovery and pyvenv.cfg environment boundaries; focused S01 fixtures passed 5/5, the complete macOS suite passed 28/28 in 1,024.50 seconds, and the ledger remained clean at 2,813 product LOC, 2,237 test LOC, 470 tool LOC, 74 generated LOC, one process, one runtime, and five exact pins
+    audit_remediation_closeout:
+      - clause: "Q29 accounting excludes foreign environments without hiding governed new source"
+        test_or_probe: "tests/test_s01_ledger.py::test_ledger_reproducible_from_clean_checkout at 306055d plus the complete S01 file"
+        input: "Create real Python environments under local-python and build/runtime-3.13, each containing a hostile foreign_runtime.py that imports mlx and store; then add an untracked compiler.py and stage trainer.py."
+        expected: "Both environments leave the byte-identical clean ledger report unchanged. The untracked and staged Cassette files enter files_checked, accounting, header, import-graph, and runtime-confinement checks."
+        observed: "The environment-bearing report remained byte-identical. The governed report named exactly compiler.py and trainer.py as additions, rejected compiler.py's MLX and sibling imports, and the complete S01 file passed 5 tests."
+      - clause: "The governed-source boundary is consequential"
+        test_or_probe: "guard-removal mutation in a disposable clone of 306055d"
+        input: "Replace Git-governed discovery with recursive Python-file discovery, then rerun the Q29 fixture."
+        expected: "The fixture fails because foreign environment files contaminate J and policy scans."
+        observed: "The fixture failed: both foreign_runtime.py files entered files_checked, product LOC rose from 2,813 to 2,817, and six false header, import, and MLX-confinement violations appeared. The disposable clone was deleted."
 
   - id: S02
     title: Canonical error vocabulary
@@ -530,7 +541,7 @@ steps:
     done_when: full suite + ledger green
     depends: [S03, S01]
     historical_status: "DONE 2026-08-09 — original step 73997e0; platform-gate repair 26a0913; complete macOS suite 28 passed in 46.17 seconds with no skips; synthetic Linux gate skipped before MLX or pager import; ledger clean with 2,813 product LOC, 2,136 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact dependency pins"
-    status: IN_PROGRESS 2026-08-09 — reopened by the S00-S12 audit for a false native-link path test, an independent hardcoded certificate-dimension list, an incomplete clean-checkout command, and an unstated S12/S13 proof boundary
+    status: DONE 2026-08-09 — audit remediation 306055ddefb4e5d5a735c3dc5e4ae6e09b7d57c0 parses real Mach-O dependencies, binds generated certificate dimensions to MATHS.md, supplies the complete isolated proof command, states S12's structural/execution boundary, preserves S13 as the next TODO, and assigns deferred Q55/Q30 work to S19/S24; focused S03 and S12 fixtures passed 4/4 and 3/3, the complete macOS suite passed 28/28 in 1,024.50 seconds with no platform skips, and the ledger remained clean
     reopened_by: "S12 test-harness portability failure reproduced after ec551de: with MLX unavailable, test_s12_pager.py reached its module-level MLX import and aborted collection; with MLX installed under a synthetic Linux platform, the golden operator fixture ran and failed at Q30's Apple Silicon Metal guard instead of skipping. Future env:any steps therefore could not satisfy their complete-suite gate outside macOS."
     closeout:
       - clause: "Q33/Q40 bounded data represents every separate MATHS.md certificate dimension and the least-invasive compiled mode"
@@ -564,6 +575,27 @@ steps:
         input: "Remove only the early skip from a disposable test-file copy and repeat the import-blocker probe; restore the guard and execute all three S12 fixtures plus every repository fixture on Apple Silicon Metal."
         expected: "The mutant reaches the forbidden MLX import. The repaired source skips only outside Darwin arm64, while all original Q30/Q33/Q40 evidence and repository invariants remain green on the declared platform."
         observed: "The mutant was caught at mlx. The repaired S12 file passed all three fixtures in 0.53 seconds; the complete suite passed all 28 tests in 46.17 seconds with no skips. The ledger reported zero violations, 2,813 product LOC, 2,136 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact pins. No Cassette image was mounted, and only the pre-existing untracked presentation directory remained."
+    audit_remediation_closeout:
+      - clause: "Q30 native-link proof examines actual Mach-O dependencies and repository ownership"
+        test_or_probe: "tests/test_s12_pager.py::test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_golden_reference at 306055d"
+        input: "Inspect the in-repository MLX installation, then rewrite a copied Mach-O consumer to load a Git-tracked libcassette.dylib in a disposable repository."
+        expected: "The MLX binary's own heading and location do not count as a dependency. The actual tracked native dependency is detected."
+        observed: "MLX produced no repository-owned dependency. The rewritten consumer resolved exactly libcassette.dylib. Neutralizing the ownership helper made the fixture fail at that exact assertion."
+      - clause: "MATHS.md section 8 is the sole machine authority for implemented certificate dimensions"
+        test_or_probe: "tests/test_s03_schema.py::test_generator_is_deterministic_and_ledger_rejects_coordinated_hand_edits at 306055d"
+        input: "Remove, duplicate, corrupt, duplicate a dimension in, add to, remove from, rename in, and reorder the bounded MATHS.md authority block; regenerate only where the contract permits it."
+        expected: "Malformed or schema-disagreeing authority fails generation. Reordering makes committed output stale, and regeneration reflects the new order."
+        observed: "Every malformed or set-changing mutation failed. Reordering caused generated-integrity failure before regeneration; regenerated tables reflected the MATHS.md order and then passed integrity. Schema regeneration on the accepted source produced zero diff."
+      - clause: "The two MATHS.md guards are independently consequential"
+        test_or_probe: "two one-at-a-time guard-removal mutations in disposable clones of 306055d"
+        input: "First remove schema-to-MATHS dimension reconciliation. Then, separately, emit dimensions from schema order instead of the parsed MATHS.md block."
+        expected: "The first mutant admits an added mathematical dimension. The second mutant hides stale generated output after an authority-order change."
+        observed: "The first fixture failed because new_dimension regenerated successfully. The second failed because the reordered MATHS.md block produced no generated-integrity violation. Both disposable clones were deleted."
+      - clause: "S12 closes only bounded representation and declared golden execution"
+        test_or_probe: "IMPLEMENTATION.md queue audit, presentation assertions, browser inspection, focused S12 fixtures, complete suite, and ledger at 306055d"
+        input: "Inspect the S12/S13 boundary, all eight contradictory certificate classes, future Q55/Q30 owners, and every corrected field-manual slide; execute all repository fixtures on arm64 macOS."
+        expected: "S12 claims no semantic truth it did not recompute. S13 remains TODO and owns all eight contradictions. S19 owns Q55 plus tuple discovery/refusal, S24 owns representative-model execution and re-goldening, and the presentation distinguishes fixture, image, and live-hardware proof."
+        observed: "The queue and presentation state those boundaries explicitly. All 28 tests passed in 1,024.50 seconds with S06, S08, and S12 executed; the ledger reported zero violations and no new dependency, process, runtime, language, kernel, or model branch."
 
   - id: S13
     title: Compatibility-certificate validation, memory budget, and residency schedules

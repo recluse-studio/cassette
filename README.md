@@ -227,10 +227,10 @@ foundation beneath the future compiler and runtime, not an early user-facing pro
 | S11 | Done | Evidence-bound metadata normalization and four-outcome preflight that derives strong trust from verified bytes. |
 | S12 | Done | MATHS.md-controlled bounded certificate dimensions, generated Q30 dispatch, ten independently checked MLX golden operator rows, and repository-owned native-link rejection. |
 
-The opening proof for this remediation on Python 3.13 reported 28 passing tests and a clean ledger:
-2,813 product lines, 406 tool lines, 2,136 test lines, 74 generated lines reported separately, one
-process, one authored language, and five exact direct dependency pins. The final proof below is
-recomputed from the committed remediation state rather than inferred from that baseline.
+The audit-remediation implementation at `306055d` passed all 28 tests on arm64 macOS in 1,024.50
+seconds, including the S06, S08, and S12 platform fixtures. Its clean ledger reported 2,813 product
+lines, 470 tool lines, 2,237 test lines, 74 generated lines separately, one process, one authored
+language, and five exact direct dependency pins.
 
 Current boundaries are explicit. Deterministic source fixtures and resumable transfer exist;
 live-source acquisition remains L02. GGUF import, export, appended training deltas, paging, MLX
