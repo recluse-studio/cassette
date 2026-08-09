@@ -1,0 +1,2517 @@
+<!-- cassette-s00-s28.html — human-facing Cassette machine-phase presentation; depends on ORIGINAL_REMIT.md, research/RESEARCH.md, research/ACCEPTANCE_MATRIX.yaml, IMPLEMENTATION.md, and shared Recluse Studio fonts. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A recovered field manual for the fictional lost platformer The Spider in Cartridge 0, explaining what Cassette stages S00 through S28 do and how they build toward the final product.">
+  <title>The Spider in Cartridge 0 — Cassette S00–S28</title>
+  <style>
+    @font-face {
+      font-family: "EB Garamond";
+      src: url("../../recluse-studio/assets/fonts/EBGaramond-Variable.ttf") format("truetype"),
+           url("/recluse-studio/assets/fonts/EBGaramond-Variable.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "IBM Plex Sans";
+      src: url("../../recluse-studio/assets/fonts/IBMPlexSans-Variable.ttf") format("truetype"),
+           url("/recluse-studio/assets/fonts/IBMPlexSans-Variable.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "IBM Plex Mono";
+      src: url("../../recluse-studio/assets/fonts/IBMPlexMono-Regular.ttf") format("truetype"),
+           url("/recluse-studio/assets/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      --black: #0b1019;
+      --ink: #111722;
+      --surface: #172237;
+      --surface-2: #22314b;
+      --rule: #4b5b77;
+      --iron: #78879d;
+      --ash: #aab7c7;
+      --silk: #dbe4eb;
+      --paper: #f4efd1;
+      --red: #b83c46;
+      --red-light: #f07861;
+      --green: #638b55;
+      --green-light: #a8ce7e;
+      --orange: #d8973f;
+      --blue: #5d91bf;
+      --cream: #f0d487;
+      --pixel-shadow: #060a12;
+      --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+      --serif: "EB Garamond", Georgia, serif;
+      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+      --ease: cubic-bezier(.2,.8,.2,1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; background: var(--black); }
+
+    body {
+      color: var(--paper);
+      font-family: var(--sans);
+      overflow: hidden;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      content: "";
+      opacity: .34;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(219,228,235,.045) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(219,228,235,.045) 2px, transparent 2px);
+      background-size: 2rem 2rem;
+      mask-image: none;
+    }
+
+    body::after {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      pointer-events: none;
+      background:
+        linear-gradient(var(--red) 0 0) 78% 16% / 12px 12px no-repeat,
+        linear-gradient(var(--orange) 0 0) 81% 19% / 8px 8px no-repeat,
+        linear-gradient(var(--green) 0 0) 12% 84% / 16px 16px no-repeat,
+        linear-gradient(var(--blue) 0 0) 15% 80% / 8px 8px no-repeat;
+      opacity: .22;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+    }
+
+    .skip-link {
+      position: fixed;
+      left: 1rem;
+      top: -4rem;
+      z-index: 50;
+      padding: .7rem 1rem;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    .skip-link:focus { top: 1rem; }
+
+    #slides {
+      height: 100dvh;
+    }
+
+    .slide {
+      display: none;
+      height: 100dvh;
+      min-height: 600px;
+      overflow: hidden;
+    }
+
+    .slide.is-active {
+      display: block;
+      animation: appear 340ms var(--ease) both;
+    }
+
+    .slide[data-accent="red"] { --accent: var(--red); --accent-light: var(--red-light); }
+    .slide[data-accent="green"] { --accent: var(--green); --accent-light: var(--green-light); }
+    .slide[data-accent="orange"] { --accent: var(--orange); --accent-light: #d8a876; }
+    .slide[data-accent="blue"] { --accent: var(--blue); --accent-light: #aab1ca; }
+    .slide[data-accent="cream"] { --accent: var(--cream); --accent-light: var(--paper); }
+
+    .slide-inner {
+      display: flex;
+      flex-direction: column;
+      width: min(100%, 1600px);
+      height: 100%;
+      margin: 0 auto;
+      padding: clamp(1.35rem, 3vw, 3.3rem) clamp(1.35rem, 5vw, 5rem) clamp(1rem, 2.4vw, 2.5rem);
+    }
+
+    .topbar,
+    .slide-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex: 0 0 auto;
+    }
+
+    .topbar {
+      min-height: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--rule);
+    }
+
+    .platformer-progress {
+      display: grid;
+      flex: 1 1 22rem;
+      min-width: 15rem;
+      max-width: 31rem;
+      gap: .18rem;
+      margin: 0 auto;
+      color: var(--ash);
+    }
+
+    .platformer-progress__head,
+    .platformer-progress__legend {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .65rem;
+      overflow: hidden;
+      font-family: var(--mono);
+      font-size: .5rem;
+      letter-spacing: .08em;
+      line-height: 1.1;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .platformer-progress__head span,
+    .platformer-progress__legend span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .platformer-progress__head span:last-child { color: var(--paper); }
+
+    .platformer-track {
+      position: relative;
+      height: 1.18rem;
+      overflow: hidden;
+      border: 2px solid var(--rule);
+      background: var(--ink);
+      box-shadow: 2px 2px 0 var(--pixel-shadow);
+    }
+
+    .platformer-track::before {
+      position: absolute;
+      inset: .2rem .25rem .25rem;
+      content: "";
+      background:
+        repeating-linear-gradient(90deg, rgba(93,145,191,.16) 0 2px, transparent 2px 10px),
+        linear-gradient(180deg, transparent 0 42%, rgba(216,151,63,.2) 42% 48%, transparent 48% 100%);
+    }
+
+    .platformer-track__tiles {
+      position: absolute;
+      right: .25rem;
+      bottom: .24rem;
+      left: .25rem;
+      display: grid;
+      grid-template-columns: repeat(29, minmax(0, 1fr));
+      align-items: end;
+      gap: 2px;
+      height: .62rem;
+    }
+
+    .platformer-tile {
+      display: block;
+      height: .42rem;
+      border-top: 2px solid var(--iron);
+      background: rgba(120,135,157,.24);
+      opacity: .38;
+    }
+
+    .platformer-tile:nth-child(3n) { height: .58rem; }
+    .platformer-tile:nth-child(5n) { height: .32rem; }
+    .platformer-tile--done { border-color: var(--green-light); background: var(--green); opacity: .94; }
+    .platformer-tile--foundation { border-color: var(--cream); background: var(--orange); opacity: .94; }
+    .platformer-tile--todo { border-color: var(--red-light); background: rgba(184,60,70,.3); opacity: .72; }
+    .platformer-tile.is-past { filter: brightness(1.05); }
+    .platformer-tile.is-current { outline: 2px solid var(--paper); outline-offset: 2px; opacity: 1; }
+
+    .platformer-player {
+      position: absolute;
+      bottom: .31rem;
+      left: 4%;
+      z-index: 3;
+      width: 1.15rem;
+      height: 1.15rem;
+      transform: translateX(-50%);
+      transition: left 260ms var(--ease);
+    }
+
+    .platformer-player::before {
+      position: absolute;
+      top: .2rem;
+      left: .32rem;
+      width: .5rem;
+      height: .58rem;
+      content: "";
+      background: var(--red-light);
+      box-shadow:
+        -.22rem .12rem 0 var(--red),
+        .22rem .12rem 0 var(--red),
+        -.32rem .43rem 0 var(--red),
+        .32rem .43rem 0 var(--red),
+        0 .68rem 0 var(--red);
+    }
+
+    .platformer-player::after {
+      position: absolute;
+      top: .31rem;
+      left: .42rem;
+      width: .1rem;
+      height: .1rem;
+      content: "";
+      background: var(--paper);
+      box-shadow: .22rem 0 0 var(--paper);
+    }
+
+    .platformer-flag {
+      position: absolute;
+      right: 2%;
+      bottom: .24rem;
+      z-index: 2;
+      width: .65rem;
+      height: .86rem;
+      border-left: 2px solid var(--cream);
+    }
+
+    .platformer-flag::after {
+      position: absolute;
+      top: .05rem;
+      left: .05rem;
+      width: .5rem;
+      height: .3rem;
+      content: "";
+      background: var(--cream);
+    }
+
+    .platformer-progress__legend {
+      justify-content: flex-start;
+      color: var(--iron);
+      letter-spacing: .04em;
+      text-transform: none;
+    }
+
+    .platformer-progress__legend i {
+      display: inline-block;
+      width: .42rem;
+      height: .42rem;
+      margin-right: .18rem;
+      vertical-align: -.04rem;
+      border: 1px solid currentColor;
+    }
+
+    .platformer-progress__legend .legend-done { color: var(--green-light); }
+    .platformer-progress__legend .legend-open { color: var(--red-light); }
+    .platformer-progress__legend .legend-current { color: var(--paper); }
+
+    .brand-lockup,
+    .slide-meta,
+    .slide-footer,
+    .control-strip,
+    .stage-map,
+    .label,
+    .stage-id,
+    .diagram-kicker,
+    .diagram-caption,
+    .node-code,
+    .plain-label,
+    .eyebrow {
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      font-size: .67rem;
+      line-height: 1.35;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      color: var(--silk);
+    }
+
+    .brand-mark {
+      position: relative;
+      display: block;
+      width: 1.35rem;
+      height: 1.35rem;
+      flex: 0 0 auto;
+      background: var(--red);
+      box-shadow: 3px 3px 0 var(--pixel-shadow);
+    }
+
+    .brand-mark::before {
+      position: absolute;
+      top: .31rem;
+      left: .43rem;
+      width: .48rem;
+      height: .62rem;
+      content: "";
+      background: var(--paper);
+      box-shadow:
+        -.28rem .12rem 0 var(--paper),
+        .28rem .12rem 0 var(--paper),
+        -.4rem .43rem 0 var(--paper),
+        .4rem .43rem 0 var(--paper),
+        0 .72rem 0 var(--paper);
+    }
+
+    .brand-mark::after {
+      position: absolute;
+      top: .45rem;
+      left: .52rem;
+      width: .12rem;
+      height: .12rem;
+      content: "";
+      background: var(--red);
+      box-shadow: .22rem 0 0 var(--red);
+    }
+
+    .slide-meta {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      color: var(--ash);
+      text-align: right;
+    }
+
+    .status {
+      padding: .28rem .48rem;
+      border: 1px solid currentColor;
+      color: var(--accent-light, var(--paper));
+      white-space: nowrap;
+    }
+
+    .status--foundation { color: var(--orange); }
+    .status--done { color: var(--green-light); }
+    .status--todo { color: var(--red-light); }
+
+    .stage-layout,
+    .title-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+      align-items: center;
+      gap: clamp(1.5rem, 3.2vw, 4rem);
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: clamp(1.6rem, 4vh, 3.8rem) 0 clamp(1rem, 3vh, 2.2rem);
+    }
+
+    .title-layout { grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr); }
+
+    .copy {
+      min-width: 0;
+      max-width: 760px;
+    }
+
+    .eyebrow,
+    .plain-label,
+    .diagram-kicker {
+      color: var(--accent-light, var(--orange));
+    }
+
+    h1, h2, p { margin-top: 0; }
+
+    h1 {
+      max-width: 12ch;
+      margin-bottom: 1.2rem;
+      color: var(--paper);
+      font-family: var(--serif);
+      font-size: clamp(2.8rem, 4.75vw, 5.1rem);
+      font-weight: 500;
+      letter-spacing: -.02em;
+      line-height: .94;
+      text-shadow: 3px 3px 0 var(--pixel-shadow);
+    }
+
+    .title-copy h1 {
+      max-width: 12ch;
+      margin: .3rem 0 1.4rem;
+      font-size: clamp(3.6rem, 6.6vw, 6.6rem);
+      font-weight: 400;
+      letter-spacing: .01em;
+      line-height: .84;
+    }
+
+    .lead {
+      max-width: 65ch;
+      margin-bottom: 1.05rem;
+      color: var(--paper);
+      font-size: clamp(1.02rem, 1.45vw, 1.27rem);
+      line-height: 1.46;
+    }
+
+    .copy p:not(.lead):not(.plain-copy),
+    .title-note {
+      max-width: 68ch;
+      margin-bottom: .95rem;
+      color: var(--silk);
+      font-size: clamp(.9rem, 1.1vw, 1rem);
+      line-height: 1.52;
+    }
+
+    .title-note {
+      max-width: 47ch;
+      margin-top: 1.5rem;
+      padding-left: 1rem;
+      border-left: 2px solid var(--red);
+      color: var(--ash);
+    }
+
+    .plain-box {
+      max-width: 68ch;
+      margin-top: 1.35rem;
+      padding: .9rem 1rem .85rem;
+      border: 1px solid var(--rule);
+      border-left: 3px solid var(--accent, var(--red));
+      background: rgba(20,20,23,.84);
+    }
+
+    .plain-copy {
+      margin: .38rem 0 0;
+      color: var(--cream);
+      font-family: var(--serif);
+      font-size: 1.24rem;
+      line-height: 1.08;
+    }
+
+    .fact-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .6rem;
+      max-width: 760px;
+      margin-top: 1.25rem;
+    }
+
+    .fact {
+      min-width: 0;
+      padding-top: .5rem;
+      border-top: 1px solid var(--rule);
+    }
+
+    .fact .label {
+      display: block;
+      margin-bottom: .3rem;
+      color: var(--iron);
+    }
+
+    .fact strong {
+      display: block;
+      color: var(--silk);
+      font-size: .82rem;
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    .proof-note {
+      margin: .85rem 0 0;
+      color: var(--iron);
+      font-family: var(--mono);
+      font-size: .68rem;
+      line-height: 1.45;
+    }
+
+    .diagram-frame {
+      position: relative;
+      min-width: 0;
+      min-height: 400px;
+      border: 2px solid var(--rule);
+      background: var(--surface);
+      box-shadow: 6px 6px 0 var(--pixel-shadow);
+      overflow: hidden;
+    }
+
+    .diagram-frame::before,
+    .diagram-frame::after {
+      position: absolute;
+      content: "";
+      pointer-events: none;
+    }
+
+    .diagram-frame::before {
+      inset: .85rem;
+      border: 2px solid rgba(219,228,235,.1);
+    }
+
+    .diagram-frame::after {
+      right: 1rem;
+      bottom: 1rem;
+      width: 3rem;
+      height: .3rem;
+      background: var(--accent, var(--red));
+      box-shadow: -.7rem 0 0 var(--accent-light, var(--orange));
+      opacity: .8;
+    }
+
+    .diagram-head {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.35rem 1.45rem 0;
+    }
+
+    .diagram-head .diagram-title {
+      color: var(--paper);
+      font-family: var(--serif);
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .diagram-head .diagram-kicker:last-child {
+      color: var(--ash);
+      text-align: right;
+    }
+
+    .diagram-body {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 315px;
+      padding: 1.4rem 1.45rem 3rem;
+    }
+
+    .diagram-caption {
+      position: absolute;
+      right: 1.45rem;
+      bottom: 1.15rem;
+      left: 1.45rem;
+      color: var(--ash);
+      text-transform: none;
+      letter-spacing: 0;
+      font-family: var(--sans);
+      font-size: .76rem;
+      line-height: 1.35;
+    }
+
+    .flow-row,
+    .flow-column,
+    .source-stack,
+    .decision-layout,
+    .identity-layout,
+    .epoch-layout,
+    .compile-layout,
+    .trainer-layout,
+    .teacher-layout,
+    .curve-layout,
+    .closeout-layout {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .7rem;
+    }
+
+    .flow-column { flex-direction: column; }
+
+    .arrow {
+      flex: 0 0 auto;
+      color: var(--accent-light, var(--orange));
+      font-size: 1.35rem;
+      line-height: 1;
+    }
+
+    .node {
+      position: relative;
+      min-width: 0;
+      padding: .8rem .82rem .72rem;
+      border: 2px solid var(--rule);
+      background: var(--surface-2);
+      box-shadow: 3px 3px 0 var(--pixel-shadow);
+    }
+
+    .node::before {
+      display: block;
+      width: 1.7rem;
+      height: .35rem;
+      margin-bottom: .55rem;
+      content: "";
+      background: var(--accent, var(--red));
+    }
+
+    .node strong {
+      display: block;
+      color: var(--paper);
+      font-size: .87rem;
+      font-weight: 600;
+      line-height: 1.1;
+    }
+
+    .node small {
+      display: block;
+      margin-top: .3rem;
+      color: var(--ash);
+      font-size: .7rem;
+      line-height: 1.3;
+    }
+
+    .node--wide { width: min(100%, 13rem); }
+    .node--compact { padding: .55rem .62rem; }
+    .node--compact::before { width: 1rem; height: .18rem; margin-bottom: .35rem; }
+    .node--compact strong { font-size: .76rem; }
+    .node--compact small { font-size: .64rem; }
+    .node--green { --accent: var(--green); }
+    .node--red { --accent: var(--red); }
+    .node--orange { --accent: var(--orange); }
+    .node--blue { --accent: var(--blue); }
+    .node--cream { --accent: var(--cream); }
+
+    .annotation {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      color: var(--ash);
+      font-size: .73rem;
+      line-height: 1.3;
+    }
+
+    .annotation::before {
+      width: .55rem;
+      height: .55rem;
+      content: "";
+      background: var(--accent, var(--red));
+    }
+
+    .two-column-diagram {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    .diagram-panel {
+      min-width: 0;
+      padding: .75rem;
+      border: 2px solid var(--rule);
+      background: var(--ink);
+      box-shadow: 3px 3px 0 var(--pixel-shadow);
+    }
+
+    .diagram-panel h3 {
+      margin: 0 0 .65rem;
+      color: var(--silk);
+      font-family: var(--serif);
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+
+    .diagram-list {
+      display: grid;
+      gap: .4rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .diagram-list li {
+      display: flex;
+      gap: .48rem;
+      align-items: flex-start;
+      color: var(--ash);
+      font-size: .72rem;
+      line-height: 1.3;
+    }
+
+    .diagram-list li::before {
+      flex: 0 0 .52rem;
+      width: .52rem;
+      height: .52rem;
+      margin-top: .2rem;
+      content: "";
+      border: 1px solid var(--accent, var(--red));
+      background: rgba(134,27,34,.28);
+    }
+
+    .diagram-list--reject li::before {
+      border-color: var(--red-light);
+      background: var(--red);
+    }
+
+    .strike { text-decoration: line-through; text-decoration-color: var(--red-light); }
+
+    .decision-bar,
+    .legend,
+    .branch-row,
+    .meter-row,
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
+    }
+
+    .decision-bar { margin-top: .8rem; }
+
+    .tag {
+      padding: .38rem .5rem;
+      border: 2px solid var(--rule);
+      color: var(--silk);
+      background: var(--surface-2);
+      font-family: var(--mono);
+      font-size: .63rem;
+      letter-spacing: .04em;
+      line-height: 1.2;
+    }
+
+    .tag--good { border-color: var(--green); color: var(--green-light); }
+    .tag--bad { border-color: var(--red); color: var(--red-light); }
+    .tag--warn { border-color: var(--orange); color: #e0af7a; }
+    .tag--blue { border-color: var(--blue); color: #b4bdd8; }
+
+    .ledger-diagram {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: .7rem;
+    }
+
+    .ledger-lines,
+    .error-fields,
+    .checklist,
+    .broker-lines,
+    .meter-lines,
+    .client-lines {
+      display: grid;
+      gap: .42rem;
+    }
+
+    .ledger-line,
+    .error-field,
+    .check-line,
+    .broker-line,
+    .meter-line,
+    .client-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: .6rem;
+      padding-bottom: .3rem;
+      border-bottom: 1px dotted rgba(168,165,160,.28);
+      color: var(--ash);
+      font-size: .7rem;
+      line-height: 1.2;
+    }
+
+    .ledger-line strong,
+    .error-field strong,
+    .check-line strong,
+    .broker-line strong,
+    .meter-line strong,
+    .client-line strong { color: var(--silk); font-weight: 500; }
+
+    .ledger-total,
+    .sealed {
+      padding: .75rem;
+      border: 1px solid var(--green);
+      color: var(--green-light);
+      background: rgba(69,109,103,.12);
+      text-align: center;
+      font-family: var(--mono);
+      font-size: .68rem;
+      line-height: 1.35;
+    }
+
+    .error-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1.18fr;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    .error-events {
+      display: grid;
+      gap: .5rem;
+    }
+
+    .event {
+      padding: .55rem .65rem;
+      border-left: 3px solid var(--red);
+      background: rgba(134,27,34,.12);
+      color: var(--silk);
+      font-size: .7rem;
+      line-height: 1.25;
+    }
+
+    .error-card {
+      padding: .8rem;
+      border: 1px solid var(--red);
+      background: rgba(134,27,34,.12);
+    }
+
+    .error-card .node-code { color: var(--red-light); }
+
+    .split-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+    }
+
+    .split-box {
+      padding: .58rem;
+      border: 1px solid var(--rule);
+      color: var(--ash);
+      font-size: .7rem;
+      line-height: 1.3;
+    }
+
+    .split-box strong { display: block; margin-bottom: .2rem; color: var(--silk); }
+
+    .identity-layout { align-items: stretch; }
+
+    .identity-source,
+    .identity-result,
+    .identity-branch {
+      min-width: 0;
+      flex: 1 1 0;
+    }
+
+    .identity-source,
+    .identity-result {
+      display: grid;
+      gap: .45rem;
+      align-content: center;
+      padding: .8rem;
+      border: 1px solid var(--rule);
+      background: rgba(27,27,32,.7);
+    }
+
+    .alias {
+      padding: .35rem .45rem;
+      border-left: 2px solid var(--orange);
+      color: var(--silk);
+      font-family: var(--mono);
+      font-size: .65rem;
+    }
+
+    .identity-result { border-color: var(--green); }
+
+    .identity-result strong {
+      color: var(--green-light);
+      font-family: var(--mono);
+      font-size: .72rem;
+    }
+
+    .identity-branch {
+      display: grid;
+      gap: .5rem;
+      align-content: center;
+    }
+
+    .branch-box {
+      padding: .6rem;
+      border: 1px solid var(--rule);
+      font-size: .7rem;
+      line-height: 1.25;
+    }
+
+    .branch-box--red { border-color: var(--red); color: var(--red-light); }
+    .branch-box--green { border-color: var(--green); color: var(--green-light); }
+
+    .page-strip,
+    .progress-strip,
+    .matrix-grid,
+    .memory-grid {
+      display: grid;
+      gap: .3rem;
+    }
+
+    .page-strip { grid-template-columns: repeat(10, 1fr); }
+
+    .page {
+      height: 2.4rem;
+      border: 1px solid var(--rule);
+      background: rgba(111,120,147,.16);
+    }
+
+    .page--one { background: rgba(69,109,103,.62); }
+    .page--two { background: rgba(184,121,62,.68); }
+    .page--cross { outline: 2px solid var(--red); outline-offset: 2px; }
+
+    .page-labels {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: .55rem;
+      color: var(--ash);
+      font-size: .68rem;
+    }
+
+    .repack-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: .65rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .layout-card {
+      padding: .6rem;
+      border: 1px solid var(--rule);
+    }
+
+    .layout-card .page-strip { grid-template-columns: repeat(6, 1fr); }
+    .layout-card .page { height: 1.2rem; }
+
+    .layout-card strong,
+    .layout-note {
+      display: block;
+      margin-bottom: .45rem;
+      color: var(--silk);
+      font-family: var(--mono);
+      font-size: .62rem;
+    }
+
+    .layout-note {
+      margin: .45rem 0 0;
+      color: var(--green-light);
+      font-family: var(--sans);
+      font-size: .68rem;
+    }
+
+    .transaction-layout,
+    .lifecycle-layout,
+    .meter-layout,
+    .matrix-layout {
+      display: grid;
+      gap: .8rem;
+    }
+
+    .transaction-layout { grid-template-columns: 1.3fr .9fr; }
+
+    .timeline {
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+    }
+
+    .timeline-step {
+      min-width: 0;
+      flex: 1 1 0;
+      padding: .62rem .45rem;
+      border-top: 3px solid var(--orange);
+      background: rgba(184,121,62,.1);
+      color: var(--silk);
+      text-align: center;
+      font-size: .66rem;
+      line-height: 1.25;
+    }
+
+    .timeline-arrow { color: var(--orange); }
+
+    .reader-lanes {
+      display: grid;
+      gap: .55rem;
+    }
+
+    .reader-lane {
+      display: grid;
+      grid-template-columns: 3.5rem 1fr;
+      gap: .45rem;
+      align-items: center;
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .64rem;
+    }
+
+    .reader-root {
+      padding: .48rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      text-align: center;
+    }
+
+    .reader-root--old { border-color: var(--blue); }
+    .reader-root--new { border-color: var(--green); }
+
+    .repair-layout { display: grid; gap: 1rem; }
+
+    .capacity-gate {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: .7rem;
+      align-items: center;
+      padding: .65rem;
+      border: 1px solid var(--orange);
+      background: rgba(184,121,62,.1);
+    }
+
+    .capacity-gate strong { color: #e0af7a; font-size: .78rem; }
+
+    .repair-path {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: .35rem;
+      align-items: center;
+    }
+
+    .repair-state {
+      min-width: 0;
+      padding: .55rem .3rem;
+      border: 1px solid var(--rule);
+      color: var(--ash);
+      text-align: center;
+      font-size: .63rem;
+      line-height: 1.2;
+    }
+
+    .repair-state--bad { border-color: var(--red); color: var(--red-light); }
+    .repair-state--good { border-color: var(--green); color: var(--green-light); }
+
+    .epoch-layout { align-items: stretch; }
+
+    .epoch {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .epoch strong { display: block; margin-bottom: .35rem; color: var(--silk); font-family: var(--mono); font-size: .68rem; }
+    .epoch span { display: block; color: var(--ash); font-size: .69rem; line-height: 1.3; }
+    .epoch--dead { border-color: var(--red); }
+    .epoch--verified { border-color: var(--green); }
+
+    .source-stack { align-items: stretch; }
+
+    .source-stack .node { flex: 1 1 0; }
+
+    .adapter-card {
+      flex: 0 0 10rem;
+      padding: .7rem;
+      border: 1px solid var(--orange);
+      background: rgba(184,121,62,.1);
+    }
+
+    .adapter-card strong { display: block; margin-bottom: .5rem; color: #e0af7a; font-size: .8rem; }
+
+    .adapter-ops {
+      display: grid;
+      gap: .3rem;
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .6rem;
+    }
+
+    .progress-strip { grid-template-columns: repeat(12, 1fr); }
+
+    .progress-cell {
+      height: 2.1rem;
+      border: 1px solid var(--rule);
+      background: rgba(111,120,147,.13);
+    }
+
+    .progress-cell--done { background: rgba(69,109,103,.72); border-color: var(--green); }
+    .progress-cell--active { background: rgba(184,121,62,.76); border-color: var(--orange); }
+    .progress-cell--bad { background: rgba(134,27,34,.78); border-color: var(--red); }
+
+    .transfer-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: .6rem;
+      color: var(--ash);
+      font-size: .68rem;
+    }
+
+    .decision-layout { align-items: stretch; }
+
+    .preflight-card {
+      flex: 1 1 0;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .decision-mark {
+      display: grid;
+      place-items: center;
+      width: 5rem;
+      height: 5rem;
+      transform: rotate(45deg);
+      border: 1px solid var(--orange);
+      background: rgba(184,121,62,.1);
+    }
+
+    .decision-mark span {
+      transform: rotate(-45deg);
+      color: #e0af7a;
+      font-family: var(--mono);
+      font-size: .62rem;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .outcome-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .38rem;
+      flex: 1.2 1 0;
+    }
+
+    .outcome {
+      display: grid;
+      place-items: center;
+      min-height: 2.7rem;
+      padding: .35rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-size: .65rem;
+      line-height: 1.15;
+      text-align: center;
+    }
+
+    .outcome--green { border-color: var(--green); }
+    .outcome--blue { border-color: var(--blue); }
+    .outcome--orange { border-color: var(--orange); }
+    .outcome--red { border-color: var(--red); color: var(--red-light); }
+
+    .dispatch-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1.05fr auto 1fr;
+      gap: .55rem;
+      align-items: center;
+    }
+
+    .operator-list,
+    .dispatch-table {
+      display: grid;
+      gap: .4rem;
+    }
+
+    .operator,
+    .dispatch-row {
+      padding: .5rem .6rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-family: var(--mono);
+      font-size: .66rem;
+    }
+
+    .dispatch-row { display: grid; grid-template-columns: 1fr auto; gap: .4rem; color: var(--ash); }
+    .dispatch-row strong { color: var(--green-light); font-weight: 500; }
+
+    .blocked-branch {
+      margin-top: .9rem;
+      padding: .5rem .65rem;
+      border: 1px dashed var(--red);
+      color: var(--red-light);
+      font-size: .68rem;
+      text-align: center;
+    }
+
+    .memory-diagram {
+      position: relative;
+      display: grid;
+      gap: .55rem;
+      padding-top: .5rem;
+    }
+
+    .memory-ceiling {
+      position: absolute;
+      top: .05rem;
+      right: 0;
+      left: 0;
+      height: 1px;
+      background: var(--red);
+    }
+
+    .memory-ceiling span {
+      position: absolute;
+      right: 0;
+      bottom: .35rem;
+      color: var(--red-light);
+      font-family: var(--mono);
+      font-size: .6rem;
+    }
+
+    .memory-row {
+      display: grid;
+      grid-template-columns: 6.3rem repeat(6, 1fr);
+      gap: .26rem;
+      align-items: center;
+    }
+
+    .memory-row strong {
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .6rem;
+      font-weight: 400;
+    }
+
+    .memory-cell {
+      height: 1.6rem;
+      border: 1px solid var(--rule);
+    }
+
+    .memory-cell--full { background: rgba(69,109,103,.62); border-color: var(--green); }
+    .memory-cell--active { background: rgba(184,121,62,.66); border-color: var(--orange); }
+    .memory-cell--context { background: rgba(111,120,147,.62); border-color: var(--blue); }
+    .memory-cell--reserve { background: rgba(216,213,206,.17); border-color: var(--silk); }
+
+    .miss-layout {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: .35rem;
+      align-items: center;
+    }
+
+    .miss-step {
+      min-width: 0;
+      padding: .65rem .4rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      text-align: center;
+      font-size: .67rem;
+      line-height: 1.25;
+    }
+
+    .miss-step--accent { border-color: var(--orange); }
+    .miss-step--good { border-color: var(--green); }
+
+    .miss-failure {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .45rem;
+      margin-top: .9rem;
+    }
+
+    .miss-failure div {
+      padding: .5rem;
+      border: 1px dashed var(--red);
+      color: var(--red-light);
+      font-size: .66rem;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .tiny-loop {
+      display: grid;
+      grid-template-columns: 1fr auto 1.2fr auto 1fr;
+      gap: .55rem;
+      align-items: center;
+    }
+
+    .tiny-loop .node { width: 100%; }
+
+    .rollback {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: .5rem;
+      align-items: center;
+      margin-top: 1rem;
+      padding: .55rem;
+      border: 1px solid var(--blue);
+      color: #b4bdd8;
+      font-size: .67rem;
+      text-align: center;
+    }
+
+    .broker-layout {
+      display: grid;
+      grid-template-columns: .9fr 1.2fr .9fr;
+      gap: .7rem;
+      align-items: center;
+    }
+
+    .broker-card {
+      padding: .8rem;
+      border: 1px solid var(--orange);
+      background: rgba(184,121,62,.1);
+    }
+
+    .broker-card strong { display: block; margin-bottom: .65rem; color: #e0af7a; font-size: .85rem; }
+
+    .broker-line { border-bottom-color: rgba(224,175,122,.3); }
+
+    .event-log {
+      display: grid;
+      gap: .34rem;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .event-log div {
+      padding: .34rem .42rem;
+      border-left: 2px solid var(--green);
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .61rem;
+    }
+
+    .queue-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      gap: .75rem;
+      align-items: center;
+    }
+
+    .client-stack { display: grid; gap: .55rem; }
+
+    .client-card,
+    .lease-card,
+    .machine-card {
+      padding: .7rem;
+      border: 1px solid var(--rule);
+      background: rgba(27,27,32,.72);
+    }
+
+    .client-card strong,
+    .lease-card strong,
+    .machine-card strong { display: block; margin-bottom: .3rem; color: var(--silk); font-size: .78rem; }
+    .client-card span,
+    .lease-card span,
+    .machine-card span { color: var(--ash); font-size: .66rem; line-height: 1.3; }
+    .lease-card { border-color: var(--orange); background: rgba(184,121,62,.1); text-align: center; }
+    .machine-card { border-color: var(--green); text-align: center; }
+
+    .stale-note {
+      margin-top: .65rem;
+      padding: .45rem;
+      border: 1px dashed var(--red);
+      color: var(--red-light);
+      font-size: .64rem;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .clients-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: .9rem;
+      align-items: center;
+    }
+
+    .client-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+    }
+
+    .client-tile {
+      min-height: 3rem;
+      padding: .55rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-size: .7rem;
+      line-height: 1.25;
+    }
+
+    .trace-loop {
+      padding: .8rem;
+      border: 1px solid var(--green);
+      background: rgba(69,109,103,.1);
+    }
+
+    .trace-loop strong { display: block; margin-bottom: .5rem; color: var(--green-light); font-family: var(--mono); font-size: .65rem; }
+
+    .trace-loop .flow-column { gap: .35rem; }
+    .trace-loop .tag { width: 100%; text-align: center; }
+
+    .compiler-layout { align-items: stretch; }
+
+    .contribution-list,
+    .compiled-list {
+      display: grid;
+      flex: 1 1 0;
+      gap: .32rem;
+    }
+
+    .contribution,
+    .compiled-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .45rem;
+      min-height: 1.55rem;
+      padding: .33rem .45rem;
+      border: 1px solid var(--rule);
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .61rem;
+    }
+
+    .contribution::before,
+    .compiled-item::before {
+      width: .52rem;
+      height: .52rem;
+      content: "";
+      background: var(--green);
+    }
+
+    .compiled-item { border-color: var(--green); color: var(--green-light); }
+    .compiler-lines { display: grid; align-content: center; gap: .35rem; color: var(--orange); font-size: 1rem; }
+    .compiler-warning { margin-top: .75rem; color: var(--red-light); font-size: .66rem; text-align: center; }
+
+    .invalidation-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1.4fr;
+      gap: .7rem;
+      align-items: center;
+    }
+
+    .change-list,
+    .plan-list {
+      display: grid;
+      gap: .45rem;
+    }
+
+    .change-item,
+    .plan-item {
+      padding: .55rem .62rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-size: .67rem;
+      line-height: 1.25;
+    }
+
+    .change-item { border-color: var(--orange); }
+    .plan-item { border-color: var(--blue); }
+    .plan-item--invalid { border-color: var(--red); color: var(--red-light); }
+
+    .no-payload {
+      margin-top: .8rem;
+      padding: .42rem;
+      border: 1px dashed var(--green);
+      color: var(--green-light);
+      font-family: var(--mono);
+      font-size: .62rem;
+      text-align: center;
+    }
+
+    .trainer-layout { align-items: stretch; }
+
+    .storage-column,
+    .window-column,
+    .child-column {
+      display: grid;
+      flex: 1 1 0;
+      gap: .4rem;
+      align-content: center;
+    }
+
+    .storage-block,
+    .window-block,
+    .child-block {
+      padding: .55rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-size: .67rem;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .storage-block { border-color: var(--blue); }
+    .window-block { border-color: var(--orange); background: rgba(184,121,62,.1); }
+    .child-block { border-color: var(--green); background: rgba(69,109,103,.1); }
+
+    .meter-layout { grid-template-columns: 1fr 1.3fr; align-items: center; }
+
+    .meter-request {
+      padding: .8rem;
+      border: 1px solid var(--orange);
+      background: rgba(184,121,62,.1);
+    }
+
+    .meter-request strong { display: block; margin-bottom: .55rem; color: #e0af7a; font-size: .8rem; }
+
+    .gauge-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .5rem;
+    }
+
+    .gauge {
+      display: grid;
+      gap: .3rem;
+      padding: .55rem;
+      border: 1px solid var(--rule);
+    }
+
+    .gauge span { color: var(--ash); font-family: var(--mono); font-size: .6rem; }
+    .gauge i { display: block; height: .35rem; background: linear-gradient(90deg, var(--green) 0 68%, var(--red) 68% 100%); }
+
+    .matrix-layout { grid-template-columns: 1fr auto; align-items: center; }
+
+    .matrix-grid {
+      grid-template-columns: 5.7rem repeat(5, 1fr);
+      border: 1px solid var(--rule);
+    }
+
+    .matrix-cell {
+      min-height: 1.9rem;
+      padding: .28rem;
+      border-right: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .55rem;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    .matrix-cell--header { color: var(--silk); background: rgba(216,213,206,.08); }
+    .matrix-cell--good { color: var(--green-light); background: rgba(69,109,103,.26); }
+    .matrix-cell--live { color: #b4bdd8; background: rgba(111,120,147,.24); }
+    .matrix-cell--open { color: #e0af7a; background: rgba(184,121,62,.18); }
+
+    .matrix-legend { display: grid; gap: .45rem; }
+    .matrix-legend .tag { white-space: nowrap; }
+
+    .teacher-layout,
+    .curve-layout { align-items: stretch; }
+
+    .teacher-card,
+    .trace-card,
+    .curve-card {
+      flex: 1 1 0;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .teacher-card { border-color: var(--orange); background: rgba(184,121,62,.1); }
+    .trace-card { border-color: var(--green); background: rgba(69,109,103,.1); }
+    .curve-card { border-color: var(--blue); background: rgba(111,120,147,.1); }
+
+    .teacher-card strong,
+    .trace-card strong,
+    .curve-card strong { display: block; margin-bottom: .45rem; color: var(--silk); font-size: .76rem; }
+
+    .trace-lines,
+    .curve-lines { display: grid; gap: .35rem; }
+
+    .trace-lines span,
+    .curve-lines span { height: .38rem; background: var(--green); }
+    .trace-lines span:nth-child(2) { width: 72%; background: var(--orange); }
+    .trace-lines span:nth-child(3) { width: 88%; background: var(--blue); }
+    .trace-lines span:nth-child(4) { width: 56%; background: var(--red); }
+
+    .curve-lines { height: 6rem; align-content: end; grid-template-columns: repeat(8, 1fr); align-items: end; }
+    .curve-lines span { width: 100%; height: var(--bar, 50%); background: var(--blue); }
+    .curve-lines span:nth-child(2) { --bar: 66%; }
+    .curve-lines span:nth-child(3) { --bar: 42%; }
+    .curve-lines span:nth-child(4) { --bar: 72%; background: var(--orange); }
+    .curve-lines span:nth-child(5) { --bar: 52%; }
+    .curve-lines span:nth-child(6) { --bar: 34%; }
+    .curve-lines span:nth-child(7) { --bar: 25%; background: var(--red); }
+    .curve-lines span:nth-child(8) { --bar: 18%; }
+
+    .gate-layout {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .55rem;
+    }
+
+    .gate {
+      display: grid;
+      place-items: center;
+      min-height: 5rem;
+      padding: .55rem;
+      border: 1px solid var(--green);
+      color: var(--green-light);
+      background: rgba(69,109,103,.1);
+      font-size: .72rem;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .gate strong { display: block; margin-bottom: .3rem; font-family: var(--mono); font-size: .62rem; }
+
+    .gate-results {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      margin-top: 1rem;
+    }
+
+    .gate-result {
+      padding: .65rem;
+      border: 1px solid var(--rule);
+      color: var(--silk);
+      font-size: .7rem;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .gate-result--pass { border-color: var(--green); color: var(--green-light); }
+    .gate-result--false { border-color: var(--red); color: var(--red-light); }
+
+    .accounting-layout {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: .8rem;
+      align-items: center;
+    }
+
+    .repo-tree,
+    .accounting-report,
+    .removal-report {
+      display: grid;
+      gap: .42rem;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .repo-tree strong,
+    .accounting-report strong,
+    .removal-report strong { color: var(--silk); font-size: .78rem; }
+
+    .tree-line,
+    .report-line {
+      padding: .32rem .4rem;
+      border-left: 2px solid var(--accent, var(--green));
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .61rem;
+    }
+
+    .removal-report { border-color: var(--red); }
+    .removal-report .report-line { border-left-color: var(--red); color: var(--red-light); }
+
+    .closeout-layout { align-items: stretch; }
+
+    .machine-column,
+    .live-column {
+      display: grid;
+      flex: 1 1 0;
+      gap: .34rem;
+      padding: .7rem;
+      border: 1px solid var(--rule);
+    }
+
+    .machine-column { border-color: var(--green); }
+    .live-column { border-color: var(--orange); }
+
+    .phase-label {
+      margin-bottom: .25rem;
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .62rem;
+      text-transform: uppercase;
+    }
+
+    .phase-step {
+      padding: .36rem .45rem;
+      border-left: 3px solid var(--rule);
+      color: var(--ash);
+      font-size: .67rem;
+    }
+
+    .phase-step--done { border-left-color: var(--green); color: var(--green-light); }
+    .phase-step--todo { border-left-color: var(--red); color: var(--red-light); }
+    .phase-step--live { border-left-color: var(--orange); color: #e0af7a; }
+
+    .closeout-gate {
+      display: grid;
+      place-items: center;
+      min-width: 5.8rem;
+      padding: .55rem;
+      border: 1px solid var(--red);
+      color: var(--red-light);
+      font-family: var(--mono);
+      font-size: .61rem;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .slide-footer {
+      min-height: 2.2rem;
+      padding-top: .8rem;
+      border-top: 1px solid var(--rule);
+      color: var(--ash);
+    }
+
+    .slide-footer .next { color: var(--silk); }
+    .slide-footer .source { color: var(--iron); text-align: right; }
+
+    .title-route {
+      display: grid;
+      gap: .9rem;
+    }
+
+    .title-route .route-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: .35rem;
+    }
+
+    .title-route .node {
+      padding: .65rem .55rem .6rem;
+    }
+
+    .title-route .node strong { font-size: .78rem; }
+    .title-route .node small { font-size: .62rem; }
+    .title-route .node { min-height: 5.6rem; }
+
+    .route-note {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .55rem;
+      margin-top: .35rem;
+    }
+
+    .route-note div {
+      padding: .6rem;
+      border-top: 1px solid var(--rule);
+      color: var(--ash);
+      font-size: .69rem;
+      line-height: 1.3;
+    }
+
+    .title-quote {
+      margin-top: 1.2rem;
+      color: var(--cream);
+      font-family: var(--serif);
+      font-size: clamp(1.3rem, 2vw, 1.8rem);
+      line-height: 1.03;
+    }
+
+    .title-spider-note {
+      display: flex;
+      align-items: center;
+      gap: .85rem;
+      margin-bottom: .2rem;
+    }
+
+    .title-spider-note > div {
+      display: grid;
+      gap: .18rem;
+    }
+
+    .title-spider-note strong {
+      color: var(--paper);
+      font-family: var(--mono);
+      font-size: .68rem;
+      font-weight: 400;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .spider-sprite {
+      position: relative;
+      display: inline-block;
+      width: 4.8rem;
+      height: 3.2rem;
+      flex: 0 0 4.8rem;
+      image-rendering: pixelated;
+      filter: drop-shadow(4px 4px 0 var(--pixel-shadow));
+    }
+
+    .spider-sprite i {
+      position: absolute;
+      display: block;
+      background: var(--red);
+    }
+
+    .spider-leg {
+      z-index: 0;
+      width: 1.3rem;
+      height: .22rem;
+      transform-origin: right center;
+    }
+
+    .spider-leg--1 { top: .72rem; left: .55rem; transform: rotate(28deg); }
+    .spider-leg--2 { top: 1.28rem; left: .28rem; transform: rotate(8deg); }
+    .spider-leg--3 { top: 1.82rem; left: .52rem; transform: rotate(-18deg); }
+    .spider-leg--4 { top: 2.28rem; left: .92rem; transform: rotate(-38deg); }
+    .spider-leg--5 { top: .72rem; left: 2.95rem; transform-origin: left center; transform: rotate(-28deg); }
+    .spider-leg--6 { top: 1.28rem; left: 3.22rem; transform-origin: left center; transform: rotate(-8deg); }
+    .spider-leg--7 { top: 1.82rem; left: 2.98rem; transform-origin: left center; transform: rotate(18deg); }
+    .spider-leg--8 { top: 2.28rem; left: 2.58rem; transform-origin: left center; transform: rotate(38deg); }
+
+    .spider-body {
+      z-index: 1;
+      top: .82rem;
+      left: 1.9rem;
+      width: 1rem;
+      height: 1.15rem;
+      background: var(--red);
+      box-shadow:
+        0 -.45rem 0 var(--red),
+        0 .9rem 0 var(--red),
+        -.28rem .35rem 0 var(--red),
+        .28rem .35rem 0 var(--red);
+    }
+
+    .spider-eye {
+      z-index: 2;
+      top: .42rem;
+      left: 2.05rem;
+      width: .2rem;
+      height: .2rem;
+      background: var(--paper) !important;
+      box-shadow: .45rem 0 0 var(--paper);
+    }
+
+    .stage-map {
+      display: flex;
+      align-items: center;
+      gap: .28rem;
+      flex-wrap: wrap;
+      padding-top: .8rem;
+    }
+
+    .stage-map button {
+      width: 1.08rem;
+      height: 1.08rem;
+      padding: 0;
+      border: 1px solid var(--iron);
+      color: var(--ash);
+      background: transparent;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: .48rem;
+      line-height: 1;
+    }
+
+    .stage-map button[data-status="done"] { border-color: var(--green); background: rgba(69,109,103,.52); color: var(--green-light); }
+    .stage-map button[data-status="todo"] { border-color: var(--red); background: rgba(134,27,34,.18); color: var(--red-light); }
+    .stage-map button[data-status="foundation"] { border-color: var(--orange); color: #e0af7a; }
+    .stage-map button.is-current { outline: 2px solid var(--paper); outline-offset: 2px; }
+
+    .title-footer-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-top: .65rem;
+      color: var(--ash);
+      font-family: var(--mono);
+      font-size: .64rem;
+      line-height: 1.35;
+    }
+
+    .control-strip {
+      position: fixed;
+      right: clamp(1rem, 2vw, 2rem);
+      bottom: clamp(.8rem, 2vw, 1.5rem);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .35rem;
+      border: 2px solid var(--rule);
+      background: var(--surface);
+      box-shadow: 4px 4px 0 var(--pixel-shadow);
+      backdrop-filter: none;
+    }
+
+    .control-strip button {
+      min-width: 2rem;
+      min-height: 1.8rem;
+      padding: .3rem .45rem;
+      border: 2px solid var(--rule);
+      color: var(--ash);
+      background: transparent;
+      cursor: pointer;
+      font-size: .65rem;
+    }
+
+    .control-strip button:hover,
+    .control-strip button:focus-visible { border-color: var(--paper); color: var(--paper); }
+    #counter { min-width: 4.5rem; color: var(--silk); text-align: center; }
+
+    body.is-overview { overflow: auto; }
+    body.is-overview #slides {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1rem;
+      height: auto;
+      padding: 1rem;
+    }
+    body.is-overview .slide {
+      display: block;
+      height: auto;
+      min-height: 0;
+      aspect-ratio: 16 / 9;
+      border: 2px solid var(--rule);
+    }
+    body.is-overview .slide-inner { padding: 1rem; }
+    body.is-overview .stage-layout,
+    body.is-overview .title-layout { gap: 1rem; padding: .8rem 0; }
+    body.is-overview .platformer-progress { min-width: 0; max-width: none; gap: .1rem; }
+    body.is-overview .platformer-progress__legend { display: none; }
+    body.is-overview .platformer-track { height: .85rem; }
+    body.is-overview .platformer-progress__head { font-size: .42rem; }
+    body.is-overview h1 { font-size: 2rem; }
+    body.is-overview .title-copy h1 { font-size: 4rem; }
+    body.is-overview .lead { font-size: .72rem; }
+    body.is-overview .copy p:not(.lead):not(.plain-copy),
+    body.is-overview .title-note { font-size: .6rem; }
+    body.is-overview .plain-box,
+    body.is-overview .fact-row,
+    body.is-overview .proof-note,
+    body.is-overview .slide-footer,
+    body.is-overview .stage-map { display: none; }
+    body.is-overview .diagram-frame { min-height: 0; height: 100%; }
+    body.is-overview .diagram-body { min-height: 0; padding: .8rem; }
+    body.is-overview .diagram-caption { display: none; }
+    body.is-overview .control-strip { position: fixed; }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(.6rem); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      #slides, .slide { height: auto; min-height: 100dvh; }
+      .slide { overflow: visible; }
+      .topbar { flex-wrap: wrap; }
+      .platformer-progress {
+        order: 3;
+        flex-basis: 100%;
+        max-width: none;
+        min-width: 0;
+        margin: .65rem 0 0;
+      }
+      .stage-layout, .title-layout { grid-template-columns: 1fr; gap: 1.5rem; }
+      .copy { max-width: none; }
+      h1 { max-width: 16ch; }
+      .diagram-frame { min-height: 390px; }
+    }
+
+    @media (max-height: 760px) and (min-width: 981px) {
+      .slide-inner { padding-top: 1rem; padding-bottom: .75rem; }
+      .topbar { padding-bottom: .65rem; }
+      .platformer-progress { gap: .1rem; }
+      .platformer-progress__legend { display: none; }
+      .platformer-track { height: 1rem; }
+      .stage-layout, .title-layout { padding-top: 1rem; padding-bottom: .7rem; gap: 2.4rem; }
+      h1 { margin-bottom: .75rem; font-size: clamp(2.6rem, 4vw, 4rem); }
+      .title-copy h1 { margin-bottom: .9rem; font-size: clamp(3.5rem, 7vw, 7rem); }
+      .lead { margin-bottom: .7rem; font-size: .98rem; }
+      .copy p:not(.lead):not(.plain-copy), .title-note { margin-bottom: .55rem; font-size: .84rem; line-height: 1.38; }
+      .plain-box { margin-top: .75rem; padding: .65rem .8rem; }
+      .plain-copy { font-size: 1.05rem; }
+      .fact-row { margin-top: .75rem; }
+      .proof-note { margin-top: .5rem; }
+      .diagram-frame { min-height: 350px; }
+      .diagram-body { min-height: 260px; padding-top: .85rem; }
+      .slide-footer { min-height: 1.8rem; padding-top: .55rem; }
+    }
+
+    @media print {
+      body { overflow: visible; background: var(--black); }
+      body::before, body::after, .control-strip, .stage-map { display: none !important; }
+      #slides { height: auto; }
+      .slide, .slide.is-active { display: block; height: 100vh; min-height: 0; page-break-after: always; animation: none; }
+      .slide-inner { height: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide.is-active { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#slides">Skip to presentation</a>
+  <main id="slides" aria-live="polite"></main>
+
+  <div class="control-strip" aria-label="Presentation controls">
+    <button id="previous" type="button" aria-label="Previous slide">←</button>
+    <span id="counter">01 / 30</span>
+    <button id="next" type="button" aria-label="Next slide">→</button>
+    <button id="overview" type="button" aria-label="Toggle overview">O</button>
+  </div>
+
+  <script>
+    const stageData = [
+      {
+        id: "S00", status: "foundation", group: "The contract before code", accent: "red",
+        title: "Decide what success is before code starts.",
+        lead: "I started Cassette with a physical question: can a very large language model remain useful when its complete set of weights lives on an external drive instead of inside the Mac?",
+        body: "The answer only counts if the Mac runs the work locally from a bounded memory window. A smaller substitute, a hidden hosted model, or a copy quietly moved onto internal storage would be a different project.",
+        plain: "S00 is not a formal row in IMPLEMENTATION.md. It is the fence around the 28 machine steps. Research tells the queue what to build; the acceptance matrix decides whether the finished machine is real.",
+        before: "An open question", adds: "A non-negotiable boundary", after: "A build we can test", proof: "ORIGINAL_REMIT.md + Q1–Q80",
+        diagram: "guardrail", diagramTitle: "The promise has four edges", diagramKicker: "shortcuts do not cross the line",
+        diagramAlt: "Four accepted Cassette boundaries surround three rejected shortcuts: a smaller model, a remote API, and a model copied onto the Mac.",
+        next: "S00 → S01 / promise → accounting"
+      },
+      {
+        id: "S01", status: "done", group: "The contract before code", accent: "green",
+        title: "Make the project answer for itself.",
+        lead: "Once the promise is clear, the project needs a way to notice when its own construction has grown beyond it. S01 creates the accounting skeleton: a repeatable report of authored code, dependencies, processes, runtimes, duplicate authorities, and shipped bytes.",
+        body: "That report is not a moral score. It is a map. When a shortcut adds another runtime or hides a second implementation, the ledger makes the cost visible before the shortcut becomes architecture.",
+        plain: "A clean checkout must be able to tell us what the machine costs and what owns each rule.",
+        before: "A promise", adds: "A repeatable ledger", after: "A measured build", proof: "Q29 / accounting",
+        diagram: "ledger", diagramTitle: "Promises become line items", diagramKicker: "nothing important stays invisible",
+        diagramAlt: "A project promise passes through an accounting ledger that reports code, dependencies, processes, and binary bytes, then produces a clean-checkout report.",
+        next: "S01 → S02 / count → failure vocabulary"
+      },
+      {
+        id: "S02", status: "done", group: "The contract before code", accent: "red",
+        title: "Give every failure one name.",
+        lead: "A machine that can only say “failed” cannot be operated safely. A broken download, a corrupt page, and an unsupported model require different responses.",
+        body: "S02 gives every failure one structured shape. It names the condition, the object involved, the rule that was broken, whether retry is allowed, and the fact a caller needs next. The same vocabulary reaches code, tests, the broker, and an eventual human operator.",
+        plain: "A failure is useful when the next person can tell what broke and what to do with it.",
+        before: "Vague exceptions", adds: "Canonical errors", after: "Routable failure", proof: "Q6 / error schema",
+        diagram: "errors", diagramTitle: "Different trouble, one usable shape", diagramKicker: "name the condition before acting",
+        diagramAlt: "Three distinct failures enter one canonical error record with fields for condition, object, rule, retry, and next fact, then branch to retry or stop.",
+        next: "S02 → S03 / errors → validators"
+      },
+      {
+        id: "S03", status: "done", group: "The contract before code", accent: "blue",
+        title: "Turn written rules into records the machine can reject.",
+        lead: "Rules written in prose drift when every caller interprets them alone. S03 turns the records that cross Cassette—source descriptions, requests, events, preflight results, and roots—into generated schemas and validators.",
+        body: "Good input passes unchanged. Malformed input stops at the boundary with a named error. The schemas are regenerated and checked so a hand edit cannot quietly create a second contract.",
+        plain: "The validator is the doorway. A record either meets the shared shape or it does not enter.",
+        before: "Written contracts", adds: "Generated validators", after: "Bounded records", proof: "Q6 / Q9 / Q31 / Q50 / Q57 / F0",
+        diagram: "validator", diagramTitle: "The doorway has a real hinge", diagramKicker: "valid in / invalid out",
+        diagramAlt: "A request record enters a generated validator and branches into an accepted record or a named rejection; malformed input does not reach the operation.",
+        next: "S03 → S04 / valid records → model identity"
+      },
+      {
+        id: "S04", status: "done", group: "The cartridge store", accent: "orange",
+        title: "Prove which model you mean.",
+        lead: "Downloading the same model through two names must not create two models in Cassette’s records. S04 builds one identity from immutable evidence: source revision, exact files, sizes, digests, and the relationships that make a derived revision.",
+        body: "If one byte changes, the identity changes. If a compiled or tuned child exists, its record points back to its parent and records the transformation that made it. Names can help locate a thing; they cannot be the thing’s proof.",
+        plain: "A filename is an address. The digest-backed record is the identity.",
+        before: "Aliases and mutable names", adds: "One canonical identity", after: "Traceable revisions", proof: "Q1 / Q32",
+        diagram: "identity", diagramTitle: "Names converge; changed bytes do not", diagramKicker: "identity follows evidence",
+        diagramAlt: "Three aliases converge on one canonical model identity. A changed byte branches to a different identity, while a derived child remains linked to its parent and transformation.",
+        next: "S04 → S05 / identity → stored bytes"
+      },
+      {
+        id: "S05", status: "done", group: "The cartridge store", accent: "green",
+        title: "Store the model without losing its shape.",
+        lead: "An ordinary model file is organized for its format, not for a removable drive that must fetch only part of it. S05 cuts the payload into bounded pages and larger segments, then records how each tensor spans those pages.",
+        body: "The physical layout may change when the cartridge is repacked. The logical tensor and the model identity must not. S05 closes only when the same bytes can be recovered before and after that move, with the root covering the material it claims.",
+        plain: "The drive may rearrange the furniture. The model must still mean the same thing.",
+        before: "Model files", adds: "Pages + tensor map", after: "Readable cartridge", proof: "Q57 / SafeTensors",
+        diagram: "pages", diagramTitle: "Meaning stays put while pages move", diagramKicker: "logical map ≠ physical layout",
+        diagramAlt: "A tensor crosses a page boundary. Two different physical page layouts both resolve the same tensor spans and preserve the same logical meaning.",
+        next: "S05 → S06 / stored bytes → durable generations"
+      },
+      {
+        id: "S06", status: "done", group: "The cartridge store", accent: "orange",
+        title: "Make a new version survive a dead process.",
+        lead: "Writing a new model revision is a sequence of fragile moments. The process can die after a byte is written, after it is read back, or while the pointer to the new root is changing.",
+        body: "S06 adds a journal and generations so a restart chooses one complete old or new revision. A reader that already pinned the old root keeps reading it; a new reader sees the child only after the durable write sequence has finished. The required APFS and full-sync proof belongs on arm64 macOS.",
+        plain: "A crash may interrupt the work. It may not leave the cartridge claiming a half-version.",
+        before: "Stored objects", adds: "Journal + generations", after: "Old or new, never half", proof: "Q25 / Q60 / Q73 / F1",
+        diagram: "transaction", diagramTitle: "The pointer moves last", diagramKicker: "readers see complete roots",
+        diagramAlt: "A writer passes through write, readback, full sync, and atomic pointer steps. An old reader stays on the old root while a new reader receives the new root only after the sequence completes.",
+        next: "S06 → S07 / generations → capacity and repair"
+      },
+      {
+        id: "S07", status: "done", group: "The cartridge store", accent: "red",
+        title: "Refuse what you cannot afford; repair what you can verify.",
+        lead: "Storage pressure and corruption are not exceptional details on a removable cartridge. They are ordinary ways for a long operation to become dangerous.",
+        body: "S07 reserves the full peak space before it changes anything. It verifies pages, indexes, manifests, roots, and parity; repairs from independently checked material when it can; and marks the exact page unavailable when it cannot. No guessed bytes enter the model.",
+        plain: "First make room for the whole operation. Then trust only bytes that can prove where they came from.",
+        before: "A durable store", adds: "Capacity + repair states", after: "Safe failure and recovery", proof: "Q53 / Q62",
+        diagram: "repair", diagramTitle: "Two protections meet before mutation", diagramKicker: "capacity first / identity second",
+        diagramAlt: "An operation first passes an exact capacity gate, then a corrupted object moves through suspect, verify, repair, and valid or unavailable states.",
+        next: "S07 → S08 / repair → cartridge lifecycle"
+      },
+      {
+        id: "S08", status: "done", group: "The cartridge store", accent: "blue",
+        title: "Know when a cartridge is still the same cartridge.",
+        lead: "A path like “/Volumes/Cassette” is not an identity. The same name can point to a different mount after a disconnect, a port change, or a replacement drive.",
+        body: "S08 gives each verified mount an epoch-bound access token. Removal kills old tokens before the next read. A new mount must match the logical cartridge, filesystem, active root, and touched pages before it can become callable; a read-only mount is allowed only as read-only.",
+        plain: "When the drive leaves, old permission leaves with it. When it returns, it must earn trust again.",
+        before: "A mounted path", adds: "Mount identity + epochs", after: "Safe reconnects", proof: "Q49 / APFS image",
+        diagram: "lifecycle", diagramTitle: "Access belongs to a mount epoch", diagramKicker: "stale tokens die before I/O",
+        diagramAlt: "A verified mount issues an access token. Disconnect invalidates it before the next read. A new mount receives a new token only after identity and root verification.",
+        next: "S08 → S09 / lifecycle → source boundary"
+      },
+      {
+        id: "S09", status: "done", group: "Getting bytes onto the cartridge", accent: "cream",
+        title: "Put different download services behind one question set.",
+        lead: "The model may come from Hugging Face, Ollama, or Tinker. Those services speak different wire protocols, but Cassette should not grow three different acquisition machines.",
+        body: "S09 makes each source adapter answer the same five questions: resolve the model, enumerate its artifacts, read their facts, open a byte range, and translate the source’s license and authentication requirements. The adapter carries no cartridge lifecycle state.",
+        plain: "Sources may differ at the edge. The rest of Cassette should receive the same kind of answer.",
+        before: "Three source wires", adds: "One stateless boundary", after: "One transfer path", proof: "Q9 / Q52 subset",
+        diagram: "sources", diagramTitle: "Different wires, one doorway", diagramKicker: "the transfer engine stays singular",
+        diagramAlt: "Hugging Face, Ollama, and Tinker feed one stateless five-operation adapter, which feeds one shared transfer engine.",
+        next: "S09 → S10 / source boundary → verified transfer"
+      },
+      {
+        id: "S10", status: "todo", group: "Getting bytes onto the cartridge", accent: "green",
+        title: "Move large source files without starting over.",
+        lead: "Once a source has been described, Cassette needs to move its bytes without staging a second full copy on the Mac. S10 transfers ranges directly into reserved cartridge space and records each completed interval.",
+        body: "Every chunk is checked as it arrives and again after it is written. If the network or process stops, the next run asks only for missing ranges. A corrupt chunk is rejected; completion requires full coverage and the source digest.",
+        plain: "Stopping halfway through a large download should leave a map of what passed, not a pile of work to repeat.",
+        before: "Verified source description", adds: "Resumable range transfer", after: "Complete cartridge payload", proof: "Q51 / S10 TODO",
+        diagram: "transfer", diagramTitle: "The missing work stays visible", diagramKicker: "stop is not reset",
+        diagramAlt: "A twelve-part transfer has completed ranges, one corrupt range, and remaining ranges. The next run retries the bad and missing intervals instead of restarting the whole source.",
+        next: "S10 → S11 / bytes → compatibility decision"
+      },
+      {
+        id: "S11", status: "todo", group: "Getting bytes onto the cartridge", accent: "red",
+        title: "Decide whether a model belongs on this machine.",
+        lead: "Downloading a model is expensive in time, space, and attention. S11 asks whether the model belongs on this machine before that expense begins.",
+        body: "It checks the model’s immutable facts, required math, semantic files, license evidence, memory budget, and cartridge capacity. The answer is one of four honest outcomes: works as-is, works after preparation, not enough evidence, or unsupported. Unknown is not permission.",
+        plain: "Preflight is the moment to refuse an impossible job cheaply.",
+        before: "A source descriptor", adds: "A compatibility decision", after: "An admitted or refused plan", proof: "Q8 / Q50 / Q55 / Q56",
+        diagram: "decision", diagramTitle: "Evidence enters; one honest outcome leaves", diagramKicker: "unknown stays unknown",
+        diagramAlt: "Model facts, required math, semantic files, license evidence, memory, and capacity enter a preflight decision and produce four outcomes: supported, prepare first, insufficient evidence, or unsupported.",
+        next: "S11 → S12 / decision → numerical dispatch"
+      },
+      {
+        id: "S12", status: "todo", group: "Running from bounded memory", accent: "blue",
+        title: "Use one known math engine.",
+        lead: "Apple’s MLX runtime already supplies the numerical operations Cassette needs. S12 connects the allowed model operations to that pinned runtime through generated dispatch data and compares their outputs with trusted reference tensors.",
+        body: "This keeps numerical code in one place. A new model changes a manifest or dispatch record when possible; it does not create a private branch or a second kernel library because one shape was inconvenient.",
+        plain: "The model can vary. The trusted route through the math should not.",
+        before: "Admitted model operations", adds: "Generated dispatch table", after: "Reference-matched math", proof: "Q30 / F2",
+        diagram: "dispatch", diagramTitle: "The table chooses the primitive", diagramKicker: "no special model branch",
+        diagramAlt: "Allowed operator, shape, and data type records pass through a generated dispatch table to MLX and are compared with reference results; a model-specific code branch is blocked.",
+        next: "S12 → S13 / operators → memory schedule"
+      },
+      {
+        id: "S13", status: "todo", group: "Running from bounded memory", accent: "blue",
+        title: "Plan what can live in memory right now.",
+        lead: "Having a large model on a drive does not mean the whole model can enter memory. S13 turns the Mac’s unified memory into a schedule with a hard ceiling.",
+        body: "At each point in a request, the schedule names the pages, cache, context, activations, transfer buffers, and reserve that may be resident. If the total does not fit the chosen hardware class, Cassette rejects the run before it starts.",
+        plain: "The cartridge holds the whole model. The Mac holds only the part this moment can afford.",
+        before: "A model and hardware profile", adds: "A time-indexed memory plan", after: "Admit or reject before allocation", proof: "Q47 / Q63 subset",
+        diagram: "memory", diagramTitle: "The red line is a real limit", diagramKicker: "every resident byte has a job",
+        diagramAlt: "A memory ceiling sits above lanes for working pages, cache, context, activations, and reserve while the full model remains on the cartridge. Resident cells change over time.",
+        next: "S13 → S14 / memory plan → page readiness"
+      },
+      {
+        id: "S14", status: "todo", group: "Running from bounded memory", accent: "red",
+        title: "Recover when the next page is not ready.",
+        lead: "A request will eventually ask for a page that is not resident. That is not permission to improvise.",
+        body: "S14 defines the miss: locate the page, fetch it, verify it, make room under the declared budget, and admit it—or stop with a typed reason. It exercises interruption, corruption, timeout, and cancellation so replay either reaches the same result or ends with the same named failure.",
+        plain: "A page miss is a controlled detour, not a silent substitution.",
+        before: "A memory schedule", adds: "Miss recovery", after: "Ready page or exact stop", proof: "Q20 / Q64 subset / F3",
+        diagram: "miss", diagramTitle: "The miss has a route and two exits", diagramKicker: "fetch, verify, admit—or stop",
+        diagramAlt: "A request page miss moves through locate, fetch, verify, make room, and ready. Timeout or corrupt data exits through a named failure rather than a fallback.",
+        next: "S14 → S15 / miss recovery → tiny end-to-end loop"
+      },
+      {
+        id: "S15", status: "todo", group: "Running from bounded memory", accent: "orange",
+        title: "Prove the whole loop on a tiny model.",
+        lead: "A tiny transformer is the first honest place to test the whole path. S15 runs a small model from the cartridge through MLX, forces pages to miss, and checks that the memory schedule predicts what actually happens.",
+        body: "It also tests the key recovery boundary: if a request must roll back its attention cache, the visible result returns to the same point. A green tiny-model run is not frontier proof. It is proof that the basic loop exists.",
+        plain: "Before asking the machine to carry a giant model, make the complete small loop tell the truth.",
+        before: "Pages + dispatch + schedule", adds: "A complete tiny run", after: "Evidence for the real runtime path", proof: "F3 / Q63",
+        diagram: "tiny", diagramTitle: "Small model, complete path", diagramKicker: "the first end-to-end proof",
+        diagramAlt: "A prompt requests pages from the cartridge, the bounded window feeds MLX, and a token returns. A forced miss can roll back and replay to the same visible result.",
+        next: "S15 → S16 / runtime path → canonical broker"
+      },
+      {
+        id: "S16", status: "todo", group: "One machine for many callers", accent: "orange",
+        title: "Give every operation one coordinator.",
+        lead: "As soon as acquisition, execution, and training have their own state, a caller needs one place to ask what is happening. S16 creates the canonical broker.",
+        body: "The broker owns operation states, durable events, cancellation, retries, and idempotent replay. The same acquisition state machine serves every source adapter. An interruption at any transition must produce one ordered, inspectable history rather than three competing stories.",
+        plain: "The broker is the traffic controller. It does not perform every job; it keeps every job legible.",
+        before: "Separate operations", adds: "One state authority", after: "Ordered, replayable work", proof: "Q5 / Q6 / Q52",
+        diagram: "broker", diagramTitle: "One coordinator, many operations", diagramKicker: "events make the history inspectable",
+        diagramAlt: "Acquisition, runtime, training, and export feed one canonical broker. The broker writes ordered events and routes work to the store, pager, and trainer.",
+        next: "S16 → S17 / broker → scheduling and leases"
+      },
+      {
+        id: "S17", status: "todo", group: "One machine for many callers", accent: "orange",
+        title: "Let clients share a scarce machine without stale work.",
+        lead: "One Mac can have several clients and only one bounded working set. S17 lets them negotiate for it without leaving stale work behind.",
+        body: "The scheduler checks capacity before admission, grants leases, handles cancellation and handoff, and invalidates cached work when the lease changes. A second client does not inherit the first client’s pages simply because they happen to be warm.",
+        plain: "A lease says who may use the scarce working set now. It also says when that right ends.",
+        before: "Competing requests", adds: "Admission + lease", after: "One current owner", proof: "Q65 / Q77",
+        diagram: "queue", diagramTitle: "The working set has one current owner", diagramKicker: "handoff invalidates stale work",
+        diagramAlt: "Two clients wait for one machine window. A scheduler grants a lease after an admission check; a handoff invalidates the previous client's cached work before the next lease begins.",
+        next: "S17 → S18 / lease → named agent adapters"
+      },
+      {
+        id: "S18", status: "todo", group: "One machine for many callers", accent: "green",
+        title: "Make real agent clients speak the same operation language.",
+        lead: "Codex, Ollama, OpenClaw, Hermes, and a custom agent will not ask for the same operation in the same shape. S18 makes those differences live at the edge.",
+        body: "Each adapter maps to the broker’s canonical operation and maps the result back without dropping fields or inventing capabilities. Golden traces run in both directions. If a client asks for something Cassette cannot do, the adapter says so.",
+        plain: "Adapters translate the conversation. They do not change what the machine can actually do.",
+        before: "Client-specific requests", adds: "Thin edge adapters", after: "Honest agent interfaces", proof: "Q31 / Q76",
+        diagram: "clients", diagramTitle: "Translation happens at the edge", diagramKicker: "capability is not fabricated",
+        diagramAlt: "The canonical broker connects to Codex, Ollama, OpenClaw, Hermes, and a custom client through separate edge adapters. A request and response travel through a canonical trace, with unsupported capability rejected.",
+        next: "S18 → S19 / agent surface → streaming compiler"
+      },
+      {
+        id: "S19", status: "todo", group: "Changing the representation", accent: "blue",
+        title: "Make a usable copy. Keep its source map.",
+        lead: "Storage-native representation cannot be made by copying files into a new folder. S19 streams the source model through a compiler that can stop and resume, while preserving a map from each source contribution to the executable result.",
+        body: "The map records what was kept, merged, quantized, or selected. Missing contributions are failures. The compiler may change placement and representation; it may not lose provenance.",
+        plain: "Every important piece of the source needs a receipt showing where it went.",
+        before: "Verified source pages", adds: "Resumable compiler + contribution map", after: "Traceable executable revision", proof: "Q4 / Q58 / Q60",
+        diagram: "compiler", diagramTitle: "Every source contribution needs a destination", diagramKicker: "omission is not compression",
+        diagramAlt: "Six source contributions map into four compiled items. Every source item has a green destination; a missing mapping is shown as a structural failure, not an acceptable omission.",
+        next: "S19 → S20 / compiled revision → honest plans"
+      },
+      {
+        id: "S20", status: "todo", group: "Changing the representation", accent: "blue",
+        title: "Keep plans honest when the inputs change.",
+        lead: "A plan is a promise about a particular source, machine, storage class, and access pattern. When one of those changes, the plan may no longer be true.",
+        body: "S20 stores plans without copying the weight payload into each one and records exactly which change invalidates which plan. A hardware change should not erase the model. A model change should not leave an old access plan looking current.",
+        plain: "Plans can be reused only while the facts that made them safe remain the same.",
+        before: "A compiled revision", adds: "Plans + invalidation graph", after: "No stale execution choice", proof: "Q11 / Q27 / Q59 / Q75",
+        diagram: "invalidation", diagramTitle: "Changes invalidate only what they touch", diagramKicker: "plans contain no weight payload",
+        diagramAlt: "A model revision has separate hardware, access, and quality plans. A hardware change invalidates the hardware plan; the other plans remain available, and the plans contain no copied weight payload.",
+        next: "S20 → S21 / plans → paged training"
+      },
+      {
+        id: "S21", status: "todo", group: "Training where the model lives", accent: "green",
+        title: "Train in pieces while the full model stays on the cartridge.",
+        lead: "Training is where the storage idea has to survive its most demanding loop. S21 trains a bounded adapter or other admitted operation by moving one dependency window into memory at a time.",
+        body: "The base model, deltas, optimizer state, journals, and child revision stay on the cartridge. A small unpaged reference and the paged run must agree. An interruption resumes bit-for-bit or returns to the exact parent; there is no hidden full master on internal storage.",
+        plain: "The trainer brings a window to the Mac, does its work, and returns the result to the cartridge.",
+        before: "A callable revision", adds: "Paged training + child commit", after: "A durable trained child", proof: "Q23 / Q25 / Q71 / Q72 / Q73",
+        diagram: "trainer", diagramTitle: "The working window moves; authority stays put", diagramKicker: "base, state, and child live on the cartridge",
+        diagramAlt: "The cartridge holds the base model and optimizer state. A bounded window enters memory, produces gradients, and returns updated state to a child revision on the cartridge.",
+        next: "S21 → S22 / trainer → metered admission"
+      },
+      {
+        id: "S22", status: "todo", group: "Training where the model lives", accent: "orange",
+        title: "Refuse training that the cartridge cannot sustain.",
+        lead: "Training can fail before the first gradient because the drive cannot sustain the job. S22 measures that risk before mutation.",
+        body: "It projects and then meters bytes written, free space, memory, bandwidth, endurance, power, temperature, and time. If reality drifts beyond the admitted budget, the job stops at a named boundary. Cassette accepts a bounded training operation only when the cartridge can carry it.",
+        plain: "A job is admitted because the hardware can finish it, not because it can begin it.",
+        before: "A training request", adds: "Projected and measured limits", after: "Admit, finish, or stop cleanly", proof: "Q28 / Q74",
+        diagram: "meter", diagramTitle: "Admission is a physical question", diagramKicker: "project first / measure while running",
+        diagramAlt: "A training request passes through gauges for space, memory, bandwidth, endurance, power, temperature, and time, then reaches an admit or reject decision.",
+        next: "S22 → S23 / admission → failure matrix"
+      },
+      {
+        id: "S23", status: "todo", group: "Proving the machine", accent: "red",
+        title: "Try the hard interruptions everywhere.",
+        lead: "By this point, failure handling has been designed in pieces. S23 asks whether the pieces still work when they meet.",
+        body: "The test harness expands a failure matrix from data across acquisition, compilation, inference, training, export, repair, and removal. It exercises every simulated interruption and lists the live-only cases for the later hardware campaign. The test set is generated from the contract, not assembled from the examples that happened to be convenient.",
+        plain: "The machine earns trust at the moments when the easy demo stops.",
+        before: "Many operation paths", adds: "Generated failure coverage", after: "Known replay or stop behavior", proof: "Q49 / failure_rows",
+        diagram: "matrix", diagramTitle: "Rows are operations; columns are trouble", diagramKicker: "the matrix expands from data",
+        diagramAlt: "A generated grid crosses acquisition, compile, inference, training, and repair with interruption, corruption, timeout, cancel, and disconnect injections. Simulated cases are tested; live-only cases are marked for hardware.",
+        next: "S23 → S24 / failure coverage → teacher observation"
+      },
+      {
+        id: "S24", status: "todo", group: "Proving the machine", accent: "orange",
+        title: "Observe a teacher before teaching the compiler.",
+        lead: "Before a compiler can claim that it saves storage traffic, Cassette needs to watch a real model behave. S24 runs a permissively licensed 3–8B model and records the teacher’s requests, active contributions, timing, and quality reference.",
+        body: "The trace is stored by digest. It is evidence about one measured model and workload, not a universal statement about frontier models. That modesty is useful; a compiler needs observations, not atmosphere.",
+        plain: "First record what a real run touched. Only then ask a compiler to change the path.",
+        before: "A working teacher run", adds: "Digest-locked traces", after: "Evidence for a small-model experiment", proof: "Q19 / Q40",
+        diagram: "teacher", diagramTitle: "Observation comes before transformation", diagramKicker: "one trace, clearly scoped",
+        diagramAlt: "A teacher model run produces request, active-contribution, timing, and quality traces. The traces are stored in a digest-locked corpus labeled as evidence for one workload.",
+        next: "S24 → S25 / teacher trace → simulator"
+      },
+      {
+        id: "S25", status: "todo", group: "Proving the machine", accent: "blue",
+        title: "Use the trace to simulate a storage-native revision.",
+        lead: "S25 uses that recorded behavior to build and replay a small storage-native revision. The simulator compares what the revision touches with what the ordinary model would touch across declared storage classes.",
+        body: "It emits retention, compression, stability, and quality curves. Those curves tell us where the tradeoff lives. They do not yet say that Cassette can run a 20–120B frontier model on a consumer Mac.",
+        plain: "A simulator can reveal whether the idea is worth carrying to hardware. It cannot pretend the hardware test already happened.",
+        before: "A measured trace", adds: "Compiled revision + replay curves", after: "A small-model decision", proof: "Q19 / Q37",
+        diagram: "simulator", diagramTitle: "The trace becomes a controlled comparison", diagramKicker: "profiles expose the tradeoff",
+        diagramAlt: "A digest-locked trace feeds a compiler and simulator. Replay across three storage profiles produces curves for bytes touched, stability, and quality.",
+        next: "S25 → S26 / curves → F4 gate"
+      },
+      {
+        id: "S26", status: "todo", group: "Proving the machine", accent: "green",
+        title: "Let the gate decide whether the idea survives.",
+        lead: "A promising curve is not a release. S26 puts the small-model result through the F4 gate.",
+        body: "The gate checks three things together: the revision must touch no more than a quarter of the ordinary active bytes, its behavior must remain stable, and its quality must stay within the declared confidence bound and training budget. The result is either PASS or a falsification report. Both are valid closeouts; neither is allowed to become a softer success.",
+        plain: "A failed experiment can close a question. It cannot be quietly promoted to a product claim.",
+        before: "A simulated revision", adds: "A hard decision gate", after: "Pass or falsified mechanism", proof: "Q36 / Q38 / F4 GATE",
+        diagram: "gate", diagramTitle: "Three conditions, one decision", diagramKicker: "no almost-pass",
+        diagramAlt: "A candidate must pass touched-bytes, stability, and quality gates. The combined result is either PASS or a falsification report.",
+        next: "S26 → S27 / gate → full accounting"
+      },
+      {
+        id: "S27", status: "todo", group: "Proving the machine", accent: "red",
+        title: "Count the machine. Remove what it no longer needs.",
+        lead: "A complete machine should not hide its cost or dead machinery. S27 reruns the accounting from a clean checkout and records what can leave.",
+        body: "Every file and authority must have a reason to exist: the acceptance row that would fail if it disappeared. If nothing depends on a component, remove it. The goal is an explainable machine.",
+        plain: "The final codebase should be small because every remaining piece has earned its place.",
+        before: "A feature-complete tree", adds: "Cost report + removal map", after: "An explainable machine", proof: "Q29 / Q78",
+        diagram: "accounting", diagramTitle: "Every part needs a reason", diagramKicker: "or it leaves the tree",
+        diagramAlt: "A repository tree feeds an accounting report and a removal report. Files tied to acceptance rows remain; an orphaned component is marked for removal.",
+        next: "S27 → S28 / accounting → machine-phase closeout"
+      },
+      {
+        id: "S28", status: "todo", group: "Proving the machine", accent: "orange",
+        title: "Close the machine phase before the live campaign.",
+        lead: "S28 closes the machine phase. It does not pretend that a closed implementation queue is the same thing as a live product campaign.",
+        body: "Every S-step must be done or carry a blocked report. The runbook for real drives, live source services, larger models, and the complete Q80 matrix is generated from the failure and acceptance rows. Only then does the work move to hardware and the final product proof.",
+        plain: "Today, S01–S09 are built. S10–S28 remain. The research queue is closed, but Q80—the complete product run—has not run.",
+        before: "Machine-phase evidence", adds: "A live-campaign runbook", after: "The final product test", proof: "Q80 / PHASE LIVE",
+        diagram: "closeout", diagramTitle: "The live campaign is a separate door", diagramKicker: "closeout is a boundary, not a victory lap",
+        diagramAlt: "The machine phase contains S01 through S28, with S01 through S09 built and later steps still open. A gate leads to live steps for real drives, live acquisition, larger models, and the complete Q80 run.",
+        next: "S28 → L01 / machine phase → live campaign"
+      }
+    ];
+
+    const slides = document.getElementById("slides");
+    const counter = document.getElementById("counter");
+    let current = 0;
+
+    function brand() {
+      return '<span class="brand-mark" aria-hidden="true"></span><span>Recluse Studio / Cassette</span>';
+    }
+
+    function spiderSprite() {
+      return `<span class="spider-sprite" aria-hidden="true">
+        <i class="spider-leg spider-leg--1"></i><i class="spider-leg spider-leg--2"></i><i class="spider-leg spider-leg--3"></i><i class="spider-leg spider-leg--4"></i>
+        <i class="spider-leg spider-leg--5"></i><i class="spider-leg spider-leg--6"></i><i class="spider-leg spider-leg--7"></i><i class="spider-leg spider-leg--8"></i>
+        <i class="spider-body"></i><i class="spider-eye"></i>
+      </span>`;
+    }
+
+    function platformerZone(step) {
+      if (step === 0) return "cartridge map";
+      if (step <= 10) return "foundations";
+      if (step <= 15) return "working window";
+      if (step <= 18) return "many callers";
+      if (step <= 22) return "representation + training";
+      return "proof";
+    }
+
+    function platformerProgress(currentStep, currentStage) {
+      const total = stageData.length;
+      const step = Math.max(0, Math.min(currentStep, total));
+      const progress = total ? step / total : 0;
+      const playerLeft = 4 + progress * 92;
+      const tiles = stageData.map((stage, index) => {
+        const tileStep = index + 1;
+        const classes = [`platformer-tile`, `platformer-tile--${stage.status}`];
+        if (tileStep < step) classes.push("is-past");
+        if (tileStep === step) classes.push("is-current");
+        return `<span class="${classes.join(" ")}" title="${stage.id}"></span>`;
+      }).join("");
+      const mapLabel = step === 0 ? "prologue" : currentStage;
+      const statusLabel = step === 0 ? "before the first room" : `${currentStage} / ${stageData[step - 1]?.status === "done" ? "built" : stageData[step - 1]?.status === "foundation" ? "foundation" : "still to build"}`;
+      return `<div class="platformer-progress" role="img" aria-label="Platformer progress map. Current ${mapLabel}. Green rooms are built, red rooms remain to be built, and the spider marks the slide currently being read."><div class="platformer-progress__head"><span>World 0 / ${platformerZone(step)}</span><span>${statusLabel}</span></div><div class="platformer-track"><div class="platformer-track__tiles">${tiles}</div><span class="platformer-player" style="left: ${playerLeft.toFixed(2)}%"></span><span class="platformer-flag" aria-hidden="true"></span></div><div class="platformer-progress__legend"><span class="legend-done"><i></i>built</span><span class="legend-open"><i></i>still to build</span><span class="legend-current"><i></i>current slide</span></div></div>`;
+    }
+
+    function node(code, title, detail, modifier = "") {
+      return `<div class="node ${modifier}"><span class="node-code">${code}</span><strong>${title}</strong><small>${detail}</small></div>`;
+    }
+
+    function arrow() { return '<span class="arrow" aria-hidden="true">→</span>'; }
+
+    function diagramMarkup(type) {
+      switch (type) {
+        case "route":
+          return `<div class="title-route">
+            <div class="flow-row route-row">
+              ${node("01", "Source", "downloadable model", "node--orange")}${arrow()}
+              ${node("02", "Cartridge", "complete authority", "node--green")}${arrow()}
+              ${node("03", "Apple", "bounded working set", "node--blue")}${arrow()}
+              ${node("04", "Agent", "local operation", "node--cream")}
+            </div>
+            <div class="route-note"><div>All model and training state stays on the external cartridge.</div><div>The Mac holds only the bytes this request can afford.</div></div>
+          </div>`;
+        case "guardrail":
+          return `<div class="two-column-diagram">
+            <div class="diagram-panel"><h3>Counts as Cassette</h3><ul class="diagram-list"><li>The complete model remains on the external cartridge.</li><li>Apple hardware runs the work locally.</li><li>Unified memory holds a bounded working set.</li><li>The final claim is tested against the full matrix.</li></ul></div>
+            <div class="diagram-panel"><h3>Does not count</h3><ul class="diagram-list diagram-list--reject"><li><span class="strike">A smaller model substituted for the target.</span></li><li><span class="strike">A remote service answering behind the curtain.</span></li><li><span class="strike">A full copy quietly moved onto internal storage.</span></li></ul></div>
+          </div>`;
+        case "ledger":
+          return `<div class="ledger-diagram"><div class="diagram-panel"><h3>The promise</h3><ul class="diagram-list"><li>One authored runtime.</li><li>One owner for each rule.</li><li>No hidden duplicate machinery.</li></ul></div>${arrow()}<div><div class="ledger-lines"><div class="ledger-line"><span>authored code</span><strong>counted</strong></div><div class="ledger-line"><span>dependencies</span><strong>pinned</strong></div><div class="ledger-line"><span>processes</span><strong>counted</strong></div><div class="ledger-line"><span>binary bytes</span><strong>reported</strong></div></div><div class="ledger-total">clean checkout<br>reproduces the report</div></div></div>`;
+        case "errors":
+          return `<div class="error-layout"><div class="error-events"><div class="event">The source range is missing.</div><div class="event">The page digest does not match.</div><div class="event">The model is not supported.</div></div>${arrow()}<div><div class="error-card"><span class="node-code">CASSETTE ERROR</span><div class="error-fields"><div class="error-field"><span>condition</span><strong>named</strong></div><div class="error-field"><span>object</span><strong>identified</strong></div><div class="error-field"><span>rule</span><strong>explicit</strong></div><div class="error-field"><span>retry</span><strong>yes / no</strong></div><div class="error-field"><span>next fact</span><strong>included</strong></div></div></div><div class="decision-bar"><span class="tag tag--good">retry safely</span><span class="tag tag--bad">stop visibly</span></div></div></div>`;
+        case "validator":
+          return `<div class="flow-column"><div class="flow-row">${node("IN", "record", "request, source, root, or event", "node--blue")}${arrow()}<div class="node node--wide node--orange"><span class="node-code">CHECK</span><strong>generated validator</strong><small>the shared shape is enforced here</small></div></div><div class="branch-row"><span class="tag tag--good">valid → operation may receive it</span><span class="tag tag--bad">malformed → named error at the door</span></div></div>`;
+        case "identity":
+          return `<div class="identity-layout"><div class="identity-source"><span class="node-code">NAMES</span><div class="alias">source alias: model/latest</div><div class="alias">requested revision: r17</div><div class="alias">mirror path: /weights</div></div>${arrow()}<div class="identity-result"><span class="node-code">PROOF</span><strong>one canonical identity</strong><small>immutable revision + exact artifacts + digests</small></div><div class="identity-branch"><div class="branch-box branch-box--red">one changed byte → different identity</div><div class="branch-box branch-box--green">derived child → parent + transformation link</div></div></div>`;
+        case "pages":
+          return `<div><div class="page-strip"><span class="page page--one"></span><span class="page page--one"></span><span class="page page--two page--cross"></span><span class="page page--two"></span><span class="page page--one"></span><span class="page page--one"></span><span class="page page--two"></span><span class="page page--two"></span><span class="page page--one"></span><span class="page page--one"></span></div><div class="page-labels"><span>one tensor crosses a page boundary</span><span>TensorMap remembers the spans</span></div><div class="repack-row"><div class="layout-card"><strong>layout A</strong><div class="page-strip"><span class="page page--one"></span><span class="page page--two"></span><span class="page page--one"></span><span class="page page--two"></span><span class="page page--one"></span><span class="page page--two"></span></div><span class="layout-note">same logical tensor</span></div>${arrow()}<div class="layout-card"><strong>layout B / repacked</strong><div class="page-strip"><span class="page page--two"></span><span class="page page--one"></span><span class="page page--two"></span><span class="page page--one"></span><span class="page page--two"></span><span class="page page--one"></span></div><span class="layout-note">same bytes, new positions</span></div></div></div>`;
+        case "transaction":
+          return `<div class="transaction-layout"><div><div class="timeline"><div class="timeline-step">write<br>candidate</div><span class="timeline-arrow">→</span><div class="timeline-step">read back<br>hash</div><span class="timeline-arrow">→</span><div class="timeline-step">full sync</div><span class="timeline-arrow">→</span><div class="timeline-step">publish<br>pointer</div></div><div class="decision-bar"><span class="tag tag--bad">process may die at every step</span><span class="tag tag--good">restart chooses one complete root</span></div></div><div class="reader-lanes"><div class="reader-lane"><span>reader A</span><div class="reader-root reader-root--old">old root stays pinned</div></div><div class="reader-lane"><span>reader B</span><div class="reader-root reader-root--new">new root after publish</div></div></div></div>`;
+        case "repair":
+          return `<div class="repair-layout"><div class="capacity-gate"><strong>1. Reserve the full peak extent before mutation.</strong><span class="tag tag--good">enough space → continue</span></div><div class="repair-path"><div class="repair-state">valid</div><span class="arrow">→</span><div class="repair-state repair-state--bad">suspect / corrupt</div><span class="arrow">→</span><div class="repair-state">verify source</div><span class="arrow">→</span><div class="repair-state">repair</div><span class="arrow">→</span><div class="repair-state repair-state--good">valid<br>or unavailable</div></div></div>`;
+        case "lifecycle":
+          return `<div class="epoch-layout"><div class="epoch epoch--verified"><strong>mount A</strong><span>UUID + filesystem + root agree</span><span>token A is valid</span></div>${arrow()}<div class="epoch epoch--dead"><strong>disconnect</strong><span>token A is invalidated</span><span>no stale read is attempted</span></div>${arrow()}<div class="epoch epoch--verified"><strong>mount B</strong><span>identity is checked again</span><span>token B is newly issued</span></div></div>`;
+        case "sources":
+          return `<div class="source-stack"><div class="node node--compact node--orange"><strong>Hugging Face</strong><small>its own wire</small></div><div class="node node--compact node--blue"><strong>Ollama</strong><small>its own wire</small></div><div class="node node--compact node--green"><strong>Tinker</strong><small>its own wire</small></div>${arrow()}<div class="adapter-card"><strong>one adapter boundary</strong><div class="adapter-ops"><span>resolve</span><span>enumerate</span><span>read facts</span><span>open range</span><span>translate auth/license</span></div></div>${arrow()}<div class="node node--wide node--cream"><strong>shared transfer engine</strong><small>one lifecycle, one journal</small></div></div>`;
+        case "transfer":
+          return `<div><div class="progress-strip">${Array.from({length: 12}, (_, i) => `<span class="progress-cell ${i < 6 ? "progress-cell--done" : i === 6 ? "progress-cell--bad" : i === 7 ? "progress-cell--active" : ""}"></span>`).join("")}</div><div class="transfer-note"><span>completed ranges stay recorded</span><span>bad / missing range resumes here</span></div><div class="decision-bar"><span class="tag tag--good">full coverage</span><span class="tag tag--good">source digest matches</span><span class="tag tag--bad">otherwise: no commit</span></div></div>`;
+        case "decision":
+          return `<div class="decision-layout"><div class="preflight-card"><span class="node-code">READ BEFORE DOWNLOAD</span><div class="checklist"><div class="check-line"><span>model facts</span><strong>present</strong></div><div class="check-line"><span>required math</span><strong>known</strong></div><div class="check-line"><span>license evidence</span><strong>clear</strong></div><div class="check-line"><span>memory / capacity</span><strong>fits?</strong></div></div></div>${arrow()}<div class="decision-mark"><span>one<br>decision</span></div>${arrow()}<div class="outcome-grid"><div class="outcome outcome--green">supported now</div><div class="outcome outcome--blue">prepare first</div><div class="outcome outcome--orange">not enough evidence</div><div class="outcome outcome--red">unsupported</div></div></div>`;
+        case "dispatch":
+          return `<div><div class="dispatch-layout"><div class="operator-list"><div class="operator">operator: attention</div><div class="operator">shape: 4096 × 4096</div><div class="operator">type: float16</div></div>${arrow()}<div class="dispatch-table"><div class="dispatch-row"><span>generated map</span><strong>MLX op A</strong></div><div class="dispatch-row"><span>golden tensor</span><strong>matches</strong></div><div class="dispatch-row"><span>runtime owner</span><strong>pager / trainer</strong></div></div>${arrow()}<div class="node node--wide node--green"><strong>pinned MLX</strong><small>one numerical path</small></div></div><div class="blocked-branch">blocked route: “if model family = X, use a private kernel”</div></div>`;
+        case "memory":
+          return `<div class="memory-diagram"><div class="memory-ceiling"><span>hard memory ceiling</span></div><div class="memory-row"><strong>working pages</strong>${[1,2,3,4,5,6].map(i => `<span class="memory-cell ${i === 2 || i === 3 ? "memory-cell--active" : i === 4 ? "memory-cell--full" : ""}"></span>`).join("")}</div><div class="memory-row"><strong>cache</strong>${[1,2,3,4,5,6].map(i => `<span class="memory-cell ${i > 3 ? "memory-cell--context" : ""}"></span>`).join("")}</div><div class="memory-row"><strong>context + activations</strong>${[1,2,3,4,5,6].map(i => `<span class="memory-cell ${i > 4 ? "memory-cell--context" : ""}"></span>`).join("")}</div><div class="memory-row"><strong>reserve</strong>${[1,2,3,4,5,6].map(() => '<span class="memory-cell memory-cell--reserve"></span>').join("")}</div><div class="decision-bar"><span class="tag tag--blue">full model remains on cartridge</span><span class="tag tag--bad">over ceiling → reject before allocation</span></div></div>`;
+        case "miss":
+          return `<div><div class="miss-layout"><div class="miss-step">request<br>page</div>${arrow()}<div class="miss-step miss-step--accent">page<br>miss</div>${arrow()}<div class="miss-step">fetch +<br>verify</div>${arrow()}<div class="miss-step">make<br>room</div>${arrow()}<div class="miss-step miss-step--good">admit<br>page</div></div><div class="miss-failure"><div>timeout / cancel → typed stop</div><div>corrupt bytes → reject before use</div></div></div>`;
+        case "tiny":
+          return `<div><div class="tiny-loop"><div class="node node--compact node--orange"><strong>prompt</strong><small>request page</small></div>${arrow()}<div class="node node--compact node--blue"><strong>cartridge</strong><small>verified page</small></div>${arrow()}<div class="node node--compact node--green"><strong>MLX</strong><small>bounded window</small></div>${arrow()}<div class="node node--compact node--cream"><strong>token</strong><small>visible result</small></div></div><div class="rollback"><span>forced miss</span>${arrow()}<strong>rollback KV cache</strong>${arrow()}<span>same visible result</span></div></div>`;
+        case "broker":
+          return `<div class="broker-layout"><div class="broker-lines"><div class="broker-line"><span>acquisition</span><strong>state</strong></div><div class="broker-line"><span>inference</span><strong>state</strong></div><div class="broker-line"><span>training</span><strong>state</strong></div><div class="broker-line"><span>export</span><strong>state</strong></div></div><div class="broker-card"><strong>canonical broker</strong><div class="broker-lines"><div class="broker-line"><span>cancel</span><strong>owned here</strong></div><div class="broker-line"><span>retry</span><strong>owned here</strong></div><div class="broker-line"><span>replay</span><strong>idempotent</strong></div></div></div><div class="event-log"><div>01 / admitted</div><div>02 / page requested</div><div>03 / page verified</div><div>04 / operation resumed</div></div></div>`;
+        case "queue":
+          return `<div class="queue-layout"><div class="client-stack"><div class="client-card"><strong>client A</strong><span>waiting for the working set</span></div><div class="client-card"><strong>client B</strong><span>waiting behind A</span></div></div>${arrow()}<div><div class="lease-card"><strong>lease A</strong><span>capacity checked before admission</span></div><div class="stale-note">handoff → A’s cached work is invalidated</div></div>${arrow()}<div class="machine-card"><strong>one bounded window</strong><span>one current owner</span></div></div>`;
+        case "clients":
+          return `<div class="clients-layout"><div class="client-grid"><div class="client-tile">Codex<br><small>edge adapter</small></div><div class="client-tile">Ollama<br><small>edge adapter</small></div><div class="client-tile">OpenClaw<br><small>edge adapter</small></div><div class="client-tile">Hermes / custom<br><small>edge adapter</small></div></div><div class="trace-loop"><strong>canonical trace</strong><div class="flow-column"><span class="tag">client request</span>${arrow()}<span class="tag tag--good">broker operation</span>${arrow()}<span class="tag">client response</span></div><div class="stale-note">unsupported capability → honest rejection</div></div></div>`;
+        case "compiler":
+          return `<div><div class="compiler-layout"><div class="contribution-list"><div class="contribution">source A <span>mapped</span></div><div class="contribution">source B <span>mapped</span></div><div class="contribution">source C <span>mapped</span></div><div class="contribution">source D <span>mapped</span></div><div class="contribution">source E <span>mapped</span></div><div class="contribution">source F <span>mapped</span></div></div><div class="compiler-lines">→<br>→<br>→</div><div class="compiled-list"><div class="compiled-item">compiled page 1 <span>kept</span></div><div class="compiled-item">compiled page 2 <span>merged</span></div><div class="compiled-item">compiled page 3 <span>quantized</span></div><div class="compiled-item">compiled page 4 <span>selected</span></div></div></div><div class="compiler-warning">No source row without a destination. Omission is a structural failure.</div></div>`;
+        case "invalidation":
+          return `<div class="invalidation-layout"><div class="change-list"><div class="change-item">hardware class changes</div><div class="change-item">source revision changes</div><div class="change-item">quality rule changes</div></div>${arrow()}<div class="plan-list"><div class="plan-item plan-item--invalid">hardware plan → invalidated by hardware change</div><div class="plan-item">access plan → remains valid</div><div class="plan-item">quality plan → remains valid</div></div><div class="no-payload">plans point to the model; they do not copy the model</div></div>`;
+        case "trainer":
+          return `<div class="trainer-layout"><div class="storage-column"><div class="storage-block">base model<br><small>cartridge</small></div><div class="storage-block">optimizer state<br><small>cartridge</small></div></div>${arrow()}<div class="window-column"><div class="window-block">one dependency window<br><small>unified memory</small></div><div class="window-block">forward + backward<br><small>bounded work</small></div></div>${arrow()}<div class="child-column"><div class="child-block">updated deltas<br><small>cartridge</small></div><div class="child-block">child revision<br><small>durable commit</small></div></div></div>`;
+        case "meter":
+          return `<div class="meter-layout"><div class="meter-request"><strong>training request</strong><div class="meter-lines"><div class="meter-line"><span>operation</span><strong>bounded adapter</strong></div><div class="meter-line"><span>estimated work</span><strong>declared</strong></div><div class="meter-line"><span>mutation</span><strong>not yet</strong></div></div></div><div><div class="gauge-grid"><div class="gauge"><span>free space</span><i></i></div><div class="gauge"><span>memory</span><i></i></div><div class="gauge"><span>bandwidth</span><i></i></div><div class="gauge"><span>endurance</span><i></i></div><div class="gauge"><span>power / heat</span><i></i></div><div class="gauge"><span>time</span><i></i></div></div><div class="decision-bar"><span class="tag tag--good">admit if all fit</span><span class="tag tag--bad">stop at a named boundary if reality drifts</span></div></div></div>`;
+        case "matrix":
+          return `<div class="matrix-layout"><div class="matrix-grid"><div class="matrix-cell matrix-cell--header">operation</div><div class="matrix-cell matrix-cell--header">interrupt</div><div class="matrix-cell matrix-cell--header">corrupt</div><div class="matrix-cell matrix-cell--header">timeout</div><div class="matrix-cell matrix-cell--header">cancel</div><div class="matrix-cell matrix-cell--header">disconnect</div><div class="matrix-cell matrix-cell--header">acquire</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--live">live</div><div class="matrix-cell matrix-cell--header">compile</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--live">live</div><div class="matrix-cell matrix-cell--header">inference</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--live">live</div><div class="matrix-cell matrix-cell--header">training</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--good">test</div><div class="matrix-cell matrix-cell--live">live</div></div><div class="matrix-legend"><span class="tag tag--good">generated test</span><span class="tag tag--blue">hardware campaign</span><span class="tag tag--warn">from contract data</span></div></div>`;
+        case "teacher":
+          return `<div class="teacher-layout"><div class="teacher-card"><strong>teacher run / 3–8B model</strong><div class="trace-lines"><span></span><span></span><span></span><span></span></div><small>requests · active contributions · time · quality</small></div>${arrow()}<div class="trace-card"><strong>digest-locked trace corpus</strong><div class="trace-lines"><span></span><span></span><span></span><span></span></div><small>one model / one workload / named evidence</small></div></div>`;
+        case "simulator":
+          return `<div class="curve-layout"><div class="trace-card"><strong>recorded trace</strong><div class="trace-lines"><span></span><span></span><span></span><span></span></div></div>${arrow()}<div class="curve-card"><strong>compiler + replay</strong><div class="curve-lines"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>${arrow()}<div class="curve-card"><strong>storage profiles</strong><div class="curve-lines"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><small>bytes · stability · quality</small></div></div>`;
+        case "gate":
+          return `<div><div class="gate-layout"><div class="gate"><strong>BYTES</strong>touch no more than 25% of ordinary active bytes</div><div class="gate"><strong>STABILITY</strong>behavior remains stable under the declared test</div><div class="gate"><strong>QUALITY</strong>stays inside the confidence and training budget</div></div><div class="gate-results"><div class="gate-result gate-result--pass">PASS<br><small>mechanism earns the next question</small></div><div class="gate-result gate-result--false">Q38-FALSIFIED<br><small>mechanism closes with a recorded failure</small></div></div></div>`;
+        case "accounting":
+          return `<div class="accounting-layout"><div class="repo-tree"><strong>repository tree</strong><div class="tree-line">store.py / one authority</div><div class="tree-line">pager.py / one authority</div><div class="tree-line">tests / cited proof</div><div class="tree-line">tools / accounting</div></div>${arrow()}<div><div class="accounting-report"><strong>accounting report</strong><div class="report-line">code / dependencies / processes</div><div class="report-line">runtimes / branches / bytes</div></div><div class="removal-report"><strong>removal map</strong><div class="report-line">orphaned helper → remove</div><div class="report-line">missing row → defect</div></div></div></div>`;
+        case "closeout":
+          return `<div class="closeout-layout"><div class="machine-column"><div class="phase-label">machine phase / S01–S28</div><div class="phase-step phase-step--done">S01–S09 / built</div><div class="phase-step phase-step--todo">S10–S27 / still to build</div><div class="phase-step phase-step--todo">S28 / closeout record</div></div><div class="closeout-gate">closeout<br>requires<br>all steps<br>resolved</div><div class="live-column"><div class="phase-label">live campaign / L01–L05</div><div class="phase-step phase-step--live">real storage qualification</div><div class="phase-step phase-step--live">live source acquisition</div><div class="phase-step phase-step--live">larger-model gates</div><div class="phase-step phase-step--live">complete Q80 run</div></div></div>`;
+        default:
+          return "";
+      }
+    }
+
+    function titleSlide() {
+      return `<section class="slide slide--title is-active" data-stage="TITLE" data-accent="red" aria-labelledby="title-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(0, "PROLOGUE")}<div class="slide-meta"><span>recovered cartridge / 30</span><span class="status status--foundation">fictional frame</span></div></header><div class="title-layout"><div class="copy title-copy"><div class="title-spider-note">${spiderSprite()}<div><span class="eyebrow">Recovered field manual / unreleased platformer</span><strong>The game never shipped.</strong></div></div><h1 id="title-heading">The Spider<br>in<br>Cartridge 0</h1><p class="lead">There was never a finished game. The real problem behind the fictional cartridge is Cassette: can a very large language model stay useful on a person’s Mac when its complete set of weights lives on an external drive?</p><p>The fiction gives the machine a level map. The build order is real: identity, storage, recovery, memory, execution, clients, training, and proof. This deck follows S00 through S28 until the finished product can show its work.</p><p class="title-quote">The full model stays on the cartridge. The Mac supplies the working window.</p></div><div class="diagram-frame" role="img" aria-label="The Cassette path from source to external cartridge to Apple working memory to agent"><div class="diagram-head"><span class="diagram-title">The missing game’s real map</span><span class="diagram-kicker">source → cartridge → working window → agent</span></div><div class="diagram-body">${diagramMarkup("route")}<div class="diagram-caption">Green rooms are built, red rooms are still ahead, and the spider marks the slide you are reading. The handoffs remain the subject: every stage gives the next one a smaller, clearer promise.</div></div></div></div><footer class="slide-footer"><span class="next">← / → move through the recovered cartridge · O opens the stage map</span><span class="source">Cassette truth: S01–S09 built · S10–S28 still to build</span></footer></div></section>`;
+    }
+
+    function stageSlide(stage, index) {
+      const statusLabel = stage.status === "done" ? "Built" : stage.status === "todo" ? "Still to build" : "Starting contract";
+      return `<section class="slide" data-stage="${stage.id}" data-accent="${stage.accent}" aria-labelledby="${stage.id.toLowerCase()}-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(index + 1, stage.id)}<div class="slide-meta"><span>${stage.id} / recovered stage log</span><span class="status status--${stage.status}">${statusLabel}</span></div></header><div class="stage-layout"><div class="copy"><div class="eyebrow">${stage.id} · ${stage.group}</div><h1 id="${stage.id.toLowerCase()}-heading">${stage.title}</h1><p class="lead">${stage.lead}</p><p>${stage.body}</p><div class="plain-box"><div class="plain-label">In plain English</div><p class="plain-copy">${stage.plain}</p></div><div class="fact-row"><div class="fact"><span class="label">Before</span><strong>${stage.before}</strong></div><div class="fact"><span class="label">This stage adds</span><strong>${stage.adds}</strong></div><div class="fact"><span class="label">After</span><strong>${stage.after}</strong></div></div><p class="proof-note">Contract / evidence: ${stage.proof}</p></div><div class="diagram-frame" role="img" aria-label="${stage.diagramAlt}"><div class="diagram-head"><span class="diagram-title">${stage.diagramTitle}</span><span class="diagram-kicker">${stage.diagramKicker}</span></div><div class="diagram-body">${diagramMarkup(stage.diagram)}<div class="diagram-caption">The map shows the spider's position in the sequence. The drawing is the claim: it shows what enters this stage, what changes here, and what the next stage is allowed to assume.</div></div></div></div><footer class="slide-footer"><span class="next">${stage.next}</span><span class="source">cartridge log ${String(index + 2).padStart(2, "0")} / 30</span></footer></div></section>`;
+    }
+
+    function render() {
+      slides.innerHTML = titleSlide() + stageData.map(stageSlide).join("");
+    }
+
+    function setSlide(next) {
+      const all = [...document.querySelectorAll(".slide")];
+      current = Math.max(0, Math.min(next, all.length - 1));
+      all.forEach((slide, index) => {
+        slide.classList.toggle("is-active", index === current);
+        slide.setAttribute("aria-hidden", index === current ? "false" : "true");
+      });
+      counter.textContent = `${String(current + 1).padStart(2, "0")} / ${all.length}`;
+      if (!document.body.classList.contains("is-overview")) window.scrollTo({top: 0, behavior: "instant"});
+    }
+
+    function toggleOverview() {
+      document.body.classList.toggle("is-overview");
+      if (!document.body.classList.contains("is-overview")) setSlide(current);
+    }
+
+    render();
+    setSlide(0);
+    document.getElementById("previous").addEventListener("click", () => setSlide(current - 1));
+    document.getElementById("next").addEventListener("click", () => setSlide(current + 1));
+    document.getElementById("overview").addEventListener("click", toggleOverview);
+    document.addEventListener("keydown", event => {
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") { event.preventDefault(); setSlide(current + 1); }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") { event.preventDefault(); setSlide(current - 1); }
+      if (event.key === "Home") { event.preventDefault(); setSlide(0); }
+      if (event.key === "End") { event.preventDefault(); setSlide(document.querySelectorAll(".slide").length - 1); }
+      if (event.key.toLowerCase() === "o") { event.preventDefault(); toggleOverview(); }
+    });
+  </script>
+</body>
+</html>
