@@ -444,11 +444,48 @@ steps:
     title: Preflight and compatibility decision
     env: any
     files: [sources.py]
+    discovered_scope: "tests/test_s11_preflight.py executes Q8/Q50/Q56. store.py exposes the existing Q53 calculation as one pure capacity_requirement so preflight and physical reservation cannot become separate byte authorities. sources.py remains the sole Q78 source, metadata, preflight, and transfer authority despite exceeding 800 physical lines; splitting the decision from its immutable source evidence would create another L2 authority and more plumbing."
     invariants: [Q8/Q50 acceptance (trust states, contradictory fixtures), Q56 acceptance (four outcomes, no silent weakening)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S09]
-    status: TODO
+    status: DONE 2026-08-08 — step commit e399d60; clean suite 25 passed in 52.89 seconds with no skips; ledger clean with 2,677 product LOC, 1,910 test LOC, 356 tool LOC, one process, one runtime, and four exact dependency pins
+    closeout:
+      - clause: "Q50 independent trust states, immutable authority, and retained contradictions"
+        test_or_probe: "tests/test_s11_preflight.py::test_q8_q50_q56_trust_conflicts_four_outcomes_and_no_silent_weakening"
+        input: "Submit one complete generated Q50 record whose card, config, source manifest, and parsed header evidence disagree about identity, bytes, artifact digests, and architecture. Add an equal-strength parsed-versus-digested architecture conflict."
+        expected: "Cassette-derived immutable Q9 artifact facts win for identity and exact artifact material; parsed config beats a declaration; every distinct contradiction remains recorded; unresolved peer immutable evidence becomes ABSENT rather than an invented winner."
+        observed: "The normalized record conformed to the generated schema. It retained all five deliberate conflicts, selected the exact resolved identity, model byte count, artifact count and digest, selected parsed architecture over its card declaration, and returned the tied architecture as ABSENT with its conflict intact."
+      - clause: "Q8 complete, incomplete, deceptive, mutable, gated, and custom-code records never acquire invented facts"
+        test_or_probe: "the complete, incomplete, active-parameter deception, mutable revision, gating, custom-code, weak-operator, and weak-context phases of the S11 fixture"
+        input: "Remove architecture and operators; present declared-only operators or context; make active parameters exceed total parameters; replace the immutable revision with main; remove required credential and license references; and set parsed custom_code true before and after filling unrelated missing metadata."
+        expected: "Unknowns remain None with exact bounded checks, malformed or mutable evidence is UNSUPPORTED, gating remains explicit, and neither false nor SUPPORTED is invented for absent or declaration-only technical facts."
+        observed: "Bounded unknowns returned METADATA_INSUFFICIENT and exact validator-bound ranges; the same unknowns without a deciding range returned UNSUPPORTED. Deceptive, mutable, ungated-authority, and custom-code inputs each retained their decisive cause, and filling operators did not weaken custom-code refusal."
+      - clause: "Q56 emits exactly four causal outcomes and cannot silently weaken a decisive refusal"
+        test_or_probe: "the native, preparation, bounded-range, unsupported-operator, unsupported-modality, and custom-code phases of the S11 fixture"
+        input: "Evaluate strong native evidence, a transformable model above native memory, bounded missing metadata, a foreign operator, an unrepresented vision modality, and custom code with then without unrelated unknowns."
+        expected: "The only classes are SUPPORTED, SUPPORTED_AFTER_PREPARATION, METADATA_INSUFFICIENT, and UNSUPPORTED. Preparation names Q17/Q18/Q19; a decisive unsupported cause survives added metadata."
+        observed: "All four classes occurred. Native support named one NATIVE mode; preparation named COMPILED and exact Q17/Q18/Q19 validation; bounded unknowns named their source range; foreign operator, vision modality, and custom code remained UNSUPPORTED with exact causes."
+      - clause: "Q53 preflight capacity includes every source payload, every Q51 checkpoint extent, and safety"
+        test_or_probe: "the independent exact-capacity calculation and one-byte-short phase of the S11 fixture"
+        input: "Preflight a 1 GiB plus 73 byte model artifact and a 101 byte metadata artifact. Independently calculate both 128 KiB plus 33-byte-per-4-MiB transfer-state extents and the 8 GiB Q53 safety reserve."
+        expected: "Equality admits; one byte less returns UNSUPPORTED with CAPACITY_EXCEEDED. Preflight reuses the same Q53 calculation later used by physical reservation."
+        observed: "Required capacity was exactly both payloads plus 270,658 checkpoint bytes plus 8 GiB. Equality returned SUPPORTED; one byte less returned UNSUPPORTED. reserve_capacity now consumes the same CapacityRequirement fields rather than maintaining duplicate arithmetic."
+      - clause: "Native memory accounts for runtime context and representation support"
+        test_or_probe: "the dense, sparse-active-byte, missing-active-bound, weak-context, and unsupported-modality phases of the S11 fixture"
+        input: "Supply a parsed 131,072-token context with a 128 MiB state bound; supply a sparse model with and without an exact active-byte bound; weaken context to DECLARED; and request vision against a text-only profile."
+        expected: "Native peak is weights plus context state. Sparse support requires a strong active-byte bound when the full representation does not fit. Declared context requires inspection, and an unsupported modality is refused even when its processor exists."
+        observed: "Dense peak included the 128 MiB state; sparse peak was exactly 728 MiB from 600 MiB active weights plus state; missing active bytes returned METADATA_INSUFFICIENT; declared context did the same; vision returned UNSUPPORTED_MODALITY:vision."
+      - clause: "The S11 fixture can disprove its consequential guards"
+        test_or_probe: "ten one-at-a-time mutations in disposable copies of step commit e399d60"
+        input: "Weaken resolved-manifest authority; remove custom-code refusal; allow declared operators; omit metadata payload capacity; choose one equal-trust conflict; drop Q18/Q19 preparation proof; omit transfer checkpoint capacity; omit context memory; allow declared context and modality evidence; and ignore unsupported modalities."
+        expected: "Each mutation makes the S11 fixture fail at the behavior owned by the changed guard."
+        observed: "All ten mutations were caught independently. Every run failed the single Q8/Q50/Q56 fixture; none produced a false green. The disposable mutation tree was removed afterward."
+      - clause: "S11 complete regression, accounting, and environment gate"
+        test_or_probe: "the pinned CPython 3.13 complete suite, tools/ledger.py, git diff checking, and hdiutil inspection after step commit e399d60"
+        input: "Run all fixtures on arm64 macOS with bytecode and pytest caches disabled; recompute commit law, generated integrity, tracked artifacts, imports, citations, pins, and runtime confinement; inspect mounted images."
+        expected: "All fixtures pass without a platform skip, the ledger reports no violation or new dependency/process/runtime/kernel/authority, the patch is clean, and no Cassette image remains mounted."
+        observed: "A first final run exposed a transient busy-volume detach in S06 and therefore did not close the gate. After detaching only that orphaned test image, S06 passed alone in 35.30 seconds and the clean complete run passed all 25 tests in 52.89 seconds. The ledger reported zero violations, 2,677 product LOC, 1,910 test LOC, 356 tool LOC, 58 generated LOC, one process, one Python runtime, and the same four pins. No Cassette test image remained mounted."
 
   - id: S12
     title: Runtime dispatch and golden operators
