@@ -2,6 +2,7 @@
 artifact_id: cassette-directed-research-evidence
 scope_mode: GENERAL_PRODUCT
 observed_at: 2026-08-05
+amended: 2026-08-09
 consumer: implementation-agent
 ---
 
@@ -107,7 +108,9 @@ personal configuration supplied evidence.
   irreducible numerical work is page-readiness and indexed gather only when no existing primitive
   preserves the selected representation. Model identity, semantic page maps, prediction, miss
   recovery, immutable revision commits, and canonical agent envelopes remain Cassette control-plane
-  responsibilities.
+  responsibilities. After E-012, compiled-plan certificate validation, condition selection,
+  description scheduling, and exact recording of fresh stochastic correction are also control-plane
+  responsibilities; no runtime supplies their mathematical authority.
 - **Authorities:**
   `https://github.com/ml-explore/mlx/blob/2c46b953db88965c4270cc7306eda6887a3247f2/mlx/io/load.cpp`,
   `https://github.com/ggml-org/llama.cpp/blob/360e1349f0009c5ad99d21e3c4546b707addc68a/src/llama-model-loader.cpp`,
@@ -155,8 +158,9 @@ personal configuration supplied evidence.
   its 113.60 GB fixed path must reread or transform that path; external streaming of the native fixed
   bytes on every token cannot approach a hosted service at consumer-removable-storage bandwidth.
   Therefore native mode is admissible only when its active graph and state fit. Smaller-memory K3
-  support requires a distinct compiled revision whose fixed and conditional working set satisfies
-  the same quality and service gates.
+  support requires a distinct Q19-certified compiled revision whose resident description and fresh
+  execution traffic satisfy the same quality and service gates. E-009 does not select a
+  representation theorem or imply that one prompt-fixed set exists.
 - **Supported questions:** Q2, Q4, Q7, Q11–Q20, Q37–Q48, Q53, Q59, Q63–Q70, Q80.
 
 ## E-010 — Bounded collision evidence
@@ -170,10 +174,11 @@ personal configuration supplied evidence.
   compression and conditioned pruning. The search found material collisions for every isolated
   ingredient, but no located artifact implemented the complete conjunction of: source-general
   direct acquisition to a removable authoritative cartridge; provenance-linked post-training
-  compilation into prompt-persistent executable pages; bounded Apple execution; cartridge-resident
-  writable derivative training and atomic revisions; named-agent protocol service; and one live
-  frontier-scale release matrix. The conjunction remains a candidate contribution, contingent on
-  Q80 live proof and a renewed search against the implemented mechanism.
+  compilation into a condition- and resource-certified executable revision; bounded Apple
+  execution; cartridge-resident writable derivative training and atomic revisions; named-agent
+  protocol service; and one live frontier-scale release matrix. This 2026-08-05 search did not test
+  the later E-012 mathematical conjunction. The contribution remains contingent on Q80 live proof
+  and a renewed search against the implemented mechanism.
 - **Authorities:**
   `https://machinelearning.apple.com/research/efficient-large-language`,
   `https://machinelearning.apple.com/research/pruning-large-language`,
@@ -194,9 +199,46 @@ personal configuration supplied evidence.
   or utilization loss. The former native-parity claim on C3 is therefore Q38-falsified by static
   bound, and the row is reclassified TEACHER_CORRECTNESS (Q39 v2). The same bound fixes the
   consumer thesis budget: on C1 at 153 GB/s, sustained Rd >= 10 tok/s requires
-  touched_bytes_per_token <= 15.3 GB at 100% utilization (~10.7 GB at 70%), which is the compiled
-  working-set envelope that the Q36 F4/F5 gates and Q37 prediction curves must clear.
+  touched_bytes_per_token <= 15.3 GB at 100% utilization (~10.7 GB at 70%). This is a physical
+  traffic envelope that every Q36 F4/F5 certificate and Q37 resource-frontier curve must clear; it
+  does not imply a prompt-fixed working set or any particular decomposition.
 - **Supported questions:** Q36–Q40, Q63, Q68, Q80.
+
+## E-012 — Mathematical-foundation cutover after S11
+
+- **Status:** `PROVED` for the statements proved in MATHS.md; `KNOWN` or `CONDITIONAL` where that
+  file marks a cited or hypothesis-bound result; recorded 2026-08-09 before S12.
+- **Method:** Define condition-wise projective loss on a declared matrix flattening, derive its
+  rank-bounded compatibility bifiltration, prove the atom-cover/minimal-nonface coloring identity,
+  construct every finite simplicial complex as a rank-one compatibility complex with common
+  positive-definite metric form and one ambient Hilbert-unitary orbit, classify exact
+  rank-preserving whitening, and separately audit Claude's seven-stage storage/probe argument.
+  No repository code, harness, or numerical exploration supplied a premise or proof.
+- **Result:** Higher-order condition compatibility is not determined by the 1-skeleton or by an
+  invariant constant on the declared projection-commuting ambient-unitary orbit. Exact whitening
+  preserves the rank variety only for product-form metrics, up to transpose. Atom count is a
+  hypergraph invariant.
+  Within a chosen atom, a resident description plus fresh residual-column sampling gives a valid
+  mean-square upper bound, but no matching converse, universal deterministic/randomized separation,
+  rate-distortion equality, or compressibility if-and-only-if was proved. Sequential execution and
+  selection from prompt observations therefore require separate composition and protected-support
+  contracts. The complete authoritative proof, nonclaims, resource vector, and Claude claim ledger
+  are in `../MATHS.md`.
+- **Known authorities:** Marcus and Moyls, DOI `10.4153/CJM-1959-008-0`; Westwick,
+  *Transformations on Tensor Spaces* (1967); Drineas, Kannan, and Mahoney, DOI
+  `10.1137/S0097539704442684`; Eckart and Young (1936); Blackwell, DOI
+  `10.1214/aoms/1177729032` (1953); Hadwin, Harrison, and Ward, DOI
+  `10.1090/S0002-9939-06-08094-4`, for rank-one partial-matrix cycle consistency; and Boege,
+  Petrović, and Sturmfels, DOI `10.1145/3476446.3536193`, for realization of simplicial complexes
+  as tensor-marginal rank patterns. These sources support component or adjacent results, not
+  Cassette's complete synthesis.
+- **Novelty boundary:** The closest collisions found were rank-one partial-matrix cycle consistency
+  and simplicial-complex-indexed marginal rank patterns. Neither supplies the positive-definite
+  condition-loss, shared-face-witness, uniform-threshold, single-orbit conjunction in Theorem 3.
+  That conjunction was derived in this work and not located in a bounded search. The search is not
+  exhaustive. No publication-novelty, priority, patent, implementation, or product claim follows.
+- **Supported questions:** Q7, Q11-Q12, Q14, Q17-Q21, Q27, Q33-Q40, Q47, Q58-Q64, Q68-Q70, Q75,
+  Q78, Q80.
 
 ## Evidence status boundary
 

@@ -1,9 +1,10 @@
-schema_version: 2
+schema_version: 3
 matrix_id: cassette-first-complete-release
 scope_mode: GENERAL_PRODUCT
 initial_status: NOT_RUN
-amended: 2026-08-05
+amended: 2026-08-09
 remit_authority: ../ORIGINAL_REMIT.md (amended 2026-08-05)
+mathematical_authority: ../MATHS.md (cutover after S11, before S12)
 thesis: >-
   Frontier-class capability on consumer Apple hardware: the cartridge carries the parameter mass,
   the consumer machine does the work it was built to do. Release gates measure the machine against
@@ -25,14 +26,15 @@ completion_rule:
   expression: >-
     every required expanded row is PASS and LIVE_PROVEN under its declared gate tier
     (FRONTIER_CLASS for thesis rows, floors plus Q17 PARITY tier for mild-transform rows,
-    correctness for TEACHER_CORRECTNESS rows), the F4 and F5 gates passed before any frontier
-    compiled row ran, Q78 exact accounting is PASS, Q79 offline proof is PASS, and no required
+    correctness for TEACHER_CORRECTNESS rows), every compiled row carries one independently
+    recomputable Q19 certificate, the F4 and F5 gates passed before any frontier compiled row ran,
+    Q78 exact accounting is PASS, Q79 offline proof is PASS, and no required
     row used a remote model at runtime or a personal-device anecdote
 
 threshold_contracts:
   quality: Q17 (tiered)
   long_tail_and_capacity: Q18 (tiered)
-  working_set: Q19
+  compiled_compatibility_and_execution_resource: Q19
   thermal: Q48
   service_gates: Q68 (floors / FRONTIER_CLASS / PARITY)
   tails: Q69
@@ -171,9 +173,12 @@ fixture_gate_rows:
     contract: Q36 F4 GATE
     model_class: 3-8B dense, permissive license
     pass_condition: >-
-      compiled prompt-persistent revision with touched_bytes_per_token <= 0.25 * native_active_bytes
-      passes Q19 stability and paired lower95CI(Qc/Q_teacher) >= 0.95 across Q15 strata within a
-      predeclared training budget
+      Q19-certified compiled revision covers the frozen Q15/Q16 protected conditions, independently
+      recomputes every atom/rank field, every per-atom and per-step resource table, every peak and
+      total description/metadata/fresh-read field, and every composed error/risk/horizon field;
+      train_dense_fixture_tier_a and train_dense_fixture_tier_b have PASS outcomes; touches no more
+      than 0.25 * native_active_bytes per token, and achieves paired
+      lower95CI(Qc/Q_teacher) >= 0.95 across Q15 strata within a predeclared training budget
     failure_consequence: Q38 record and mechanism revision before any frontier work
   - id: f5_gate
     required: true
@@ -181,8 +186,10 @@ fixture_gate_rows:
     contract: Q36 F5 GATE plus Q37 curves
     model_class: 20-120B sparse
     pass_condition: >-
-      F4 predicates at scale plus retention-versus-compression curves whose predicted frontier
-      point clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget
+      F4 predicates at scale; train_sparse_fixture_tier_a and train_sparse_fixture_tier_b have PASS
+      outcomes; plus
+      mathematical-resource-versus-quality/service frontier curves whose predicted feasible point
+      clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget
     failure_consequence: Q38 record and mechanism revision; frontier compiled rows remain refused
 
 source_rows:
@@ -225,14 +232,16 @@ execution_rows:
     apple_class: c1_air_32
     storage_class: s1_usb4_nvme_2tb
     model: frontier_reference (exemplar kimi_k3)
-    mode: COMPILED_PROMPT_PERSISTENT
+    mode: COMPILED_CERTIFIED
     precondition: f5_gate PASS
+    mathematical_certificate: Q19 required and independently recomputed
     gate_tier: FRONTIER_CLASS
     gates:
       - q68_usability_floors
       - q68_value_gate_vs_b_native_c1
       - q68_position_gate_vs_b_teacher
       - q18_capacity_proof
+      - q19_mathematical_certificate
       - q68_honesty_vector_published
     required_context_tests:
       - ordinary
@@ -247,6 +256,8 @@ execution_rows:
     storage_class: s1_usb4_nvme_2tb
     model: llama_4_scout
     mode: LEAST_INVASIVE_PASSING_Q40_MODE
+    allowed_q40_modes: [1, 2, 3]
+    on_no_passing_mode: FAIL_ROW_WITH_Q38_RECORD
     gate_tier: floors_plus_q17_parity_tier
     required_context_tests:
       - ordinary
@@ -260,6 +271,8 @@ execution_rows:
     storage_class: s2_tb5_nvme_2tb
     model: qwen3_235b_a22b
     mode: LEAST_INVASIVE_PASSING_Q40_MODE
+    allowed_q40_modes: [1, 2, 3]
+    on_no_passing_mode: FAIL_ROW_WITH_Q38_RECORD
     gate_tier: floors_plus_q17_parity_tier
     required_context_tests:
       - ordinary
@@ -294,9 +307,13 @@ execution_rows:
     apple_class: c3_ultra_512
     storage_class: s3_tb5_nvme_4tb_writable
     model: kimi_k3
-    mode: COMPILED_PROMPT_PERSISTENT
+    mode: COMPILED_CERTIFIED
     precondition: f5_gate PASS
+    mathematical_certificate: Q19 required and independently recomputed
     gate_tier: q68_usability_floors_plus_portability
+    gates:
+      - q19_mathematical_certificate
+      - q18_capacity_proof
     portability_assertions:
       - same_cartridge_pages_as_c1_row_no_weight_duplication (Q11, Q59)
     required_context_tests:
@@ -327,7 +344,7 @@ workload_suites:
       - q10_semantics
       - q17_quality_at_row_tier
       - q18_long_tail_at_row_tier
-      - q19_working_set
+      - q19_compiled_compatibility_and_execution_resource_when_compiled
       - q68_gate_tier_service
       - q69_tail_latency
   - id: sustained_q48
@@ -384,7 +401,8 @@ training_rows:
     required: true
     execution_row: exec_c1_s1_frontier_compiled
     operations:
-      - prompt_router_recovery_32768_traces
+      - compiled_condition_atom_description_estimator_recovery_32768_traces
+      - observation_and_composition_certificate_revalidation
       - every_precision_tier_recovery
   - id: train_c1_s1_scout_tier_a
     required: true
@@ -404,7 +422,8 @@ training_rows:
     required: true
     execution_row: exec_c3_s3_k3_compiled_portability
     operations:
-      - prompt_router_recovery_32768_traces
+      - compiled_condition_atom_description_estimator_recovery_32768_traces
+      - observation_and_composition_certificate_revalidation
       - every_precision_tier_recovery
   - id: train_dense_fixture_tier_a
     required: true
@@ -414,6 +433,30 @@ training_rows:
       - offline_adapter_dpo_1024_pairs
       - adapter_continued_pretraining_1048576_tokens
     assertion: same_drive_resident_dataflow_and_commit_path_as_frontier_rows
+  - id: train_dense_fixture_tier_b
+    required: true
+    fixture_stage: F4
+    operations:
+      - compiled_condition_atom_description_estimator_recovery_32768_traces
+      - observation_and_composition_certificate_revalidation
+      - every_precision_tier_recovery
+    assertion: regenerated_q19_certificate_matches_clean_derivation_and_committed_child
+  - id: train_sparse_fixture_tier_a
+    required: true
+    fixture_stage: F5
+    operations:
+      - adapter_sft_131072_tokens
+      - offline_adapter_dpo_1024_pairs
+      - adapter_continued_pretraining_1048576_tokens
+    assertion: same_drive_resident_dataflow_and_commit_path_as_frontier_rows
+  - id: train_sparse_fixture_tier_b
+    required: true
+    fixture_stage: F5
+    operations:
+      - compiled_condition_atom_description_estimator_recovery_32768_traces
+      - observation_and_composition_certificate_revalidation
+      - every_precision_tier_recovery
+    assertion: regenerated_q19_certificate_matches_clean_derivation_and_committed_child
 
 training_assertions:
   required_for_every_training_row:
@@ -427,6 +470,8 @@ training_assertions:
     - q73_atomic_child
     - q74_endurance_admission
     - resulting_revision_callable_through_all_agent_clients
+    - tier_b_regenerates_every_invalidated_q19_witness_when_applicable
+    - tier_b_incremental_certificate_matches_clean_derivation_when_applicable
 
 failure_rows:
   required: true

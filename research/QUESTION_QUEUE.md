@@ -1,8 +1,8 @@
 ---
 artifact_id: cassette-build-directed-question-queue
-version: 2
-amended: 2026-08-05
-amendment_authority: ORIGINAL_REMIT.md (amended 2026-08-05)
+version: 3
+amended: 2026-08-09
+amendment_authority: ORIGINAL_REMIT.md and MATHS.md (mathematical cutover after S11)
 scope_mode: GENERAL_PRODUCT
 question_count: 80
 producer: research-agent
@@ -19,6 +19,11 @@ named_instance_inspection: forbidden-unless-explicitly-added
 This queue governs research for a complete open-source Cassette system. Each answer must become a
 mathematical, computational, storage, training, reliability, or machine-protocol decision that a
 high-capability implementation agent can consume without repeating the research.
+
+The 2026-08-09 amendment replaces “prompt-persistent working set” as a general compiled premise.
+MATHS.md now requires separate compatibility, atom, description, execution-risk, composition, and
+observation questions. Historical source questions remain finite; their resolved packets in
+RESEARCH.md v3 carry the amended answers.
 
 ## Binding result
 
@@ -104,6 +109,11 @@ without translating an agent answer into a human decision.
 | \(Q_b\) | Quality score of the matched laboratory baseline. |
 | \(Q_c\) | Quality score of Cassette under an equivalent agent workload. |
 | \(T\) | Deterministic or trained transformation from source model representation to cartridge representation. |
+| \(K_{\eta,r}\) | Condition-indexed compatibility complex at representation tolerance \(\eta\) and declared flattening rank \(r\). |
+| \(a\) | Number of compiled atoms used to cover the protected condition set. |
+| \(b_{desc}^{peak},b_{desc}^{total},b_{meta}^{peak},b_{meta}^{total}\) | Peak simultaneously resident and total distinct description and mathematical-certificate metadata bytes, backed by per-atom and per-step tables. |
+| \(s^{max},s^{total},t_{fresh}^{max},t_{fresh}^{total}\) | Maximum one-step and total-horizon fresh stochastic work units and traffic. |
+| \(\varepsilon_{exec},\delta_{exec}^{total}\) | Compiled execution error scale and composed operation-and-horizon risk bound. |
 
 ## Research directions
 
@@ -113,10 +123,11 @@ Define what constitutes the full model, which representation is authoritative, w
 copies are permitted, and which invariants prove that the cartridge retains the model's complete
 capacity.
 
-### D2 — Mathematical capability preservation
+### D2 — Mathematical compatibility and capability preservation
 
-Formalize numerical equivalence, acceptable approximation, routing fidelity, long-tail capacity,
-quality variance, and the tests that distinguish preserved model behavior from a smaller surrogate.
+Formalize condition-indexed representation loss, atom capacity, description distortion, execution
+error/risk, observation adequacy, numerical equivalence, long-tail capacity, and the tests that
+distinguish preserved model behavior from a smaller surrogate.
 
 ### D3 — Apple computation and memory architecture
 
@@ -144,10 +155,12 @@ metadata, precision layers, and compilation recovery.
 Define prefill, decode, page loading, caching, eviction, compute scheduling, misses, context state,
 concurrency, cancellation, and model switching.
 
-### D8 — Working-set routing and adaptive precision
+### D8 — Certified compiled selection, execution, and adaptive precision
 
-Define shared and conditional parameters, request-level selection, token-level correction, page
-churn, memory adaptation, precision refinement, and post-training effects on those structures.
+Define compatibility atoms and their protected service faces, observation-bounded selection,
+resident descriptions, exact or fresh-stochastic correction, physical page traffic, memory
+adaptation, precision refinement, sequential composition, and post-training effects on the
+certificate.
 
 ### D9 — Drive-resident training
 
@@ -256,7 +269,7 @@ Directions: D5, D6, D7.
 ### Q8 — Pre-download suitability decision
 
 Determine which remotely available metadata is sufficient to classify model compatibility, required
-capacity, expected working-set behavior, training support, and missing custom operations before
+capacity, expected native-state or compiled-resource behavior, training support, and missing custom operations before
 transferring the full artifact. Emit a deterministic preflight record and the conditions that require
 deferred inspection.
 
@@ -304,8 +317,8 @@ Directions: D2, D14.
 
 ### Q14 — Request latency decomposition
 
-Determine which stages contribute to end-to-end agent response time and whether model preparation or
-working-set assembly belongs to request latency. Emit
+Determine which stages contribute to end-to-end agent response time and whether model preparation,
+condition selection, certificate resolution, or page assembly belongs to request latency. Emit
 \(L_{total}=L_a+L_p+nL_d+L_{protocol}+L_{tool}\), with each term's start, stop, cache state, and
 accounting rule.
 
@@ -338,34 +351,38 @@ Directions: D2, D14.
 
 ### Q18 — Preservation of long-tail parameter capacity
 
-Determine whether transformed routing and bounded working sets preserve rare capabilities encoded in
-\(P\), rather than reproducing only common tasks. Emit long-tail probes, attribution or ablation
-tests, required quality ratios, and evidence that unavailable pages have not become permanently
-unreachable.
+Determine whether the compiled compatibility cover, observation contract, and total contribution map
+preserve rare capabilities encoded in \(P\), rather than reproducing only common tasks. Emit the
+protected condition/test law, off-support behavior, long-tail probes, attribution or ablation tests,
+required quality ratios, and evidence that no contribution has become permanently unreachable.
 
 Directions: D2, D8, D14.
 
-### Q19 — Request-level working-set stability
+### Q19 — Compiled compatibility and execution-resource certificate
 
-Measure and formalize stability of \(W(r,t)\) across generation using page-union size, weighted
-Jaccard overlap, bytes loaded, churn rate, route entropy, and quality impact. Emit the stability
-condition under which prompt-persistent paging is admitted.
+Determine whether a compiled revision has a complete MATHS.md certificate: declared flattenings and
+condition metrics, compatibility complexes, rank-bounded atom witnesses and cover, observation
+contract, resident descriptions, exact or stochastic residual execution, error/risk bounds,
+operation-specific composition, certified horizon, and conversion to pages, bytes, memory, and
+latency. Emit one independently recomputable certificate and every causal exclusion.
 
 Directions: D2, D8.
 
-### Q20 — Mid-generation working-set miss semantics
+### Q20 — Certified page-readiness and execution-failure semantics
 
-Define the state transition when generation requires parameters outside the prepared working set.
-Emit detection, asynchronous acquisition, synchronization, timeout, fallback, output-integrity, and
-cache-update rules that preserve the model result without uncontrolled stalls.
+Define the state transition when a native path or compiled certificate names an absent or invalid
+page, when a stochastic schedule or seed is outside its contract, or when the certificate is stale.
+Distinguish planned fresh correction from a miss. Emit detection, asynchronous acquisition,
+synchronization, timeout, output-integrity, replay, and child-calibration rules without fallback.
 
 Directions: D7, D8, D10.
 
 ### Q21 — Supported training operation set
 
 Determine which operations Cassette must support for compatible models: adapters, LoRA, supervised
-fine-tuning, preference optimization, continued pretraining, router recovery, precision recovery, and
-full-weight updates. Emit capability predicates and numerical requirements for each operation.
+fine-tuning, preference optimization, continued pretraining, compiled-certificate recovery,
+precision recovery, and full-weight updates. Emit capability predicates and numerical requirements
+for each operation.
 
 Directions: D9.
 
@@ -411,9 +428,10 @@ Directions: D6, D9, D11.
 
 ### Q27 — Training invalidation graph
 
-Determine which changes to weights, routing, precision, tokenizer, context behavior, or operators
-invalidate page placement, prompt routing, caches, hardware plans, quality proofs, or compatibility
-manifests. Emit an explicit dependency graph and minimal recomputation rules.
+Determine which changes to weights, condition metrics, atom witnesses or selection, descriptions,
+residual estimators, observation contracts, composition bounds, precision, tokenizer, context
+behavior, or operators invalidate page placement, caches, hardware plans, quality proofs, or
+compatibility manifests. Emit an explicit dependency graph and minimal recomputation rules.
 
 Directions: D6, D8, D9.
 
@@ -459,9 +477,10 @@ Directions: D5, D6, D7, D9, D12.
 
 ### Q33 — Data-driven versus executable behavior
 
-Determine which architecture, layout, routing, precision, compatibility, and protocol variation can
-be represented in manifests or generated plans rather than handwritten branches. Emit the boundary
-between semantic model decisions, declarative data, deterministic harness code, and numerical kernels.
+Determine which architecture, layout, native routing, mathematical certificate, compiled selection,
+description, estimator, precision, compatibility, and protocol variation can be represented in
+manifests or generated plans rather than handwritten branches. Emit the boundary between semantic
+model decisions, declarative data, deterministic harness code, and numerical kernels.
 
 Directions: D6, D12.
 
@@ -484,9 +503,10 @@ Directions: D16.
 
 ### Q36 — Diagnostic fixture ladder
 
-Determine the smallest controlled artifacts that isolate parser, layout, paging, kernel, routing,
-training, and protocol defects without becoming Cassette's completion target. Emit a fixture ladder
-whose final mandatory stage is the full-scale acceptance model from Q39 and Q80.
+Determine the smallest controlled artifacts that isolate parser, layout, mathematical-certificate,
+paging, kernel, selection, stochastic-correction, training, and protocol defects without becoming
+Cassette's completion target. Emit a fixture ladder whose final mandatory stage is the full-scale
+acceptance model from Q39 and Q80.
 
 Directions: D2, D6, D7, D15.
 
@@ -501,7 +521,8 @@ Directions: D2, D14, D15.
 ### Q38 — Compatibility-bound falsification
 
 Define the lower-bound results that classify one model, Apple-compute, and storage tuple as
-incompatible, including bytes per token, compute, quality loss, latency, working-set instability, and
+incompatible, including bytes per token, compute, quality loss, latency, uncovered protected
+conditions, invalid representation or execution bounds, observation/horizon failure, and
 training-state requirements. Emit exclusion thresholds, a causal record, and the next mechanism or
 supported tuple to test; no failed tuple may terminate complete-system work or redefine a partial
 artifact as Cassette.
@@ -519,8 +540,9 @@ Directions: D3, D4, D14, D15.
 ### Q40 — Native structure versus model transformation
 
 Determine, per architecture class, whether Cassette can exploit existing sparsity and routing without
-changing the model or must apply deterministic reorganization, quantization recovery, router training,
-or broader post-training. Emit the least invasive transformation that satisfies Q12–Q20.
+changing the model or must apply deterministic reorganization, quantization recovery, a
+compatibility-certified atom/description/estimator transformation, or broader post-training. Emit the
+least invasive transformation that satisfies Q12–Q20 without prescribing one compiled mechanism.
 
 Directions: D2, D6, D8.
 
@@ -666,15 +688,16 @@ Directions: D1, D6.
 
 Define the invariant proving that every parameter, expert, precision contribution, tokenizer asset,
 operator, and required model semantic from Q1 remains represented and addressable after \(T\). Emit
-bijective mappings or explicit lossy transformations with bounded quality evidence.
+bijective mappings or explicit lossy relations from source contributions to atoms, descriptions,
+residual corrections, and bounded quality evidence.
 
 Directions: D1, D2, D6.
 
 ### Q59 — Multiple hardware plans without weight duplication
 
-Determine how one cartridge stores layouts, page orders, cache policies, precision budgets, and
-kernel plans for several Apple and storage classes while sharing the same parameter bytes. Emit the
-selection function and metadata-size bound.
+Determine how one cartridge stores layouts, page orders, Q19 certificate references, description
+and fresh-read budgets, precision budgets, and kernel plans for several Apple and storage classes
+while sharing the same parameter bytes. Emit the selection function and metadata-size bound.
 
 Directions: D3, D6, D8.
 
@@ -688,9 +711,10 @@ Directions: D6, D10.
 
 ### Q61 — Layout evolution after training
 
-Determine how changed activations, routing, precision, tensors, tokenizer state, or operators alter
-page clusters and execution plans. Emit incremental layout-update rules, thresholds requiring full
-recompilation, and preservation of prior valid revisions.
+Determine how changed protected conditions, metrics, compatibility witnesses, atom cover,
+observation contract, descriptions, residual estimators, composition bounds, precision, tensors,
+tokenizer state, or operators alter pages and execution plans. Emit digest-complete incremental
+update rules, conditions requiring a new certificate, and preservation of prior valid revisions.
 
 Directions: D6, D8, D9.
 
@@ -710,11 +734,12 @@ time-indexed placement and transfer schedule constrained by \(M\), \(B_s\), and 
 
 Directions: D3, D4, D7, D8.
 
-### Q64 — Working-set prediction failure
+### Q64 — Condition selection and compiled-certificate failure
 
-Determine how the runtime detects an incorrect request-level prediction before quality diverges,
-loads corrective pages, preserves deterministic token semantics, and updates future routing. Emit
-confidence measures, miss thresholds, synchronization, and bounded-stall behavior.
+Determine how native prefetch remains non-semantic and how compiled execution detects an
+off-support observation, false atom membership, stale certificate, invalid seed/adversary model, or
+exhausted horizon before quality diverges. Emit selection evidence, page synchronization, exact or
+seeded replay, rejection, and future-child calibration behavior.
 
 Directions: D7, D8, D14.
 
@@ -729,8 +754,9 @@ Directions: D7, D11, D14.
 ### Q66 — Long-context, multimodal, reasoning, and tool semantics
 
 Determine how context growth, vision encoders, reasoning history, structured output, dynamic tools,
-and multi-turn agent state alter storage, compute, protocol, quality, and working-set requirements.
-Emit capability-specific execution and acceptance contracts.
+and multi-turn agent state alter storage, compute, protocol, quality, condition compatibility,
+composition, certified horizon, and resident/fresh-resource requirements. Emit capability-specific
+execution and acceptance contracts.
 
 Directions: D2, D7, D11, D14.
 
@@ -803,9 +829,11 @@ Directions: D4, D9, D10.
 
 ### Q75 — Incremental recompilation after tuning
 
-Determine which trained changes can update routing, precision, page placement, quality evidence, and
-hardware plans incrementally. Emit dependency hashes, affected-component closure, recomputation
-algorithm, and conditions requiring a complete new cartridge revision.
+Determine which trained changes can update condition metrics, atom witnesses or selection,
+descriptions, residual estimators, observation/composition contracts, precision, page placement,
+quality evidence, and hardware plans incrementally. Emit dependency hashes, affected-component
+closure, recomputation algorithm, and conditions requiring a complete new certificate or cartridge
+revision.
 
 Directions: D6, D8, D9, D10.
 

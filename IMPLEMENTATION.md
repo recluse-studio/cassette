@@ -71,6 +71,13 @@ proven.
 
 ## PHASE MACHINE
 
+**Mathematical cutover, 2026-08-09.** S01-S11 remain closed: none implements a compiled selector,
+rank decomposition, prompt-fixed page set, or stochastic correction scheme. MATHS.md now governs
+S12 onward. Every future compiled plan separates condition compatibility, atom capacity,
+description distortion, execution error/risk, composition, observation adequacy, and physical
+resources. The former prompt-persistent/router mechanism remains eligible only as a certified
+special case.
+
 ```yaml
 steps:
   - id: S01
@@ -389,6 +396,7 @@ steps:
     discovered_scope: "tests/test_s10_transfer.py and tests/fixture_server.py execute Q51; store.py retains the sole digest authority; pyproject.toml pins the admitted continuation-state primitive; AGENTS.md records sources.py as the transfer-extent writer. errors.py and the existing S02 fixture correct an observed Q6 failure where frozen exception fields replaced an uncaught CassetteError at a generator-context boundary. sources.py remains one Q78 source boundary above 800 physical lines because splitting transfer from source authority would create another L2 authority and more plumbing."
     dependency_admission: "resumablesha256==1.0; subset: SHA-256 __getstate__/__setstate__ only; serves Q51 serialized_hash_state and one-readback transfer; Unlicense, 53,584-byte abi3 extension, no runtime dependencies or install hooks. The stdlib hashlib object cannot export continuation state, and prefix reconstruction reread completed cartridge bytes, so the dependency replaces authored cryptography and closes the measured Q51 gap."
     invariants: [Q51 acceptance (random interruption, corrupt chunks, validator change, no post-completion reread) against the fixture server]
+    acceptance_boundary: "A completed Q51 PartialState proves the transfer that produced it and permits transfer_artifact to return without a post-completion whole-object reread. It is not present-byte authority after return. A later consumer must verify the source extent against its immutable Q1/Q9 whole-object digest while consuming those bytes; S19 owns that read-time verification, S24 executes the first S10-to-S19 integration, and Q62 begins only after canonical pages and a root exist."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S09, S07]
@@ -510,40 +518,40 @@ steps:
         observed: "All 25 tests passed in 57.94 seconds with no skips. The ledger reported zero violations, 2,723 product LOC, 1,955 test LOC, 356 tool LOC, 58 generated LOC, one process, one Python runtime, and the same four exact pins. The patch was clean and no Cassette S06 or S08 image remained mounted."
 
   - id: S12
-    title: Runtime dispatch and golden operators
+    title: Mathematical-plan schemas, runtime dispatch, and golden operators
     env: macos
-    files: [pager.py, schema/ (generated dispatch table)]
-    invariants: [Q30 acceptance (golden tensors per dispatched dtype/shape/operator against reference), F2 fixtures; mlx confinement check in ledger]
+    files: [pager.py, tools/genschema.py, schema/ (generated dispatch and Q19 certificate tables)]
+    invariants: [Q30 acceptance (golden tensors per dispatched dtype/shape/operator against reference), Q33/Q40 acceptance (generated bounded schema represents every MATHS.md certificate dimension without executable or model-specific payload), F2 valid/malformed certificate and golden-operator fixtures; mlx confinement check in ledger]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03, S01]
     status: TODO
 
   - id: S13
-    title: Memory budget and residency schedules
+    title: Compatibility-certificate validation, memory budget, and residency schedules
     env: any
     files: [pager.py]
-    invariants: [Q47 acceptance (boundary sweeps on simulated profiles), Q63 schedule generation subset]
-    expected_size: medium
+    invariants: [Q19 acceptance (independently recompute flattening, ranks, witness losses, service faces, minimal nonfaces, atom cover, observation contract, description distortion, execution error/risk, composition maps, and horizon on exact generated matrices), Q47 acceptance (boundary sweeps on simulated profiles), Q63 certified schedule generation subset]
+    expected_size: large
     done_when: full suite + ledger green
     depends: [S12]
     status: TODO
 
   - id: S14
-    title: Page readiness, miss recovery, prediction hooks
+    title: Certified page readiness, stochastic correction, and selection failure
     env: macos
     files: [pager.py]
-    invariants: [Q20 acceptance (forced miss, corruption, timeout, cancel — replay-equal or typed termination), Q64 acceptance subset; F3 tiny-model fixtures]
+    invariants: [Q20 acceptance (forced absent/corrupt exact and sampled pages, stale certificate, out-of-contract seed, timeout, cancel — exact replay or seeded certified replay or typed termination), Q64 acceptance (native prefetch remains non-semantic; compiled selection rejects forged faces, off-support observations, and exhausted horizons); F3 tiny-model fixtures]
     expected_size: large
     done_when: full suite + ledger green
     depends: [S13, S08]
     status: TODO
 
   - id: S15
-    title: F3 end-to-end - tiny transformer from cartridge
+    title: F3 end-to-end - certified tiny transformer from cartridge
     env: macos
     files: [pager.py]
-    invariants: [F3 stage gates (forced misses, KV rollback), Q63 acceptance (trace equals schedule, no hidden allocation)]
+    invariants: [F3 stage gates (one exact description and one fresh-residual-sampling description, forced page failures, seeded reproduction, KV rollback), Q19 certificate remains valid across the declared trace horizon, Q63 acceptance (trace equals certified schedule, no hidden allocation or traffic)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S14, S05]
@@ -554,6 +562,7 @@ steps:
     env: any
     files: [broker.py]
     invariants: [Q5 acceptance (interrupt every transition, idempotent replay), Q6 acceptance (double issue, cancel every phase, typed failures, monotonic events), Q52 acceptance (the production acquisition state machine is unchanged across every source adapter)]
+    acceptance_boundary: "SOURCE_VERIFIED records that Q51 completed successfully; it does not make the source bytes callable or prove their present contents. The broker may advance toward PUBLISHED only after the owning preparation operation returns current-byte verification and a verified canonical root. The broker never reads source extents or treats PartialState as that verification."
     expected_size: large
     done_when: full suite + ledger green
     depends: [S03, S07, S10]
@@ -580,33 +589,34 @@ steps:
     status: TODO
 
   - id: S19
-    title: Streaming compiler and contribution map
+    title: Streaming compiler, contribution map, and mathematical certificate
     env: macos
     files: [compiler.py]
-    invariants: [Q4 acceptance (peak-extent instrumentation, interruption, resume), Q58 acceptance (total map, structural failure on omission), Q60 resume on small dense model]
+    invariants: [Q4 acceptance (peak-extent instrumentation, interruption, resume), Q19/Q40 acceptance (derive immutable condition metrics, atom witnesses, service faces, cover, observation contract, descriptions/residuals, execution-risk and composition certificate from canonical inputs), Q58 acceptance (total source-to-atom/description/residual map, structural failure on omission or detached certificate relation), Q60 resume on small dense model, Q51/Q60 source-consumption boundary (recompute each immutable source object's authoritative whole digest on the same reads used by compilation and reject changed completed extents before candidate-root publication), Q62 publication guard (verify canonical pages, mathematical certificate, and candidate root before generation publication)]
+    acceptance_boundary: "PartialState and its mutable chunk records locate resumable work but do not authorize present bytes. Compilation hashes each complete source object while consuming it, compares the result with immutable Q1/Q9 evidence before publication, and emits no root when the extent changed after transfer completion. This is not a separate post-completion transfer reread: the compiler hashes the bytes it must already read. After canonical publication, Q62 owns at-rest verification."
     expected_size: large
     done_when: full suite + ledger green
-    depends: [S05, S06, S12]
+    depends: [S05, S06, S10, S12]
     status: TODO
 
   - id: S20
-    title: Plans and invalidation graph
+    title: Certified hardware plans and mathematical invalidation graph
     env: any
     files: [compiler.py]
-    invariants: [Q11/Q59 acceptance (plan switch, zero weight payload in plans), Q27/Q75 acceptance (exact invalidation closure per change class)]
+    invariants: [Q11/Q59 acceptance (plan switch over one certificate, zero weight payload in plans, exact description/metadata/fresh-traffic budgets), Q27/Q61/Q75 acceptance (exact invalidation closure for condition metrics, atoms, cover, observation, description, residual estimator, composition, precision, and semantic changes)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S19]
     status: TODO
 
   - id: S21
-    title: Trainer - paged Tier A on cartridge
+    title: Trainer - paged Tier A and compiled-certificate Tier B
     env: macos
     files: [trainer.py]
-    invariants: [Q71 acceptance (tensor lifetime trace), Q72 acceptance (paged vs unpaged equivalence), Q73 child commit, Q25 interrupt/resume bit-exact, Q23 placement trace]
+    invariants: [Q21/Q70 Tier-A operations on frozen cartridge pages, Q21/Q70 Tier-B recovery operations over immutable condition/atom/description/estimator/observation/precision calibration records, Q71 acceptance (tensor lifetime trace), Q72 acceptance (paged vs unpaged equivalence), Q73 child commit, Q25 interrupt/resume bit-exact, Q23 placement trace; Tier-B output is a committed training artifact consumed through store and broker, never a trainer-owned certificate]
     expected_size: large
     done_when: full suite + ledger green
-    depends: [S15, S06]
+    depends: [S15, S06, S20]
     status: TODO
 
   - id: S22
@@ -630,30 +640,30 @@ steps:
     status: TODO
 
   - id: S24
-    title: F4 trace tooling and teacher capture
+    title: F4 protected-condition, metric, and teacher capture
     env: macos
     files: [compiler.py, tools/ (analysis, generated)]
-    invariants: [Q40 teacher trace capture on a permissively licensed 3-8B dense model (agent downloads via sources.py), Q19 metric computation machinery]
+    invariants: [Q40 immutable teacher trace capture on a permissively licensed 3-8B dense model (agent downloads via sources.py), Q18 protected condition/test-law construction including rare and off-support cases, Q19 condition-metric and compatibility-certificate input generation, Q51-to-Q58 integration (change one completed source byte after S10 returns and require S19 to reject it against the immutable whole-object digest before trace or root emission; preserve the clean path without a separate transfer reread)]
     expected_size: medium
     done_when: full suite + ledger green; trace corpus committed by digest
     depends: [S19, S10]
     status: TODO
 
   - id: S25
-    title: F4 compile and simulator replay
+    title: F4 certified compile and resource-frontier replay
     env: macos
     files: [compiler.py, tools/ (simulator, generated)]
-    invariants: [prompt-persistent 3-8B revision built end-to-end; Q19 stability metrics computed; Q37 retention-versus-compression curves emitted against recorded storage-class profiles]
+    invariants: [Q19-certified 3-8B revision built end-to-end; every protected condition covered or causally excluded; exact and fresh-stochastic paths replay under their declared contracts; Q70 Tier-A training completes on the dense fixture; Q70 Tier-B recovery consumes S21's committed calibration artifacts, regenerates every invalidated condition/atom/description/estimator/observation/precision witness, publishes one Q73 child, and matches a clean certificate derivation; Q37 curves emitted over atom count, rank, peak and total description/metadata bytes, peak and total fresh traffic, composed execution error/risk, horizon, quality, and service against recorded storage-class profiles]
     expected_size: large
     done_when: full suite + ledger green; curves committed
-    depends: [S24, S20]
+    depends: [S24, S20, S21]
     status: TODO
 
   - id: S26
     title: F4 GATE evaluation
     env: macos
     files: []
-    invariants: [Q36 F4 GATE - touched_bytes<=0.25*native_active, Q19 stability, paired lower95CI(Qc/Q_teacher)>=0.95 within predeclared training budget]
+    invariants: [Q36 F4 GATE - train_dense_fixture_tier_a and train_dense_fixture_tier_b both PASS, complete independently recomputed Q19 certificate over the frozen protected set, touched_bytes<=0.25*native_active, declared execution risk passes, and paired lower95CI(Qc/Q_teacher)>=0.95 within the predeclared training budget]
     expected_size: medium
     done_when: gate outcome recorded PASS or Q38-FALSIFIED with report; either outcome completes the step
     depends: [S25, S21]
@@ -698,7 +708,7 @@ steps:
   - id: L03
     title: F5 at 20-120B and F5 GATE
     env: macos+hardware
-    invariants: [Q36 F5 GATE - predicates at scale, Q37 predicted frontier point vs E-011 budget; PASS or Q38-FALSIFIED recorded]
+    invariants: [Q36 F5 GATE - train_sparse_fixture_tier_a and train_sparse_fixture_tier_b both PASS, Q19 predicates and peak/total resources at scale, Tier-B recovery regenerated every invalidated witness, Q37 predicted frontier point vs E-011 budget; PASS or Q38-FALSIFIED recorded]
     depends: [L02]
     status: TODO
   - id: L04

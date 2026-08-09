@@ -1,8 +1,8 @@
 ---
 artifact_id: cassette-build-directed-research
-version: 2
-amended: 2026-08-05
-amendment_authority: ORIGINAL_REMIT.md (amended 2026-08-05)
+version: 3
+amended: 2026-08-09
+amendment_authority: ORIGINAL_REMIT.md and MATHS.md (mathematical cutover after S11)
 scope_mode: GENERAL_PRODUCT
 source_queue: research/QUESTION_QUEUE.md
 research_status: COMPLETE
@@ -38,6 +38,13 @@ Q70, Q80. E-011 records the static falsification that reclassified the former C3
 as TEACHER_CORRECTNESS. Remit ruling on compute provenance: one-time frontier compilation may use
 recorded external compute; runtime inference and training remain local, so Q79 is unchanged.
 
+Amended 2026-08-09 after S11 and before S12: MATHS.md replaces the unproved assumption that every
+compiled revision is a prompt-fixed working set selected by one router. Compiled plans now require
+separate condition-compatibility, atom-capacity, description-distortion, execution-risk,
+composition, and observation-adequacy records. Fresh residual sampling is admitted as a conditional
+upper bound, not as a universal optimum or rate-distortion equality. Revised packets: Q7, Q11-Q12,
+Q14, Q17-Q21, Q27, Q33-Q40, Q47, Q58-Q64, Q68-Q70, Q75, Q78, Q80. E-012 records the proof boundary.
+
 ## Scope and authority
 
 - Product scope is `GENERAL_PRODUCT`: Apple Silicon and macOS classes, removable flash and SSD media
@@ -48,6 +55,8 @@ recorded external compute; runtime inference and training remain local, so Q79 i
   local model caches, personal accounts, signed-in sessions, or personal client configuration.
 - Research may write this ledger and bounded evidence artifacts under `research/`. Research does not
   authorize Cassette implementation, publication, account mutation, or messages to external parties.
+- [MATHS.md](../MATHS.md) is the sole mathematical authority for compiled representation and
+  execution. A packet may specialize it but may not merge or omit its resource dimensions.
 - The external cartridge remains the authoritative parameter, optimizer, checkpoint, journal, and
   trained-revision store. Unified memory may contain bounded transient working state; internal storage
   may contain Cassette code and non-model configuration, but no full checkpoint or prohibited training
@@ -59,7 +68,7 @@ recorded external compute; runtime inference and training remain local, so Q79 i
 |---|---|---|
 | G1 model identity and acquisition | Q1, Q3, Q7–Q10, Q50–Q58 | Trace official source manifests, model artifacts, formats, revision identities, and transfer contracts. |
 | G2 Apple and removable-storage path | Q2, Q11, Q30, Q41–Q49, Q63 | Trace buffers, copies, synchronization, filesystems, transports, memory budgets, and sustained device-class limits. |
-| G3 paging and execution | Q12–Q20, Q32–Q33, Q36–Q40, Q57–Q69 | Derive byte and compute bounds, then choose the runtime, layout, cache, router, and correction contracts. |
+| G3 compiled geometry and execution | Q12–Q20, Q32–Q33, Q36–Q40, Q57–Q69 | Derive compatibility, atom, description, execution-risk, byte, and compute bounds, then choose the runtime and plan. |
 | G4 drive-resident training and durability | Q21–Q28, Q53, Q60–Q62, Q70–Q75 | Trace tensor and optimizer lifetimes, write transactions, recovery, endurance, and invalidation. |
 | G5 agent protocols | Q5–Q6, Q9–Q10, Q31, Q49, Q52, Q65–Q67, Q76–Q77 | Trace discovery, request, stream, tool, cancellation, error, and training semantics for each named client. |
 | G6 qualification and proof | Q29, Q34–Q39, Q67–Q70, Q78–Q80 | Fix matched baselines, thresholds, code accounting, provenance, and the full live acceptance matrix. |
@@ -67,7 +76,7 @@ recorded external compute; runtime inference and training remain local, so Q79 i
 ## Dependency order
 
 1. Q1 fixes model identity; Q2–Q11 then fix authority, residency, acquisition, and compatibility.
-2. Q12–Q20 fix measurable equivalence and working-set behavior before runtime transformation is chosen.
+2. Q12–Q20 fix measurable equivalence and the compiled resource certificate before a runtime transformation is chosen.
 3. Q21–Q28 fix writable-model semantics before the on-cartridge format and transaction system close.
 4. Q29–Q33 fix code ownership and protocol authority before component boundaries become binding.
 5. Q36–Q40 and Q41–Q69 fix the controlled-reference, hardware, compiler, runtime, and evaluation path.
@@ -216,14 +225,14 @@ question_id: Q7
 state: CLOSED
 decision: "Compatibility is a predicate over graph semantics, executable operators, representation, active-state bounds, transformability, and acceptance evidence; architecture labels alone never imply support."
 formal_contract:
-  symbols: "supported(I,h,s,mode) = parsed(I) and operators(I) subset dispatch(h) and state_bound(I,mode)<=M(h) and io_bound(I,mode,s) passes Q68 and semantics(I) represented and quality(I,mode) passes Q17/Q18. mode is NATIVE or COMPILED."
-  applicability: "Dense models use NATIVE only when all active weights fit; sparse MoE may use native routing and prefetch; multimodal, linear-attention, and recurrent models require their processors and state transitions; quantized models require exact codecs; custom operators require Q55 containment."
+  symbols: "supported(I,h,s,mode) = parsed(I) and operators(I) subset dispatch(h) and state_bound(I,mode)<=M(h) and io_bound(I,mode,s) passes Q68 and semantics(I) represented and quality(I,mode) passes Q17/Q18 and (mode=NATIVE or compiled_certificate(I,mode) passes Q19). mode is NATIVE or COMPILED_CERTIFIED."
+  applicability: "Dense models use NATIVE only when all active weights fit; sparse MoE may use native routing and prefetch; compiled modes use the MATHS.md certificate rather than an assumed router. Multimodal, linear-attention, and recurrent models require their processors and state transitions; quantized models require exact codecs; custom operators require Q55 containment."
 evidence:
   - status: OBSERVED
     result: "E-001 shows that a sparse label does not make Kimi K3's 139.43 GB native active representation fit a 32 GB class."
   - status: SPECIFIED
     result: "E-006 identifies reusable operator runtimes."
-build_instruction: "Emit a per-revision compatibility manifest with predicate inputs, mode, unsupported operators, memory/I/O bounds, training tier, and evidence IDs."
+build_instruction: "Emit a per-revision compatibility manifest with predicate inputs, mode, unsupported operators, memory/I/O bounds, training tier, evidence IDs, and the Q19 mathematical certificate for every compiled mode."
 acceptance_check: "Evaluate representative dense, MoE, multimodal, recurrent/linear-attention, quantized, and custom-op fixtures; each result must be deterministic and any SUPPORTED result must lead to a passing Q80 row."
 depends_on: [Q1, Q2]
 reopen_only_if: "A new operator or representation gains a qualified dispatch path."
@@ -295,11 +304,11 @@ state: CLOSED
 decision: "One cartridge carries content-addressed parameter pages plus several small execution plans; plans select and schedule shared bytes but do not duplicate P."
 formal_contract:
   symbols: "plan* = argmin_plan predicted_Ltotal(plan,h,s,request_class) subject to memory(plan,h)<=M(h), bandwidth(plan,s), operator(plan,h), and quality(plan) constraints; |plans+indexes| <= min(0.01*|P_bytes|, 4 GiB) per executable revision."
-  applicability: "Plans may differ in read grouping, cache budget, precision layers, kernel dispatch, and concurrency. A different tensor transform or trained router creates a new executable revision, not merely a plan."
+  applicability: "Plans may differ in read grouping, description budget, fresh-sampling budget, precision layers, kernel dispatch, and concurrency while retaining one mathematical certificate. Different atom values, condition metrics, description reconstruction, or trained selector semantics create a new executable revision, not merely a plan."
 evidence:
   - status: SPECIFIED
     result: "E-003 and E-005 define compute and storage-class inputs; E-006 supports runtime plan variation over shared weights."
-build_instruction: "Store hardware-neutral semantic pages once, profile the current declared class at activation, validate its measured envelope, and choose only a plan whose recorded assumptions hold."
+build_instruction: "Store hardware-neutral semantic pages once, profile the current declared class at activation, validate its measured envelope and Q19 resource certificate, and choose only a plan whose recorded assumptions hold."
 acceptance_check: "Move the same cartridge among all Q39 classes, select the expected plan without rewriting weight pages, and reject or recompile when no plan satisfies the measured class."
 depends_on: [Q1, Q3, Q7]
 reopen_only_if: "A required kernel layout cannot reference shared semantic pages without material weight duplication."
@@ -310,15 +319,15 @@ reopen_only_if: "A required kernel layout cannot reference shared semantic pages
 ```yaml
 question_id: Q12
 state: CLOSED
-decision: "Service behavior at every gate tier is evaluated by a vector, never a single token-rate average."
+decision: "Service behavior at every gate tier is evaluated by a vector that retains both agent-visible service and the mathematical resources consumed; neither may be collapsed to a token-rate average."
 formal_contract:
-  symbols: "V={La_ms,Lp_ms,Ld_ms[token],Rd_tok_s,Ttask_ms,interruptions,stalls,error_rate,availability,Qc_over_Qb,bytes_read,bytes_written,peak_UM}; report count, p50, p95, p99, max, mean, standard deviation, and 95% confidence interval per workload stratum and cache state."
+  symbols: "V={La_ms,Lp_ms,Ld_ms[token],Rd_tok_s,Ttask_ms,interruptions,stalls,error_rate,availability,Qc_over_Qb,bytes_read,bytes_written,peak_UM,eta_rep,epsilon_exec,delta_exec_total,atom_count,rank_budget,description_bytes_peak,description_bytes_total,metadata_bytes_peak,metadata_bytes_total,fresh_samples_max,fresh_samples_total,fresh_bytes_max,fresh_bytes_total,certified_horizon}; report count, p50, p95, p99, max, mean, standard deviation, and 95% confidence interval per workload stratum, mathematical certificate, and resident state."
   applicability: "Cold means no reusable parameter/KV pages for the revision; warm means the declared cache state is pre-established and recorded; sustained means at least 30 minutes and 10,000 generated tokens unless a workload naturally exceeds both."
 evidence:
   - status: INFERRED
     result: "E-009 separates storage, memory, and compute lower bounds."
-build_instruction: "Timestamp request admission, page readiness, prefill begin/end, each committed token, stream delivery, tool transitions, and terminal result using a monotonic clock; record physical bytes and thermal session position."
-acceptance_check: "Recompute every aggregate from an append-only trace and reject results missing cold/warm label, denominator, stratum, baseline ID, or tail distribution."
+build_instruction: "Timestamp request admission, certificate selection, description readiness, each fresh correction read, prefill begin/end, each committed token, stream delivery, tool transitions, and terminal result using a monotonic clock; record physical bytes, certificate identity, and thermal session position."
+acceptance_check: "Recompute every aggregate from an append-only trace and reject results missing resident-state label, mathematical certificate, denominator, stratum, baseline ID, or tail distribution."
 depends_on: [Q2]
 reopen_only_if: "A supported protocol introduces an agent-visible latency phase absent from V."
 ```
@@ -351,14 +360,14 @@ reopen_only_if: "A stronger reproducible baseline identity is published, or a su
 ```yaml
 question_id: Q14
 state: CLOSED
-decision: "Prompt-selected page assembly is request latency and belongs to La; prior model installation or compilation does not."
+decision: "Condition selection, certificate validation, resident-description assembly, and prefill-required fresh reads are request latency and belong to La; prior model installation or compilation does not."
 formal_contract:
-  symbols: "Ltotal = Lqueue + La + Lp + sum_i(Ld_i) + Lprotocol + Ltool; La starts when an admitted request begins working-set prediction and ends when all prefill-required pages are validated resident; Lp ends when the first decode step is ready; each Ld_i ends when token i is committed; protocol and tool time are separately measured, never hidden."
+  symbols: "Ltotal = Lqueue + La + Lp + sum_i(Ld_i) + Lprotocol + Ltool; La starts when an admitted request begins condition/certificate selection and ends when its description, metadata, and prefill-required pages are validated resident; Lp ends when the first decode step is ready; each Ld_i ends when token i is committed; protocol and tool time are separately measured, never hidden."
   applicability: "Cold and warm runs use the same boundaries. Download, model compilation, and training are lifecycle operation times reported separately."
 evidence:
   - status: INFERRED
     result: "E-005 and E-009 show that assembly consumes externally bounded I/O and must be visible."
-build_instruction: "Emit nested trace spans with no overlapping double count and preserve both model-only and complete agent-task totals."
+build_instruction: "Emit nested spans for condition selection, certificate validation, description assembly, fresh correction reads, and the existing latency phases with no overlapping double count; preserve both model-only and complete agent-task totals."
 acceptance_check: "For every run, reconstruct wall-clock terminal time from spans within one clock-resolution unit; fail on omitted assembly, queue, tool, or stream delivery time."
 depends_on: [Q12]
 reopen_only_if: "A protocol changes the observable request start or terminal delivery boundary."
@@ -405,15 +414,15 @@ reopen_only_if: "A declared model or agent capability lacks an executable fixtur
 ```yaml
 question_id: Q17
 state: CLOSED
-decision: "Native and transformed revisions use separate equivalence gates; sampler variance is paired before transformation loss is estimated."
+decision: "Native and transformed revisions use separate equivalence gates; output-sampler variance, compiled representation loss, and stochastic execution error are identified separately before any aggregate is estimated."
 formal_contract:
   symbols: "For deterministic native runs, require identical rendered input, state transitions, and token sequence; if a reused kernel is non-bitwise, require same token sequence plus recorded max_abs_logit_error<=1e-3 and KL<=1e-4. For transformed runs, use paired prompts and seeds, >=30 paired stochastic trials per critical stratum, lower95CI(Qc/Qb)>=0.97 overall and >=0.95 per critical stratum; error or refusal regressions may not exceed 0.5 percentage points."
-  applicability: "Ratios use the same scorer and denominator. The 0.97/0.95 bounds define the PARITY tier: required for NEAR_LABORATORY labels and for mildly transformed rows (Q40 modes 1-3). Prompt-persistent frontier revisions are release-gated by Q68 FRONTIER_CLASS using this same paired methodology against B_native and B_teacher, with the full Qc/Q_teacher vector reported unconditionally. Exact thresholds may be tightened per model, never weakened after compatibility publication without a new tier name."
+  applicability: "Ratios use the same scorer and denominator. The 0.97/0.95 bounds define the PARITY tier: required for NEAR_LABORATORY labels and for mildly transformed rows (Q40 modes 1-3). Q19-certified compiled frontier revisions are release-gated by Q68 FRONTIER_CLASS using this same paired methodology against B_native and B_teacher, with the full Qc/Q_teacher vector reported unconditionally. Prompt persistence is only one possible certified description specialization. Exact thresholds may be tightened per model, never weakened after compatibility publication without a new tier name."
 evidence:
   - status: CHOSEN
     result: "Paired trials separate sampler and harness variance from transformation, precision, and routing effects."
-build_instruction: "Log seeds, logits where available, routes, precision pages, harness IDs, and paired scores; attribute each divergence before aggregating it."
-acceptance_check: "Inject sampler-only, quantization, routing, and harness perturbations and verify attribution; fail on either confidence-bound or hard-stratum regression."
+build_instruction: "Log output-sampler seeds, compiled-execution seeds, atom and condition IDs, description and residual identities, logits where available, source-native routes, precision pages, harness IDs, and paired scores; attribute each divergence before aggregating it."
+acceptance_check: "Inject output-sampler-only, representation, compiled-execution, quantization, source-routing, and harness perturbations and verify attribution; fail on either confidence-bound, declared Q19 risk bound, or hard-stratum regression."
 depends_on: [Q12, Q13, Q15, Q16]
 reopen_only_if: "A scorer lacks ratio meaning or a deterministic operator cannot satisfy the native trace condition."
 ```
@@ -423,51 +432,51 @@ reopen_only_if: "A scorer lacks ratio meaning or a deterministic operator cannot
 ```yaml
 question_id: Q18
 state: CLOSED
-decision: "Complete capacity requires 100% addressability plus behavioral evidence that rare pages remain selectable and consequential; common-task imitation is insufficient."
+decision: "Complete capacity requires 100% source-contribution addressability plus behavioral evidence that rare and protected conditions remain covered and consequential; common-task imitation is insufficient."
 formal_contract:
-  symbols: "reachability = addressed_source_contributions/required_source_contributions = 1; partition pages by activation-frequency decile plus never-observed set. Reachability, page-selection recall>=0.99 against teacher attribution on qualified probes, and a statistically significant score/logit change under targeted page ablation where the teacher shows one bind every tier. Long-tail behavioral bounds are tiered: PARITY requires lower95CI(Qc/Q_teacher)>=0.95; FRONTIER_CLASS requires lower95CI(Qc/Q_native)>=1.15 on long-tail and capacity strata with the full Qc/Q_teacher long-tail vector reported (Q68). Long-tail advantage over B_native is the thesis capacity proof: it demonstrates that the mass on the cartridge is present, reachable, and consequential."
-  applicability: "Native routing uses source route attribution. Compiled routing uses teacher activation, gradient, and ablation attribution recorded by transform revision."
+  symbols: "reachability = addressed_source_contributions/required_source_contributions = 1; partition contributions by activation-frequency decile plus never-observed set. A compiled certificate must cover every declared protected condition, retain every minimal-nonface or exclusion record, and declare its observation/test-law boundary. Reachability plus a statistically significant score/logit change under targeted contribution ablation where the teacher shows one bind every tier. Long-tail behavioral bounds are tiered: PARITY requires lower95CI(Qc/Q_teacher)>=0.95; FRONTIER_CLASS requires lower95CI(Qc/Q_native)>=1.15 on long-tail and capacity strata with the full Qc/Q_teacher long-tail vector reported (Q68)."
+  applicability: "Native routing uses source route attribution. Compiled revisions use their MATHS.md atom cover, protected-condition law, total contribution map, and teacher activation/gradient/ablation evidence; off-support conditions are rejected or separately qualified, never inferred from similarity."
 evidence:
   - status: INFERRED
     result: "Q1 identity and E-009 imply that omitted or permanently unreachable contributions define a smaller model, regardless of common benchmark score."
-build_instruction: "Generate rare-domain and rare-route probes from source activation traces, include never-selected pages in adversarial search, and store route/ablation evidence by revision."
-acceptance_check: "Make one mapped page unreachable and require both structural reachability failure and at least one targeted behavioral failure; no unreachable contribution may pass."
+build_instruction: "Generate rare-domain and rare-route conditions from source traces, include never-observed contributions in adversarial search, compute the compatibility cover on the protected set, and store cover, exclusion, observation, and ablation evidence by revision."
+acceptance_check: "Make one mapped contribution unreachable, remove one protected condition from the cover, and supply one off-support condition without a declared decision rule; require structural failure before activation and the applicable targeted behavioral failure."
 depends_on: [Q1, Q15, Q17]
 reopen_only_if: "A model contribution has no executable attribution or ablation boundary, requiring a different completeness proof."
 ```
 
-## Q19 — Request-level working-set stability
+## Q19 — Compiled compatibility and execution-resource certificate
 
 ```yaml
 question_id: Q19
 state: CLOSED
-decision: "Prompt-persistent paging is a per-revision measured admission mode, not an assumed property; no model revision receives that label before its qualification traces pass the stability predicate."
+decision: "A compiled revision is callable only through a MATHS.md certificate that separately proves condition compatibility, atom capacity, description distortion, stochastic or deterministic execution error, observation adequacy, and the physical conversion to resident bytes and fresh traffic. A prompt-fixed page set is one optional description class, not the general mechanism."
 formal_contract:
-  symbols: "Let P_r be the pages prepared before decode and R_t the pages required at token t. coverage=sum_t bytes(R_t intersect P_r)/sum_t bytes(R_t); weighted_J_t=bytes(R_t intersect P_r)/bytes(R_t union P_r); churn=sum_t bytes(R_t-P_r)/(n*bytes(P_r)); miss_tokens=|{t:R_t not_subset P_r}|/n. Admit iff p05(coverage)>=0.995, p05(weighted_J)>=0.99, p95(churn)<=0.001, p95(miss_tokens)<=0.01, union(P_r,R_1..R_n) fits M, and Q17/Q18/Q68 pass."
-  applicability: "Measured separately by model revision, plan, memory class, workload stratum, and context range. Native routers remain semantic authority; prompt predictors prefetch only."
+  symbols: "For every declared flattening and target T, certificate={field,shape,T_digest,conditions V,metric_digests C_v,eta_rep,rank r,atoms A_i,service_faces F_i,minimal_nonfaces,atom_cover,observation_contract,description_class,B_i,residual_relation,epsilon_exec,delta_exec_total,sampling_law?,per_atom_resource_tables,per_step_resource_tables,description_bytes_peak,description_bytes_total,metadata_bytes_peak,metadata_bytes_total,fresh_samples_max,fresh_samples_total,fresh_bytes_max,fresh_bytes_total,composition_maps,certified_horizon}. Require V=union_i F_i; rank(A_i)<=r; ell_v([A_i])<=eta_rep for v in F_i; every evaluated but excluded condition has a causal record; every stochastic estimator states fresh/private-coin and adversary hypotheses. For the MATHS.md residual sampler, E||Y-A_i x||^2<=||A_i-B_i||_F^2||x||^2/s and Pr(||Y-A_i x||>epsilon_exec||A_i||_F||x||)<=delta_exec under its declared sufficient sample bound, with operation-level risk composed into delta_exec_total. The physical schedule must satisfy Q47/Q68."
+  applicability: "Certified separately by immutable revision, plan, Apple/storage class, protected condition and trace family, context range, and observation experiment. Native source routing remains semantic authority and does not require a compiled atom cover."
 evidence:
   - status: INFERRED
-    result: "E-001 provides exact per-expert bytes but no generation routes; therefore Kimi K3 or any other revision remains unadmitted until live route traces satisfy this predicate."
-build_instruction: "Trace exact required page IDs, bytes, prediction confidence, corrections, and output quality for all Q15 cases; publish the aggregate with the plan."
-acceptance_check: "Run Q15 with a cold cache, recompute every metric, and refuse prompt-persistent mode if any bound fails; a failed model may use native resident mode or an explicitly different compiled revision."
+    result: "E-012 proves that arbitrary higher-order compatibility obstructions can occur inside one orbit of ambient unitaries commuting with the declared coordinate projections. The compatibility complex is therefore not determined by an invariant constant on that orbit; examples with the same 1-skeleton also show that pairwise feasibility is insufficient. E-012 proves only an upper bound for fresh residual sampling; no rate-distortion converse is available."
+build_instruction: "Generate the complete certificate from immutable teacher/target evidence, recompute rank and every witness loss, preserve the face cover and exclusions, validate the execution bound, then convert its resources to exact pages, bytes, memory, and measured latency. Store the certificate by digest in the executable revision."
+acceptance_check: "On generated exact matrices, realize a face, a pairwise-compatible minimal nonface, a generic metric whose whitening changes rank, a valid residual sampler, a stale certificate, an uncovered protected condition, and an off-support condition. Admit only the exact covered cases whose mathematical and physical bounds both pass; recompute the certificate independently from canonical inputs."
 depends_on: [Q12, Q15, Q17, Q18]
-reopen_only_if: "Q68 cannot be met despite this stability predicate or live traces justify a stricter bound."
+reopen_only_if: "A certified plan exposes a missing mathematical resource, a claimed theorem fails, or a less restrictive proved certificate can pass a tuple this contract excludes."
 ```
 
-## Q20 — Mid-generation working-set miss semantics
+## Q20 — Certified page-readiness and execution-failure semantics
 
 ```yaml
 question_id: Q20
 state: CLOSED
-decision: "A miss stalls before the first operator that needs the absent page; Cassette loads and verifies the exact page or terminates the run without committing the affected token. It never substitutes a smaller expert, remote result, zero page, or lower-quality branch."
+decision: "Every page named by the selected native path or compiled certificate must be validated before its first consumer. An absent planned page stalls or terminates before the affected token; declared stochastic correction is planned execution, not a miss or fallback. Cassette never substitutes a smaller expert, remote result, zero page, or uncertified branch."
 formal_contract:
-  symbols: "PageState: ABSENT -> ACQUIRING -> HASHED -> RESIDENT -> GPU_SUBMITTED -> RECLAIMABLE, with FAILED terminal for that acquisition; invariant required_pages(graph(r,t)) subset validated_resident_pages before command submission; timeout yields WORKING_SET_TIMEOUT and preserves replay input and last committed model state."
-  applicability: "Native mode follows the source router exactly. Compiled mode follows the router encoded in its distinct Q1 revision."
+  symbols: "PageState: ABSENT -> ACQUIRING -> HASHED -> RESIDENT -> GPU_SUBMITTED -> RECLAIMABLE, with FAILED terminal for that acquisition; invariant planned_pages(native_graph or certified_schedule,r,t,seed) subset validated_resident_pages before command submission. Timeout yields WORKING_SET_TIMEOUT and preserves replay input, certificate identity, execution seed, and last committed model state. Certificate mismatch or undeclared execution risk terminates before submission with one canonical typed error."
+  applicability: "Native mode follows the source router exactly. Compiled mode follows its immutable atom, description, sampling, composition, and observation certificate; fresh samples are drawn only under the certificate's coin/adversary model."
 evidence:
   - status: SPECIFIED
     result: "E-004 supplies asynchronous load and synchronization primitives; E-005 supplies disconnect/error conditions."
-build_instruction: "Evaluate routing early, schedule range reads, verify page digest before publication, fence compute on readiness, checkpoint recurrent state before speculation, and update only predictor statistics after a miss."
-acceptance_check: "Force predicted and unpredicted misses, corruption, timeout, cancellation, and disconnect at every layer; output must equal a no-miss replay or end before the affected token with one typed error."
+build_instruction: "Resolve the native route or compiled certificate before command encoding, schedule its declared reads, verify page digests, fence compute on readiness, checkpoint recurrent state before stochastic execution, and retain the exact seed and sample record required by Q17."
+acceptance_check: "Force absent planned pages, corrupt sampled pages, stale descriptions, out-of-contract seeds, timeout, cancellation, and disconnect at every layer. Exact paths must equal a no-failure replay; stochastic paths must reproduce from their recorded seed and certificate or end before the affected token with one typed error."
 depends_on: [Q2, Q10, Q19]
 reopen_only_if: "A model graph cannot expose page requirements before an irreversible state update."
 ```
@@ -477,9 +486,9 @@ reopen_only_if: "A model graph cannot expose page requirements before an irrever
 ```yaml
 question_id: Q21
 state: CLOSED
-decision: "Training support is tiered by persistent state and operator proof: Tier A requires adapter/LoRA SFT, adapter continued pretraining, and offline adapter DPO; Tier B adds router and precision-recovery tuning for compiled revisions; Tier C permits full-weight updates only for tuples whose exact state, I/O, endurance, and quality bounds pass admission."
+decision: "Training support is tiered by persistent state and operator proof: Tier A requires adapter/LoRA SFT, adapter continued pretraining, and offline adapter DPO; Tier B adds recovery of the compiled compatibility, description, estimator, observation, and precision certificate; Tier C permits full-weight updates only for tuples whose exact state, I/O, endurance, and quality bounds pass admission."
 formal_contract:
-  symbols: "trainable(op,I,h,s) = gradients_supported(op,I) and state_bytes(op,I)<=capacity_free and peak_UM(op,I)<=M and projected_writes<=endurance_budget and exact_restart=true. Tier A has trainable parameter count N_a << |P|; Tier B restricts updates to router/calibration/recovery tensors; Tier C has N_train=|P_trainable|."
+  symbols: "trainable(op,I,h,s) = gradients_supported(op,I) and state_bytes(op,I)<=capacity_free and peak_UM(op,I)<=M and projected_writes<=endurance_budget and exact_restart=true. Tier A has trainable parameter count N_a << |P|; Tier B restricts updates to atom/selector/description/estimator/observation calibration and precision-recovery tensors declared by the compiled revision; Tier C has N_train=|P_trainable|."
   applicability: "A compatible inference tuple need not qualify for Tier C. Every published training capability names model revision, operation, precision, optimizer, dataset bound, and storage class."
 evidence:
   - status: INFERRED
@@ -585,14 +594,14 @@ reopen_only_if: "A target format adds a previously absent required semantic repr
 ```yaml
 question_id: Q27
 state: CLOSED
-decision: "Training invalidation follows content dependencies, not broad rebuild folklore; only the transitive consumers of changed hashes are recomputed."
+decision: "Training invalidation follows content and mathematical-certificate dependencies, not broad rebuild folklore; only the transitive consumers of changed hashes are recomputed."
 formal_contract:
-  symbols: "weights -> {page_stats,page_layout,prompt_router,precision_calibration,kernel_plan,quality_proof,cache_key}; router -> {working_set_plan,quality_proof,cache_key}; precision -> {page_bytes,kernel_plan,quality_proof}; tokenizer/template/context/operators -> {semantic_manifest,trace_corpus,router,plans,quality_proof,protocol_capabilities}; invalidate(x)=transitive_consumers(changed_digest(x))."
+  symbols: "weights -> {page_stats,page_layout,condition_metrics,compatibility_witnesses,atom_cover,description_distortion,residual_metadata,estimator_calibration,precision_calibration,kernel_plan,quality_proof,cache_key}; certificate member -> {dependent witnesses,plans,quality_proof,cache_key}; precision -> {page_bytes,description_residual,kernel_plan,quality_proof}; tokenizer/template/context/operators -> {semantic_manifest,protected_trace_corpus,observation_contract,condition_metrics,compatibility_certificate,plans,quality_proof,protocol_capabilities}; invalidate(x)=transitive_consumers(changed_digest(x))."
   applicability: "A cache is always revision-keyed and is invalidated by any resolved page or semantic digest change."
 evidence:
   - status: INFERRED
     result: "Q1's immutable identity and E-006's plan/runtime boundary yield a hash-addressable dependency graph."
-build_instruction: "Persist dependency edges and build hashes in each revision; compute affected closure before training commit; carry forward only artifacts whose complete input vector is unchanged."
+build_instruction: "Persist every MATHS.md certificate input and dependency edge in each revision; compute affected closure before training commit; carry forward only artifacts whose complete input vector is unchanged."
 acceptance_check: "Mutate each dependency class independently and assert the exact invalidation set; fail on stale reuse or unrelated full recompilation."
 depends_on: [Q1, Q10, Q22, Q24, Q26]
 reopen_only_if: "A new generated artifact depends on an input absent from the graph."
@@ -693,15 +702,15 @@ reopen_only_if: "A lifecycle operation requires materially different durability 
 ```yaml
 question_id: Q33
 state: CLOSED
-decision: "Model semantics and plan variation are immutable data; the harness validates and executes that data; numerical meaning remains in existing kernels."
+decision: "Model semantics, mathematical certificates, and plan variation are immutable data; the harness validates and executes that data; numerical meaning remains in existing kernels."
 formal_contract:
-  symbols: "Declarative={tensor graph,page map,layout,precision planes,routing policy,cache budget,hardware predicates,semantic manifest,protocol mapping,invalidation edges}; deterministic harness={parse,validate,state transitions,schedule,commit,adapt}; trained semantic decisions={router,page clusters,precision allocation}; kernels={operators}. Manifests may select only capabilities enumerated by the harness schema."
+  symbols: "Declarative={tensor graph,page map,layout,precision planes,native routing policy,MATHS certificate {flattening,conditions,metrics,atoms,faces,minimal_nonfaces,cover,observation contract,description,residual,estimator,risk,composition,horizon},hardware predicates,semantic manifest,protocol mapping,invalidation edges}; deterministic harness={parse,validate,state transitions,schedule,commit,adapt}; trained semantic decisions={compiled atoms or selector,description,estimator calibration,precision allocation}; kernels={operators}. Manifests may select only capabilities enumerated by the harness schema."
   applicability: "No manifest may inject executable code, arbitrary paths, shell commands, network calls, or unbounded allocation."
 evidence:
   - status: OBSERVED
     result: "E-002 shows safe data containers; E-006 shows reusable kernels; E-008 shows adapters can be schema-driven only where semantics align."
-build_instruction: "Generate plans and adapter maps from schemas, validate every enum and bound, and reserve handwritten code for state transitions or operators that cannot be represented declaratively."
-acceptance_check: "Add a supported model and one hardware plan using data only; malformed manifests must fail before allocation or execution; Q29 must expose every remaining model-specific branch."
+build_instruction: "Generate certificates, plans, and adapter maps from schemas, validate every enum, digest, witness, and bound, and reserve handwritten code for state transitions or operators that cannot be represented declaratively."
+acceptance_check: "Add a supported model, mathematical certificate, and hardware plan using data only; malformed or collapsed certificate dimensions must fail before allocation or execution; Q29 must expose every remaining model-specific branch."
 depends_on: [Q7, Q10, Q29, Q30, Q31, Q32]
 reopen_only_if: "A supported architecture has safe behavior that cannot be expressed in the bounded schema."
 ```
@@ -711,13 +720,13 @@ reopen_only_if: "A supported architecture has safe behavior that cannot be expre
 ```yaml
 question_id: Q34
 state: CLOSED
-decision: "Cassette's admissible contribution claim is the complete conjunction: a source-general compiler and runtime that creates an immutable, removable, authoritative, drive-resident model cartridge; transforms compatible full models into provenance-linked prompt-persistent executable page revisions when native active state does not fit; executes them through bounded Apple unified memory; supports cartridge-resident derivative training and atomic revisions; and serves named agents on consumer-class Apple hardware at Q68 FRONTIER_CLASS gates with dual-baseline honesty. No isolated ingredient is claimed."
+decision: "Cassette's admissible contribution claim is the complete conjunction: a source-general compiler and runtime that creates an immutable, removable, authoritative, drive-resident model cartridge; transforms compatible full models into provenance-linked, MATHS-certified executable revisions when native active state does not fit; executes them through bounded Apple unified memory; supports cartridge-resident derivative training and atomic revisions; and serves named agents on consumer-class Apple hardware at Q68 FRONTIER_CLASS gates with dual-baseline honesty. No isolated ingredient or pure theorem is claimed as the product."
 formal_contract:
   symbols: "claimable(Cassette) iff every material clause maps to at least one LIVE-PROVEN Q80 row and Q78 passes; otherwise public_claim_state=WITHHELD."
   applicability: "The claim covers only model, Apple-compute, storage, training, and protocol tuples that live-pass. It does not claim every model, every Mac, every USB-C drive, zero OS swap, or laboratory parity where Q13 is unavailable."
 evidence:
   - status: CHOSEN
-    result: "E-010 shows collisions for isolated flash loading, SSD streaming, prompt pruning, and checkpoint loading; the conjunction is the only defensible candidate."
+    result: "E-010 shows collisions for isolated flash loading, SSD streaming, prompt pruning, and checkpoint loading. The pre-cutover product conjunction remains the only candidate supported by that search; Q35 requires a new search against the implemented MATHS-certified mechanism before any contribution claim."
 build_instruction: "Attach each claim clause to machine evidence IDs and suppress the contribution statement until those records are LIVE-PROVEN."
 acceptance_check: "Delete any one conjunction clause from the implementation evidence map: if no live row proves it, the claim must not emit; if an isolated prior-art phrase appears, replace it with the exact conjunction."
 depends_on: [Q19, Q21, Q31, Q39, Q40, Q68, Q78, Q80]
@@ -729,9 +738,9 @@ reopen_only_if: "Q80 behavior differs from the claim or Q35 locates the complete
 ```yaml
 question_id: Q35
 state: CLOSED
-decision: "The 2026-08-05 bounded search found material collisions for every separate mechanism but no public artifact implementing Q34's entire conjunction; the claim is therefore narrowed to the conjunction and remains contingent on a post-implementation repeat search."
+decision: "The 2026-08-05 bounded search found material collisions for every then-declared separate mechanism but no public artifact implementing Q34's entire conjunction; the claim remains narrowed to the conjunction and requires a new post-implementation search against the MATHS-certified mechanism."
 formal_contract:
-  symbols: "Search boundary={Apple LLM in a Flash, Apple IFPruning, SwiftLM and MLX SSD streamers, llama.cpp/ggml paging, ServerlessLLM, model-pruning and storage patents located by exact mechanism terms}; collision requires one system or patent mapping every material Q34 clause, not a bag of references."
+  symbols: "Search boundary={Apple LLM in a Flash, Apple IFPruning, SwiftLM and MLX SSD streamers, llama.cpp/ggml paging, ServerlessLLM, model-pruning and storage patents located by exact mechanism terms}; pre-2026-08-09 result does not cover the compatibility-complex/atom-cover/description-probe conjunction; collision requires one system or patent mapping every material Q34 clause, not a bag of references."
   applicability: "Technical collision record only; not patentability, validity, infringement, or freedom-to-operate advice. Search date and query vocabulary are part of the record."
 evidence:
   - status: OBSERVED
@@ -749,12 +758,12 @@ question_id: Q36
 state: CLOSED
 decision: "Fixtures isolate defects in seven ascending stages; F4 and F5 are binding falsification gates for the frontier thesis, and no stage below the frontier rows can mark Cassette complete."
 formal_contract:
-  symbols: "F0 malformed/valid manifests and headers; F1 deterministic content pages, hashes, interruption, and repair; F2 golden operator and page-readiness tensors; F3 tiny transformer with forced misses and KV/recurrent rollback; F4 3B-8B dense transformation and quality recovery; F5 20B-120B sparse/multimodal plus Tier-A training and all protocol adapters; F6 one full-scale model per Q39 compute boundary; F7 complete Q80 matrix. Promotion requires all lower-stage directly coupled invariants. F4 GATE (binding): a permissively licensed 3-8B dense model compiled to a prompt-persistent revision with touched_bytes_per_token<=0.25*native_active_bytes must pass Q19 stability and paired lower95CI(Qc/Q_teacher)>=0.95 across Q15 strata within a predeclared training budget. F5 GATE (binding): a 20B-120B sparse model must satisfy the same predicates at scale and produce Q37 retention-versus-compression curves whose predicted frontier point clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget. A failed gate emits a Q38 record and a mechanism revision; no frontier compiled row may execute before both gates pass."
+  symbols: "F0 malformed/valid manifests and headers; F1 deterministic content pages, hashes, interruption, and repair; F2 golden operators plus malformed/valid MATHS certificates; F3 tiny transformer with certified deterministic and fresh-stochastic execution, forced page failures, and KV/recurrent rollback; F4 3B-8B dense transformation, quality recovery, Tier-A training, and Tier-B certificate recovery; F5 20B-120B sparse/multimodal plus Tier-A training, Tier-B certificate recovery, and all protocol adapters; F6 one full-scale model per Q39 compute boundary; F7 complete Q80 matrix. Promotion requires all lower-stage directly coupled invariants. F4 GATE (binding): a permissively licensed 3-8B dense model compiled to a Q19-certified revision with touched_bytes_per_token<=0.25*native_active_bytes must cover the frozen Q15/Q16 protected conditions, declare and validate its per-atom/per-step plus peak/total resource certificate, complete the Q70 dense-fixture Tier-A and Tier-B rows, and achieve paired lower95CI(Qc/Q_teacher)>=0.95 across Q15 strata within a predeclared training budget. F5 GATE (binding): a 20B-120B sparse model must satisfy the same predicates at scale, complete its Tier-A and Tier-B rows, and produce Q37 mathematical-resource-versus-quality/service frontier curves whose predicted feasible point clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget. A failed gate emits a Q38 record and a mechanism revision; no frontier compiled row may execute before both gates pass."
   applicability: "Fixtures may be generated and small. Only F6/F7 establish frontier scale, service behavior, or completion."
 evidence:
   - status: CHOSEN
     result: "The ladder isolates parser, storage, numerical, routing, training, and protocol faults without permitting proof-of-concept substitution."
-build_instruction: "Give every fixture an immutable input, expected failure locus, and exact invariant; run the smallest stage that can disprove the changed behavior, then run mandatory F7 before release."
+build_instruction: "Give every fixture an immutable input, mathematical certificate when compiled execution is involved, expected failure locus, and exact invariant; run the smallest stage that can disprove the changed behavior, then run mandatory F7 before release."
 acceptance_check: "Inject one defect owned by each stage and require first failure at that stage; verify that an F0-F5 pass cannot set release state COMPLETE and that frontier compiled rows are refused while an F4/F5 gate is unpassed."
 depends_on: [Q16, Q17, Q20, Q25, Q30, Q31]
 reopen_only_if: "A new subsystem lacks an isolating fixture before F6."
@@ -765,17 +774,17 @@ reopen_only_if: "A new subsystem lacks an isolating fixture before F6."
 ```yaml
 question_id: Q37
 state: CLOSED
-decision: "Diagnostic success transfers only for invariants with proven bounds; performance, quality, thermal behavior, route stability, and recovery require full-scale confirmation, and F4/F5 retention-versus-compression predictions are binding preconditions for attempting any frontier row."
+decision: "Diagnostic success transfers only for invariants with proven bounds; performance, quality, thermal behavior, certificate coverage, execution risk, and recovery require full-scale confirmation, and F4/F5 mathematical-resource frontier predictions are binding preconditions for attempting any frontier row."
 formal_contract:
-  symbols: "N_pages=ceil(S_exec/page_bytes); metadata=O(N_pages); lookup=O(1) expected or O(log N_pages) worst; La>=D_load/Bs+N_reads*l_read; Ld>=max(Dmiss/Bs,Hmem/Bm,F/Ccompute); KV=layers*tokens*state_bytes_per_layer_token; Adam_state>=10N_train or 14N_train B. Any measured superlinear metadata, queue collapse, cache cliff, thermal decay, or route-union overflow is a breakpoint."
+  symbols: "N_pages=ceil(S_exec/page_bytes); metadata=O(N_pages); lookup=O(1) expected or O(log N_pages) worst; La>=D_load/Bs+N_reads*l_read; Ld>=max(Dmiss/Bs,Hmem/Bm,F/Ccompute); KV=layers*tokens*state_bytes_per_layer_token; Adam_state>=10N_train or 14N_train B. Any measured superlinear metadata, queue collapse, cache cliff, thermal decay, condition-cover failure, or certified-resource overflow is a breakpoint."
   applicability: "F0-F5 may prove parsing, hashing, transaction, and asymptotic memory. F6/F7 alone prove frontier service and training."
 evidence:
   - status: OBSERVED
     result: "E-001 establishes a concrete breakpoint: Kimi K3's 113.60 GB fixed native text path exceeds a 32 GB class before selected experts and state."
   - status: INFERRED
     result: "E-007 and E-009 establish training, I/O, and memory scaling floors."
-build_instruction: "Record predicted and observed curves at logarithmic page/model/context sizes, mark first >10% residual or resource cliff, and force every full-scale matrix row across all predicted breakpoints."
-acceptance_check: "Fit the declared scaling functions on lower stages, predict F6 resource bounds before execution, and fail transfer if observed peak or latency exceeds prediction by >10% without a revised causal model and repeated F6 run."
+build_instruction: "Record predicted and observed curves over atom count, rank, description bytes, metadata bytes, fresh traffic, error/risk, horizon, page/model/context sizes, and physical service; mark the first >10% residual or resource cliff and force every full-scale matrix row across all predicted breakpoints."
+acceptance_check: "Fit the declared scaling functions on lower stages, predict F6 resource bounds before execution, and fail transfer if any observed peak or total description, metadata, fresh-sample, or fresh-traffic resource, or any latency, exceeds its prediction by >10% without a revised causal model and repeated F6 run."
 depends_on: [Q12, Q19, Q28, Q36]
 reopen_only_if: "A full-scale row exposes an unmodeled breakpoint or nonlinearity."
 ```
@@ -785,14 +794,14 @@ reopen_only_if: "A full-scale row exposes an unmodeled breakpoint or nonlinearit
 ```yaml
 question_id: Q38
 state: CLOSED
-decision: "A tuple is incompatible when any physical lower bound or measured hard gate fails; the failure excludes only that tuple and mechanism."
+decision: "A tuple is incompatible when any physical lower bound, mathematical-certificate requirement, or measured hard gate fails; the failure excludes only that tuple and mechanism."
 formal_contract:
-  symbols: "INCOMPATIBLE if S_peak>free_reserved_capacity or minimum_live_state>M or max(Dmiss/Bs,Hmem/Bm,F/Ccompute)>Q68 latency bound or Q17/Q18 quality fails or Q19 stability fails or unsupported_operator exists or training_state/endurance exceeds Q28/Q53/Q74. Record={tuple,mode,bound,measured,evidence,cause,next_mode_or_tuple}."
+  symbols: "INCOMPATIBLE if S_peak>free_reserved_capacity or minimum_live_state>M or max(Dfresh/Bs,Hmem/Bm,F/Ccompute)>Q68 latency bound or Q17/Q18 quality fails or Q19 certificate coverage/error/risk/observation/physical conversion fails or unsupported_operator exists or training_state/endurance exceeds Q28/Q53/Q74. Record={tuple,mode,bound,measured,evidence,cause,next_mode_or_tuple}."
   applicability: "A failed native mode may proceed to compiled mode; a failed storage class may move upward; a failed training tier does not erase eligible inference. No failure makes a paper, simulator, or smaller fixture the product."
 evidence:
   - status: INFERRED
     result: "E-009 supplies service lower bounds; E-001 supplies a concrete native K3 memory falsification for the 32 GB class."
-build_instruction: "Evaluate cheap static bounds before transfer, measured class bounds before compilation, and quality/stability after preparation; persist the first decisive causal failure and continue the matrix."
+build_instruction: "Evaluate cheap static bounds before transfer, mathematical feasibility and measured class bounds before compilation, and quality/certificate validity after preparation; persist the first decisive causal failure and continue the matrix."
 acceptance_check: "Construct one failure for each predicate and verify deterministic exclusion, exact causal record, no silent threshold relaxation, and continued execution of independent Q80 rows."
 depends_on: [Q7, Q17, Q18, Q19, Q28, Q37]
 reopen_only_if: "The failed mechanism changes enough to alter its decisive bound."
@@ -806,7 +815,7 @@ state: CLOSED
 revised: 2026-08-05 under the amended remit
 decision: "The first release uses three public Apple classes in declared roles — C1 consumer thesis target, C2 consumer-pro target, C3 build-and-teacher infrastructure — and three pinned frontier model boundaries with Kimi K3 as the level exemplar. The headline row is the frontier compiled cartridge on C1. The former native-parity row on C3 is reclassified TEACHER_CORRECTNESS after E-011's static falsification. All storage is qualified as an assembled class, never a brand or connector."
 formal_contract:
-  symbols: "C1={M5 MacBook Air,32GB,153GB/s,fanless,role=THESIS}; C2={M5 Max MacBook Pro,128GB,614GB/s,active cooling,role=CONSUMER_PRO}; C3={M3 Ultra Mac Studio,512GB,819GB/s,active cooling,role=INFRASTRUCTURE}. S1={APFS NVMe,USB4 40Gb/s,>=2TB}; S2={APFS NVMe,Thunderbolt5,>=2TB}; S3={APFS NVMe,Thunderbolt5,>=4TB,writable endurance qualified}. Models: K3=moonshotai/Kimi-K3@9f62e4e9fffbd0a83ddd60e1c209d828994b3569 (level exemplar); Scout=meta-llama/Llama-4-Scout-17B-16E-Instruct@92f3b1597a195b523d8d9e5700e57e4fbb8f20d3; Qwen=Qwen/Qwen3-235B-A22B-Instruct-2507@ac9c66cc9b46af7306746a9250f23d47083d689e. frontier_reference(class)={open downloadable revision, total_bytes>=1e12, native_active_state>M_ceiling(class)}; substituting an equal-or-greater-level model with a smaller fixed-path fraction is a recorded remit-level decision. Mandatory rows={C1/S1/FRONTIER-COMPILED+TierA+B (thesis headline, Q68 FRONTIER_CLASS, precondition F5 gate), C1/S1/Scout-least-invasive, C2/S2/Qwen-least-invasive, C3/S2/K3-NATIVE (TEACHER_CORRECTNESS: routing and declared-capability correctness including 1,048,576-token context, absolute service report, teacher trace generation; no parity or value gate), C3/S3/K3-COMPILED+TierA (portability and training row, usability floors)}."
+  symbols: "C1={M5 MacBook Air,32GB,153GB/s,fanless,role=THESIS}; C2={M5 Max MacBook Pro,128GB,614GB/s,active cooling,role=CONSUMER_PRO}; C3={M3 Ultra Mac Studio,512GB,819GB/s,active cooling,role=INFRASTRUCTURE}. S1={APFS NVMe,USB4 40Gb/s,>=2TB}; S2={APFS NVMe,Thunderbolt5,>=2TB}; S3={APFS NVMe,Thunderbolt5,>=4TB,writable endurance qualified}. Models: K3=moonshotai/Kimi-K3@9f62e4e9fffbd0a83ddd60e1c209d828994b3569 (level exemplar); Scout=meta-llama/Llama-4-Scout-17B-16E-Instruct@92f3b1597a195b523d8d9e5700e57e4fbb8f20d3; Qwen=Qwen/Qwen3-235B-A22B-Instruct-2507@ac9c66cc9b46af7306746a9250f23d47083d689e. frontier_reference(class)={revision: open_downloadable(revision) and total_bytes(revision)>=1e12 and native_active_state(revision)>M_ceiling(class)}; substituting an equal-or-greater-level model with a smaller fixed-path fraction is a recorded remit-level decision. Mandatory rows={C1/S1/FRONTIER-COMPILED-CERTIFIED+TierA+B (thesis headline, Q68 FRONTIER_CLASS, Q19 certificate, precondition F5 gate), C1/S1/Scout-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C2/S2/Qwen-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C3/S2/K3-NATIVE (TEACHER_CORRECTNESS: routing and declared-capability correctness including 1,048,576-token context, absolute service report, teacher trace generation; no parity or value gate), C3/S3/K3-COMPILED-CERTIFIED+TierA+B (portability, certificate recovery, and training row, usability floors)}."
   applicability: "Source acquisition uses exact Hugging Face revisions; the same immutable artifacts are re-exposed as pinned Ollama blobs and Tinker-export descriptors for adapter conformance. Every named client runs against each callable capability tier through Q76. B_native for each consumer class is pinned at matrix freeze under Q13."
 evidence:
   - status: OBSERVED
@@ -815,7 +824,7 @@ evidence:
     result: "E-003 fixes Apple class ceilings; E-005 requires measured storage qualification."
   - status: INFERRED
     result: "E-011 falsifies native K3 service parity on C3 (5.87 tok/s ceiling against the 10 tok/s floor) and fixes the C1 compiled decode budget (15.3 GB touched per token at 100% utilization)."
-build_instruction: "Encode the matrix in machine data, measure each exact assembled storage path with Q42, pin source and runtime commits, pin B_native per consumer class at freeze, refuse frontier compiled rows before their F5 gate, and execute every mandatory row without substituting personal hardware anecdotes."
+build_instruction: "Encode the matrix in machine data, bind every compiled row to one Q19 certificate, measure each exact assembled storage path with Q42, pin source and runtime commits, pin B_native per consumer class at freeze, refuse frontier compiled rows before their F5 gate, and execute every mandatory row without substituting personal hardware anecdotes."
 acceptance_check: "A clean runner enumerates exactly the mandatory rows, roles, source digests, baselines, clients, training tiers, gates, and preconditions; release fails if any row is absent, substituted, measured under an unqualified class, or executed with an unpassed gate; the TEACHER_CORRECTNESS row must be structurally unable to emit a parity or value label."
 depends_on: [Q7, Q13, Q15, Q21, Q36, Q37, Q38]
 reopen_only_if: "A named public artifact becomes unavailable, an Apple class leaves support, a superior frontier_reference is adopted by remit-level decision, or a static bound proves a row impossible and Q38 records the replacement mechanism rather than lowering the boundary."
@@ -826,17 +835,17 @@ reopen_only_if: "A named public artifact becomes unavailable, an Apple class lea
 ```yaml
 question_id: Q40
 state: CLOSED
-decision: "Use the least invasive passing mode in this order: byte-identical layout, exact native sparsity, exact quantization/layout conversion, predictive prefetch with native routing, then a separately identified post-trained prompt-persistent compiled revision."
+decision: "Use the least invasive passing mode in this order: byte-identical layout, exact native sparsity, exact quantization/layout conversion, predictive prefetch with native routing, then a separately identified MATHS-certified compiled revision. The final mode is a certificate class, not a prescribed top-k, shared-core, or prompt-router decomposition."
 formal_contract:
-  symbols: "For compiled layer l, W_l^(r)=W_l^0+sum_{j in R_l(r)} DeltaW_lj, where W^0 is the shared core and R(r) is selected before decode and remains fixed except Q20 corrective pages. Train with L=L_teacher+lambda_B*bytes_loaded+lambda_S*seeks+lambda_C*page_churn+lambda_M*memory_violation+lambda_Q*quantization_error. Native prompt predictors may prefetch but never override source routing."
-  applicability: "Dense models require complete native weights resident or compiled decomposition. MoE models retain native router semantics when their fixed plus selected state fits; otherwise fixed and conditional paths may both require compilation. Multimodal and recurrent components transform only with capability-specific state proofs."
+  symbols: "For each compiled tensor/operator target T and declared flattening, emit K_{eta,r}, atom witnesses {A_i}, service faces {F_i}, a cover of the protected condition set, observation contract, resident descriptions {B_i}, residual or exact execution relation, epsilon_exec, delta_exec_total, composition maps, certified horizon, and physical resource conversion as Q19. A shared core, sparse dictionary, block description, quantized description, or fresh residual sampler is admitted only as a declared specialization. Native prompt predictors may prefetch but never override source routing."
+  applicability: "Dense models require complete native weights resident or a certified compiled representation. MoE models retain native router semantics when their active state passes; a compiled child may use different atoms or selectors only under its own Q1 identity and Q19 evidence. A matrix row whose allowed_q40_modes stop at mode 3 fails with a Q38 record when none passes; it may not advance silently into compiled mode. Compiled evaluation requires a separate Q19-certified row, compiled gate, and Q70 Tier-B path. Multimodal and recurrent components transform only with capability-specific condition, composition, and state proofs."
 evidence:
   - status: INFERRED
-    result: "E-001/E-009 prove K3's native fixed path cannot satisfy the 32 GB row; E-010 shows prompt-fixed pruning and SSD streaming separately but not this complete product transformation."
-build_instruction: "Evaluate modes in order, stop at the first Q12-Q20 pass, record teacher traces and storage profile, train compiled pages for persistence, and issue a new Q1 identity for every lossy or trained transform."
-acceptance_check: "For each architecture class, demonstrate that the selected mode is the least invasive passing mode by running the prior mode through Q38; compiled revisions must pass Q17-Q20 and complete-capacity Q58."
+    result: "E-001/E-009 prove K3's native fixed path cannot satisfy the 32 GB row. E-012 proves that invariants constant under the declared projection-commuting ambient unitaries, including their ordinary Hilbert data, do not determine low-rank condition compatibility; fresh residual sampling supplies only a conditional within-atom upper bound."
+build_instruction: "Evaluate modes in order, stop at the first Q12-Q20 pass, derive condition metrics and the protected observation contract from immutable teacher traces, emit the complete Q19 certificate, train only its declared revision-owned objects, and issue a new Q1 identity for every lossy or trained transform."
+acceptance_check: "For each architecture class, demonstrate that the selected mode is the least invasive passing mode by running the prior mode through Q38; compiled revisions must independently recompute and pass Q17-Q20, complete-capacity Q58, and every MATHS.md certificate dimension."
 depends_on: [Q7, Q17, Q18, Q19, Q20, Q30, Q38, Q39]
-reopen_only_if: "A less invasive mode gains a qualified plan or the compiled decomposition fails Q17/Q18."
+reopen_only_if: "A less invasive mode gains a qualified plan, a certificate theorem fails, or the selected compiled representation fails Q17/Q18/Q19."
 ```
 
 ## Q41 — Supported physical cartridge classes
@@ -954,12 +963,12 @@ question_id: Q47
 state: CLOSED
 decision: "Cassette computes a conservative live memory budget before every admission and recomputes it as context, cache, other processes, and thermal state change."
 formal_contract:
-  symbols: "Reserve=max(4GiB,0.25*M_physical). M_ceiling=min(M_physical-Reserve,0.90*recommendedMaxWorkingSetSize). M=M_ceiling-M_exec-M_other_observed. Admit iff peak(|W|+|C|+|K|+|A|+|R|+training_window)<=M. Eviction order={speculative pages,cold C,precision corrections,recomputable activations}; W required for current op and committed K cannot be evicted. On hard pressure cancel before new allocation."
+  symbols: "Reserve=max(4GiB,0.25*M_physical). M_ceiling=min(M_physical-Reserve,0.90*recommendedMaxWorkingSetSize). M=M_ceiling-M_exec-M_other_observed. Admit iff peak(|W|+|C|+|K|+|A|+|R|+training_window)<=M, where C includes the Q19 resident description and metadata and W includes declared fresh correction pages. Eviction order={unused speculative pages,cold C,precision corrections,recomputable activations}; W required for the current certified operation and committed K cannot be evicted. On hard pressure cancel before new allocation."
   applicability: "The 25% reserve is the first-release floor and may increase after controlled qualification, never decrease silently for a published plan."
 evidence:
   - status: SPECIFIED
     result: "E-003 supplies physical and recommended working-set inputs; E-009 supplies the residency inequality."
-build_instruction: "Use checked 64-bit byte arithmetic, predict maximum KV/training growth, expose the complete budget ledger, and bind plan selection to the minimum budget observed during qualification."
+build_instruction: "Use checked 64-bit byte arithmetic, import exact Q19 description/metadata/fresh-page maxima, predict maximum KV/training growth, expose the complete budget ledger, and bind plan selection to the minimum budget observed during qualification."
 acceptance_check: "Sweep context, page cache, batch, and competing-memory loads to every boundary; no accepted operation may cause hard pressure or positive swap growth attributable to continued Cassette allocation."
 depends_on: [Q2, Q12, Q19, Q23]
 reopen_only_if: "Controlled class measurements prove a different reserve is required to maintain Q69."
@@ -1150,17 +1159,17 @@ reopen_only_if: "Q42 proves the 4 MiB content boundary prevents Q68 and a new ca
 ```yaml
 question_id: Q58
 state: CLOSED
-decision: "Compilation emits a total source-to-executable contribution map; lossless transforms prove bijection, while lossy transforms name every approximation and attach Q17/Q18 evidence."
+decision: "Compilation emits a total source-to-executable contribution map; lossless transforms prove bijection, while lossy transforms name every approximation and bind the Q19 atom, description, execution, composition, and observation certificate to Q17/Q18 evidence."
 formal_contract:
-  symbols: "Map m: source_contributions -> executable_contributions. Lossless requires m total, injective over value contributions, reconstructable, and digest-equal after inverse. Lossy requires m total with each source contribution classified {represented,merged,quantized,conditionally_selected}; omitted is forbidden; every class records transform/error bound. Semantic assets/operators require a total identity or explicit equivalent implementation map."
+  symbols: "Map m: source_contributions -> executable_contributions. Lossless requires m total, injective over value contributions, reconstructable, and digest-equal after inverse. Lossy requires m total with each source contribution classified {represented,merged,quantized,atom_conditioned,stochastically_corrected}; omitted is forbidden; every class records transform/error bound, atom/service-face relation, description/residual relation, and observation boundary. Semantic assets/operators require a total identity or explicit equivalent implementation map."
   applicability: "Parameters include routed/shared experts, embeddings, output heads, normalization, attention/recurrent/vision tensors, precision planes, tokenizer/processors/templates, and required operators."
 evidence:
   - status: OBSERVED
     result: "E-001 enumerates 497,220 K3 tensors and exact category bytes, providing a frontier-scale completeness ledger."
   - status: INFERRED
     result: "Q18 supplies behavioral reachability for lossy conditional mappings."
-build_instruction: "Emit the map while parsing source headers, reconcile source and destination byte/element counts, record transformations per span, and bind it to the executable root."
-acceptance_check: "Account for every E-001 tensor and semantic asset; remove, duplicate, mis-map, or make unreachable one contribution and require structural failure before model activation."
+build_instruction: "Emit the map while parsing source headers, reconcile source and destination byte/element counts, record transformations and Q19 certificate relations per span, and bind it to the executable root."
+acceptance_check: "Account for every E-001 tensor and semantic asset; remove, duplicate, mis-map, make unreachable, or detach one contribution from its atom/description/residual certificate and require structural failure before model activation."
 depends_on: [Q1, Q3, Q17, Q18, Q40, Q57]
 reopen_only_if: "A model has non-tensor learned state not represented by the contribution taxonomy."
 ```
@@ -1170,14 +1179,14 @@ reopen_only_if: "A model has non-tensor learned state not represented by the con
 ```yaml
 question_id: Q59
 state: CLOSED
-decision: "Hardware plans contain references, schedules, and budgets only; all plans resolve the same semantic page digests and precision contributions."
+decision: "Hardware plans contain references, schedules, mathematical-certificate specializations, and budgets only; all plans resolve the same semantic page digests and precision contributions."
 formal_contract:
-  symbols: "Plan={profile_predicate,page_order,read_groups,cache_policy,precision_budget,kernel_dispatch,concurrency,prefetch_policy,memory_schedule,expected_metrics}; plan_weight_payload_bytes=0; sum(plan_metadata)<=min(0.01*S_exec,4GiB); select is Q11."
+  symbols: "Plan={profile_predicate,Q19_certificate_digest,condition_selector,atom_refs,description_budget,metadata_budget,fresh_sample_or_exact_read_budget,error_risk_horizon,page_order,read_groups,precision_budget,kernel_dispatch,concurrency,prefetch_policy,memory_schedule,expected_metrics}; plan_weight_payload_bytes=0; sum(plan_metadata)<=min(0.01*S_exec,4GiB); select is Q11."
   applicability: "A plan may omit optional correction planes only if its revision-quality evidence covers that precision tier. A plan requiring different trained values creates a child revision."
 evidence:
   - status: INFERRED
     result: "Q57 separates semantic pages from physical plans; E-003/E-005 supply profile dimensions."
-build_instruction: "Generate plans from measured profiles, reference page digests and TensorMap spans, and store expected bounds plus evidence IDs."
+build_instruction: "Generate plans from measured profiles and one immutable Q19 certificate, reference page digests and TensorMap spans, and store expected mathematical and physical bounds plus evidence IDs."
 acceptance_check: "Add, delete, and switch plans while page payload digests and root capacity mapping remain unchanged; reject any plan carrying copied weights."
 depends_on: [Q11, Q47, Q57]
 reopen_only_if: "A kernel requires a duplicated packed weight form that cannot be generated transiently within Q68."
@@ -1191,7 +1200,7 @@ state: CLOSED
 decision: "Compilation is a resumable content transaction whose incomplete objects are never trusted by name, size, or prior process state—only by readback digest and a committed journal record."
 formal_contract:
   symbols: "For each output page: PLAN -> ALLOCATE_TEMP -> WRITE -> READBACK_HASH -> COMMIT_PAGE_RECORD -> RELEASE_DEAD_SOURCE_EXTENT. Then WRITE_INDEX -> VERIFY_TOTAL_MAP -> WRITE_CANDIDATE_ROOT -> FULLFSYNC -> ATOMIC_GENERATION -> FULLFSYNC. Resume scans journal, rehashes only uncommitted or suspect pages, and reconstructs the remaining dependency frontier. GC deletes only unreachable temp extents after a valid root exists."
-  applicability: "Native layout, deterministic conversion, quantization, prompt-persistent compilation, and incremental recompilation."
+  applicability: "Native layout, deterministic conversion, quantization, Q19-certified compilation, and incremental recompilation."
 evidence:
   - status: SPECIFIED
     result: "E-005 supplies durability; Q4 supplies bounded extent reclamation; Q57 supplies page/root identities."
@@ -1206,15 +1215,15 @@ reopen_only_if: "A compiler stage cannot declare a bounded deterministic resume 
 ```yaml
 question_id: Q61
 state: CLOSED
-decision: "A tuned child reuses its parent's layout only while changed dependency hashes and measured route distributions remain local; otherwise it compiles a new immutable layout while preserving the parent."
+decision: "A tuned child reuses its parent's layout only while changed dependency hashes remain local and every reused mathematical witness and physical bound recomputes exactly; otherwise it compiles a new immutable layout while preserving the parent."
 formal_contract:
-  symbols: "Incremental layout is allowed iff changed_semantic_page_fraction<=0.05, JensenShannon(route_parent,route_child)<=0.02 per critical layer/stratum, operator/tokenizer/context schemas unchanged, precision codec unchanged or correction-only, and Q17-Q19 pass after affected closure. Any schema change, page-cluster split/merge cascade, threshold failure, or >5% changed pages requires full new layout."
-  applicability: "Adapter-only children may share base layout and add delta gather plans. Router, precision, and base-page updates invoke Q27 closure."
+  symbols: "Incremental layout is allowed iff operator/tokenizer/context schemas are unchanged; every carried condition metric, atom witness, service face, minimal-nonface record, cover, observation contract, description residual, estimator bound, composition map, and physical schedule recomputes from unchanged input digests; and Q17-Q19 pass after the Q27 closure. Any changed certificate input or failed witness requires a new certificate and every transitively dependent layout object."
+  applicability: "Adapter-only children may share base layout and add delta gather plans when the recomputation predicate passes. Atom/selector, description, estimator, observation, precision, and base-page updates invoke Q27 closure."
 evidence:
   - status: CHOSEN
     result: "Digest and route-distribution thresholds bound incremental plan drift without mutating a valid parent."
-build_instruction: "Trace post-training activations, compare distributions, recompute only affected clusters/plans, and publish all results as a child revision."
-acceptance_check: "Exercise changes immediately below and above every threshold; below must rebuild only the Q27 closure, above must create a complete new layout, and the parent must remain callable."
+build_instruction: "Trace post-training protected conditions and activations, recompute the complete affected certificate closure, reuse only digest-identical unaffected objects, and publish all results as a child revision."
+acceptance_check: "Change each certificate input independently; exact unchanged inputs must reuse only their unaffected Q27 objects, while every changed witness or bound must invalidate its complete transitive closure. The parent remains callable."
 depends_on: [Q22, Q27, Q40, Q57, Q60]
 reopen_only_if: "Full-scale evidence shows the thresholds admit stale layouts or force unnecessary full compilation."
 ```
@@ -1242,35 +1251,35 @@ reopen_only_if: "The chosen digest or aggregate construction is broken or insuff
 ```yaml
 question_id: Q63
 state: CLOSED
-decision: "D retains the complete revision; unified memory contains the smallest validated execution frontier and request state at each time, with explicit prefill and decode schedules."
+decision: "D retains the complete revision; unified memory contains the smallest frontier permitted by the selected native path or Q19 certificate, plus request state at each time, with explicit prefill and decode schedules."
 formal_contract:
-  symbols: "At activation: UM={runtime,resident shared core,plan metadata,empty C}. At request assembly: load P_r into C/W and processors needed by modalities. Prefill layer l: UM={required page run_l,K_partial,activations_l}; retire recomputable activations after layer. Decode t: UM={shared core,P_r,corrective pages,C,K_t,current activations,logits}; D={all other pages,immutable context spill if plan permits,revision}. Constraint is Q47; transfer schedule starts page l+1 only if it cannot evict pinned l/K. Protocol buffers are bounded host memory and never carry model pages."
-  applicability: "Native resident mode may keep its complete active graph in C. Native streamed mode is compatible only if Q68 passes. Compiled mode pins the prompt-persistent set for the run."
+  symbols: "At activation: UM={runtime,plan and Q19 certificate metadata,admitted resident descriptions,empty reusable C}. At request assembly: select the certified condition/atom and load its description plus modality processors. Prefill layer l: UM={description_l,planned exact or sampled residual pages_l,K_partial,activations_l}; retire recomputable activations after layer. Decode t: UM={selected descriptions,planned correction pages,C,K_t,current activations,logits}; D={complete revision and all other pages,immutable context spill if plan permits}. Constraint is Q47; transfer schedule starts page l+1 only if it cannot evict pinned l/K. Protocol buffers are bounded host memory and never carry model pages."
+  applicability: "Native resident mode may keep its complete active graph in C. Native streamed mode is compatible only if Q68 passes. Compiled mode follows its certified description, fresh-read, risk, and horizon budgets; it need not pin one prompt-selected set for the run."
 evidence:
   - status: INFERRED
     result: "E-001 supplies exact K3 component bytes; E-004/E-006 supply load and compute paths; E-009 supplies bounds."
-build_instruction: "Generate a time-indexed allocation/transfer plan from tensor graph, page map, context limit, and profile; reserve maxima before admission and expose actual residency by category."
+build_instruction: "Generate a time-indexed allocation/transfer plan from the Q19 certificate, tensor graph, page map, context limit, and profile; reserve maxima before admission and expose actual residency and fresh traffic by certificate category."
 acceptance_check: "Trace prefill/decode for every Q39 architecture, compare each instant to the generated schedule and Q47, and fail on hidden model allocation, undeclared spill, or use-before-verify."
 depends_on: [Q2, Q11, Q19, Q20, Q45, Q47, Q57, Q59]
 reopen_only_if: "A new stateful operator requires a residency category or rollback rule absent from the schedule."
 ```
 
-## Q64 — Working-set prediction failure
+## Q64 — Condition selection and compiled-certificate failure
 
 ```yaml
 question_id: Q64
 state: CLOSED
-decision: "Prediction is an optimization with an exact failure detector: the executable graph's required page IDs are authoritative, and divergence cannot occur before a miss is detected and corrected."
+decision: "Native prefetch prediction is an optimization under source routing. Compiled condition selection is semantic and may execute only inside the observation, protected-set, atom-cover, error-risk, and horizon contract of its immutable Q19 certificate; an out-of-contract observation is rejected before model divergence."
 formal_contract:
-  symbols: "Predictor emits {P_r,confidence,bytes}. If confidence<plan_threshold, expand to conservative set or reject admission. During execution, require R_t subset VALID_RESIDENT before affected operator. Miss invokes Q20; predictor update occurs after terminal run as statistics bound to revision/stratum and cannot change model outputs. p99 correction stall and miss rate must satisfy Q19/Q69."
-  applicability: "For source-native MoE, native router output defines R_t. For compiled revisions, the trained compiled router defines R_t and corrective pages are part of that revision."
+  symbols: "Native prefetch emits {page_candidates,confidence,bytes}; low confidence expands conservatively or rejects. Compiled selection emits {observed_condition,atom_id,service_face,certificate_digest,description_digest,execution_seed_or_exact_schedule,bytes}. Require observed_condition in the certified protected support, atom_id covers it, the certified horizon is not exceeded, and every planned page is VALID_RESIDENT before its consumer. Any violation invokes Q20 before the affected operator. Updates after a terminal run create statistics for a future child certificate and cannot alter the current revision."
+  applicability: "For source-native MoE, native router output defines the semantic path. For compiled revisions, the immutable observation contract and atom cover define admissible selection; a trained selector is one revision-owned implementation, not a universal router premise."
 evidence:
   - status: INFERRED
     result: "Q19/Q20 separate stable prefetch from semantic routing; E-004 supplies synchronization."
-build_instruction: "Compute page requirements before command encoding, preserve last committed token and recurrent checkpoint, and log confidence, misses, stall, and subsequent predictor calibration."
-acceptance_check: "Force false-high and false-low confidence plus adversarial domain shifts; outputs must equal an exact no-prediction replay or terminate before divergence, and future statistics must not contaminate another revision."
+build_instruction: "Validate observation support, service-face membership, certificate identity, horizon, and page requirements before command encoding; preserve the last committed token and recurrent checkpoint; log native-prefetch confidence or compiled selection, planned correction, and later child-calibration evidence separately."
+acceptance_check: "Force false-high and false-low native prefetch confidence, forged atom membership, stale certificates, exhausted horizons, revealed fixed coins outside their adversary model, and adversarial domain shifts. Native outputs must equal an exact no-prefetch replay; compiled runs must reproduce under their certificate or terminate before divergence; future statistics cannot contaminate another revision."
 depends_on: [Q19, Q20, Q62, Q63]
-reopen_only_if: "An operator can consume an unknown parameter before exposing its identity."
+reopen_only_if: "An operator can consume an unknown parameter before exposing its identity, or a selector requires an observation relation absent from MATHS.md."
 ```
 
 ## Q65 — Concurrent agent requests and model switching
@@ -1333,10 +1342,10 @@ reopen_only_if: "A provider reveals or changes a previously hidden material feat
 question_id: Q68
 state: CLOSED
 revised: 2026-08-05 under the amended remit
-decision: "Service qualification is tiered. FRONTIER_CLASS is the release gate for prompt-persistent frontier rows: absolute usability floors, a value gate against B_native, a position gate against B_teacher, and the Q18 capacity proof. PARITY (NEAR_LABORATORY) is an additional label claimed only when the original ratio bounds actually pass. The full measured gap to the teacher and hosted references is always published. Incompatible tuples are rejected rather than relabeled, and thresholds may not be weakened to admit a failed tuple."
+decision: "Service qualification is tiered. FRONTIER_CLASS is the release gate for Q19-certified compiled frontier rows: absolute usability floors, a value gate against B_native, a position gate against B_teacher, and the Q18 capacity proof. PARITY (NEAR_LABORATORY) is an additional label claimed only when the original ratio bounds actually pass. The full measured gap to the teacher and hosted references is always published. Incompatible tuples are rejected rather than relabeled, and thresholds may not be weakened to admit a failed tuple."
 formal_contract:
   symbols: "Floors (all service rows): warm p95(first_committed_token)<=5s; cold p95<=15s; warm p95(Ld)<=100ms; sustained Rd>=10 tok/s; operation_error_rate<=0.005; qualified-session availability>=0.995; all Q48 post-warmup windows pass. Value gate (frontier rows, vs B_native): lower95CI(Qc/Q_native)>=1.05 overall, >=1.15 on long-tail and capacity strata, and no critical stratum lower95CI<1.00. Position gate (frontier rows): lower95CI[(Qc-Q_native)/(Q_teacher-Q_native)]>=0.50 per critical stratum where Q_teacher>Q_native. Honesty (all rows): the complete vector {Qc/Q_teacher, first-token, Ld, Rd, Ttask ratios against B_teacher and B_hosted when equivalent} is computed and published; suppressing a measured unfavorable component is a failed row. PARITY label: warm p95(first)<=1.25*baseline_p95; cold p95 within max(2.0*baseline_p95,baseline_p95+5s); warm p95(Ld)<=1.25*baseline; sustained Rd>=0.80*baseline_Rd; warm p95(Ttask)<=1.25*baseline; Q17/Q18 PARITY-tier thresholds pass."
-  applicability: "FRONTIER_CLASS applies to prompt-persistent compiled frontier rows. Mild-transform rows (Q40 modes 1-3, e.g. the Scout and Qwen rows) gate on floors plus the Q17 PARITY tier against their own B_teacher. TEACHER_CORRECTNESS rows gate on correctness and honest reporting only. Every ratio requires Q67 equivalence for the baseline it uses."
+  applicability: "FRONTIER_CLASS applies to Q19-certified compiled frontier rows. Mild-transform rows (Q40 modes 1-3, e.g. the Scout and Qwen rows) gate on floors plus the Q17 PARITY tier against their own B_teacher. TEACHER_CORRECTNESS rows gate on correctness and honest reporting only. Every ratio requires Q67 equivalence for the baseline it uses."
 evidence:
   - status: CHOSEN
     result: "The tiered structure encodes the amended remit: the release contest is against what the same consumer machine can do unaided, the laboratory gap is measured and published rather than gated, and parity language is reserved for tuples that actually earn it."
@@ -1369,9 +1378,9 @@ reopen_only_if: "A declared workload has a legitimate deterministic pause requir
 ```yaml
 question_id: Q70
 state: CLOSED
-decision: "The first release must complete Tier-A training on every compiled Q39 model row that declares training and Tier-B recovery on every prompt-persistent row; full-weight frontier training is optional and may be incompatible by Q21."
+decision: "The first release must complete Tier-A training on every compiled Q39 model row that declares training and Tier-B recovery on every Q19-certified row; full-weight frontier training is optional and may be incompatible by Q21."
 formal_contract:
-  symbols: "Tier-A qualification per row: LoRA/adapter SFT >=131072 train tokens, offline DPO >=1024 preference pairs, adapter continued pretraining >=1048576 tokens. Tier-B compiled rows: router/persistence recovery >=32768 prompt-continuation traces and precision recovery over every emitted precision tier. Mandatory rows include C1/S1/FRONTIER-COMPILED (K3 exemplar) and C3/S3/K3-COMPILED plus one dense F4 fixture. Each operation must fit Q53/Q74, finish within 1.25*its predeclared measured compute+I/O estimate, improve its operation-specific held-out score, and regress Q16 general score by <=1 percentage point."
+  symbols: "Tier-A qualification per row: LoRA/adapter SFT >=131072 train tokens, offline DPO >=1024 preference pairs, adapter continued pretraining >=1048576 tokens. Tier-B compiled rows: condition/atom/description/estimator/observation recovery and calibration >=32768 prompt-continuation traces plus precision recovery over every emitted precision tier. Mandatory rows include C1/S1/FRONTIER-COMPILED-CERTIFIED (K3 exemplar), C3/S3/K3-COMPILED-CERTIFIED, one dense F4 Tier-A/Tier-B fixture pair, and one sparse F5 Tier-A/Tier-B fixture pair. Each operation must fit Q53/Q74, finish within 1.25*its predeclared measured compute+I/O estimate, improve its operation-specific held-out score, regress Q16 general score by <=1 percentage point, and regenerate every invalidated Q19 witness."
   applicability: "The corpus, tokenizer, steps, optimizer, seeds, adapter rank, checkpoint cadence, and expected storage/time are frozen per test. Tier-C is advertised only if separately live-qualified."
 evidence:
   - status: INFERRED
@@ -1426,7 +1435,7 @@ state: CLOSED
 decision: "Training commits immutable child pages or deltas behind a candidate root and changes callability with one durable generation pointer; readers never observe a mixed revision."
 formal_contract:
   symbols: "child_id=H(parent_id,training_manifest,ordered_page_or_delta_digests,semantic_manifest); dependency order={payloads -> indexes -> child root -> verification -> generation pointer}. Reader pins {generation,child_id,root_digest}. Rollback selects prior valid generation. GC may reclaim an object iff reachability from all retained roots and active reader pins is zero and rollback retention has expired."
-  applicability: "Adapters, replacement pages, router/precision recovery, and consolidated revisions. Callable roots are immutable."
+  applicability: "Adapters, replacement pages, compiled-certificate/precision recovery, and consolidated revisions. Callable roots are immutable."
 evidence:
   - status: SPECIFIED
     result: "E-005 provides durable ordering; Q22/Q25 define version and transaction semantics."
@@ -1459,14 +1468,14 @@ reopen_only_if: "A supported storage class lacks a measurable resource needed by
 ```yaml
 question_id: Q75
 state: CLOSED
-decision: "Post-training recompilation computes the transitive hash closure from changed trainable objects and reuses every artifact whose complete input digest vector is unchanged."
+decision: "Post-training recompilation computes the transitive hash closure from changed trainable objects and mathematical-certificate inputs, and reuses every artifact whose complete input digest vector is unchanged."
 formal_contract:
-  symbols: "Changed={delta pages,replacement pages,router,precision residuals,tokenizer,operators,context}. affected=transitive_closure_Q27(Changed). Recompute in topological order {activation stats -> clusters/page maps -> prompt router -> precision calibration -> hardware plans -> quality/stability evidence -> compatibility/protocol manifest}. Full revision is required by Q61 thresholds or any semantic schema change."
+  symbols: "Changed={delta pages,replacement pages,condition metrics,atoms,selector,description,residual estimator,observation contract,precision residuals,tokenizer,operators,context}. affected=transitive_closure_Q27(Changed). Recompute in topological order {protected traces and activation stats -> condition metrics -> compatibility witnesses and atom cover -> descriptions/residuals/estimator calibration -> page maps -> precision calibration -> composition/horizon proof -> hardware plans -> quality/certificate evidence -> compatibility/protocol manifest}. Full certificate closure is required by Q61 or any semantic schema change."
   applicability: "Adapter-only revisions may add an overlay plan and rerun quality without repacking base pages; merged or base-updated revisions follow affected tensor spans."
 evidence:
   - status: INFERRED
     result: "Q27 supplies dependencies; Q57/Q59 separate shared pages from plans."
-build_instruction: "Hash every generator's complete inputs, cache outputs by that hash, recompute affected closure on D, and publish through Q60/Q73 while retaining the prior revision."
+build_instruction: "Hash every generator's complete inputs, including every MATHS.md certificate field, cache outputs by that hash, recompute affected closure on D, and publish through Q60/Q73 while retaining the prior revision."
 acceptance_check: "For each change class, compare incremental output with clean full compilation: logical root, plans, and evidence inputs must match wherever deterministic, with no stale artifact reuse."
 depends_on: [Q27, Q61, Q70, Q73]
 reopen_only_if: "Incremental and clean compilation diverge beyond an explicitly stochastic recorded transform."
@@ -1549,7 +1558,7 @@ reopen_only_if: "A runtime or OS path prevents auditable local-only enforcement.
 ```yaml
 question_id: Q80
 state: CLOSED
-decision: "Cassette is complete only when every REQUIRED row in research/ACCEPTANCE_MATRIX.yaml (v2) is LIVE-PROVEN under its declared role and gate tier — Q68 FRONTIER_CLASS for thesis rows, floors plus the Q17 PARITY tier for mild-transform rows, correctness for TEACHER_CORRECTNESS rows, with the F4/F5 gates passed before any frontier compiled row ran — against its exact immutable model, Apple class, measured cartridge class, source, workload, training, protocol, failure, privacy, and code identity; no partial substitute changes the result."
+decision: "Cassette is complete only when every REQUIRED row in research/ACCEPTANCE_MATRIX.yaml (v3) is LIVE-PROVEN under its declared role and gate tier — Q68 FRONTIER_CLASS for thesis rows, floors plus the Q17 PARITY tier for mild-transform rows, correctness for TEACHER_CORRECTNESS rows, with the F4/F5 gates passed before any frontier compiled row ran — against its exact immutable model, Apple class, measured cartridge class, source, workload, training, protocol, failure, privacy, and code identity; no partial substitute changes the result."
 formal_contract:
   symbols: "complete = all(row.status==PASS for row in matrix where row.required) and all(evidence(row)==LIVE_PROVEN) and Q78_exact_accounting_pass and Q79_offline_pass. Any NOT_RUN, BLOCKED, SKIPPED, SUBSTITUTED, SIMULATED, REMOTE, or FAIL required row implies complete=false. Thresholds are Q17/Q18/Q19/Q48/Q68/Q69/Q70."
   applicability: "The matrix binds exact Q39 rows, all five named agent surfaces, source adapters, Tier-A/Tier-B training, long context/vision/reasoning/tools, disconnect/corruption/power/capacity failures, recovery, offline execution, provenance, and minimum-code proof."

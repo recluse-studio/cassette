@@ -1,7 +1,8 @@
 # AGENTS.md — Cassette build rules
 
-Read ORIGINAL_REMIT.md, research/RESEARCH.md, and research/ACCEPTANCE_MATRIX.yaml before writing
-anything. This file operationalizes Q29/Q30/Q32/Q33/Q78 and binds every agent and every commit.
+Read ORIGINAL_REMIT.md, MATHS.md, research/RESEARCH.md, and research/ACCEPTANCE_MATRIX.yaml before
+writing anything. MATHS.md is binding for every compiler, plan, pager, and compiled-training
+decision. This file operationalizes Q29/Q30/Q32/Q33/Q78 and binds every agent and every commit.
 This is the only instruction authority in this repository; CLAUDE.md and
 .github/copilot-instructions.md are pointers to it.
 
@@ -35,7 +36,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
 - Line 1 of every authored file is one comment: what the file is, and every repo file it depends
   on. Example:
 
-  `# pager.py — working-set prediction, page residency, miss recovery (Q19/Q20/Q63/Q64); depends on store.py, errors.py.`
+  `# pager.py — certified plan execution, page residency, stochastic correction (Q19/Q20/Q63/Q64); depends on store.py, errors.py.`
 
   tools/ledger verifies declared dependencies equal actual intra-repo imports; a mismatch fails
   the accounting.
@@ -91,6 +92,9 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   defect.
 - No speculative abstraction: no interface with one implementation, no config for a value with
   one setting, no future hooks. The ledger's reopen clauses are the future mechanism.
+- No mathematical collapse: condition compatibility, atom capacity, description distortion,
+  execution risk, sequential composition, and observation adequacy remain separate certificate
+  fields under MATHS.md. Rank, cache size, or prompt similarity may not stand in for another field.
 - No silent fallbacks (Q20): a missing invariant terminates with a typed error; it never degrades
   quality or substitutes a result.
 - No hand edits to generated files. Schemas, validators, and dispatch tables are generated from
