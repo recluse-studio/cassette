@@ -527,7 +527,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03, S01]
-    status: IN_PROGRESS 2026-08-09 — reopened after non-Darwin collection and execution probes proved that the env:macos fixture lacked a pre-import platform gate
+    status: DONE 2026-08-09 — original step 73997e0; platform-gate repair 26a0913; complete macOS suite 28 passed in 46.17 seconds with no skips; synthetic Linux gate skipped before MLX or pager import; ledger clean with 2,813 product LOC, 2,136 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact dependency pins
     reopened_by: "S12 test-harness portability failure reproduced after ec551de: with MLX unavailable, test_s12_pager.py reached its module-level MLX import and aborted collection; with MLX installed under a synthetic Linux platform, the golden operator fixture ran and failed at Q30's Apple Silicon Metal guard instead of skipping. Future env:any steps therefore could not satisfy their complete-suite gate outside macOS."
     closeout:
       - clause: "Q33/Q40 bounded data represents every separate MATHS.md certificate dimension and the least-invasive compiled mode"
@@ -550,6 +550,17 @@ steps:
         input: "Inject an MLX import into a hostile compiler authority; run every fixture on arm64 macOS with bytecode and pytest caches disabled; regenerate and hash every schema; recompute imports, citations, pins, commit law, tracked artifacts, runtime confinement, and J; inspect mounted images and the patch."
         expected: "The hostile import fails confinement. Every fixture passes without a platform skip; generated files and the lock are reproducible; the ledger reports no violation, duplicate authority, model branch, extra runtime, process, or authored kernel; no Cassette test image remains mounted."
         observed: "The hostile compiler import was rejected and its guard-removal mutant failed. The complete suite passed all 28 tests in 46.32 seconds with no skips. The ledger reported zero violations, 2,813 product LOC, 2,133 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact pins. No Cassette S06 or S08 image was mounted, and the repository retained 97 GiB free."
+    correction_closeout:
+      - clause: "An env:macos S12 fixture cannot abort or fail a future non-Darwin complete-suite run"
+        test_or_probe: "synthetic Linux module-load probe with an import blocker before and after repair 26a0913"
+        input: "Override platform.system to Linux and platform.machine to x86_64, then make any import of mlx, mlx.*, or pager raise immediately while loading tests/test_s12_pager.py. Separately run the Q30 golden fixture with MLX installed under the same synthetic platform."
+        expected: "Before repair, the module reaches MLX during collection or reaches Q30 execution and fails. After repair, pytest skips the module before either platform-bound import; no S12 test runs or fails outside its declared environment."
+        observed: "Before repair, the import blocker reported platform import reached: mlx, and the installed-runtime probe failed with CAPABILITY_MISMATCH at the Apple Silicon Metal guard. After repair, the same blocker remained untouched and the module raised the explicit S12 non-Darwin skip."
+      - clause: "The platform guard is consequential and preserves all accepted macOS behavior"
+        test_or_probe: "one guard-removal mutant, tests/test_s12_pager.py on real arm64 macOS, the complete pinned suite, tools/ledger.py, hdiutil inspection, and git diff checking after 26a0913"
+        input: "Remove only the early skip from a disposable test-file copy and repeat the import-blocker probe; restore the guard and execute all three S12 fixtures plus every repository fixture on Apple Silicon Metal."
+        expected: "The mutant reaches the forbidden MLX import. The repaired source skips only outside Darwin arm64, while all original Q30/Q33/Q40 evidence and repository invariants remain green on the declared platform."
+        observed: "The mutant was caught at mlx. The repaired S12 file passed all three fixtures in 0.53 seconds; the complete suite passed all 28 tests in 46.17 seconds with no skips. The ledger reported zero violations, 2,813 product LOC, 2,136 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact pins. No Cassette image was mounted, and only the pre-existing untracked presentation directory remained."
 
   - id: S13
     title: Compatibility-certificate validation, memory budget, and residency schedules
