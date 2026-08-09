@@ -521,11 +521,13 @@ steps:
     title: Mathematical-plan schemas, runtime dispatch, and golden operators
     env: macos
     files: [pager.py, tools/genschema.py, schema/ (generated dispatch and Q19 certificate tables)]
+    discovered_scope: "tests/test_s12_pager.py executes the F2/Q30/Q33/Q40 boundary; tests/test_s03_schema.py admits the new generated contracts without weakening S03; pyproject.toml and uv.lock pin the MLX release executed by the generated dispatch table. The pre-S12 mathematical-authority amendment is a required input and remains distinct from the S12 implementation changes. tools/genschema.py remains the sole generated-contract authority above 800 physical lines; splitting it would create schema plumbing and a second authority."
+    dependency_admission: "mlx==0.31.0 at release commit 365d6f29b47686a9f5401f6a9ec5825fee162d69; subset: core/fast operators, explicit-key categorical sampling, autograd, and SGD; serves Q30. Its Darwin wheel supplies the existing Metal kernels that replace every Cassette numerical kernel."
     invariants: [Q30 acceptance (golden tensors per dispatched dtype/shape/operator against reference), Q33/Q40 acceptance (generated bounded schema represents every MATHS.md certificate dimension without executable or model-specific payload), F2 valid/malformed certificate and golden-operator fixtures; mlx confinement check in ledger]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03, S01]
-    status: TODO
+    status: IN_PROGRESS 2026-08-09
 
   - id: S13
     title: Compatibility-certificate validation, memory budget, and residency schedules

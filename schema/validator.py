@@ -2,6 +2,8 @@
 """Validate instances against the generated JSON Schema subset used by Cassette."""
 
 import json
+import math
+import re
 from pathlib import Path
 
 _SCHEMAS = {}
@@ -45,6 +47,8 @@ def _validate(schema, value, path):
         defects = []
         if len(value) < schema.get("minItems", 0):
             defects.append(f"{path}: requires at least {schema['minItems']} items")
+        if len(value) > schema.get("maxItems", len(value)):
+            defects.append(f"{path}: permits at most {schema['maxItems']} items")
         if "items" in schema:
             for index, item in enumerate(value):
                 defects.extend(_validate(schema["items"], item, f"{path}[{index}]"))
@@ -58,6 +62,12 @@ def _validate(schema, value, path):
         defects = []
         if kind == "string" and len(value) < schema.get("minLength", 0):
             defects.append(f"{path}: string is shorter than {schema['minLength']}")
+        if kind == "string" and len(value) > schema.get("maxLength", len(value)):
+            defects.append(f"{path}: string is longer than {schema['maxLength']}")
+        if kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
+            defects.append(f"{path}: string does not match {schema['pattern']!r}")
+        if kind == "number" and not math.isfinite(value):
+            defects.append(f"{path}: number must be finite")
         if "minimum" in schema and value < schema["minimum"]:
             defects.append(f"{path}: value is below {schema['minimum']}")
         if "maximum" in schema and value > schema["maximum"]:

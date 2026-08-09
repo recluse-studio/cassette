@@ -14,7 +14,10 @@ REPO = Path(__file__).resolve().parent.parent
 EXPECTED_KINDS = {
     "capability_profile",
     "error",
+    "execution_plan",
+    "mathematical_certificate",
     "operation",
+    "operator_dispatch",
     "remote_metadata",
     "remote_metadata_field",
     "request",
@@ -73,6 +76,22 @@ EXPECTED_FIELDS = {
     "root": {
         "identity", "parents", "provenance", "semantic_assets", "tensor_maps", "operators",
         "plans", "deltas", "integrity_root",
+    },
+    "mathematical_certificate": {
+        "certificate_version", "certificate_id", "target", "condition_metrics",
+        "compatibility", "atoms", "description_contract", "observation_contract", "execution_contract",
+        "trace_contract", "resources", "resource_tables", "physical_conversion",
+    },
+    "operator_dispatch": {
+        "dispatch_version", "runtime_name", "runtime_version", "runtime_commit",
+        "dispatch_digest", "case_ids", "apple_features",
+    },
+    "execution_plan": {
+        "plan_version", "plan_id", "selected_mode", "prior_mode_failures", "target_digest",
+        "profile_digest", "certificate_id", "tensor_graph_digest", "page_map_digest",
+        "layout_digest", "precision_planes_digest", "semantic_manifest_digest",
+        "invalidation_graph_digest", "dispatch", "resource_limits", "artifact_refs",
+        "weight_payload_bytes",
     },
 }
 EXPECTED_OPTIONAL = {
@@ -137,6 +156,236 @@ TENSOR_MAP = {
     "plane": 0,
     "spans": [SPAN],
 }
+DIGESTS = [f"blake3:{digit * 64}" for digit in "0123456789abcdef"]
+RESOURCES = {
+    "eta_rep": 0.125,
+    "epsilon_exec": 0.01,
+    "delta_exec_total": 0.001,
+    "atom_count": 1,
+    "max_atom_rank": 1,
+    "description_bytes_peak": 4096,
+    "description_bytes_total": 4096,
+    "metadata_bytes_peak": 1024,
+    "metadata_bytes_total": 1024,
+    "fresh_samples_max": 0,
+    "fresh_samples_total": 0,
+    "fresh_traffic_max": 0,
+    "fresh_traffic_total": 0,
+    "fresh_traffic_unit": "BYTES",
+    "horizon": 1,
+}
+OPERATOR_DISPATCH = {
+    "dispatch_version": "q30-v1",
+    "runtime_name": "mlx",
+    "runtime_version": "0.31.0",
+    "runtime_commit": "365d6f29b47686a9f5401f6a9ec5825fee162d69",
+    "dispatch_digest": "sha256:db0c5bae5819952f448174049b5acbb1dcc95ccd49437da45c881eed7250b32f",
+    "case_ids": [
+        "mlx.matmul.f32.2x3_3x2",
+        "mlx.quantized_matmul.affine4.f32.1x32_2x32",
+        "mlx.rms_norm.f32.2x4",
+        "mlx.rope.traditional.f32.1x1x2x4",
+        "mlx.attention.f32.1x1x2x2",
+        "mlx.conv1d.f32.1x4x1_1x2x1",
+        "mlx.embedding.f32_u32.4x3_2",
+        "mlx.categorical.f32_u32.2x3_2",
+        "mlx.autograd_sum.f32.2x3",
+        "mlx.sgd.f32.3",
+    ],
+    "apple_features": ["apple_silicon", "metal"],
+}
+MATHEMATICAL_CERTIFICATE = {
+    "certificate_version": "q19-v1",
+    "certificate_id": DIGESTS[0],
+    "target": {
+        "target_digest": DIGESTS[1],
+        "flattening_digest": DIGESTS[2],
+        "shape": [2, 2],
+        "field": "REAL",
+    },
+    "condition_metrics": [
+        {
+            "condition_id": "condition.a",
+            "provenance_digest": DIGESTS[3],
+            "metric_digest": DIGESTS[4],
+            "positive_definite_witness_digest": DIGESTS[5],
+        },
+        {
+            "condition_id": "condition.b",
+            "provenance_digest": DIGESTS[6],
+            "metric_digest": DIGESTS[7],
+            "positive_definite_witness_digest": DIGESTS[8],
+        },
+    ],
+    "compatibility": {
+        "eta_rep": 0.125,
+        "rank_budget": 1,
+        "service_faces": [
+            {"face_id": "face.ab", "condition_ids": ["condition.a", "condition.b"]}
+        ],
+        "minimal_nonfaces": [],
+        "cover": [
+            {"condition_id": "condition.a", "atom_id": "atom.ab"},
+            {"condition_id": "condition.b", "atom_id": "atom.ab"},
+        ],
+        "excluded_conditions": [],
+    },
+    "atoms": [
+        {
+            "atom_id": "atom.ab",
+            "witness_digest": DIGESTS[9],
+            "rank": 1,
+            "service_face_id": "face.ab",
+            "witness_losses": [
+                {"condition_id": "condition.a", "loss": 0.1},
+                {"condition_id": "condition.b", "loss": 0.125},
+            ],
+            "description": {
+                "class": "EXACT",
+                "reconstruction_digest": DIGESTS[10],
+                "residual_relation_digest": DIGESTS[11],
+                "distortion_bound": 0.01,
+                "estimator_digest": DIGESTS[12],
+                "estimator_calibration_digest": DIGESTS[13],
+                "sampling_law_id": "sampling.exact",
+            },
+        }
+    ],
+    "description_contract": {
+        "description_family_digest": DIGESTS[10],
+        "distortion_metric_digest": DIGESTS[11],
+        "residual_family_digest": DIGESTS[12],
+        "estimator_family_digest": DIGESTS[13],
+    },
+    "observation_contract": {
+        "kind": "PROTECTED_TEST_LAW",
+        "experiment_digest": DIGESTS[12],
+        "support_digest": DIGESTS[13],
+        "selector_digest": DIGESTS[14],
+        "loss_family_digest": DIGESTS[15],
+        "sample_count": 256,
+        "confidence": 0.99,
+        "off_support": "REJECT",
+    },
+    "execution_contract": {
+        "sampling_laws": [
+            {
+                "sampling_law_id": "sampling.exact",
+                "kind": "EXACT",
+                "law_digest": DIGESTS[11],
+                "work_unit": "PAGES",
+                "seed_policy": "NONE",
+            }
+        ],
+        "operations": [
+            {
+                "operation_id": "operation.matmul",
+                "operator_case_id": "mlx.matmul.f32.2x3_3x2",
+                "rank_accounting_digest": DIGESTS[2],
+                "loss_propagation_digest": DIGESTS[4],
+                "remainder_bound": 0.0,
+                "epsilon_exec": 0.01,
+                "delta_exec": 0.001,
+                "sampling_law_id": "sampling.exact",
+            }
+        ],
+        "risk_composition_kind": "UNION_BOUND",
+        "risk_composition_digest": DIGESTS[5],
+    },
+    "trace_contract": {
+        "protected_trace_family_digest": DIGESTS[6],
+        "schedule_digest": DIGESTS[7],
+        "prefix_policy": "COHERENT_RESTRICTION",
+        "horizon": 1,
+    },
+    "resources": RESOURCES,
+    "resource_tables": {
+        "per_atom": [
+            {
+                "atom_id": "atom.ab",
+                "description_bytes": 4096,
+                "metadata_bytes": 1024,
+                "fresh_samples_max": 0,
+                "fresh_samples_total": 0,
+                "fresh_traffic_max": 0,
+                "fresh_traffic_total": 0,
+                "epsilon_exec": 0.01,
+                "delta_exec": 0.001,
+            }
+        ],
+        "per_operation": [
+            {
+                "operation_id": "operation.matmul",
+                "description_bytes_peak": 4096,
+                "description_bytes_total": 4096,
+                "metadata_bytes_peak": 1024,
+                "metadata_bytes_total": 1024,
+                "fresh_samples_max": 0,
+                "fresh_samples_total": 0,
+                "fresh_traffic_max": 0,
+                "fresh_traffic_total": 0,
+                "epsilon_exec": 0.01,
+                "delta_exec": 0.001,
+            }
+        ],
+        "per_trace_step": [
+            {
+                "step": 0,
+                "operation_id": "operation.matmul",
+                "atom_id": "atom.ab",
+                "description_bytes_resident": 4096,
+                "metadata_bytes_resident": 1024,
+                "fresh_samples": 0,
+                "fresh_traffic": 0,
+                "epsilon_exec": 0.01,
+                "delta_exec": 0.001,
+            }
+        ],
+    },
+    "physical_conversion": {
+        "conversion_rows": [
+            {
+                "operation_id": "operation.matmul",
+                "probe_unit": "BLOCKS",
+                "probes": 1,
+                "page_reads": 1,
+                "bytes": 4096,
+                "memory_bytes_peak": 5120,
+                "latency_ns_peak": 1000,
+            }
+        ],
+        "conversion_digest": DIGESTS[8],
+    },
+}
+EXECUTION_PLAN = {
+    "plan_version": "compiled-plan-v1",
+    "plan_id": DIGESTS[9],
+    "selected_mode": "COMPILED_CERTIFIED",
+    "prior_mode_failures": [
+        {"ordinal": index + 1, "mode": mode, "q38_record_digest": DIGESTS[index + 10]}
+        for index, mode in enumerate(
+            [
+                "BYTE_IDENTICAL_LAYOUT",
+                "EXACT_NATIVE_SPARSITY",
+                "EXACT_QUANTIZED_LAYOUT",
+                "NATIVE_PREDICTIVE_PREFETCH",
+            ]
+        )
+    ],
+    "target_digest": DIGESTS[1],
+    "profile_digest": DIGESTS[2],
+    "certificate_id": DIGESTS[0],
+    "tensor_graph_digest": DIGESTS[3],
+    "page_map_digest": DIGESTS[4],
+    "layout_digest": DIGESTS[5],
+    "precision_planes_digest": DIGESTS[6],
+    "semantic_manifest_digest": DIGESTS[7],
+    "invalidation_graph_digest": DIGESTS[8],
+    "dispatch": OPERATOR_DISPATCH,
+    "resource_limits": RESOURCES,
+    "artifact_refs": [DIGESTS[1]],
+    "weight_payload_bytes": 0,
+}
 GOLDEN = {
     "error": {
         "code": "PAGE_CORRUPT",
@@ -198,6 +447,9 @@ GOLDEN = {
     "remote_metadata": REMOTE_GOLDEN,
     "tensor_span": SPAN,
     "tensor_map": TENSOR_MAP,
+    "mathematical_certificate": MATHEMATICAL_CERTIFICATE,
+    "operator_dispatch": OPERATOR_DISPATCH,
+    "execution_plan": EXECUTION_PLAN,
     "root": {
         "identity": "I-abc",
         "parents": ["I-parent"],

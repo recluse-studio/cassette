@@ -1,7 +1,10 @@
 {
   "capability_profile.json": "ebbd55731f03a6095b8aafe8b8bee658a06605f1ad11f47ab38f8050f9848ebf",
   "error.json": "4665d53782b610a7e36c9164d03e805f7d8fe5cd74bdf2727610a7d2d5ff2072",
+  "execution_plan.json": "1a922522379d6a4e0464c1aec7156ccaaf772b80e0e5c88ce423ff91fb3a2a90",
+  "mathematical_certificate.json": "6e7bc53432859543bc148e5aa7d595e86f0130bd5aa02047053e088934f2403d",
   "operation.json": "5c76e77a1adbd4568546c640c6f8ef0c08f6c1fb5dbfebcaa43ed4a936b20463",
+  "operator_dispatch.json": "21b1dbd55a80e0ec35515200e1daf03e253f8688dc2e9658c8633013a76568dd",
   "remote_metadata.json": "3da766417388bd6d34499dd760aaf110cb469a8f43314c368b42f893dbd01ab6",
   "remote_metadata_field.json": "50a2e4af1faf3412eee88283d1560599e9802d9f5f9b5bde2142f3fb876c6162",
   "request.json": "d237ea9b1c2696fdd2630c939b65abdca360bfe1f2d11fb55b109aca71da958a",
@@ -9,7 +12,8 @@
   "run_event.json": "d33c75a4b235b4f975ab662ae6dfd69128a7ab62d17de3d9304e89af9e1833a7",
   "run_request.json": "0462fd01a44433f04df26cfa952654eaa3a3a1c9c3c7afa278b45c549924fd48",
   "source_descriptor.json": "febc9b9c3ffa590ee7741038300b995943bd6af45c0599dee6e21ee978e7af69",
+  "tables.py": "bd419e8a12889cf65c3a5c285e28bd17847862d9f14f76bd15555b0ca4688e7a",
   "tensor_map.json": "e8c4c07ecbb65f7920e9e5593e2523d8f5c24055d27e1b4d4081063b57182637",
   "tensor_span.json": "c8262fe8a7944ea216c72469dc4b421391b34a74f5b60fa12459e7a114a14335",
-  "validator.py": "d690117596e19fe2a9f3f5a5f4951427f20d2855ce73516a3ea3b0cffa6c0efb"
+  "validator.py": "524722225e40bd72275df245e480a2137c4bc23d915270d99c7aa34c897f7a96"
 }

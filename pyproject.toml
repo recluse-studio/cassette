@@ -11,8 +11,10 @@ requires-python = "==3.13.*"
 # Q1/Q51/Q57/Q62: blake3.blake3 is the one Cassette content and identity digest primitive.
 # Q1/Q57: rfc8785.dumps is the one canonical model and manifest serializer.
 # Q51: resumablesha256 exposes fixed SHA-256 continuation state; hashlib exposes no state.
+# Q30: MLX 0.31.0 owns every dispatched Apple numerical operator; Cassette authors none.
 dependencies = [
     "blake3==1.0.9",
+    "mlx==0.31.0",
     "rfc8785==0.1.4",
     "resumablesha256==1.0",
 ]

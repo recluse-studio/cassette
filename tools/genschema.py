@@ -1,4 +1,4 @@
-# genschema.py — emits the Q6/Q9/Q31/Q50/Q57 JSON Schemas, validator, and integrity manifest; depends on errors.py.
+# genschema.py — emits Q6/Q9/Q19/Q30/Q31/Q33/Q40/Q50/Q57 contracts and generated tables; depends on errors.py.
 """Generate Cassette's machine contracts. Files under schema/ are never hand-edited.
 
 The emitted documents are JSON Schema Draft 2020-12 contracts. The generated validator executes
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pprint
 import sys
 from pathlib import Path
 
@@ -44,24 +45,262 @@ REMOTE_METADATA_FIELDS = [
     "training_precision",
     "source_validators",
 ]
+MAX_IDENTIFIER_BYTES = 256
+MAX_TEXT_BYTES = 4096
+MAX_TABLE_ROWS = 1_048_576
+MAX_U64 = 18_446_744_073_709_551_615
+MLX_RUNTIME = {
+    "name": "mlx",
+    "package": "mlx==0.31.0",
+    "release_commit": "365d6f29b47686a9f5401f6a9ec5825fee162d69",
+    "apple_features": ["apple_silicon", "metal"],
+}
+Q40_MODES = [
+    "BYTE_IDENTICAL_LAYOUT",
+    "EXACT_NATIVE_SPARSITY",
+    "EXACT_QUANTIZED_LAYOUT",
+    "NATIVE_PREDICTIVE_PREFETCH",
+    "COMPILED_CERTIFIED",
+]
+DISPATCH_ROWS = [
+    {
+        "case_id": "mlx.matmul.f32.2x3_3x2",
+        "operator": "matmul",
+        "runtime_symbols": ["mlx.core.matmul"],
+        "input_dtypes": ["float32", "float32"],
+        "input_shapes": [[2, 3], [3, 2]],
+        "output_dtype": "float32",
+        "output_shape": [2, 2],
+        "parameters": {},
+        "absolute_tolerance": 1e-6,
+        "relative_tolerance": 1e-6,
+    },
+    {
+        "case_id": "mlx.quantized_matmul.affine4.f32.1x32_2x32",
+        "operator": "quantized_matmul",
+        "runtime_symbols": ["mlx.core.quantized_matmul"],
+        "input_dtypes": ["float32", "uint32", "float32", "float32"],
+        "input_shapes": [[1, 32], [2, 4], [2, 1], [2, 1]],
+        "output_dtype": "float32",
+        "output_shape": [1, 2],
+        "parameters": {"bits": 4, "group_size": 32, "mode": "affine", "transpose": True},
+        "absolute_tolerance": 1e-3,
+        "relative_tolerance": 1e-6,
+    },
+    {
+        "case_id": "mlx.rms_norm.f32.2x4",
+        "operator": "norm",
+        "runtime_symbols": ["mlx.core.fast.rms_norm"],
+        "input_dtypes": ["float32", "float32"],
+        "input_shapes": [[2, 4], [4]],
+        "output_dtype": "float32",
+        "output_shape": [2, 4],
+        "parameters": {"eps": 1e-5},
+        "absolute_tolerance": 1e-5,
+        "relative_tolerance": 1e-5,
+    },
+    {
+        "case_id": "mlx.rope.traditional.f32.1x1x2x4",
+        "operator": "rope",
+        "runtime_symbols": ["mlx.core.fast.rope"],
+        "input_dtypes": ["float32"],
+        "input_shapes": [[1, 1, 2, 4]],
+        "output_dtype": "float32",
+        "output_shape": [1, 1, 2, 4],
+        "parameters": {
+            "base": 10000.0,
+            "dims": 4,
+            "offset": 0,
+            "scale": 1.0,
+            "traditional": True,
+        },
+        "absolute_tolerance": 1e-5,
+        "relative_tolerance": 1e-5,
+    },
+    {
+        "case_id": "mlx.attention.f32.1x1x2x2",
+        "operator": "attention",
+        "runtime_symbols": ["mlx.core.fast.scaled_dot_product_attention"],
+        "input_dtypes": ["float32", "float32", "float32"],
+        "input_shapes": [[1, 1, 2, 2], [1, 1, 2, 2], [1, 1, 2, 2]],
+        "output_dtype": "float32",
+        "output_shape": [1, 1, 2, 2],
+        "parameters": {"scale": 0.7071067811865476},
+        "absolute_tolerance": 1e-5,
+        "relative_tolerance": 1e-5,
+    },
+    {
+        "case_id": "mlx.conv1d.f32.1x4x1_1x2x1",
+        "operator": "convolution",
+        "runtime_symbols": ["mlx.core.conv1d"],
+        "input_dtypes": ["float32", "float32"],
+        "input_shapes": [[1, 4, 1], [1, 2, 1]],
+        "output_dtype": "float32",
+        "output_shape": [1, 3, 1],
+        "parameters": {"dilation": 1, "groups": 1, "padding": 0, "stride": 1},
+        "absolute_tolerance": 1e-6,
+        "relative_tolerance": 1e-6,
+    },
+    {
+        "case_id": "mlx.embedding.f32_u32.4x3_2",
+        "operator": "embedding",
+        "runtime_symbols": ["mlx.core.take"],
+        "input_dtypes": ["float32", "uint32"],
+        "input_shapes": [[4, 3], [2]],
+        "output_dtype": "float32",
+        "output_shape": [2, 3],
+        "parameters": {"axis": 0},
+        "absolute_tolerance": 0.0,
+        "relative_tolerance": 0.0,
+    },
+    {
+        "case_id": "mlx.categorical.f32_u32.2x3_2",
+        "operator": "sampling",
+        "runtime_symbols": ["mlx.core.random.categorical"],
+        "input_dtypes": ["float32", "uint32"],
+        "input_shapes": [[2, 3], [2]],
+        "output_dtype": "uint32",
+        "output_shape": [2],
+        "parameters": {"axis": -1},
+        "absolute_tolerance": 0.0,
+        "relative_tolerance": 0.0,
+    },
+    {
+        "case_id": "mlx.autograd_sum.f32.2x3",
+        "operator": "autograd",
+        "runtime_symbols": ["mlx.core.grad", "mlx.core.sum"],
+        "input_dtypes": ["float32"],
+        "input_shapes": [[2, 3]],
+        "output_dtype": "float32",
+        "output_shape": [2, 3],
+        "parameters": {},
+        "absolute_tolerance": 0.0,
+        "relative_tolerance": 0.0,
+    },
+    {
+        "case_id": "mlx.sgd.f32.3",
+        "operator": "optimizer",
+        "runtime_symbols": ["mlx.optimizers.SGD.apply_gradients"],
+        "input_dtypes": ["float32", "float32"],
+        "input_shapes": [[3], [3]],
+        "output_dtype": "float32",
+        "output_shape": [3],
+        "parameters": {"learning_rate": 0.25},
+        "absolute_tolerance": 1e-6,
+        "relative_tolerance": 1e-6,
+    },
+]
+DISPATCH_DIGEST = "sha256:" + hashlib.sha256(
+    json.dumps(
+        {"runtime": MLX_RUNTIME, "rows": DISPATCH_ROWS},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+).hexdigest()
+OPERATOR_DISPATCH_RECORD = {
+    "dispatch_version": "q30-v1",
+    "runtime_name": MLX_RUNTIME["name"],
+    "runtime_version": MLX_RUNTIME["package"].split("==", 1)[1],
+    "runtime_commit": MLX_RUNTIME["release_commit"],
+    "dispatch_digest": DISPATCH_DIGEST,
+    "case_ids": [row["case_id"] for row in DISPATCH_ROWS],
+    "apple_features": MLX_RUNTIME["apple_features"],
+}
+CERTIFICATE_DIMENSIONS = {
+    "mathematics": [
+        "target",
+        "condition_metrics",
+        "compatibility",
+        "atoms",
+        "description_contract",
+        "observation_contract",
+        "execution_contract",
+        "trace_contract",
+    ],
+    "resources": [
+        "eta_rep",
+        "epsilon_exec",
+        "delta_exec_total",
+        "atom_count",
+        "max_atom_rank",
+        "description_bytes_peak",
+        "description_bytes_total",
+        "metadata_bytes_peak",
+        "metadata_bytes_total",
+        "fresh_samples_max",
+        "fresh_samples_total",
+        "fresh_traffic_max",
+        "fresh_traffic_total",
+        "fresh_traffic_unit",
+        "horizon",
+    ],
+    "tables": ["per_atom", "per_operation", "per_trace_step"],
+    "physical": ["conversion_rows", "conversion_digest"],
+}
 
 
-def text(*, enum: list[str] | None = None, empty: bool = False) -> dict:
+def text(
+    *,
+    enum: list[str] | None = None,
+    empty: bool = False,
+    maximum: int | None = None,
+    pattern: str | None = None,
+) -> dict:
     shape: dict = {"type": "string"}
     if not empty:
         shape["minLength"] = 1
+    if maximum is not None:
+        shape["maxLength"] = maximum
     if enum is not None:
         shape["enum"] = enum
+    if pattern is not None:
+        shape["pattern"] = pattern
     return shape
 
 
-def array(items: dict | None = None, *, minimum: int | None = None) -> dict:
+def array(
+    items: dict | None = None,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> dict:
     shape: dict = {"type": "array"}
     if items is not None:
         shape["items"] = items
     if minimum is not None:
         shape["minItems"] = minimum
+    if maximum is not None:
+        shape["maxItems"] = maximum
     return shape
+
+
+def bounded_text(*, enum: list[str] | None = None) -> dict:
+    return text(enum=enum, maximum=MAX_TEXT_BYTES, pattern=r"^[^\x00-\x1f\x7f]+$")
+
+
+def identifier(*, enum: list[str] | None = None) -> dict:
+    return text(
+        enum=enum,
+        maximum=MAX_IDENTIFIER_BYTES,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+def digest() -> dict:
+    return text(maximum=71, pattern=r"^(blake3|sha256):[0-9a-f]{64}$")
+
+
+def integer(*, minimum: int = 0, maximum: int = MAX_U64) -> dict:
+    return {"type": "integer", "minimum": minimum, "maximum": maximum}
+
+
+def number(*, minimum: float = 0.0, maximum: float = 1e300) -> dict:
+    return {"type": "number", "minimum": minimum, "maximum": maximum}
+
+
+def bounded_array(items: dict, *, minimum: int = 0, maximum: int = MAX_TABLE_ROWS) -> dict:
+    return array(items, minimum=minimum, maximum=maximum)
 
 
 def ref(kind: str) -> dict:
@@ -95,6 +334,348 @@ REMOTE_FIELD = record(
         "authority": text(),
     },
     optional=("value",),
+)
+
+CONDITION_METRIC = record(
+    "Condition metric",
+    "Q19/MATHS section 1",
+    {
+        "condition_id": identifier(),
+        "provenance_digest": digest(),
+        "metric_digest": digest(),
+        "positive_definite_witness_digest": digest(),
+    },
+)
+SERVICE_FACE = record(
+    "Atom service face",
+    "Q19/MATHS section 2",
+    {
+        "face_id": identifier(),
+        "condition_ids": bounded_array(identifier(), minimum=1),
+    },
+)
+MINIMAL_NONFACE = record(
+    "Compatibility minimal nonface",
+    "Q19/MATHS section 2",
+    {
+        "nonface_id": identifier(),
+        "condition_ids": bounded_array(identifier(), minimum=1),
+        "witness_digest": digest(),
+    },
+)
+COVER_ENTRY = record(
+    "Protected-condition atom cover entry",
+    "Q19/MATHS section 2",
+    {"condition_id": identifier(), "atom_id": identifier()},
+)
+EXCLUDED_CONDITION = record(
+    "Causally excluded condition",
+    "Q19/MATHS section 8",
+    {
+        "condition_id": identifier(),
+        "cause": bounded_text(
+            enum=[
+                "OFF_SUPPORT",
+                "UNSUPPORTED_MODALITY",
+                "UNSUPPORTED_OPERATOR",
+                "UNREPRESENTABLE_WITHIN_BOUND",
+            ]
+        ),
+        "evidence_digest": digest(),
+    },
+)
+WITNESS_LOSS = record(
+    "Condition-wise witness loss",
+    "Q19/MATHS sections 1 and 8",
+    {"condition_id": identifier(), "loss": number()},
+)
+DESCRIPTION = record(
+    "Resident description and residual relation",
+    "Q19/MATHS sections 5 and 8",
+    {
+        "class": bounded_text(
+            enum=[
+                "BLOCK",
+                "DENSE_RANK_CONSTRAINED",
+                "EXACT",
+                "PRODUCT_DICTIONARY",
+                "QUANTIZED",
+                "SHARED_CORE",
+                "SPARSE_DICTIONARY",
+                "UNBOUNDED_NET",
+            ]
+        ),
+        "reconstruction_digest": digest(),
+        "residual_relation_digest": digest(),
+        "distortion_bound": number(),
+        "estimator_digest": digest(),
+        "estimator_calibration_digest": digest(),
+        "sampling_law_id": identifier(),
+    },
+)
+ATOM = record(
+    "Compatibility atom",
+    "Q19/MATHS sections 2 and 8",
+    {
+        "atom_id": identifier(),
+        "witness_digest": digest(),
+        "rank": integer(minimum=1),
+        "service_face_id": identifier(),
+        "witness_losses": bounded_array(WITNESS_LOSS, minimum=1),
+        "description": DESCRIPTION,
+    },
+)
+SAMPLING_LAW = record(
+    "Exact or fresh stochastic execution law",
+    "Q19/MATHS sections 5 and 8",
+    {
+        "sampling_law_id": identifier(),
+        "kind": bounded_text(enum=["EXACT", "FRESH_RANDOM"]),
+        "law_digest": digest(),
+        "work_unit": bounded_text(enum=["BYTES", "COLUMNS", "PAGES", "ROWS", "SCALARS"]),
+        "seed_policy": bounded_text(enum=["NONE", "RECORDED_COUNTER_KEY"]),
+    },
+)
+OPERATION_COMPOSITION = record(
+    "Operation-specific rank and loss composition",
+    "Q19/MATHS section 6",
+    {
+        "operation_id": identifier(),
+        "operator_case_id": identifier(),
+        "rank_accounting_digest": digest(),
+        "loss_propagation_digest": digest(),
+        "remainder_bound": number(),
+        "epsilon_exec": number(),
+        "delta_exec": number(maximum=1.0),
+        "sampling_law_id": identifier(),
+    },
+)
+RESOURCE_VECTOR = record(
+    "Separate mathematical and physical resource bounds",
+    "Q19/MATHS section 8",
+    {
+        "eta_rep": number(),
+        "epsilon_exec": number(),
+        "delta_exec_total": number(maximum=1.0),
+        "atom_count": integer(minimum=1),
+        "max_atom_rank": integer(minimum=1),
+        "description_bytes_peak": integer(),
+        "description_bytes_total": integer(),
+        "metadata_bytes_peak": integer(),
+        "metadata_bytes_total": integer(),
+        "fresh_samples_max": integer(),
+        "fresh_samples_total": integer(),
+        "fresh_traffic_max": integer(),
+        "fresh_traffic_total": integer(),
+        "fresh_traffic_unit": bounded_text(enum=["BYTES", "SCALARS"]),
+        "horizon": integer(minimum=1),
+    },
+)
+ATOM_RESOURCE = record(
+    "Per-atom resource row",
+    "Q19/MATHS section 8",
+    {
+        "atom_id": identifier(),
+        "description_bytes": integer(),
+        "metadata_bytes": integer(),
+        "fresh_samples_max": integer(),
+        "fresh_samples_total": integer(),
+        "fresh_traffic_max": integer(),
+        "fresh_traffic_total": integer(),
+        "epsilon_exec": number(),
+        "delta_exec": number(maximum=1.0),
+    },
+)
+OPERATION_RESOURCE = record(
+    "Per-operation resource row",
+    "Q19/MATHS section 8",
+    {
+        "operation_id": identifier(),
+        "description_bytes_peak": integer(),
+        "description_bytes_total": integer(),
+        "metadata_bytes_peak": integer(),
+        "metadata_bytes_total": integer(),
+        "fresh_samples_max": integer(),
+        "fresh_samples_total": integer(),
+        "fresh_traffic_max": integer(),
+        "fresh_traffic_total": integer(),
+        "epsilon_exec": number(),
+        "delta_exec": number(maximum=1.0),
+    },
+)
+TRACE_STEP_RESOURCE = record(
+    "Per-trace-step resource row",
+    "Q19/MATHS section 8",
+    {
+        "step": integer(),
+        "operation_id": identifier(),
+        "atom_id": identifier(),
+        "description_bytes_resident": integer(),
+        "metadata_bytes_resident": integer(),
+        "fresh_samples": integer(),
+        "fresh_traffic": integer(),
+        "epsilon_exec": number(),
+        "delta_exec": number(maximum=1.0),
+    },
+)
+PHYSICAL_CONVERSION_ROW = record(
+    "Mathematical-probe physical conversion",
+    "Q19/MATHS section 8",
+    {
+        "operation_id": identifier(),
+        "probe_unit": bounded_text(enum=["BLOCKS", "BYTES", "COLUMNS", "ROWS", "SCALARS"]),
+        "probes": integer(),
+        "page_reads": integer(),
+        "bytes": integer(),
+        "memory_bytes_peak": integer(),
+        "latency_ns_peak": integer(),
+    },
+)
+PRIOR_MODE_FAILURE = record(
+    "Q40 prior-mode failure",
+    "Q40",
+    {
+        "ordinal": integer(minimum=1, maximum=4),
+        "mode": bounded_text(enum=Q40_MODES[:-1]),
+        "q38_record_digest": digest(),
+    },
+)
+
+MATHEMATICAL_CERTIFICATE = record(
+    "Q19 mathematical resource certificate",
+    "Q19/Q33/Q40/MATHS",
+    {
+        "certificate_version": bounded_text(enum=["q19-v1"]),
+        "certificate_id": digest(),
+        "target": record(
+            "Immutable target and flattening",
+            "Q19/MATHS section 1",
+            {
+                "target_digest": digest(),
+                "flattening_digest": digest(),
+                "shape": array(integer(minimum=1), minimum=2, maximum=2),
+                "field": bounded_text(enum=["COMPLEX", "REAL"]),
+            },
+        ),
+        "condition_metrics": bounded_array(CONDITION_METRIC, minimum=1),
+        "compatibility": record(
+            "Compatibility complex and atom cover",
+            "Q19/MATHS sections 1 and 2",
+            {
+                "eta_rep": number(),
+                "rank_budget": integer(minimum=1),
+                "service_faces": bounded_array(SERVICE_FACE, minimum=1),
+                "minimal_nonfaces": bounded_array(MINIMAL_NONFACE),
+                "cover": bounded_array(COVER_ENTRY, minimum=1),
+                "excluded_conditions": bounded_array(EXCLUDED_CONDITION),
+            },
+        ),
+        "atoms": bounded_array(ATOM, minimum=1),
+        "description_contract": record(
+            "Description, distortion, residual, and estimator family",
+            "Q19/MATHS sections 5 and 8",
+            {
+                "description_family_digest": digest(),
+                "distortion_metric_digest": digest(),
+                "residual_family_digest": digest(),
+                "estimator_family_digest": digest(),
+            },
+        ),
+        "observation_contract": record(
+            "Protected observation and rejection contract",
+            "Q19/MATHS section 7",
+            {
+                "kind": bounded_text(enum=["PROTECTED_DECISION_FAMILY", "PROTECTED_TEST_LAW"]),
+                "experiment_digest": digest(),
+                "support_digest": digest(),
+                "selector_digest": digest(),
+                "loss_family_digest": digest(),
+                "sample_count": integer(),
+                "confidence": number(maximum=1.0),
+                "off_support": bounded_text(enum=["REJECT"]),
+            },
+        ),
+        "execution_contract": record(
+            "Fresh execution and operation-specific composition",
+            "Q19/MATHS sections 5 and 6",
+            {
+                "sampling_laws": bounded_array(SAMPLING_LAW, minimum=1),
+                "operations": bounded_array(OPERATION_COMPOSITION, minimum=1),
+                "risk_composition_kind": bounded_text(
+                    enum=["DECLARED_DEPENDENCE", "DETERMINISTIC", "INDEPENDENT_PRODUCT", "UNION_BOUND"]
+                ),
+                "risk_composition_digest": digest(),
+            },
+        ),
+        "trace_contract": record(
+            "Protected traces and certified horizon",
+            "Q19/MATHS section 6",
+            {
+                "protected_trace_family_digest": digest(),
+                "schedule_digest": digest(),
+                "prefix_policy": bounded_text(enum=["COHERENT_RESTRICTION", "NO_PREFIX_CLAIM"]),
+                "horizon": integer(minimum=1),
+            },
+        ),
+        "resources": RESOURCE_VECTOR,
+        "resource_tables": record(
+            "Recomputable resource tables",
+            "Q19/MATHS section 8",
+            {
+                "per_atom": bounded_array(ATOM_RESOURCE, minimum=1),
+                "per_operation": bounded_array(OPERATION_RESOURCE, minimum=1),
+                "per_trace_step": bounded_array(TRACE_STEP_RESOURCE, minimum=1),
+            },
+        ),
+        "physical_conversion": record(
+            "Mathematical-to-physical conversion",
+            "Q19/MATHS section 8",
+            {
+                "conversion_rows": bounded_array(PHYSICAL_CONVERSION_ROW, minimum=1),
+                "conversion_digest": digest(),
+            },
+        ),
+    },
+)
+
+OPERATOR_DISPATCH = record(
+    "Pinned MLX operator dispatch",
+    "Q30",
+    {
+        "dispatch_version": bounded_text(enum=["q30-v1"]),
+        "runtime_name": bounded_text(enum=[MLX_RUNTIME["name"]]),
+        "runtime_version": bounded_text(enum=[MLX_RUNTIME["package"].split("==", 1)[1]]),
+        "runtime_commit": text(maximum=40, pattern=r"^[0-9a-f]{40}$"),
+        "dispatch_digest": digest(),
+        "case_ids": bounded_array(identifier(), minimum=1),
+        "apple_features": array(
+            bounded_text(enum=MLX_RUNTIME["apple_features"]), minimum=2, maximum=2
+        ),
+    },
+)
+
+EXECUTION_PLAN = record(
+    "Compiled certified execution plan",
+    "Q33/Q40",
+    {
+        "plan_version": bounded_text(enum=["compiled-plan-v1"]),
+        "plan_id": digest(),
+        "selected_mode": bounded_text(enum=[Q40_MODES[-1]]),
+        "prior_mode_failures": array(PRIOR_MODE_FAILURE, minimum=4, maximum=4),
+        "target_digest": digest(),
+        "profile_digest": digest(),
+        "certificate_id": digest(),
+        "tensor_graph_digest": digest(),
+        "page_map_digest": digest(),
+        "layout_digest": digest(),
+        "precision_planes_digest": digest(),
+        "semantic_manifest_digest": digest(),
+        "invalidation_graph_digest": digest(),
+        "dispatch": OPERATOR_DISPATCH,
+        "resource_limits": RESOURCE_VECTOR,
+        "artifact_refs": bounded_array(digest(), minimum=1),
+        "weight_payload_bytes": integer(maximum=0),
+    },
 )
 
 CONTRACTS: dict[str, dict] = {
@@ -251,6 +832,9 @@ CONTRACTS: dict[str, dict] = {
             "spans": array(ref("tensor_span")),
         },
     ),
+    "mathematical_certificate": MATHEMATICAL_CERTIFICATE,
+    "operator_dispatch": OPERATOR_DISPATCH,
+    "execution_plan": EXECUTION_PLAN,
     "root": {
         **record(
             "Immutable cartridge root manifest",
@@ -275,6 +859,8 @@ VALIDATOR_SRC = '''# validator.py — {note}; depends on (none).
 """Validate instances against the generated JSON Schema subset used by Cassette."""
 
 import json
+import math
+import re
 from pathlib import Path
 
 _SCHEMAS = {{}}
@@ -318,6 +904,8 @@ def _validate(schema, value, path):
         defects = []
         if len(value) < schema.get("minItems", 0):
             defects.append(f"{{path}}: requires at least {{schema['minItems']}} items")
+        if len(value) > schema.get("maxItems", len(value)):
+            defects.append(f"{{path}}: permits at most {{schema['maxItems']}} items")
         if "items" in schema:
             for index, item in enumerate(value):
                 defects.extend(_validate(schema["items"], item, f"{{path}}[{{index}}]"))
@@ -331,6 +919,12 @@ def _validate(schema, value, path):
         defects = []
         if kind == "string" and len(value) < schema.get("minLength", 0):
             defects.append(f"{{path}}: string is shorter than {{schema['minLength']}}")
+        if kind == "string" and len(value) > schema.get("maxLength", len(value)):
+            defects.append(f"{{path}}: string is longer than {{schema['maxLength']}}")
+        if kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
+            defects.append(f"{{path}}: string does not match {{schema['pattern']!r}}")
+        if kind == "number" and not math.isfinite(value):
+            defects.append(f"{{path}}: number must be finite")
         if "minimum" in schema and value < schema["minimum"]:
             defects.append(f"{{path}}: value is below {{schema['minimum']}}")
         if "maximum" in schema and value > schema["maximum"]:
@@ -363,6 +957,16 @@ def emit(outdir: Path) -> dict[str, str]:
     for kind, schema in sorted(CONTRACTS.items()):
         document = {"$id": f"{SCHEMA_BASE}/{kind}.json", **schema}
         put(f"{kind}.json", json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    tables = (
+        f"# tables.py — {GENERATED_NOTE}; depends on (none).\n"
+        f"MLX_RUNTIME = {pprint.pformat(MLX_RUNTIME, sort_dicts=True, width=100)}\n"
+        f"DISPATCH_DIGEST = {DISPATCH_DIGEST!r}\n"
+        f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
+        f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
+        f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
+        f"CERTIFICATE_DIMENSIONS = {pprint.pformat(CERTIFICATE_DIMENSIONS, sort_dicts=True, width=100)}\n"
+    )
+    put("tables.py", tables)
     put("validator.py", VALIDATOR_SRC.format(note=GENERATED_NOTE))
     (outdir / "MANIFEST.json").write_text(
         json.dumps(written, indent=2, sort_keys=True) + "\n", encoding="utf-8"
