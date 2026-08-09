@@ -284,6 +284,17 @@ class CapacityPhase:
 
 
 @dataclass(frozen=True)
+class CapacityRequirement:
+    """The one Q53 phase maximum and safety calculation, before physical reservation."""
+
+    device_bytes: int
+    safety_bytes: int
+    phase_totals: tuple[int, ...]
+    repair_bytes: int
+    required_bytes: int
+
+
+@dataclass(frozen=True)
 class CapacityReservation:
     """A Q53 extent owned by one operation until its terminal cleanup releases it."""
 
@@ -582,6 +593,34 @@ def _capacity_sum(values, operation_id: str) -> int:
     return total
 
 
+def capacity_requirement(
+    operation_id: str,
+    *,
+    device_bytes: int,
+    phases: tuple[CapacityPhase, ...],
+) -> CapacityRequirement:
+    """Compute Q53 once for preflight and the later physical reservation."""
+
+    if not isinstance(operation_id, str) or _TRANSACTION_ID.fullmatch(operation_id) is None:
+        _capacity_reject(
+            "unidentified", "operation_id must satisfy the durable identifier grammar", "INVALID_REQUEST"
+        )
+    device_bytes = _capacity_value("device_bytes", device_bytes, operation_id)
+    if (not isinstance(phases, tuple) or not phases
+            or any(not isinstance(phase, CapacityPhase) for phase in phases)):
+        _capacity_reject(operation_id, "one or more CapacityPhase values are required", "INVALID_REQUEST")
+    totals = tuple(phase.total for phase in phases)
+    five_percent = device_bytes // 20 + bool(device_bytes % 20)
+    safety = max(8 * 1024**3, five_percent)
+    return CapacityRequirement(
+        device_bytes,
+        safety,
+        totals,
+        max(phase.repair for phase in phases),
+        _capacity_sum((max(totals), safety), operation_id),
+    )
+
+
 def reserve_capacity(
     operation_id: str,
     *,
@@ -593,47 +632,44 @@ def reserve_capacity(
 ) -> CapacityReservation:
     """Admit Q53 only after one atomic preallocator reserves the exact phase maximum plus safety."""
 
-    if not isinstance(operation_id, str) or _TRANSACTION_ID.fullmatch(operation_id) is None:
-        _capacity_reject(
-            "unidentified", "operation_id must satisfy the durable identifier grammar", "INVALID_REQUEST"
-        )
-    device_bytes = _capacity_value("device_bytes", device_bytes, operation_id)
+    requirement = capacity_requirement(
+        operation_id, device_bytes=device_bytes, phases=phases
+    )
     free = _capacity_value("allocatable_verified_free", allocatable_verified_free, operation_id)
-    if free > device_bytes:
+    if free > requirement.device_bytes:
         _capacity_reject(
             operation_id, "allocatable verified free bytes exceed device bytes", "INVALID_REQUEST"
         )
-    if (not isinstance(phases, tuple) or not phases
-            or any(not isinstance(phase, CapacityPhase) for phase in phases)):
-        _capacity_reject(operation_id, "one or more CapacityPhase values are required", "INVALID_REQUEST")
     if not callable(reserve_extent) or not callable(release_extent):
         _capacity_reject(
             operation_id,
             "reserve_extent and release_extent must be callable",
             "INVALID_REQUEST",
         )
-    totals = tuple(phase.total for phase in phases)
-    five_percent = device_bytes // 20 + bool(device_bytes % 20)
-    safety = max(8 * 1024**3, five_percent)
-    required = _capacity_sum((max(totals), safety), operation_id)
-    if free < required:
-        _capacity_reject(operation_id, f"required {required} bytes; verified allocatable free is {free}")
+    if free < requirement.required_bytes:
+        _capacity_reject(
+            operation_id,
+            f"required {requirement.required_bytes} bytes; verified allocatable free is {free}",
+        )
     try:
-        reserved = reserve_extent(required)
+        reserved = reserve_extent(requirement.required_bytes)
     except OSError as error:
-        _capacity_reject(operation_id, f"preallocate failed for {required} bytes: {error}")
+        _capacity_reject(
+            operation_id,
+            f"preallocate failed for {requirement.required_bytes} bytes: {error}",
+        )
     if reserved is not True:
         _capacity_reject(
             operation_id,
-            f"preallocate refused one exact {required}-byte extent despite {free} reported free bytes",
+            f"preallocate refused one exact {requirement.required_bytes}-byte extent despite {free} reported free bytes",
         )
     return CapacityReservation(
         operation_id,
-        device_bytes,
-        safety,
-        totals,
-        max(phase.repair for phase in phases),
-        required,
+        requirement.device_bytes,
+        requirement.safety_bytes,
+        requirement.phase_totals,
+        requirement.repair_bytes,
+        requirement.required_bytes,
         release_extent,
     )
 

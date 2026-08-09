@@ -1,5 +1,5 @@
-# sources.py — source resolution and resumable verified transfer (Q9/Q51/Q52); depends on errors.py, schema, store.py.
-"""Normalize source wires and copy verified bytes into store-granted cartridge extents."""
+# sources.py — source resolution, preflight, and verified transfer (Q8/Q9/Q50-Q52/Q56); depends on errors.py, schema, store.py.
+"""Normalize source evidence, decide compatibility, and copy bytes into cartridge extents."""
 
 from __future__ import annotations
 
@@ -20,9 +20,11 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from errors import CassetteError
 from schema.validator import validate
 from store import (
+    CapacityPhase,
     CapacityReservation,
     artifact_hash_state,
     canonical_bytes,
+    capacity_requirement,
     digest_bytes,
     resumable_artifact_hasher,
     resume_artifact_hasher,
@@ -47,6 +49,21 @@ _TRANSFER_HEADER_FIELDS = frozenset({
 _TRANSFER_IDENTITY_FIELDS = frozenset({
     "version", "artifact_id", "source_revision", "object_size", "validator",
     "expected_digest", "chunk_bytes", "chunk_count", "chunk_manifest_digest",
+})
+_METADATA_TRUST = {"ABSENT": 0, "DECLARED": 1, "PARSED": 2, "EVIDENCE_DIGESTED": 2}
+_PREFLIGHT_CLASSES = frozenset({
+    "SUPPORTED", "SUPPORTED_AFTER_PREPARATION", "METADATA_INSUFFICIENT", "UNSUPPORTED",
+})
+_PREFLIGHT_REQUIRED = frozenset({
+    "identity", "total_bytes", "artifact_count", "artifact_digests", "format",
+    "architecture", "total_parameters", "active_parameters", "dtype_quantization",
+    "context", "modalities", "operators", "custom_code", "tokenizer", "template",
+    "license", "gating", "source_validators",
+})
+_PREFLIGHT_STRONG = frozenset({
+    "format", "architecture", "total_parameters", "active_parameters",
+    "dtype_quantization", "context", "modalities", "operators", "custom_code", "tokenizer",
+    "processor", "template",
 })
 
 
@@ -111,6 +128,93 @@ class Requirements:
             "license_digest": self.license_digest,
             "license_acceptance_required": self.license_acceptance_required,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataProbe:
+    """One bounded source range that can decide named absent Q50 fields."""
+
+    fields: tuple[str, ...]
+    artifact_path: str
+    offset: int
+    length: int
+
+    def record(self) -> dict:
+        return {
+            "kind": "METADATA_RANGE",
+            "fields": list(self.fields),
+            "artifact_path": self.artifact_path,
+            "offset": self.offset,
+            "length": self.length,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CompatibilityProfile:
+    """General class bounds supplied to Q56; no current-device inspection occurs here."""
+
+    device_bytes: int
+    allocatable_verified_free: int
+    memory_bytes: int
+    supported_operators: frozenset[str]
+    supported_modalities: frozenset[str]
+    native_formats: frozenset[str]
+    preparation_formats: frozenset[str]
+    training_tiers: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PreflightDecision:
+    """The complete Q8/Q56 decision with unknowns retained as None, never defaults."""
+
+    classification: str
+    source_identity: str | None
+    trust: str
+    total_bytes: int | None
+    peak_bytes: int | None
+    architecture: str | None
+    operators: tuple[str, ...] | None
+    precision: object | None
+    total_parameters: int | None
+    active_parameters: int | None
+    context: object | None
+    assets: tuple[dict, ...]
+    license: str | None
+    training_tiers: tuple[str, ...]
+    mode_candidates: tuple[str, ...]
+    reasons: tuple[str, ...]
+    required_bytes: int | None
+    memory_bound: int | None
+    storage_bound: int
+    deferred_checks: tuple[dict, ...]
+    evidence: dict
+
+    def record(self) -> dict:
+        """Return the machine Q8/Q56 record without retaining caller-owned containers."""
+        record = {
+            "class": self.classification,
+            "source_identity": self.source_identity,
+            "trust": self.trust,
+            "total_bytes": self.total_bytes,
+            "peak_bytes": self.peak_bytes,
+            "architecture": self.architecture,
+            "operators": None if self.operators is None else list(self.operators),
+            "precision": self.precision,
+            "total_parameters": self.total_parameters,
+            "active_parameters": self.active_parameters,
+            "context": self.context,
+            "assets": list(self.assets),
+            "license": self.license,
+            "training_tiers": list(self.training_tiers),
+            "mode_candidates": list(self.mode_candidates),
+            "reasons": list(self.reasons),
+            "required_bytes": self.required_bytes,
+            "memory_bound": self.memory_bound,
+            "storage_bound": self.storage_bound,
+            "deferred_checks": list(self.deferred_checks),
+            "evidence": self.evidence,
+        }
+        return json.loads(canonical_bytes(record))
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,6 +620,529 @@ class SourceAdapter:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source operation must complete", f"source returned HTTP {error.code}", "retryable")
         except (IncompleteRead, URLError, OSError, TimeoutError) as error:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source endpoint must be reachable", type(error).__name__, "retryable")
+
+
+def _preflight_fail(object_id: str, detail: str) -> None:
+    _fail(
+        "INVALID_REQUEST",
+        object_id,
+        "Q8/Q50/Q56: preflight inputs must be bounded canonical evidence",
+        detail,
+    )
+
+
+def _json_copy(value: object, object_id: str) -> object:
+    try:
+        return json.loads(canonical_bytes(value))
+    except (CassetteError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        _preflight_fail(object_id, "metadata values must be canonical JSON")
+
+
+def _metadata_candidate(candidate: object, object_id: str) -> dict:
+    defects = validate("remote_metadata_field", candidate)
+    if defects:
+        _preflight_fail(object_id, "; ".join(defects))
+    result = _json_copy(candidate, object_id)
+    if (result["trust"] == "ABSENT") != ("value" not in result):
+        _preflight_fail(object_id, "ABSENT metadata has no value; every other trust state requires one")
+    return result
+
+
+def _resolved_metadata_candidates(revision: ResolvedSource, object_id: str) -> dict[str, dict]:
+    objects = (*revision.artifacts, *revision.metadata_assets)
+    if not revision.artifacts or any(not isinstance(artifact, Artifact) for artifact in objects):
+        _preflight_fail(object_id, "resolved source artifacts are missing or malformed")
+    paths = [artifact.path for artifact in objects]
+    if (len(set(paths)) != len(paths)
+            or tuple(artifact.path for artifact in revision.artifacts) != tuple(sorted(
+                artifact.path for artifact in revision.artifacts
+            ))
+            or tuple(artifact.path for artifact in revision.metadata_assets) != tuple(sorted(
+                artifact.path for artifact in revision.metadata_assets
+            ))
+            or any(
+                _canonical_text(artifact.path) is None
+                or type(artifact.size) is not int or not 0 <= artifact.size <= 2**64 - 1
+                or _canonical_digest(artifact.digest) is None
+                or _canonical_text(artifact.range_uri) is None
+                or _canonical_text(artifact.validator) is None
+                for artifact in objects
+            )):
+        _preflight_fail(object_id, "resolved artifacts require unique sorted paths and exact immutable fields")
+    authority = f"cassette:resolved:{revision.source_kind}:manifest"
+    values = {
+        "identity": revision.identity,
+        "total_bytes": sum(artifact.size for artifact in revision.artifacts),
+        "artifact_count": len(revision.artifacts),
+        "artifact_digests": [artifact.digest for artifact in revision.artifacts],
+        "license": revision.license_digest,
+        "source_validators": {artifact.path: artifact.validator for artifact in objects},
+    }
+    return {
+        field: {"value": value, "trust": "EVIDENCE_DIGESTED", "authority": authority}
+        for field, value in values.items()
+    }
+
+
+def normalize_remote_metadata(
+    revision: ResolvedSource,
+    records: tuple[dict, ...],
+) -> dict:
+    """Merge Q50 evidence, prefer immutable source facts, and retain every contradiction."""
+
+    object_id = revision.locator if isinstance(revision, ResolvedSource) else "source:unidentified"
+    if not isinstance(revision, ResolvedSource):
+        _preflight_fail(object_id, "ResolvedSource is required")
+    if not isinstance(records, tuple) or not records:
+        _preflight_fail(object_id, "one or more remote_metadata records are required")
+    fields: tuple[str, ...] | None = None
+    candidates: dict[str, list[tuple[dict, int]]] = {}
+    for record in records:
+        defects = validate("remote_metadata", record)
+        if defects:
+            _preflight_fail(object_id, "; ".join(defects))
+        record_fields = tuple(sorted(set(record) - {"conflicts"}))
+        if fields is None:
+            fields = record_fields
+            candidates = {field: [] for field in fields}
+        elif record_fields != fields:
+            _preflight_fail(object_id, "remote_metadata records must expose one generated field set")
+        for field in fields:
+            candidate = _metadata_candidate(record[field], object_id)
+            candidates[field].append((candidate, _METADATA_TRUST[candidate["trust"]]))
+        for conflict in record["conflicts"]:
+            field = conflict["field"]
+            if field not in candidates:
+                _preflight_fail(object_id, f"conflict names unknown field {field!r}")
+            for raw in conflict["candidates"]:
+                candidate = _metadata_candidate(raw, object_id)
+                candidates[field].append((candidate, _METADATA_TRUST[candidate["trust"]]))
+
+    resolved = _resolved_metadata_candidates(revision, object_id)
+    for field, candidate in resolved.items():
+        if field not in candidates:
+            _preflight_fail(object_id, f"generated metadata schema omits resolved field {field!r}")
+        candidates[field].append((_metadata_candidate(candidate, object_id), 4))
+
+    normalized = {}
+    conflicts = []
+    for field in fields or ():
+        unique = {}
+        for candidate, priority in candidates[field]:
+            encoded = canonical_bytes(candidate)
+            retained = unique.get(encoded)
+            if retained is None or priority > retained[1]:
+                unique[encoded] = (candidate, priority)
+        ordered = sorted(
+            unique.values(),
+            key=lambda item: (-item[1], item[0]["authority"], canonical_bytes(item[0])),
+        )
+        present = tuple(item for item in ordered if item[0]["trust"] != "ABSENT")
+        if not present:
+            normalized[field] = ordered[0][0]
+            continue
+        top_priority = present[0][1]
+        top = tuple(item for item in present if item[1] == top_priority)
+        top_values = {canonical_bytes(item[0]["value"]) for item in top}
+        normalized[field] = (
+            top[0][0]
+            if len(top_values) == 1
+            else {"trust": "ABSENT", "authority": f"cassette:conflict:{field}"}
+        )
+        distinct_values = {canonical_bytes(item[0]["value"]) for item in present}
+        if len(distinct_values) > 1:
+            conflicts.append({"field": field, "candidates": [item[0] for item in present]})
+    normalized["conflicts"] = sorted(conflicts, key=lambda conflict: conflict["field"])
+    defects = validate("remote_metadata", normalized)
+    if defects:
+        _preflight_fail(object_id, "; ".join(defects))
+    return normalized
+
+
+def _preflight_profile(profile: CompatibilityProfile, object_id: str) -> None:
+    if not isinstance(profile, CompatibilityProfile):
+        _preflight_fail(object_id, "CompatibilityProfile is required")
+    integers = (profile.device_bytes, profile.allocatable_verified_free, profile.memory_bytes)
+    if (any(type(value) is not int or not 0 <= value <= 2**64 - 1 for value in integers)
+            or profile.device_bytes == 0 or profile.memory_bytes == 0
+            or profile.allocatable_verified_free > profile.device_bytes):
+        _preflight_fail(object_id, "profile byte bounds must be exact and internally consistent")
+    for name, values in (
+        ("supported_operators", profile.supported_operators),
+        ("supported_modalities", profile.supported_modalities),
+        ("native_formats", profile.native_formats),
+        ("preparation_formats", profile.preparation_formats),
+    ):
+        if (not isinstance(values, frozenset) or any(
+                not isinstance(value, str) or not value or value != value.strip()
+                for value in values
+        )):
+            _preflight_fail(object_id, f"{name} must be a frozenset of canonical names")
+    if any(value != value.casefold() for value in (*profile.native_formats, *profile.preparation_formats)):
+        _preflight_fail(object_id, "format names in a compatibility profile must be lowercase")
+    if (not isinstance(profile.training_tiers, tuple)
+            or len(set(profile.training_tiers)) != len(profile.training_tiers)
+            or any(not isinstance(value, str) or not value or value != value.strip()
+                   for value in profile.training_tiers)):
+        _preflight_fail(object_id, "training_tiers must be unique canonical names")
+
+
+def _metadata_probes(
+    probes: tuple[MetadataProbe, ...],
+    revision: ResolvedSource,
+    fields: frozenset[str],
+) -> tuple[MetadataProbe, ...]:
+    if not isinstance(probes, tuple):
+        _preflight_fail(revision.locator, "metadata probes must be a tuple")
+    artifacts = {artifact.path: artifact for artifact in (*revision.artifacts, *revision.metadata_assets)}
+    checked = []
+    for probe in probes:
+        artifact = artifacts.get(probe.artifact_path) if isinstance(probe, MetadataProbe) else None
+        if (artifact is None or not isinstance(probe.fields, tuple) or not probe.fields
+                or len(set(probe.fields)) != len(probe.fields)
+                or any(field not in fields for field in probe.fields)
+                or type(probe.offset) is not int or type(probe.length) is not int
+                or probe.offset < 0 or probe.length <= 0
+                or probe.offset + probe.length > artifact.size):
+            _preflight_fail(revision.locator, "each metadata probe must be bounded by one resolved artifact")
+        checked.append(probe)
+    return tuple(sorted(checked, key=lambda probe: (probe.artifact_path, probe.offset, probe.fields)))
+
+
+def _metadata_probe_record(probe: MetadataProbe, revision: ResolvedSource) -> dict:
+    artifact = next(
+        artifact for artifact in (*revision.artifacts, *revision.metadata_assets)
+        if artifact.path == probe.artifact_path
+    )
+    return {
+        **probe.record(),
+        "artifact_digest": artifact.digest,
+        "validator": artifact.validator,
+    }
+
+
+def _metadata_value(metadata: dict, field: str):
+    record = metadata[field]
+    return None if record["trust"] == "ABSENT" else record["value"]
+
+
+def _canonical_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value and value == value.strip() else None
+
+
+def _canonical_names(value: object) -> tuple[str, ...] | None:
+    if (not isinstance(value, list) or not value
+            or any(_canonical_text(item) is None for item in value)
+            or len(set(value)) != len(value)):
+        return None
+    return tuple(value)
+
+
+def _context_bound(value: object) -> tuple[dict, int] | None:
+    if (not isinstance(value, dict) or set(value) != {"tokens", "state_bytes"}
+            or type(value["tokens"]) is not int or value["tokens"] <= 0
+            or type(value["state_bytes"]) is not int
+            or not 0 <= value["state_bytes"] <= 2**64 - 1):
+        return None
+    return value, value["state_bytes"]
+
+
+def _canonical_digest(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    match = _DIGEST.fullmatch(value)
+    if match is None or len(match.group("hex")) != _DIGEST_LENGTH.get(match.group("algorithm")):
+        return None
+    return value
+
+
+def preflight(
+    revision: ResolvedSource,
+    metadata_records: tuple[dict, ...],
+    requirements: Requirements,
+    profile: CompatibilityProfile,
+    *,
+    probes: tuple[MetadataProbe, ...] = (),
+) -> PreflightDecision:
+    """Return one Q8/Q50/Q56 decision without inspecting or allocating on the current machine."""
+
+    object_id = revision.locator if isinstance(revision, ResolvedSource) else "source:unidentified"
+    if not isinstance(revision, ResolvedSource):
+        _preflight_fail(object_id, "ResolvedSource is required")
+    if not isinstance(requirements, Requirements):
+        _preflight_fail(object_id, "Requirements is required")
+    if (not isinstance(requirements.auth_scope, str) or not requirements.auth_scope
+            or not isinstance(requirements.credential_required, bool)
+            or _canonical_digest(requirements.license_digest) is None
+            or not isinstance(requirements.license_acceptance_required, bool)):
+        _preflight_fail(object_id, "Requirements fields must retain their exact Q9 types")
+    _preflight_profile(profile, object_id)
+    metadata = normalize_remote_metadata(revision, metadata_records)
+    fields = frozenset(metadata) - {"conflicts"}
+    checked_probes = _metadata_probes(probes, revision, fields)
+
+    values = {field: _metadata_value(metadata, field) for field in fields}
+    unresolved = {
+        field for field in _PREFLIGHT_REQUIRED
+        if values.get(field) is None
+    }
+    unresolved.update(
+        field for field in _PREFLIGHT_STRONG
+        if values.get(field) is not None
+        and metadata[field]["trust"] not in {"EVIDENCE_DIGESTED", "PARSED"}
+    )
+    decisive = []
+    invalid = []
+
+    if (revision.source_kind not in _WIRES or _canonical_text(revision.locator) is None
+            or _canonical_text(revision.auth_scope) is None
+            or _canonical_digest(revision.license_digest) is None
+            or _canonical_digest(revision.immutable_revision) is None
+            or _canonical_digest(revision.identity) is None
+            or not revision.identity.startswith("blake3:")):
+        decisive.append("MUTABLE_OR_UNVERIFIED_SOURCE_IDENTITY")
+    source_identity = values.get("identity")
+    if _canonical_digest(source_identity) is None or source_identity != revision.identity:
+        invalid.append("identity")
+
+    total_bytes = values.get("total_bytes")
+    artifact_count = values.get("artifact_count")
+    artifact_digests = values.get("artifact_digests")
+    if type(total_bytes) is not int or not 0 < total_bytes <= 2**64 - 1:
+        invalid.append("total_bytes")
+        total_bytes = None
+    if type(artifact_count) is not int or artifact_count <= 0:
+        invalid.append("artifact_count")
+    if (not isinstance(artifact_digests, list) or len(artifact_digests) != artifact_count
+            or any(_canonical_digest(value) is None for value in artifact_digests)):
+        invalid.append("artifact_digests")
+
+    model_format = _canonical_text(values.get("format"))
+    architecture = _canonical_text(values.get("architecture"))
+    if values.get("format") is not None and model_format is None:
+        invalid.append("format")
+    if values.get("architecture") is not None and architecture is None:
+        invalid.append("architecture")
+    total_parameters = values.get("total_parameters")
+    active_parameters = values.get("active_parameters")
+    if (values.get("total_parameters") is not None
+            and (type(total_parameters) is not int or total_parameters <= 0)):
+        invalid.append("total_parameters")
+        total_parameters = None
+    if (values.get("active_parameters") is not None
+            and (type(active_parameters) is not int or active_parameters <= 0)):
+        invalid.append("active_parameters")
+        active_parameters = None
+    if (total_parameters is not None and active_parameters is not None
+            and active_parameters > total_parameters):
+        invalid.append("active_parameters")
+
+    precision = values.get("dtype_quantization")
+    precision_active_bytes = None
+    if precision is not None:
+        if _canonical_text(precision) is None and not isinstance(precision, dict):
+            invalid.append("dtype_quantization")
+        elif isinstance(precision, dict):
+            if _canonical_text(precision.get("name")) is None:
+                invalid.append("dtype_quantization")
+            if "active_bytes" in precision:
+                precision_active_bytes = precision["active_bytes"]
+                if (type(precision_active_bytes) is not int or precision_active_bytes <= 0
+                        or (total_bytes is not None and precision_active_bytes > total_bytes)):
+                    invalid.append("dtype_quantization")
+                    precision_active_bytes = None
+
+    context_result = _context_bound(values.get("context"))
+    context = context_result[0] if context_result is not None else None
+    context_state_bytes = context_result[1] if context_result is not None else None
+    if values.get("context") is not None and context_result is None:
+        invalid.append("context")
+    modalities = _canonical_names(values.get("modalities"))
+    operators = _canonical_names(values.get("operators"))
+    if values.get("modalities") is not None and modalities is None:
+        invalid.append("modalities")
+    if values.get("operators") is not None and operators is None:
+        invalid.append("operators")
+    custom_code = values.get("custom_code")
+    gating = values.get("gating")
+    if custom_code is not None and not isinstance(custom_code, bool):
+        invalid.append("custom_code")
+    if gating is not None and not isinstance(gating, bool):
+        invalid.append("gating")
+
+    for field in ("tokenizer", "template", "license"):
+        if values.get(field) is not None and _canonical_digest(values[field]) is None:
+            invalid.append(field)
+    if modalities is not None and any(modality != "text" for modality in modalities):
+        if values.get("processor") is None:
+            unresolved.add("processor")
+        elif metadata["processor"]["trust"] not in {"EVIDENCE_DIGESTED", "PARSED"}:
+            unresolved.add("processor")
+        elif _canonical_digest(values["processor"]) is None:
+            invalid.append("processor")
+    source_validators = values.get("source_validators")
+    if (source_validators is not None
+            and (not isinstance(source_validators, dict) or not source_validators
+                 or any(_canonical_text(name) is None or _canonical_text(value) is None
+                        for name, value in source_validators.items()))):
+        invalid.append("source_validators")
+
+    if requirements.auth_scope != revision.auth_scope or requirements.license_digest != revision.license_digest:
+        decisive.append("SOURCE_REQUIREMENTS_CHANGED")
+    if requirements.credential_required and revision.credential_ref is None:
+        decisive.append("CREDENTIAL_REQUIRED")
+    if requirements.license_acceptance_required and revision.license_acceptance_ref is None:
+        decisive.append("LICENSE_ACCEPTANCE_REQUIRED")
+    if gating is True and not (
+            requirements.credential_required or requirements.license_acceptance_required
+    ):
+        decisive.append("GATING_REQUIREMENTS_CONFLICT")
+    if custom_code is True:
+        decisive.append("CUSTOM_CODE_REQUIRES_CONTAINMENT")
+    decisive.extend(f"INVALID_METADATA:{field}" for field in sorted(set(invalid)))
+
+    required_bytes = None
+    objects = (*revision.artifacts, *revision.metadata_assets)
+    if any(artifact.size > _MAX_FILE_OFFSET for artifact in objects):
+        decisive.append("SOURCE_ARTIFACT_EXCEEDS_TRANSFER_LIMIT")
+    else:
+        try:
+            payload_bytes = sum(artifact.size for artifact in objects)
+            state_bytes = sum(transfer_state_bytes(artifact.size) for artifact in objects)
+            requirement = capacity_requirement(
+                "preflight",
+                device_bytes=profile.device_bytes,
+                phases=(CapacityPhase(inflight=payload_bytes, journal=state_bytes),),
+            )
+            required_bytes = requirement.required_bytes
+            if required_bytes > profile.allocatable_verified_free:
+                decisive.append("CAPACITY_EXCEEDED")
+        except CassetteError as error:
+            if error.code != "CAPACITY_EXCEEDED":
+                raise
+            decisive.append("CAPACITY_EXCEEDED")
+
+    format_name = model_format.casefold() if model_format is not None else None
+    unsupported_operators = (
+        tuple(sorted(set(operators) - profile.supported_operators))
+        if operators is not None else ()
+    )
+    unsupported_modalities = (
+        tuple(sorted(set(modalities) - profile.supported_modalities))
+        if modalities is not None else ()
+    )
+    decisive.extend(f"UNSUPPORTED_OPERATOR:{operator}" for operator in unsupported_operators)
+    decisive.extend(f"UNSUPPORTED_MODALITY:{modality}" for modality in unsupported_modalities)
+    native_candidate = format_name in profile.native_formats if format_name is not None else False
+    preparation_candidate = (
+        format_name in profile.preparation_formats if format_name is not None else False
+    )
+    if format_name is not None and not native_candidate and not preparation_candidate:
+        decisive.append(f"UNSUPPORTED_FORMAT:{format_name}")
+
+    native_peak_bytes = None
+    if total_bytes is not None and total_parameters is not None and active_parameters is not None:
+        weight_bytes = None
+        if active_parameters == total_parameters:
+            weight_bytes = total_bytes
+        elif precision_active_bytes is not None:
+            weight_bytes = precision_active_bytes
+        elif native_candidate and total_bytes > profile.memory_bytes:
+            unresolved.add("dtype_quantization")
+        else:
+            weight_bytes = total_bytes
+        if weight_bytes is not None and context_state_bytes is not None:
+            native_peak_bytes = weight_bytes + context_state_bytes
+            if native_peak_bytes > 2**64 - 1:
+                decisive.append("MEMORY_BOUND_EXCEEDS_PROFILE")
+                native_peak_bytes = None
+    if context_state_bytes is not None and context_state_bytes >= profile.memory_bytes:
+        decisive.append("MEMORY_BOUND_EXCEEDS_PROFILE")
+
+    probes_by_field = {
+        field: tuple(probe for probe in checked_probes if field in probe.fields)
+        for field in unresolved
+    }
+    undecidable = tuple(sorted(field for field, matches in probes_by_field.items() if not matches))
+    range_checks = tuple(
+        _metadata_probe_record(probe, revision) for probe in checked_probes
+        if any(field in unresolved for field in probe.fields)
+    )
+    reasons = list(dict.fromkeys(decisive))
+    selected_modes: tuple[str, ...] = ()
+    deferred_checks: tuple[dict, ...] = range_checks
+    training_tiers: tuple[str, ...] = ()
+
+    peak_bytes = native_peak_bytes
+    if reasons:
+        reasons.extend(f"METADATA_REQUIRED:{field}" for field in sorted(unresolved))
+        reasons.extend(f"UNDECIDABLE_METADATA:{field}" for field in undecidable)
+        classification = "UNSUPPORTED"
+    elif unresolved:
+        reasons.extend(f"METADATA_REQUIRED:{field}" for field in sorted(unresolved))
+        if undecidable:
+            reasons.extend(f"UNDECIDABLE_METADATA:{field}" for field in undecidable)
+            classification = "UNSUPPORTED"
+        else:
+            classification = "METADATA_INSUFFICIENT"
+    elif native_candidate and native_peak_bytes is not None and native_peak_bytes <= profile.memory_bytes:
+        classification = "SUPPORTED"
+        reasons.append("NATIVE_STATIC_PREDICATES_PASS")
+        selected_modes = ("NATIVE",)
+    elif preparation_candidate and context_state_bytes is not None:
+        classification = "SUPPORTED_AFTER_PREPARATION"
+        reasons.append("PREPARATION_AND_Q17_Q19_EVIDENCE_REQUIRED")
+        selected_modes = ("COMPILED",)
+        peak_bytes = profile.memory_bytes
+        deferred_checks += ({
+            "kind": "PREPARATION_VALIDATION",
+            "invariants": ["Q17", "Q18", "Q19"],
+        },)
+    else:
+        classification = "UNSUPPORTED"
+        reasons.append("MEMORY_BOUND_EXCEEDS_PROFILE")
+
+    training_precision = values.get("training_precision")
+    if (training_precision is not None
+            and _canonical_text(training_precision) is None
+            and not isinstance(training_precision, dict)):
+        training_precision = None
+    if (classification in {"SUPPORTED", "SUPPORTED_AFTER_PREPARATION"}
+            and training_precision is not None
+            and metadata["training_precision"]["trust"] in {"EVIDENCE_DIGESTED", "PARSED"}):
+        training_tiers = profile.training_tiers
+    if classification not in _PREFLIGHT_CLASSES:
+        _preflight_fail(object_id, "preflight produced an undeclared classification")
+    assets = tuple(
+        {"role": role, **artifact.record()}
+        for role, collection in (
+            ("model", revision.artifacts), ("metadata", revision.metadata_assets)
+        )
+        for artifact in collection
+    )
+    return PreflightDecision(
+        classification,
+        source_identity if isinstance(source_identity, str) else None,
+        metadata["identity"]["trust"],
+        total_bytes,
+        peak_bytes,
+        architecture,
+        operators,
+        precision,
+        total_parameters,
+        active_parameters,
+        context,
+        assets,
+        values.get("license") if isinstance(values.get("license"), str) else None,
+        training_tiers,
+        selected_modes,
+        tuple(reasons),
+        required_bytes,
+        peak_bytes,
+        profile.allocatable_verified_free,
+        deferred_checks,
+        metadata,
+    )
 
 
 def transfer_state_bytes(object_size: int) -> int:
