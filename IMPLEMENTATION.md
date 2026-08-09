@@ -521,13 +521,14 @@ steps:
     title: Mathematical-plan schemas, runtime dispatch, and golden operators
     env: macos
     files: [pager.py, tools/genschema.py, schema/ (generated dispatch and Q19 certificate tables)]
-    discovered_scope: "tests/test_s12_pager.py executes the F2/Q30/Q33/Q40 boundary; tests/test_s03_schema.py admits the new generated contracts without weakening S03; pyproject.toml and uv.lock pin the MLX release executed by the generated dispatch table. The pre-S12 mathematical-authority amendment is a required input and remains distinct from the S12 implementation changes. tools/genschema.py remains the sole generated-contract authority above 800 physical lines; splitting it would create schema plumbing and a second authority."
+    discovered_scope: "tests/test_s12_pager.py executes the F2/Q30/Q33/Q40 boundary and owns an early platform gate so future env:any full-suite runs skip before importing MLX; tests/test_s03_schema.py admits the new generated contracts without weakening S03; pyproject.toml and uv.lock pin the MLX release executed by the generated dispatch table. The pre-S12 mathematical-authority amendment is a required input and remains distinct from the S12 implementation changes. tools/genschema.py remains the sole generated-contract authority above 800 physical lines; splitting it would create schema plumbing and a second authority."
     dependency_admission: "mlx==0.31.0 at release commit 365d6f29b47686a9f5401f6a9ec5825fee162d69; subset: core/fast operators, explicit-key categorical sampling, autograd, and SGD; serves Q30. Its Darwin wheel supplies the existing Metal kernels that replace every Cassette numerical kernel."
     invariants: [Q30 acceptance (golden tensors per dispatched dtype/shape/operator against reference), Q33/Q40 acceptance (generated bounded schema represents every MATHS.md certificate dimension without executable or model-specific payload), F2 valid/malformed certificate and golden-operator fixtures; mlx confinement check in ledger]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03, S01]
-    status: DONE 2026-08-09 — step commit 73997e0; complete macOS suite 28 passed in 46.32 seconds with no skips; ledger clean with 2,813 product LOC, 2,133 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact dependency pins
+    status: IN_PROGRESS 2026-08-09 — reopened after non-Darwin collection and execution probes proved that the env:macos fixture lacked a pre-import platform gate
+    reopened_by: "S12 test-harness portability failure reproduced after ec551de: with MLX unavailable, test_s12_pager.py reached its module-level MLX import and aborted collection; with MLX installed under a synthetic Linux platform, the golden operator fixture ran and failed at Q30's Apple Silicon Metal guard instead of skipping. Future env:any steps therefore could not satisfy their complete-suite gate outside macOS."
     closeout:
       - clause: "Q33/Q40 bounded data represents every separate MATHS.md certificate dimension and the least-invasive compiled mode"
         test_or_probe: "tests/test_s12_pager.py::test_q33_q40_f2_certificate_dimensions_are_bounded_data_and_fail_before_execution plus Draft 2020-12 metaschema validation"

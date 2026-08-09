@@ -8,11 +8,19 @@ import copy
 import importlib.metadata
 import json
 import math
+import platform
 import subprocess
 from pathlib import Path
 
-import mlx.core as mx
 import pytest
+
+if platform.system() != "Darwin" or platform.machine() != "arm64":
+    pytest.skip(
+        "S12 requires arm64 macOS with MLX Metal; skip before importing the runtime",
+        allow_module_level=True,
+    )
+
+import mlx.core as mx
 
 import pager
 from errors import CassetteError
