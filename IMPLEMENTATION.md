@@ -449,7 +449,8 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S09]
-    status: DONE 2026-08-08 — step commit e399d60; clean suite 25 passed in 52.89 seconds with no skips; ledger clean with 2,677 product LOC, 1,910 test LOC, 356 tool LOC, one process, one runtime, and four exact dependency pins
+    status: DONE 2026-08-08 — initial implementation e399d60; trust-provenance repair 97a43e7; clean suite 25 passed in 57.94 seconds with no skips; ledger clean with 2,723 product LOC, 1,955 test LOC, 356 tool LOC, one process, one Python runtime, and four exact dependency pins
+    reopened_by: "Q8/Q50/Q56 trust-provenance failure reproduced at bf881af: SourceAdapter accepted remote trust and authority labels, normalize_remote_metadata converted those labels directly into decision priority, and only Q9 material fields were replaced by Cassette-derived evidence. A forged architecture, one active byte, zero context state, supported operators, and custom_code false therefore produced SUPPORTED with attacker:self authority."
     closeout:
       - clause: "Q50 independent trust states, immutable authority, and retained contradictions"
         test_or_probe: "tests/test_s11_preflight.py::test_q8_q50_q56_trust_conflicts_four_outcomes_and_no_silent_weakening"
@@ -486,6 +487,27 @@ steps:
         input: "Run all fixtures on arm64 macOS with bytecode and pytest caches disabled; recompute commit law, generated integrity, tracked artifacts, imports, citations, pins, and runtime confinement; inspect mounted images."
         expected: "All fixtures pass without a platform skip, the ledger reports no violation or new dependency/process/runtime/kernel/authority, the patch is clean, and no Cassette image remains mounted."
         observed: "A first final run exposed a transient busy-volume detach in S06 and therefore did not close the gate. After detaching only that orphaned test image, S06 passed alone in 35.30 seconds and the clean complete run passed all 25 tests in 52.89 seconds. The ledger reported zero violations, 2,677 product LOC, 1,910 test LOC, 356 tool LOC, 58 generated LOC, one process, one Python runtime, and the same four pins. No Cassette test image remained mounted."
+    correction_closeout:
+      - clause: "Q8/Q50/Q56 trust derives from verified evidence rather than source labels"
+        test_or_probe: "direct hostile reproduction at bf881af followed by the repaired S09 and S11 fixtures at 97a43e7"
+        input: "Let a hostile source label invented architecture, active-byte, context-state, operator, and custom-code claims EVIDENCE_DIGESTED or PARSED with attacker-controlled authority."
+        expected: "Remote labels remain declarations and cannot produce SUPPORTED. Cassette grants strong trust only after it verifies the complete immutable metadata asset against the resolved artifact digest."
+        observed: "Before repair, the forged record returned SUPPORTED with attacker:self authority. After repair, adapter claims are DECLARED; the same evidence is UNSUPPORTED until digest-matched immutable asset bytes are supplied, and same-length corrupt bytes return IDENTITY_MISMATCH."
+      - clause: "Strong metadata remains bound to resolved immutable cartridge bytes"
+        test_or_probe: "tests/test_s11_preflight.py verified-asset, corrupt-asset, contradiction, and four-outcome phases"
+        input: "Supply complete metadata bytes whose path, size, digest, JSON shape, and generated Q50 fields either agree with or contradict the resolved revision."
+        expected: "Only exact resolved bytes receive EVIDENCE_DIGESTED authority; malformed, foreign, duplicate, incomplete, or digest-mismatched material cannot become decision evidence."
+        observed: "The verified asset received Cassette-owned digest authority and drove the declared decision. Corrupt bytes were refused before normalization, while equal strong contradictions remained ABSENT and produced UNSUPPORTED."
+      - clause: "The repaired fixture can disprove every consequential trust guard"
+        test_or_probe: "six one-at-a-time mutations in a disposable copy of repair commit 97a43e7"
+        input: "Restore source labels, bypass sanitation, preserve self-asserted strong trust, skip immutable-asset digest comparison, admit DECLARED technical claims, or reduce verified evidence to declaration priority."
+        expected: "Each mutation makes the repaired fixture fail."
+        observed: "All six mutations failed independently. The disposable tree was deleted after the runs."
+      - clause: "S11 trust repair complete gate"
+        test_or_probe: "the complete pinned Python suite, tools/ledger.py, git diff checking, and mounted-image inspection after 97a43e7"
+        input: "Run every fixture with bytecode and pytest caches disabled, recompute the ledger, inspect the patch, and confirm no Cassette test image remains mounted."
+        expected: "All fixtures pass; the ledger and patch are clean; no new dependency, process, runtime, numerical kernel, model branch, or authority appears; no test image remains mounted."
+        observed: "All 25 tests passed in 57.94 seconds with no skips. The ledger reported zero violations, 2,723 product LOC, 1,955 test LOC, 356 tool LOC, 58 generated LOC, one process, one Python runtime, and the same four exact pins. The patch was clean and no Cassette S06 or S08 image remained mounted."
 
   - id: S12
     title: Runtime dispatch and golden operators
