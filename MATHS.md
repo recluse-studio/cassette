@@ -781,6 +781,54 @@ The certificate also records:
 5. the observation/protected-set contract; and
 6. the physical conversion from mathematical probes to page reads, bytes, memory, and latency.
 
+The following block is the sole machine-readable authority for the certificate dimensions. The
+schema generator must parse this exact bounded block and must reject any disagreement between it
+and the implemented schema. The listed order is retained in generated inspection data; it does not
+change the mathematical rank of one dimension relative to another.
+
+<!-- CASSETTE_CERTIFICATE_DIMENSIONS_BEGIN -->
+```json
+{
+  "mathematics": [
+    "target",
+    "condition_metrics",
+    "compatibility",
+    "atoms",
+    "description_contract",
+    "observation_contract",
+    "execution_contract",
+    "trace_contract"
+  ],
+  "resources": [
+    "eta_rep",
+    "epsilon_exec",
+    "delta_exec_total",
+    "atom_count",
+    "max_atom_rank",
+    "description_bytes_peak",
+    "description_bytes_total",
+    "metadata_bytes_peak",
+    "metadata_bytes_total",
+    "fresh_samples_max",
+    "fresh_samples_total",
+    "fresh_traffic_max",
+    "fresh_traffic_total",
+    "fresh_traffic_unit",
+    "horizon"
+  ],
+  "tables": [
+    "per_atom",
+    "per_operation",
+    "per_trace_step"
+  ],
+  "physical": [
+    "conversion_rows",
+    "conversion_digest"
+  ]
+}
+```
+<!-- CASSETTE_CERTIFICATE_DIMENSIONS_END -->
+
 This vector is one point in a feasible resource set. Its undominated points form the Pareto
 frontier. Cassette may select a plan only after the acceptance row fixes the feasible region. The
 repository's lexicographic objective \(J\) then minimizes implementation cost; it does not erase

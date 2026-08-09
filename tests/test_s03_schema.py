@@ -4,6 +4,8 @@
 import hashlib
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from schema.validator import validate
@@ -469,6 +471,16 @@ def install_generator(root: Path) -> None:
     (root / "tools").mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO / "tools" / "genschema.py", root / "tools" / "genschema.py")
     shutil.copy2(REPO / "errors.py", root / "errors.py")
+    shutil.copy2(REPO / "MATHS.md", root / "MATHS.md")
+
+
+def run_generator(root: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(root / "tools" / "genschema.py")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_exact_contract_set_is_json_schema_and_round_trips():
@@ -535,7 +547,7 @@ def test_malformed_f0_instances_are_rejected():
 
 
 def test_generator_is_deterministic_and_ledger_rejects_coordinated_hand_edits(tmp_path):
-    """Q57/q78_exact_accounting: regeneration is exact; schema and digest co-edits still fail."""
+    """Q33/Q57/q78_exact_accounting: MATHS authority and regeneration fail closed."""
     first, second = tmp_path / "first", tmp_path / "second"
     install_generator(first)
     install_generator(second)
@@ -560,6 +572,44 @@ def test_generator_is_deterministic_and_ledger_rejects_coordinated_hand_edits(tm
     fresh = {name: (first / "schema" / name).read_bytes() for name in manifest1}
     assert committed == fresh, "committed schema/ differs from fresh generator output"
     assert check_generated_integrity(first) == ("ran", [])
+
+    begin = "<!-- CASSETTE_CERTIFICATE_DIMENSIONS_BEGIN -->"
+    end = "<!-- CASSETTE_CERTIFICATE_DIMENSIONS_END -->"
+    authority_mutations = {
+        "missing": lambda text: text.replace(begin, "", 1).replace(end, "", 1),
+        "multiple": lambda text: text.replace(begin, begin + "\n" + begin, 1),
+        "malformed": lambda text: text.replace('"eta_rep",', '"eta_rep",,', 1),
+        "duplicate": lambda text: text.replace('"epsilon_exec"', '"eta_rep"', 1),
+        "added": lambda text: text.replace('"eta_rep",', '"eta_rep",\n    "new_dimension",', 1),
+        "removed": lambda text: text.replace('    "eta_rep",\n', "", 1),
+        "renamed": lambda text: text.replace('"eta_rep"', '"eta_represented"', 1),
+    }
+    for name, mutate in authority_mutations.items():
+        mutant = tmp_path / f"authority-{name}"
+        shutil.copytree(second, mutant)
+        maths = mutant / "MATHS.md"
+        maths.write_text(mutate(maths.read_text(encoding="utf-8")), encoding="utf-8")
+        result = run_generator(mutant)
+        assert result.returncode != 0, f"{name} authority mutation regenerated successfully"
+
+    stale = tmp_path / "stale-maths"
+    shutil.copytree(second, stale)
+    maths = stale / "MATHS.md"
+    source = maths.read_text(encoding="utf-8")
+    source = source.replace(
+        '    "eta_rep",\n    "epsilon_exec",',
+        '    "epsilon_exec",\n    "eta_rep",',
+        1,
+    )
+    maths.write_text(source, encoding="utf-8")
+    status, violations = check_generated_integrity(stale)
+    assert status == "ran"
+    assert any("tools/genschema.py" in violation for violation in violations)
+    regenerated = run_generator(stale)
+    assert regenerated.returncode == 0, regenerated.stderr
+    tables = (stale / "schema" / "tables.py").read_text(encoding="utf-8")
+    assert tables.index("'epsilon_exec'") < tables.index("'eta_rep'")
+    assert check_generated_integrity(stale) == ("ran", [])
 
     changed = first / "schema" / "error.json"
     changed.write_text(changed.read_text(encoding="utf-8") + " ", encoding="utf-8")

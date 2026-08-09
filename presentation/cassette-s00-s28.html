@@ -481,6 +481,28 @@
       line-height: 1.08;
     }
 
+    .acceptance-boundary {
+      max-width: 68ch;
+      margin-top: .65rem;
+      padding: .58rem .72rem;
+      border: 1px solid color-mix(in srgb, var(--accent, var(--orange)) 52%, var(--rule));
+      background: rgba(8, 8, 10, .72);
+      color: var(--ash);
+      font-size: .72rem;
+      line-height: 1.42;
+    }
+
+    .acceptance-boundary strong {
+      display: block;
+      margin-bottom: .2rem;
+      color: var(--accent-light, var(--orange));
+      font-family: var(--mono);
+      font-size: .62rem;
+      font-weight: 500;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
     .fact-row {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -592,6 +614,8 @@
       font-size: .76rem;
       line-height: 1.35;
     }
+
+    .diagram-body--compiler > div:first-child { transform: translateY(-1.5rem); }
 
     .flow-row,
     .flow-column,
@@ -1945,6 +1969,7 @@
     body.is-overview .copy p:not(.lead):not(.plain-copy),
     body.is-overview .title-note { font-size: .6rem; }
     body.is-overview .plain-box,
+    body.is-overview .acceptance-boundary,
     body.is-overview .fact-row,
     body.is-overview .proof-note,
     body.is-overview .slide-footer,
@@ -1990,6 +2015,7 @@
       .copy p:not(.lead):not(.plain-copy), .title-note { margin-bottom: .55rem; font-size: .84rem; line-height: 1.38; }
       .plain-box { margin-top: .75rem; padding: .65rem .8rem; }
       .plain-copy { font-size: 1.05rem; }
+      .acceptance-boundary { margin-top: .45rem; padding: .42rem .6rem; font-size: .64rem; }
       .fact-row { margin-top: .75rem; }
       .proof-note { margin-top: .5rem; }
       .diagram-frame { min-height: 350px; }
@@ -2117,6 +2143,7 @@
         lead: "A path like “/Volumes/Cassette” is not an identity. The same name can point to a different mount after a disconnect, a port change, or a replacement drive.",
         body: "S08 gives each verified mount an epoch-bound access token. Removal kills old tokens before the next read. A new mount must match the logical cartridge, filesystem, active root, and touched pages before it can become callable; a read-only mount is allowed only as read-only.",
         plain: "When the drive leaves, old permission leaves with it. When it returns, it must earn trust again.",
+        acceptanceBoundary: "Proved with lifecycle injections and real APFS disk-image mount events. S23 and the L01–L04 hardware campaign own the operation cross-product and physical external-drive events.",
         before: "A mounted path", adds: "Mount identity + epochs", after: "Safe reconnects", proof: "Q49 / APFS image",
         diagram: "lifecycle", diagramTitle: "Access belongs to a mount epoch", diagramKicker: "stale tokens die before I/O",
         diagramAlt: "A verified mount issues an access token. Disconnect invalidates it before the next read. A new mount receives a new token only after identity and root verification.",
@@ -2125,54 +2152,59 @@
       {
         id: "S09", status: "done", group: "Getting bytes onto the cartridge", accent: "cream",
         title: "Put different download services behind one question set.",
-        lead: "The model may come from Hugging Face, Ollama, or Tinker. Those services speak different wire protocols, but Cassette should not grow three different acquisition machines.",
-        body: "S09 makes each source adapter answer the same five questions: resolve the model, enumerate its artifacts, read their facts, open a byte range, and translate the source’s license and authentication requirements. The adapter carries no cartridge lifecycle state.",
-        plain: "Sources may differ at the edge. The rest of Cassette should receive the same kind of answer.",
+        lead: "The model may come from Hugging Face, Ollama, or Tinker. S09 proves the shared adapter contract against deterministic provider-shaped fixture wires, without pretending those fixtures are the live services.",
+        body: "Each fixture adapter answers the same five questions: resolve the model, enumerate its artifacts, read their facts, open a byte range, and translate license and authentication requirements. The adapter carries no cartridge lifecycle state.",
+        plain: "Different source wires can meet one strict boundary. The live wires still have to prove they fit it.",
+        acceptanceBoundary: "Proves deterministic fixture-wire behavior, credential confinement, and hostile-redirect refusal. L02 owns live Hugging Face, Ollama, and Tinker interoperability.",
         before: "Three source wires", adds: "One stateless boundary", after: "One transfer path", proof: "Q9 / Q52 subset",
         diagram: "sources", diagramTitle: "Different wires, one doorway", diagramKicker: "the transfer engine stays singular",
-        diagramAlt: "Hugging Face, Ollama, and Tinker feed one stateless five-operation adapter, which feeds one shared transfer engine.",
+        diagramAlt: "Deterministic Hugging Face-shaped, Ollama-shaped, and Tinker-shaped fixture wires feed one stateless five-operation adapter, which feeds one shared transfer engine.",
         next: "S09 → S10 / source boundary → verified transfer"
       },
       {
-        id: "S10", status: "todo", group: "Getting bytes onto the cartridge", accent: "green",
-        title: "Move large source files without starting over.",
+        id: "S10", status: "done", group: "Getting bytes onto the cartridge", accent: "green",
+        title: "Resume large source transfers.",
         lead: "Once a source has been described, Cassette needs to move its bytes without staging a second full copy on the Mac. S10 transfers ranges directly into reserved cartridge space and records each completed interval.",
         body: "Every chunk is checked as it arrives and again after it is written. If the network or process stops, the next run asks only for missing ranges. A corrupt chunk is rejected; completion requires full coverage and the source digest.",
-        plain: "Stopping halfway through a large download should leave a map of what passed, not a pile of work to repeat.",
-        before: "Verified source description", adds: "Resumable range transfer", after: "Complete cartridge payload", proof: "Q51 / S10 TODO",
+        plain: "Stopping halfway through a large download leaves a verified map of what passed, not a pile of work to repeat.",
+        acceptanceBoundary: "Completion yields a verified source extent and durable transfer state. It is not a complete cartridge or proof that bytes cannot change later; S19 rehashes the bytes while consuming them.",
+        before: "Verified source description", adds: "Resumable range transfer", after: "Verified source extent", proof: "Q51 / completed transfer fixture",
         diagram: "transfer", diagramTitle: "The missing work stays visible", diagramKicker: "stop is not reset",
         diagramAlt: "A twelve-part transfer has completed ranges, one corrupt range, and remaining ranges. The next run retries the bad and missing intervals instead of restarting the whole source.",
         next: "S10 → S11 / bytes → compatibility decision"
       },
       {
-        id: "S11", status: "todo", group: "Getting bytes onto the cartridge", accent: "red",
+        id: "S11", status: "done", group: "Getting bytes onto the cartridge", accent: "red",
         title: "Decide whether a model belongs on this machine.",
         lead: "Downloading a model is expensive in time, space, and attention. S11 asks whether the model belongs on this machine before that expense begins.",
-        body: "It checks the model’s immutable facts, required math, semantic files, license evidence, memory budget, and cartridge capacity. The answer is one of four honest outcomes: works as-is, works after preparation, not enough evidence, or unsupported. Unknown is not permission.",
+        body: "It checks immutable model facts, required math, semantic files, license evidence, memory budget, and cartridge capacity. Remote labels remain DECLARED. Stronger provenance exists only after Cassette verifies immutable metadata bytes against their resolved digest. The answer is one of four honest outcomes.",
         plain: "Preflight is the moment to refuse an impossible job cheaply.",
-        before: "A source descriptor", adds: "A compatibility decision", after: "An admitted or refused plan", proof: "Q8 / Q50 / Q55 / Q56",
+        acceptanceBoundary: "Proves evidence-bound preflight under Q8, Q50, and Q56. It does not parse executable model material; Q55 containment begins at S19.",
+        before: "A source descriptor", adds: "A compatibility decision", after: "An admitted or refused plan", proof: "Q8 / Q50 / Q56",
         diagram: "decision", diagramTitle: "Evidence enters; one honest outcome leaves", diagramKicker: "unknown stays unknown",
         diagramAlt: "Model facts, required math, semantic files, license evidence, memory, and capacity enter a preflight decision and produce four outcomes: supported, prepare first, insufficient evidence, or unsupported.",
         next: "S11 → S12 / decision → numerical dispatch"
       },
       {
-        id: "S12", status: "todo", group: "Running from bounded memory", accent: "blue",
+        id: "S12", status: "done", group: "Running from bounded memory", accent: "blue",
         title: "Use one known math engine.",
-        lead: "Apple’s MLX runtime already supplies the numerical operations Cassette needs. S12 connects the allowed model operations to that pinned runtime through generated dispatch data and compares their outputs with trusted reference tensors.",
-        body: "This keeps numerical code in one place. A new model changes a manifest or dispatch record when possible; it does not create a private branch or a second kernel library because one shape was inconvenient.",
-        plain: "The model can vary. The trusted route through the math should not.",
-        before: "Admitted model operations", adds: "Generated dispatch table", after: "Reference-matched math", proof: "Q30 / F2",
+        lead: "MATHS.md now controls the bounded certificate dimensions emitted by the generator. S12 connects ten declared operator, data-type, shape, and parameter rows to pinned MLX and compares each output with independent reference arithmetic.",
+        body: "Q33 and Q40 bound the certificate and least-invasive plan as data. Q30 confines numerical execution to generated dispatch and MLX. The native-link proof inspects real Mach-O dependencies and rejects repository-owned native code without confusing an installed dependency’s location with authorship.",
+        plain: "S12 proves the record shape and the declared math route. It does not certify that a claimant filled the record truthfully.",
+        acceptanceBoundary: "S12 proves bounded schemas, generated dispatch membership, and faithful execution of the ten golden MLX rows. S13 owns independent recomputation from source evidence and rejection of contradictory certificates.",
+        before: "Admitted model operations", adds: "MATHS-bound schema + dispatch", after: "Reference-matched golden math", proof: "Q30 / Q33 / Q40 / F2",
         diagram: "dispatch", diagramTitle: "The table chooses the primitive", diagramKicker: "no special model branch",
         diagramAlt: "Allowed operator, shape, and data type records pass through a generated dispatch table to MLX and are compared with reference results; a model-specific code branch is blocked.",
         next: "S12 → S13 / operators → memory schedule"
       },
       {
         id: "S13", status: "todo", group: "Running from bounded memory", accent: "blue",
-        title: "Plan what can live in memory right now.",
-        lead: "Having a large model on a drive does not mean the whole model can enter memory. S13 turns the Mac’s unified memory into a schedule with a hard ceiling.",
-        body: "At each point in a request, the schedule names the pages, cache, context, activations, transfer buffers, and reserve that may be resident. If the total does not fit the chosen hardware class, Cassette rejects the run before it starts.",
-        plain: "The cartridge holds the whole model. The Mac holds only the part this moment can afford.",
-        before: "A model and hardware profile", adds: "A time-indexed memory plan", after: "Admit or reject before allocation", proof: "Q47 / Q63 subset",
+        title: "Prove it. Then schedule memory.",
+        lead: "A bounded certificate can still lie. S13 must recompute its ranks, losses, service faces, atom cover, description and observation claims, execution risk, composition, resources, and horizon from canonical source evidence.",
+        body: "Only a reconciled certificate may become a time-indexed memory schedule. Aggregate/table disagreement, false atom counts, horizon or epsilon drift, peak-above-total resources, insufficient plan limits, eta drift, and over-budget atom rank must all stop before admission.",
+        plain: "First prove what the certificate says. Then decide what the Mac can afford at each moment.",
+        acceptanceBoundary: "Not implemented. S13 owns semantic recomputation and bounded residency; S12 supplied structural and golden-execution proof.",
+        before: "A structural certificate + evidence", adds: "Independent proof + memory plan", after: "Admit or reject before allocation", proof: "Q19 / Q47 / Q63 subset",
         diagram: "memory", diagramTitle: "The red line is a real limit", diagramKicker: "every resident byte has a job",
         diagramAlt: "A memory ceiling sits above lanes for working pages, cache, context, activations, and reserve while the full model remains on the cartridge. Resident cells change over time.",
         next: "S13 → S14 / memory plan → page readiness"
@@ -2234,11 +2266,12 @@
       },
       {
         id: "S19", status: "todo", group: "Changing the representation", accent: "blue",
-        title: "Make a usable copy. Keep its source map.",
-        lead: "Storage-native representation cannot be made by copying files into a new folder. S19 streams the source model through a compiler that can stop and resume, while preserving a map from each source contribution to the executable result.",
-        body: "The map records what was kept, merged, quantized, or selected. Missing contributions are failures. The compiler may change placement and representation; it may not lose provenance.",
+        title: "Compile without losing provenance.",
+        lead: "S19 streams the verified source through a resumable compiler and maps every source contribution to the executable result.",
+        body: "Before any unsafe load, it rejects model-controlled pickle, templates, traversal, auto-map code, native libraries, and custom operators. It inventories required Q30 tuples from verified evidence. A missing contribution or tuple is a typed failure.",
         plain: "Every important piece of the source needs a receipt showing where it went.",
-        before: "Verified source pages", adds: "Resumable compiler + contribution map", after: "Traceable executable revision", proof: "Q4 / Q58 / Q60",
+        acceptanceBoundary: "S19 owns Q55 containment and source-driven Q30 tuple discovery. Refusal precedes code, network, credentials, native shims, private kernels, and fallback.",
+        before: "Verified source pages", adds: "Contained, resumable compiler", after: "Traceable executable revision", proof: "Q4 / Q19 / Q30 / Q55 / Q58 / Q60",
         diagram: "compiler", diagramTitle: "Every source contribution needs a destination", diagramKicker: "omission is not compression",
         diagramAlt: "Six source contributions map into four compiled items. Every source item has a green destination; a missing mapping is shown as a structural failure, not an acceptable omission.",
         next: "S19 → S20 / compiled revision → honest plans"
@@ -2291,9 +2324,9 @@
         id: "S24", status: "todo", group: "Proving the machine", accent: "orange",
         title: "Observe a teacher before teaching the compiler.",
         lead: "Before a compiler can claim that it saves storage traffic, Cassette needs to watch a real model behave. S24 runs a permissively licensed 3–8B model and records the teacher’s requests, active contributions, timing, and quality reference.",
-        body: "The trace is stored by digest. It is evidence about one measured model and workload, not a universal statement about frontier models. That modesty is useful; a compiler needs observations, not atmosphere.",
+        body: "The trace is stored by digest. S24 also executes and re-goldens every source-discovered Q30 tuple required by the representative model. This remains evidence about one measured model and workload, not a universal statement about frontier models.",
         plain: "First record what a real run touched. Only then ask a compiler to change the path.",
-        before: "A working teacher run", adds: "Digest-locked traces", after: "Evidence for a small-model experiment", proof: "Q19 / Q40",
+        before: "A working teacher run", adds: "Traces + tuple re-goldening", after: "Evidence for a small-model experiment", proof: "Q18 / Q19 / Q30 / Q40",
         diagram: "teacher", diagramTitle: "Observation comes before transformation", diagramKicker: "one trace, clearly scoped",
         diagramAlt: "A teacher model run produces request, active-contribution, timing, and quality traces. The traces are stored in a digest-locked corpus labeled as evidence for one workload.",
         next: "S24 → S25 / teacher trace → simulator"
@@ -2336,10 +2369,10 @@
         title: "Close the machine phase before the live campaign.",
         lead: "S28 closes the machine phase. It does not pretend that a closed implementation queue is the same thing as a live product campaign.",
         body: "Every S-step must be done or carry a blocked report. The runbook for real drives, live source services, larger models, and the complete Q80 matrix is generated from the failure and acceptance rows. Only then does the work move to hardware and the final product proof.",
-        plain: "Today, S01–S09 are built. S10–S28 remain. The research queue is closed, but Q80—the complete product run—has not run.",
+        plain: "Today, S01–S12 are built. S13 is the next step; S13–S28 remain. The research queue is closed, but Q80—the complete product run—has not run.",
         before: "Machine-phase evidence", adds: "A live-campaign runbook", after: "The final product test", proof: "Q80 / PHASE LIVE",
         diagram: "closeout", diagramTitle: "The live campaign is a separate door", diagramKicker: "closeout is a boundary, not a victory lap",
-        diagramAlt: "The machine phase contains S01 through S28, with S01 through S09 built and later steps still open. A gate leads to live steps for real drives, live acquisition, larger models, and the complete Q80 run.",
+        diagramAlt: "The machine phase contains S01 through S28, with S01 through S12 built and S13 onward still open. A gate leads to live steps for real drives, live acquisition, larger models, and the complete Q80 run.",
         next: "S28 → L01 / machine phase → live campaign"
       }
     ];
@@ -2426,7 +2459,7 @@
         case "lifecycle":
           return `<div class="epoch-layout"><div class="epoch epoch--verified"><strong>mount A</strong><span>UUID + filesystem + root agree</span><span>token A is valid</span></div>${arrow()}<div class="epoch epoch--dead"><strong>disconnect</strong><span>token A is invalidated</span><span>no stale read is attempted</span></div>${arrow()}<div class="epoch epoch--verified"><strong>mount B</strong><span>identity is checked again</span><span>token B is newly issued</span></div></div>`;
         case "sources":
-          return `<div class="source-stack"><div class="node node--compact node--orange"><strong>Hugging Face</strong><small>its own wire</small></div><div class="node node--compact node--blue"><strong>Ollama</strong><small>its own wire</small></div><div class="node node--compact node--green"><strong>Tinker</strong><small>its own wire</small></div>${arrow()}<div class="adapter-card"><strong>one adapter boundary</strong><div class="adapter-ops"><span>resolve</span><span>enumerate</span><span>read facts</span><span>open range</span><span>translate auth/license</span></div></div>${arrow()}<div class="node node--wide node--cream"><strong>shared transfer engine</strong><small>one lifecycle, one journal</small></div></div>`;
+          return `<div class="source-stack"><div class="node node--compact node--orange"><strong>HF-shaped fixture</strong><small>deterministic wire</small></div><div class="node node--compact node--blue"><strong>Ollama-shaped fixture</strong><small>deterministic wire</small></div><div class="node node--compact node--green"><strong>Tinker-shaped fixture</strong><small>deterministic wire</small></div>${arrow()}<div class="adapter-card"><strong>one adapter boundary</strong><div class="adapter-ops"><span>resolve</span><span>enumerate</span><span>read facts</span><span>open range</span><span>translate auth/license</span></div></div>${arrow()}<div class="node node--wide node--cream"><strong>shared transfer engine</strong><small>one lifecycle, one journal</small></div></div>`;
         case "transfer":
           return `<div><div class="progress-strip">${Array.from({length: 12}, (_, i) => `<span class="progress-cell ${i < 6 ? "progress-cell--done" : i === 6 ? "progress-cell--bad" : i === 7 ? "progress-cell--active" : ""}"></span>`).join("")}</div><div class="transfer-note"><span>completed ranges stay recorded</span><span>bad / missing range resumes here</span></div><div class="decision-bar"><span class="tag tag--good">full coverage</span><span class="tag tag--good">source digest matches</span><span class="tag tag--bad">otherwise: no commit</span></div></div>`;
         case "decision":
@@ -2464,19 +2497,20 @@
         case "accounting":
           return `<div class="accounting-layout"><div class="repo-tree"><strong>repository tree</strong><div class="tree-line">store.py / one authority</div><div class="tree-line">pager.py / one authority</div><div class="tree-line">tests / cited proof</div><div class="tree-line">tools / accounting</div></div>${arrow()}<div><div class="accounting-report"><strong>accounting report</strong><div class="report-line">code / dependencies / processes</div><div class="report-line">runtimes / branches / bytes</div></div><div class="removal-report"><strong>removal map</strong><div class="report-line">orphaned helper → remove</div><div class="report-line">missing row → defect</div></div></div></div>`;
         case "closeout":
-          return `<div class="closeout-layout"><div class="machine-column"><div class="phase-label">machine phase / S01–S28</div><div class="phase-step phase-step--done">S01–S09 / built</div><div class="phase-step phase-step--todo">S10–S27 / still to build</div><div class="phase-step phase-step--todo">S28 / closeout record</div></div><div class="closeout-gate">closeout<br>requires<br>all steps<br>resolved</div><div class="live-column"><div class="phase-label">live campaign / L01–L05</div><div class="phase-step phase-step--live">real storage qualification</div><div class="phase-step phase-step--live">live source acquisition</div><div class="phase-step phase-step--live">larger-model gates</div><div class="phase-step phase-step--live">complete Q80 run</div></div></div>`;
+          return `<div class="closeout-layout"><div class="machine-column"><div class="phase-label">machine phase / S01–S28</div><div class="phase-step phase-step--done">S01–S12 / built</div><div class="phase-step phase-step--todo">S13–S27 / still to build</div><div class="phase-step phase-step--todo">S28 / closeout record</div></div><div class="closeout-gate">closeout<br>requires<br>all steps<br>resolved</div><div class="live-column"><div class="phase-label">live campaign / L01–L05</div><div class="phase-step phase-step--live">real storage qualification</div><div class="phase-step phase-step--live">live source acquisition</div><div class="phase-step phase-step--live">larger-model gates</div><div class="phase-step phase-step--live">complete Q80 run</div></div></div>`;
         default:
           return "";
       }
     }
 
     function titleSlide() {
-      return `<section class="slide slide--title is-active" data-stage="TITLE" data-accent="red" aria-labelledby="title-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(0, "PROLOGUE")}<div class="slide-meta"><span>recovered cartridge / 30</span><span class="status status--foundation">fictional frame</span></div></header><div class="title-layout"><div class="copy title-copy"><div class="title-spider-note">${spiderSprite()}<div><span class="eyebrow">Recovered field manual / unreleased platformer</span><strong>The game never shipped.</strong></div></div><h1 id="title-heading">The Spider<br>in<br>Cartridge 0</h1><p class="lead">There was never a finished game. The real problem behind the fictional cartridge is Cassette: can a very large language model stay useful on a person’s Mac when its complete set of weights lives on an external drive?</p><p>The fiction gives the machine a level map. The build order is real: identity, storage, recovery, memory, execution, clients, training, and proof. This deck follows S00 through S28 until the finished product can show its work.</p><p class="title-quote">The full model stays on the cartridge. The Mac supplies the working window.</p></div><div class="diagram-frame" role="img" aria-label="The Cassette path from source to external cartridge to Apple working memory to agent"><div class="diagram-head"><span class="diagram-title">The missing game’s real map</span><span class="diagram-kicker">source → cartridge → working window → agent</span></div><div class="diagram-body">${diagramMarkup("route")}<div class="diagram-caption">Green rooms are built, red rooms are still ahead, and the spider marks the slide you are reading. The handoffs remain the subject: every stage gives the next one a smaller, clearer promise.</div></div></div></div><footer class="slide-footer"><span class="next">← / → move through the recovered cartridge · O opens the stage map</span><span class="source">Cassette truth: S01–S09 built · S10–S28 still to build</span></footer></div></section>`;
+      return `<section class="slide slide--title is-active" data-stage="TITLE" data-accent="red" aria-labelledby="title-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(0, "PROLOGUE")}<div class="slide-meta"><span>recovered cartridge / 30</span><span class="status status--foundation">fictional frame</span></div></header><div class="title-layout"><div class="copy title-copy"><div class="title-spider-note">${spiderSprite()}<div><span class="eyebrow">Recovered field manual / unreleased platformer</span><strong>The game never shipped.</strong></div></div><h1 id="title-heading">The Spider<br>in<br>Cartridge 0</h1><p class="lead">There was never a finished game. The real problem behind the fictional cartridge is Cassette: can a very large language model stay useful on a person’s Mac when its complete set of weights lives on an external drive?</p><p>The fiction gives the machine a level map. The build order is real: identity, storage, recovery, memory, execution, clients, training, and proof. This deck follows S00 through S28 until the finished product can show its work.</p><p class="title-quote">The full model stays on the cartridge. The Mac supplies the working window.</p></div><div class="diagram-frame" role="img" aria-label="The Cassette path from source to external cartridge to Apple working memory to agent"><div class="diagram-head"><span class="diagram-title">The missing game’s real map</span><span class="diagram-kicker">source → cartridge → working window → agent</span></div><div class="diagram-body diagram-body--route">${diagramMarkup("route")}<div class="diagram-caption">Green rooms are built, red rooms are still ahead, and the spider marks the slide you are reading. The handoffs remain the subject: every stage gives the next one a smaller, clearer promise.</div></div></div></div><footer class="slide-footer"><span class="next">← / → move through the recovered cartridge · O opens the stage map</span><span class="source">Cassette truth: S01–S12 built · S13–S28 still to build</span></footer></div></section>`;
     }
 
     function stageSlide(stage, index) {
       const statusLabel = stage.status === "done" ? "Built" : stage.status === "todo" ? "Still to build" : "Starting contract";
-      return `<section class="slide" data-stage="${stage.id}" data-accent="${stage.accent}" aria-labelledby="${stage.id.toLowerCase()}-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(index + 1, stage.id)}<div class="slide-meta"><span>${stage.id} / recovered stage log</span><span class="status status--${stage.status}">${statusLabel}</span></div></header><div class="stage-layout"><div class="copy"><div class="eyebrow">${stage.id} · ${stage.group}</div><h1 id="${stage.id.toLowerCase()}-heading">${stage.title}</h1><p class="lead">${stage.lead}</p><p>${stage.body}</p><div class="plain-box"><div class="plain-label">In plain English</div><p class="plain-copy">${stage.plain}</p></div><div class="fact-row"><div class="fact"><span class="label">Before</span><strong>${stage.before}</strong></div><div class="fact"><span class="label">This stage adds</span><strong>${stage.adds}</strong></div><div class="fact"><span class="label">After</span><strong>${stage.after}</strong></div></div><p class="proof-note">Contract / evidence: ${stage.proof}</p></div><div class="diagram-frame" role="img" aria-label="${stage.diagramAlt}"><div class="diagram-head"><span class="diagram-title">${stage.diagramTitle}</span><span class="diagram-kicker">${stage.diagramKicker}</span></div><div class="diagram-body">${diagramMarkup(stage.diagram)}<div class="diagram-caption">The map shows the spider's position in the sequence. The drawing is the claim: it shows what enters this stage, what changes here, and what the next stage is allowed to assume.</div></div></div></div><footer class="slide-footer"><span class="next">${stage.next}</span><span class="source">cartridge log ${String(index + 2).padStart(2, "0")} / 30</span></footer></div></section>`;
+      const boundary = stage.acceptanceBoundary ? `<div class="acceptance-boundary"><strong>Acceptance boundary</strong>${stage.acceptanceBoundary}</div>` : "";
+      return `<section class="slide" data-stage="${stage.id}" data-accent="${stage.accent}" aria-labelledby="${stage.id.toLowerCase()}-heading"><div class="slide-inner"><header class="topbar"><div class="brand-lockup">${brand()}</div>${platformerProgress(index + 1, stage.id)}<div class="slide-meta"><span>${stage.id} / recovered stage log</span><span class="status status--${stage.status}">${statusLabel}</span></div></header><div class="stage-layout"><div class="copy"><div class="eyebrow">${stage.id} · ${stage.group}</div><h1 id="${stage.id.toLowerCase()}-heading">${stage.title}</h1><p class="lead">${stage.lead}</p><p>${stage.body}</p><div class="plain-box"><div class="plain-label">In plain English</div><p class="plain-copy">${stage.plain}</p></div>${boundary}<div class="fact-row"><div class="fact"><span class="label">Before</span><strong>${stage.before}</strong></div><div class="fact"><span class="label">This stage adds</span><strong>${stage.adds}</strong></div><div class="fact"><span class="label">After</span><strong>${stage.after}</strong></div></div><p class="proof-note">Contract / evidence: ${stage.proof}</p></div><div class="diagram-frame" role="img" aria-label="${stage.diagramAlt}"><div class="diagram-head"><span class="diagram-title">${stage.diagramTitle}</span><span class="diagram-kicker">${stage.diagramKicker}</span></div><div class="diagram-body diagram-body--${stage.diagram}">${diagramMarkup(stage.diagram)}<div class="diagram-caption">The map shows the spider's position in the sequence. The drawing is the claim: it shows what enters this stage, what changes here, and what the next stage is allowed to assume.</div></div></div></div><footer class="slide-footer"><span class="next">${stage.next}</span><span class="source">cartridge log ${String(index + 2).padStart(2, "0")} / 30</span></footer></div></section>`;
     }
 
     function render() {

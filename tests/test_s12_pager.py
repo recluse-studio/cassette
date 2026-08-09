@@ -9,6 +9,7 @@ import importlib.metadata
 import json
 import math
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -86,6 +87,71 @@ def dispatch_record() -> dict:
         "case_ids": list(CASE_IDS),
         "apple_features": ["apple_silicon", "metal"],
     }
+
+
+def otool_dependencies(binary: Path) -> list[str]:
+    """Return Mach-O load entries; the first otool heading is not a dependency."""
+    lines = subprocess.run(
+        ["otool", "-L", str(binary)], check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    assert lines and lines[0].rstrip().endswith(":"), "unexpected otool -L structure"
+    return [line.strip().split(" (", 1)[0] for line in lines[1:] if line.strip()]
+
+
+def otool_rpaths(binary: Path) -> list[str]:
+    """Return LC_RPATH values used to resolve @rpath dependency entries."""
+    lines = subprocess.run(
+        ["otool", "-l", str(binary)], check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    paths = []
+    for index, line in enumerate(lines):
+        if line.strip() != "cmd LC_RPATH":
+            continue
+        for candidate in lines[index + 1 : index + 8]:
+            value = candidate.strip()
+            if value.startswith("path "):
+                paths.append(value[5:].split(" (offset ", 1)[0])
+                break
+    return paths
+
+
+def repository_owned_dependencies(binary: Path, repository: Path) -> list[str]:
+    """Map actual Mach-O load entries to files owned by the supplied Git repository."""
+    repository = repository.resolve()
+    tracked = set(
+        subprocess.run(
+            ["git", "-C", str(repository), "ls-files", "-z"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
+    )
+
+    def anchored(value: str) -> Path | None:
+        if value.startswith("@loader_path/") or value.startswith("@executable_path/"):
+            return binary.parent / value.split("/", 1)[1]
+        return Path(value) if value.startswith("/") else None
+
+    candidates: list[Path] = []
+    rpaths = [anchored(value) for value in otool_rpaths(binary)]
+    for dependency in otool_dependencies(binary):
+        if dependency.startswith("@rpath/"):
+            suffix = dependency.split("/", 1)[1]
+            candidates.extend(path / suffix for path in rpaths if path is not None)
+            continue
+        candidate = anchored(dependency)
+        if candidate is not None:
+            candidates.append(candidate)
+
+    owned = []
+    for candidate in candidates:
+        try:
+            relative = candidate.resolve().relative_to(repository).as_posix()
+        except ValueError:
+            continue
+        if relative in tracked:
+            owned.append(relative)
+    return sorted(set(owned))
 
 
 def certificate(target_digit: str = "1") -> dict:
@@ -514,7 +580,9 @@ def test_q33_q40_f2_certificate_dimensions_are_bounded_data_and_fail_before_exec
     )
 
 
-def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_golden_reference():
+def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_golden_reference(
+    tmp_path,
+):
     """Q30 acceptance: F2 executes every generated MLX tuple against literal or scalar reference arithmetic."""
     assert importlib.metadata.version("mlx") == "0.31.0"
     rows = {row["case_id"]: row for row in DISPATCH_ROWS}
@@ -549,10 +617,33 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
         ["git", "ls-files"], cwd=REPO, check=True, capture_output=True, text=True
     ).stdout.splitlines()
     assert not [path for path in tracked if Path(path).suffix in native_sources]
-    linked = subprocess.run(
-        ["otool", "-L", mx.__file__], check=True, capture_output=True, text=True
-    ).stdout
-    assert str(REPO) not in linked
+    assert repository_owned_dependencies(Path(mx.__file__), REPO) == []
+
+    native_repo = tmp_path / "native-repository"
+    native_repo.mkdir()
+    subprocess.run(["git", "-C", str(native_repo), "init", "--quiet"], check=True)
+    consumer = native_repo / "consumer.so"
+    owned_library = native_repo / "libcassette.dylib"
+    shutil.copy2(mx.__file__, consumer)
+    shutil.copy2(mx.__file__, owned_library)
+    original_dependency = otool_dependencies(consumer)[0]
+    subprocess.run(
+        [
+            "install_name_tool",
+            "-change",
+            original_dependency,
+            str(owned_library.resolve()),
+            str(consumer),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(native_repo), "add", "consumer.so", "libcassette.dylib"],
+        check=True,
+    )
+    assert repository_owned_dependencies(consumer, native_repo) == ["libcassette.dylib"]
     pager_tree = ast.parse((REPO / "pager.py").read_text(encoding="utf-8"))
     executor_names = {f"_{row['operator']}" for row in rows.values()}
     executor_functions = [

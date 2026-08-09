@@ -4,6 +4,7 @@
 import json
 import subprocess
 import sys
+import venv
 from pathlib import Path
 
 from tools.ledger import (
@@ -39,7 +40,7 @@ def init_git(root: Path) -> str:
 
 
 def test_ledger_reproducible_from_clean_checkout(tmp_path):
-    """Q29 acceptance: reproduce J from a clean checkout — clone HEAD, run twice, identical clean report."""
+    """Q29 acceptance: J excludes foreign environments but includes new governed source."""
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "--quiet", str(REPO), str(clone)], check=True, capture_output=True)
     first = run_ledger(clone)
@@ -49,6 +50,35 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
     report = json.loads(first.stdout)
     assert report["violations"] == []
     assert report["j_partial"]["direct_dependencies"], "pins must be recorded"
+
+    for name in ("local-python", "build/runtime-3.13"):
+        environment = clone / name
+        venv.EnvBuilder(with_pip=False, symlinks=True).create(environment)
+        foreign = environment / "lib" / "python3.13" / "site-packages" / "foreign_runtime.py"
+        foreign.parent.mkdir(parents=True, exist_ok=True)
+        foreign.write_text("import mlx\nimport store\n")
+    isolated = run_ledger(clone)
+    assert isolated.returncode == 0, isolated.stdout
+    assert isolated.stdout == first.stdout
+
+    (clone / "compiler.py").write_text(
+        "# compiler.py — untracked hostile source; depends on sources.py.\n"
+        "import mlx\n"
+        "import sources\n"
+    )
+    (clone / "trainer.py").write_text(
+        "# trainer.py — staged governed source; depends on (none).\nVALUE = 1\n"
+    )
+    git(clone, "add", "trainer.py")
+    governed = run_ledger(clone)
+    assert governed.returncode == 1
+    governed_report = json.loads(governed.stdout)
+    assert set(governed_report["files_checked"]) - set(report["files_checked"]) == {
+        "compiler.py",
+        "trainer.py",
+    }
+    assert any("compiler.py: mlx import outside" in item for item in governed_report["violations"])
+    assert any("compiler.py: illegal import of 'sources'" in item for item in governed_report["violations"])
 
 
 def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):

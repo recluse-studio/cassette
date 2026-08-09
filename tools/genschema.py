@@ -207,37 +207,55 @@ OPERATOR_DISPATCH_RECORD = {
     "case_ids": [row["case_id"] for row in DISPATCH_ROWS],
     "apple_features": MLX_RUNTIME["apple_features"],
 }
-CERTIFICATE_DIMENSIONS = {
-    "mathematics": [
-        "target",
-        "condition_metrics",
-        "compatibility",
-        "atoms",
-        "description_contract",
-        "observation_contract",
-        "execution_contract",
-        "trace_contract",
-    ],
-    "resources": [
-        "eta_rep",
-        "epsilon_exec",
-        "delta_exec_total",
-        "atom_count",
-        "max_atom_rank",
-        "description_bytes_peak",
-        "description_bytes_total",
-        "metadata_bytes_peak",
-        "metadata_bytes_total",
-        "fresh_samples_max",
-        "fresh_samples_total",
-        "fresh_traffic_max",
-        "fresh_traffic_total",
-        "fresh_traffic_unit",
-        "horizon",
-    ],
-    "tables": ["per_atom", "per_operation", "per_trace_step"],
-    "physical": ["conversion_rows", "conversion_digest"],
-}
+CERTIFICATE_DIMENSION_GROUPS = ("mathematics", "resources", "tables", "physical")
+CERTIFICATE_DIMENSIONS_BEGIN = "<!-- CASSETTE_CERTIFICATE_DIMENSIONS_BEGIN -->"
+CERTIFICATE_DIMENSIONS_END = "<!-- CASSETTE_CERTIFICATE_DIMENSIONS_END -->"
+MAX_CERTIFICATE_AUTHORITY_BYTES = 8_192
+MAX_CERTIFICATE_DIMENSIONS_PER_GROUP = 64
+
+
+def load_certificate_dimensions(maths_path: Path | None = None) -> dict[str, list[str]]:
+    """Parse the single bounded certificate-dimension authority in MATHS.md section 8."""
+    path = maths_path or Path(__file__).resolve().parent.parent / "MATHS.md"
+    source = path.read_text(encoding="utf-8")
+    if source.count(CERTIFICATE_DIMENSIONS_BEGIN) != 1:
+        raise ValueError("MATHS.md requires exactly one certificate-dimensions begin marker")
+    if source.count(CERTIFICATE_DIMENSIONS_END) != 1:
+        raise ValueError("MATHS.md requires exactly one certificate-dimensions end marker")
+    start = source.index(CERTIFICATE_DIMENSIONS_BEGIN) + len(CERTIFICATE_DIMENSIONS_BEGIN)
+    end = source.index(CERTIFICATE_DIMENSIONS_END, start)
+    block = source[start:end].strip()
+    lines = block.splitlines()
+    if len(lines) < 3 or lines[0] != "```json" or lines[-1] != "```":
+        raise ValueError("MATHS.md certificate dimensions must be one fenced JSON block")
+    payload = "\n".join(lines[1:-1])
+    if len(payload.encode("utf-8")) > MAX_CERTIFICATE_AUTHORITY_BYTES:
+        raise ValueError("MATHS.md certificate-dimensions block exceeds 8192 bytes")
+    try:
+        dimensions = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"MATHS.md certificate dimensions are malformed JSON: {exc.msg}") from exc
+    if not isinstance(dimensions, dict) or tuple(dimensions) != CERTIFICATE_DIMENSION_GROUPS:
+        raise ValueError(
+            f"MATHS.md certificate-dimension groups must be {CERTIFICATE_DIMENSION_GROUPS} in order"
+        )
+    seen: set[str] = set()
+    for group in CERTIFICATE_DIMENSION_GROUPS:
+        names = dimensions[group]
+        if not isinstance(names, list) or not 1 <= len(names) <= MAX_CERTIFICATE_DIMENSIONS_PER_GROUP:
+            raise ValueError(f"MATHS.md certificate group {group!r} requires 1..64 dimensions")
+        for name in names:
+            if (
+                not isinstance(name, str)
+                or not name.isascii()
+                or not name.isidentifier()
+                or not 1 <= len(name.encode("utf-8")) <= 64
+            ):
+                raise ValueError(f"MATHS.md certificate group {group!r} has an invalid dimension")
+            if name in seen:
+                raise ValueError(f"MATHS.md certificate dimension {name!r} is duplicated")
+            seen.add(name)
+    return dimensions
 
 
 def text(
@@ -678,6 +696,37 @@ EXECUTION_PLAN = record(
     },
 )
 
+
+def implemented_certificate_dimensions() -> dict[str, list[str]]:
+    """Describe the certificate fields implemented by the generated schemas."""
+    certificate = MATHEMATICAL_CERTIFICATE["properties"]
+    envelope = {
+        "certificate_version",
+        "certificate_id",
+        "resources",
+        "resource_tables",
+        "physical_conversion",
+    }
+    return {
+        "mathematics": [name for name in certificate if name not in envelope],
+        "resources": list(certificate["resources"]["properties"]),
+        "tables": list(certificate["resource_tables"]["properties"]),
+        "physical": list(certificate["physical_conversion"]["properties"]),
+    }
+
+
+def verify_certificate_dimensions(dimensions: dict[str, list[str]]) -> None:
+    """Reject any MATHS.md dimension that the implemented schema does not represent exactly."""
+    implemented = implemented_certificate_dimensions()
+    for group in CERTIFICATE_DIMENSION_GROUPS:
+        authority = set(dimensions[group])
+        schema = set(implemented[group])
+        if authority != schema:
+            raise ValueError(
+                f"MATHS.md certificate group {group!r} disagrees with schema: "
+                f"authority_only={sorted(authority - schema)}, schema_only={sorted(schema - authority)}"
+            )
+
 CONTRACTS: dict[str, dict] = {
     "error": record(
         "Canonical error",
@@ -947,6 +996,8 @@ def validate(kind, obj):
 
 def emit(outdir: Path) -> dict[str, str]:
     """Write every generated file and return its name-to-SHA-256 integrity map."""
+    certificate_dimensions = load_certificate_dimensions()
+    verify_certificate_dimensions(certificate_dimensions)
     outdir.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {}
 
@@ -964,7 +1015,7 @@ def emit(outdir: Path) -> dict[str, str]:
         f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
-        f"CERTIFICATE_DIMENSIONS = {pprint.pformat(CERTIFICATE_DIMENSIONS, sort_dicts=True, width=100)}\n"
+        f"CERTIFICATE_DIMENSIONS = {pprint.pformat(certificate_dimensions, sort_dicts=True, width=100)}\n"
     )
     put("tables.py", tables)
     put("validator.py", VALIDATOR_SRC.format(note=GENERATED_NOTE))

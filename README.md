@@ -14,9 +14,10 @@ fine-tuned or post-trained where they sit. The full checkpoint does not move ont
 and no hosted model answers behind the curtain.
 
 > [!IMPORTANT]
-> Cassette is being built in public. S01–S11 are complete: the repository now has its accounting,
+> Cassette is being built in public. S01–S12 are complete: the repository now has its accounting,
 > error, schema, identity, content-store, transaction, integrity, capacity, cartridge-lifecycle,
-> source-adapter, resumable-transfer, and evidence-bound preflight authorities. S12 has not begun.
+> source-adapter, resumable-transfer, evidence-bound preflight, bounded mathematical-schema, and
+> pinned MLX golden-dispatch authorities. S13 is next.
 > Cassette does **not** yet compile, execute, train, or serve a model. The complete release matrix
 > remains `NOT_RUN`.
 
@@ -66,8 +67,8 @@ verifiable model identity.
 
 ## The storage-native design
 
-The complete architecture is deliberately narrow. Python owns the control plane, MLX will own Apple
-tensor execution and autograd, and existing numerical primitives outrank new kernels. The external
+The complete architecture is deliberately narrow. Python owns the control plane, MLX owns S12's
+golden tensor execution and will own later Apple execution and autograd, and existing numerical primitives outrank new kernels. The external
 cartridge is the durable meeting place between otherwise separate components.
 
 ```mermaid
@@ -208,7 +209,7 @@ there is no partially callable model and no hidden full master on internal stora
 
 ## Current implementation
 
-The repository has finished eleven of twenty-eight machine-build steps. The present code is the
+The repository has finished twelve of twenty-eight machine-build steps. The present code is the
 foundation beneath the future compiler and runtime, not an early user-facing product.
 
 | Step | State | Implemented result |
@@ -224,17 +225,20 @@ foundation beneath the future compiler and runtime, not an early user-facing pro
 | S09 | Done | Stateless five-operation source boundary with credential-authority and hostile-redirect repair. |
 | S10 | Done | Resumable direct-to-cartridge transfer with bounded ranges, durable SHA-256 continuation, and corruption/drift rejection. |
 | S11 | Done | Evidence-bound metadata normalization and four-outcome preflight that derives strong trust from verified bytes. |
-| S12 | Next | Generated mathematical-plan schema, pinned runtime dispatch, and golden operators. |
+| S12 | Done | MATHS.md-controlled bounded certificate dimensions, generated Q30 dispatch, ten independently checked MLX golden operator rows, and repository-owned native-link rejection. |
 
-The latest committed proof on Python 3.13 reports 25 passing tests and a clean ledger: 2,723 product
-lines, 356 tool lines, 1,955 test lines, 58 generated lines reported separately, one process, one
-authored language, and four exact direct dependency pins. The mathematical cutover changes no
-S01-S11 product behavior because none of those steps implements compiled execution.
+The opening proof for this remediation on Python 3.13 reported 28 passing tests and a clean ledger:
+2,813 product lines, 406 tool lines, 2,136 test lines, 74 generated lines reported separately, one
+process, one authored language, and five exact direct dependency pins. The final proof below is
+recomputed from the committed remediation state rather than inferred from that baseline.
 
 Current boundaries are explicit. Deterministic source fixtures and resumable transfer exist;
 live-source acquisition remains L02. GGUF import, export, appended training deltas, paging, MLX
-execution, compilation, training, brokering, named-client adapters, and any UI do not yet exist.
-Fields reserved for later root material do not count as those operations.
+model execution, compilation, training, brokering, named-client adapters, and any UI do not yet
+exist. S12 proves bounded record structure, generated dispatch membership, and the declared golden
+MLX rows. S13 must independently recompute certificate truth from source evidence and reject
+internally contradictory claims. Fields reserved for later root material do not count as those
+operations.
 
 ## Build path
 
@@ -311,20 +315,24 @@ remains `NOT_RUN` until every required live row passes.
 
 ## Reproduce the current proof
 
-Cassette currently pins Python `==3.13.*`, `blake3==1.0.9`, `rfc8785==0.1.4`,
+Cassette currently pins Python `==3.13.*`, `blake3==1.0.9`, `mlx==0.31.0`, `rfc8785==0.1.4`,
 `resumablesha256==1.0`, and the development dependency `pytest==9.1.1`. The following commands
-reproduce the current isolated checks:
+create no repository-local environment and reproduce the current isolated checks when copied
+verbatim on Apple Silicon macOS:
 
 ```bash
-uv run --isolated --no-project --python 3.13 \
+PYTHONDONTWRITEBYTECODE=1 uv run --isolated --no-project --python 3.13 \
   --with pytest==9.1.1 \
   --with blake3==1.0.9 \
+  --with mlx==0.31.0 \
   --with rfc8785==0.1.4 \
   --with resumablesha256==1.0 \
-  python -m pytest -q
+  python -m pytest -q -p no:cacheprovider
 
-uv run --isolated --no-project --python 3.13 \
+PYTHONDONTWRITEBYTECODE=1 uv run --isolated --no-project --python 3.13 \
+  --with pytest==9.1.1 \
   --with blake3==1.0.9 \
+  --with mlx==0.31.0 \
   --with rfc8785==0.1.4 \
   --with resumablesha256==1.0 \
   python tools/ledger.py

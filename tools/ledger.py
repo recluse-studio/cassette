@@ -9,7 +9,9 @@ Checks (AGENTS.md):
   5. Identity authority confinement: product digest and RFC 8785 imports exist only in store.py.
   6. Test citation law: every test function cites a ledger invariant (Qn or a matrix row id).
   7. Pin law: every dependency in pyproject.toml carries an exact `==` pin.
-  8. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
+  8. Governed-source accounting: Git-owned and intentionally untracked source is measured; foreign
+     interpreter environments, dependency trees, and ignored caches are not repository code.
+  9. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
      separately and never counted as authored.
 
 Output is deterministic. Exit 0 when clean, 1 when any violation exists. Usage:
@@ -111,13 +113,43 @@ def classify(path: Path) -> str:
 
 
 def discover(root: Path) -> list[Path]:
-    files = []
-    for p in sorted(root.rglob("*.py")):
-        rel = p.relative_to(root)
-        if any(part in EXCLUDED_DIRS for part in rel.parts):
+    """Return Git-owned and intentionally introduced Python source, not foreign environments."""
+
+    def git_paths(*args: str) -> list[Path] | None:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", *args],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        return [Path(item) for item in result.stdout.split("\0") if item]
+
+    def eligible(rel: Path) -> bool:
+        return (
+            rel.suffix == ".py"
+            and not any(part in EXCLUDED_DIRS for part in rel.parts)
+            and (root / rel).is_file()
+        )
+
+    tracked = git_paths("--cached")
+    untracked = git_paths("--others", "--exclude-standard")
+    if tracked is None or untracked is None:
+        return [
+            path.relative_to(root)
+            for path in sorted(root.rglob("*.py"))
+            if not any(part in EXCLUDED_DIRS for part in path.relative_to(root).parts)
+        ]
+
+    owned = {rel for rel in tracked if eligible(rel)}
+    for rel in untracked:
+        if not eligible(rel):
             continue
-        files.append(rel)
-    return files
+        parents = [rel.parent, *rel.parent.parents]
+        if any((root / parent / "pyvenv.cfg").is_file() for parent in parents):
+            continue
+        owned.add(rel)
+    return sorted(owned)
 
 
 def logical_loc(root: Path, rel: Path) -> int:
