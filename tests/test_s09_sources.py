@@ -90,9 +90,15 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
             assert payload == case["payload"][1:-1]
             assert metadata["identity"] == {
                 "value": case["identity"],
-                "trust": "EVIDENCE_DIGESTED",
-                "authority": f"fixture:{kind}:manifest",
+                "trust": "DECLARED",
+                "authority": (
+                    f"source:{kind}:claim:EVIDENCE_DIGESTED:fixture:{kind}:manifest"
+                ),
             }
+            assert metadata["format"]["trust"] == "DECLARED"
+            assert metadata["format"]["authority"].startswith(
+                f"source:{kind}:claim:PARSED:"
+            )
             assert requirements.auth_scope == case["scope"]
             assert requirements.credential_required is True
             assert requirements.license_acceptance_required is case["license_acceptance"]

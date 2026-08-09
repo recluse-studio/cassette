@@ -22,6 +22,7 @@ from schema.validator import validate
 from store import (
     CapacityPhase,
     CapacityReservation,
+    artifact_hasher,
     artifact_hash_state,
     canonical_bytes,
     capacity_requirement,
@@ -452,7 +453,7 @@ class SourceAdapter:
         identity = metadata["identity"]
         if identity.get("trust") != "ABSENT" and identity.get("value") != revision.identity:
             _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q50: metadata identity must match resolve", "metadata names another source identity")
-        return metadata
+        return _source_metadata_record(metadata, self.kind, revision.locator)
 
     async def open_range(self, revision: ResolvedSource, artifact: Artifact, offset: int, length: int, validator: str) -> bytes:
         """Return one exact validator-bound byte range; S10 owns transfer scheduling and state."""
@@ -648,6 +649,90 @@ def _metadata_candidate(candidate: object, object_id: str) -> dict:
     return result
 
 
+def _source_metadata_candidate(candidate: object, source_kind: str, object_id: str) -> dict:
+    """Retain a source claim while deriving its trust from the source boundary."""
+
+    result = _metadata_candidate(candidate, object_id)
+    marker = f"source:{source_kind}:claim:"
+    if not result["authority"].startswith(marker):
+        result["authority"] = f"{marker}{result['trust']}:{result['authority']}"
+    if result["trust"] != "ABSENT":
+        result["trust"] = "DECLARED"
+    return result
+
+
+def _source_metadata_record(record: object, source_kind: str, object_id: str) -> dict:
+    """Remove self-asserted trust from one remote Q50 record without losing its claims."""
+
+    defects = validate("remote_metadata", record)
+    if defects:
+        _preflight_fail(object_id, "; ".join(defects))
+    copied = _json_copy(record, object_id)
+    result = {
+        field: _source_metadata_candidate(copied[field], source_kind, object_id)
+        for field in copied if field != "conflicts"
+    }
+    result["conflicts"] = [{
+        "field": conflict["field"],
+        "candidates": [
+            _source_metadata_candidate(candidate, source_kind, object_id)
+            for candidate in conflict["candidates"]
+        ],
+    } for conflict in copied["conflicts"]]
+    return result
+
+
+def _verified_metadata_candidates(
+    revision: ResolvedSource,
+    assets: tuple[tuple[str, bytes], ...],
+    fields: frozenset[str],
+    object_id: str,
+) -> dict[str, list[tuple[dict, int]]]:
+    """Derive strong Q50 candidates only from complete digest-matched metadata assets."""
+
+    if not isinstance(assets, tuple):
+        _preflight_fail(object_id, "verified metadata assets must be a tuple")
+    available = {artifact.path: artifact for artifact in revision.metadata_assets}
+    candidates: dict[str, list[tuple[dict, int]]] = {}
+    seen = set()
+    for item in assets:
+        if (not isinstance(item, tuple) or len(item) != 2
+                or not isinstance(item[0], str) or type(item[1]) is not bytes
+                or item[0] in seen or item[0] not in available):
+            _preflight_fail(object_id, "each verified metadata asset must name one resolved path once")
+        path, payload = item
+        seen.add(path)
+        artifact = available[path]
+        if len(payload) != artifact.size or len(payload) > _CONTROL_BYTES:
+            _preflight_fail(path, "verified metadata bytes must match one bounded resolved asset")
+        hasher = artifact_hasher(artifact.digest, path)
+        hasher.update(payload)
+        actual = f"{artifact.digest.partition(':')[0]}:{hasher.hexdigest()}"
+        if actual != artifact.digest:
+            _fail(
+                "IDENTITY_MISMATCH",
+                path,
+                "Q50: strong metadata must come from resolved immutable bytes",
+                f"expected {artifact.digest}; observed {actual}",
+            )
+        try:
+            values = json.loads(payload, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            _preflight_fail(path, "verified metadata asset must be UTF-8 JSON without duplicate fields")
+        if (not isinstance(values, dict) or not values
+                or any(field not in fields for field in values)):
+            _preflight_fail(path, "verified metadata asset must contain only generated Q50 fields")
+        authority = f"cassette:metadata-asset:{path}:{artifact.digest}"
+        for field, value in values.items():
+            candidate = _metadata_candidate({
+                "value": value,
+                "trust": "EVIDENCE_DIGESTED",
+                "authority": authority,
+            }, object_id)
+            candidates.setdefault(field, []).append((candidate, 3))
+    return candidates
+
+
 def _resolved_metadata_candidates(revision: ResolvedSource, object_id: str) -> dict[str, dict]:
     objects = (*revision.artifacts, *revision.metadata_assets)
     if not revision.artifacts or any(not isinstance(artifact, Artifact) for artifact in objects):
@@ -687,6 +772,8 @@ def _resolved_metadata_candidates(revision: ResolvedSource, object_id: str) -> d
 def normalize_remote_metadata(
     revision: ResolvedSource,
     records: tuple[dict, ...],
+    *,
+    verified_assets: tuple[tuple[str, bytes], ...] = (),
 ) -> dict:
     """Merge Q50 evidence, prefer immutable source facts, and retain every contradiction."""
 
@@ -698,9 +785,7 @@ def normalize_remote_metadata(
     fields: tuple[str, ...] | None = None
     candidates: dict[str, list[tuple[dict, int]]] = {}
     for record in records:
-        defects = validate("remote_metadata", record)
-        if defects:
-            _preflight_fail(object_id, "; ".join(defects))
+        record = _source_metadata_record(record, revision.source_kind, object_id)
         record_fields = tuple(sorted(set(record) - {"conflicts"}))
         if fields is None:
             fields = record_fields
@@ -717,6 +802,11 @@ def normalize_remote_metadata(
             for raw in conflict["candidates"]:
                 candidate = _metadata_candidate(raw, object_id)
                 candidates[field].append((candidate, _METADATA_TRUST[candidate["trust"]]))
+
+    for field, verified in _verified_metadata_candidates(
+        revision, verified_assets, frozenset(fields or ()), object_id
+    ).items():
+        candidates[field].extend(verified)
 
     resolved = _resolved_metadata_candidates(revision, object_id)
     for field, candidate in resolved.items():
@@ -862,6 +952,7 @@ def preflight(
     requirements: Requirements,
     profile: CompatibilityProfile,
     *,
+    verified_assets: tuple[tuple[str, bytes], ...] = (),
     probes: tuple[MetadataProbe, ...] = (),
 ) -> PreflightDecision:
     """Return one Q8/Q50/Q56 decision without inspecting or allocating on the current machine."""
@@ -877,7 +968,9 @@ def preflight(
             or not isinstance(requirements.license_acceptance_required, bool)):
         _preflight_fail(object_id, "Requirements fields must retain their exact Q9 types")
     _preflight_profile(profile, object_id)
-    metadata = normalize_remote_metadata(revision, metadata_records)
+    metadata = normalize_remote_metadata(
+        revision, metadata_records, verified_assets=verified_assets
+    )
     fields = frozenset(metadata) - {"conflicts"}
     checked_probes = _metadata_probes(probes, revision, fields)
 
