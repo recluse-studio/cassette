@@ -527,7 +527,28 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S03, S01]
-    status: IN_PROGRESS 2026-08-09
+    status: DONE 2026-08-09 — step commit 73997e0; complete macOS suite 28 passed in 46.32 seconds with no skips; ledger clean with 2,813 product LOC, 2,133 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact dependency pins
+    closeout:
+      - clause: "Q33/Q40 bounded data represents every separate MATHS.md certificate dimension and the least-invasive compiled mode"
+        test_or_probe: "tests/test_s12_pager.py::test_q33_q40_f2_certificate_dimensions_are_bounded_data_and_fail_before_execution plus Draft 2020-12 metaschema validation"
+        input: "Validate two data-only target variants; remove each of target, condition metrics, compatibility, atoms, description, observation, execution, and trace; collapse the resource vector; add code, command, model family, path, URL, or weight payload; exceed the four prior modes; supply infinity; reorder Q40 failures; alter the dispatch; mismatch the target; and name a foreign operator."
+        expected: "Each valid certificate and plan conforms to bounded generated schemas and uses the exact fifth Q40 mode only after four ordered Q38 records. Every malformed, collapsed, executable, model-specific, stale, or foreign case terminates before MLX allocation."
+        observed: "Both target variants passed the same code path. All three generated contracts passed the official Draft 2020-12 metaschema. Every object, array, string, integer, and number is structurally bounded; each hostile case returned its typed invariant failure, and Metal peak memory did not increase during malformed-plan validation."
+      - clause: "Q30 dispatch executes every declared operator, dtype, shape, parameter tuple, and tolerance through the pinned MLX release"
+        test_or_probe: "tests/test_s12_pager.py::test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_golden_reference"
+        input: "Execute the generated float32 and uint32 rows for matmul, affine four-bit quantized matmul, RMS norm, traditional RoPE, scaled dot-product attention, convolution, embedding, explicit-key categorical sampling, autograd, and SGD; then submit a wrong shape and an absent custom case."
+        expected: "Every result matches independent literal or scalar reference arithmetic within its declared tolerance. Wrong signatures and undeclared operators terminate with canonical typed errors. No Cassette numerical kernel or repository-linked native binary exists."
+        observed: "All ten rows matched their references on MLX 0.31.0 over Apple Silicon Metal. Wrong shape returned INVALID_REQUEST; the custom case returned UNSUPPORTED_OPERATOR. AST inspection found no authored arithmetic in the ten wrappers, tracked sources contained no native kernel language, and otool found no repository-linked MLX binary."
+      - clause: "The S12 fixtures can disprove every consequential schema, dispatch, operator, and confinement guard"
+        test_or_probe: "eight one-at-a-time mutations in detached disposable worktrees at step commit 73997e0"
+        input: "Make description optional; disable array maxima; accept non-finite numbers; compare only the dispatch digest; admit a foreign certificate operator; add one to MLX matmul output; bypass dtype and shape admission; or permit MLX imports in compiler.py."
+        expected: "Each mutation makes the fixture for the removed guard fail."
+        observed: "All eight mutants failed independently at the intended assertion. None produced a false green, and all agent-created worktrees were removed afterward."
+      - clause: "Q30 runtime ownership remains confined and the complete S12 regression and accounting gate passes"
+        test_or_probe: "tests/test_s12_pager.py::test_q30_ledger_confines_mlx_to_pager_and_trainer, the complete pinned CPython 3.13 suite, tools/ledger.py, hdiutil inspection, and git diff checking after 73997e0"
+        input: "Inject an MLX import into a hostile compiler authority; run every fixture on arm64 macOS with bytecode and pytest caches disabled; regenerate and hash every schema; recompute imports, citations, pins, commit law, tracked artifacts, runtime confinement, and J; inspect mounted images and the patch."
+        expected: "The hostile import fails confinement. Every fixture passes without a platform skip; generated files and the lock are reproducible; the ledger reports no violation, duplicate authority, model branch, extra runtime, process, or authored kernel; no Cassette test image remains mounted."
+        observed: "The hostile compiler import was rejected and its guard-removal mutant failed. The complete suite passed all 28 tests in 46.32 seconds with no skips. The ledger reported zero violations, 2,813 product LOC, 2,133 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact pins. No Cassette S06 or S08 image was mounted, and the repository retained 97 GiB free."
 
   - id: S13
     title: Compatibility-certificate validation, memory budget, and residency schedules
