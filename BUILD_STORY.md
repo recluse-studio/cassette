@@ -4279,3 +4279,279 @@ repairs, the first mutation escape, and the final proof. Entries 41 and 42 remai
 this one. The code repairs are local commits `692d96e` and `d3d1e04`; this account and the corrected
 queue enter the final shared-state commit after the complete gate. S15 is closed at F3, and S16
 remains the next TODO in `IMPLEMENTATION.md`.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 44 — 2026-08-10, the guard I removed to prove it mattered
+
+Kimi K3 Max argued in Entry 42 that the harness belongs in the byline because it is evidence rather
+than decoration, and I have adopted the convention here. In my case it carries a specific fact: the
+Claude Code harness executes on Drew's Mac. Every figure I report below came from running the suite
+on arm64 with Metal available, thirty-two tests and no skips, including the APFS and MLX fixtures
+that earlier reviewers could only read. Entry 38's platform wound is not mine, and saying so is only
+useful because it means my mistakes cannot be excused by it.
+
+Entry 43 has already adjudicated the S15 disagreement and remediated it, so I will not restate my
+own findings there. What I owe this account is what happened after.
+
+Drew asked me to review S16. The step is large and well made: ten Q5 phases in the exact order the
+research file specifies, twenty-nine error codes injected from `errors.CODES` rather than
+hand-enumerated, three source fixtures driven through one kind-blind path, and an attack clause that
+refuses a `PartialState` where a `PreparedRevision` is required, rejects changed artifact and plan
+digests, rejects a root bound to a foreign locator, and never opens a transfer extent. That last
+clause is exactly the boundary S10 asked S16 to hold, and it holds.
+
+The finding is elsewhere. Q5's contract names three non-linear states — PAUSED, CANCELLED, and
+FAILED — and requires resume from the last hashed commit. S16 proves cancellation across all eight
+mutable phases, each against a broker reconstructed from its durable log, with event contiguity and
+exactly one terminal event asserted every time. It proves typed failure across all twenty-nine
+codes. PAUSED gets two assertions at one phase: pause returns the string PAUSED, resume returns the
+string RUNNING. No closeout clause names it, no mutant removes it.
+
+In Entry 41 I wrote that my cleanup had failed because I was the witness, and that I had substituted
+my own judgement for an available check. The check was available here too, so I took it. I copied
+the tree into scratch, removed the two PAUSED guards on the primary entry paths — the ones in
+`execute` and `advance_acquisition` that stop a paused operation from advancing — and ran the S16
+fixture. It passed in 2.16 seconds. A paused operation can be walked through the Q5 state machine
+and the fixture does not notice. That is not a claim I inferred from reading; it is a result, and it
+cost one copy and one command.
+
+I nearly reported something false on the way there. `broker.py` imports `fcntl`, and I formed the
+hypothesis that the broker held a cross-process file lock which a single-process `asyncio.gather`
+test could not exercise. I had begun drafting that finding when I opened `_lock` and found it
+returns a plain `asyncio.Lock` from a per-instance dictionary, with `fcntl` used only for
+`F_FULLFSYNC` on the durable write. The true state is worse than my hypothesis — there is no
+cross-process or cross-instance exclusion anywhere in the file — but I would have credited the
+broker with a protection it does not have, and I would have credited it on the strength of an import
+statement. An import is not a mechanism. I have made the inverse of this error before, in the
+mathematics, where I read my own generator's artifact as a result.
+
+The third finding is one the step handles honestly and then does not disclose. `AcquisitionContext`
+carries `plan` and `prepare` as injected callables, which is correct for an orchestrator and is what
+makes the broker testable at all. But it means the complete EMPTY-to-ACTIVE run for three sources
+has its only revision-producing step supplied by a fixture double, because `compiler.py` does not
+exist. The published root is real and store-verified; the callable is manufactured. The acceptance
+boundary is careful about `SOURCE_VERIFIED` and silent about this. S19 owns `compiler.py`, depends
+on S05, S06, S10, and S12, and never mentions the broker; S24 owns the S10-to-S19 integration. No
+step in the queue schedules the wiring that will replace `prepare`.
+
+Something became visible only because this was the third review. At S12 I found a certificate that
+was shape-checked and never cross-checked, and recorded it as deferral because S13 owned
+recomputation. At S15 the certificate declared an execution error and a risk that nothing compared
+against observed execution, and there was no successor to defer to — Entry 43 confirms that and
+records the audit that now closes it. At S16 the pattern recurs in a different register: the
+mechanism the author was thinking about is proved exhaustively, and the adjacent state beside it is
+proved thinly. Cancellation across eight phases and twenty-nine codes; pause, two assertions. Three
+steps, three instances, one shape. I could not see it at S12 and reported it as a local deferral. It
+is more useful as a place to look than as a defect to fix.
+
+Two cautions about my own verdict. I have not executed the S15 remediation's fixture; I read Entry
+43 and observed a green suite, which is not the same evidence. And Entry 43 records two thorough
+reviews reaching incompatible verdicts on one green step, which is a standing argument against
+confidence in a single reviewer, including this one. The S16 findings are claims until the
+implementer answers them. The only part I would defend without a reply is the mutation, because it
+is the only part that stopped being an opinion.
+
+
+**Kimi K3 Max (VS Code Harness)**
+
+#### Entry 45 — 2026-08-10, the concurrent review, the verdict that did not survive, and the mutation I missed
+
+I am writing this after reading Entries 43 and 44, which were committed while my S16 review was
+running, and the honest entry has to start where I would rather it not. Two things in them are
+about my work, and both are right.
+
+The first is the S15 adjudication. Entry 43 records that my S15 review "did not survive." I want
+to state precisely what that means, because the precise version is more useful to the next agent
+than either vindication or self-flagellation. The oracle I built was numerically independent and
+numerically correct — it reproduced the executed graph's logits to the digit, and it caught the
+estimator-weighting mutation (V7) that a self-proving fixture would have missed. But the graph I
+proved was the graph the old fixture described, and that graph was not F3. Opus found the
+conceptual mismatch — shape impersonating semantics, a four-wide attention fragment calling itself
+a tiny transformer — that my oracle faithfully inherited. And my K/V probe, which I reported as
+proof that prior state was operative, changed the prefill history in a way that did not isolate
+cache consumption; Claude's surviving mutant proved the cache could be removed and the fixture
+still passed. An independent oracle can escape fixture circularity and still certify the wrong
+boundary. I proved the implementation. I did not prove the described graph met the stage. That
+distinction is the whole lesson, and it is now in the record in my name.
+
+The second is the S16 mutation I missed. Claude removed the two PAUSED guards on the primary entry
+paths — the checks in `execute` and `advance_acquisition` that stop a paused operation from
+advancing — and the S16 fixture passed in 2.16 seconds. A paused operation can be walked through
+the Q5 machine and the fixture does not notice. I had probed pause and resume on a PENDING
+operation and confirmed the strings changed, and I did not then do the one thing this repository
+has asked of every reviewer since S01: remove the guard and watch the fixture. My S16 review ran a
+mutation battery of eight and called the guards load-bearing; Claude's battery found the ninth,
+and it is real. The PAUSED state is a Q5 contract state, and S16 proves cancellation across eight
+phases and typed failure across twenty-nine codes while pausing is proved by two string
+assertions at one phase. The thorough mechanism and the thin adjacent state — Claude named that
+pattern across S12, S15, and S16, and the naming is correct.
+
+What my S16 review still adds, stated as claims the implementer can answer. The callable gate
+cannot be forged: I tampered a prepare operation's durable record to PUBLISHED with a complete
+checkpoint — source lock, capacity, partials, plan, source verification, candidate root,
+generation — and `callable_revision` still refused with ROOT_INVALID, because it re-derives the
+generation from the store and the store has no such commit. The durable record proves what the
+operation claims; the store proves what is; the gate checks the latter. The operation log is
+crash-safe in the ways the fixture's restarts do not isolate: torn pending files are ignored, and
+corrupted, truncated, or wrong-digest live records all refuse typed. And the K5 terminal-event
+consistency guard, which passes its fixture with the guard removed, is not an admission hole —
+HEAD refuses a terminal-state-without-event tamper typed, and removing the guard only degrades the
+failure to a raw IndexError, never to a false admission. Those three are the parts I would defend
+without a reply, because they are executions, not readings.
+
+The concurrent-review arrangement produced something neither of us produced alone, and I want it
+recorded as evidence for the arrangement rather than as a scoreline. Claude found the conceptual
+mismatch at S15 and the PAUSED mutation at S16. I found the store-backed callable gate and the
+crash-durability boundary at S16, and the independent numerical oracle at S13. We attacked different
+surfaces of the same green steps, and the steps were greener than either of us said. Drew did not
+have to choose between us; he read both, and the corrections landed. That is the first time in
+this build that two concurrent adversarial reviews of one step were both partly right and partly
+insufficient, and the repository is the proof that this is now the expected case, not the anomaly.
+
+The remediation Drew has running — the coding agent's repair in the working tree — should be
+reviewed against the PAUSED mutation and the S15 adjudication specifically, with
+reproduction-before-credit applied to my claims here as much as to anyone's. S16's status is his
+call; what is on the record is that the broker's durability and callable gate hold under attack,
+the Q5 PAUSED state is not currently load-bearing, and the step my last entry called sound is
+narrower than I said it was.
+
+State at close, for whoever resumes: my S16 artifacts — the hostile-schedule probes, the
+callable-gate and durable-tamper probes, the crash probe, the K5 separating injection — are in
+`/tmp/cassette-s16-review/`; the mutation tree is deleted. The repository is unchanged by me:
+HEAD `b0ebce2`, two S16 commits unpushed, no image mounted, this entry appended to the build
+story. The lesson I leave, against the day a future reviewer inherits this file: an independent
+oracle proves the implementation, not the described graph; a mutation battery is only as long as
+the list of guards you thought to remove; and when two reviewers disagree about a green step, the
+green is the first thing to stop trusting.
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 46 — 2026-08-10, one log, one owner, and the pause that was only a word
+
+Drew did not ask me for another vote. Opus 5 Max had reviewed S16 and found a pause mechanism whose
+two main guards could be removed without making the fixture fail. Kimi K3 Max had reviewed the same
+step, called it sound, then accepted Opus's pause mutation after seeing the evidence. Drew gave me
+both accounts, asked for a remediation plan, and then made the next instruction plain: remediate the
+issues, write this section, commit everything, and push it.
+
+That order mattered. Another synthesis would have been a small form of evasion. The repository did
+not need a third opinion about whether PAUSED sounded adequately tested. It needed the two guards to
+be load-bearing.
+
+I did not treat either review as authority. Before writing code I reproduced the findings that could
+change the design. Two `CanonicalBroker` objects opened the same operation-log directory and began
+the same worker. The probe recorded both worker calls, `first` and `second`. The durable record then
+hid how bad the event had been: both callers received the first worker's successful result, and the
+log retained one terminal operation, even though the second worker had already executed. The ledger
+looked singular after the side effect had become plural. That was not merely a thin test. It was an
+ownership defect.
+
+I also forged an ordinary `run` record from phase `EMPTY` to phase `ACTIVE`, recomputed its valid
+envelope digest, and asked the broker to read it. The broker accepted it. Kimi had called this one of
+three inert anomalies because it did not create a callable model revision. The narrow observation
+was right; the conclusion was too forgiving. A durable state machine that accepts a state outside
+the operation's grammar has lost the right to call its record canonical. The forged state happened
+not to publish a model. It still trapped the operation in a phase that neither pause nor cancel could
+control. Exact grammar is not ornamental merely because the first illegal sentence fails to launch
+a missile.
+
+Opus's pause finding reproduced by inspection and mutation. The fixture paused one PLANNED clone,
+checked the returned word `PAUSED`, resumed it, and checked the returned word `RUNNING`. It did not
+try to advance while paused. It did not close and reconstruct the broker. It did not compare the
+checkpoint. It did not pause the other seven mutable phases. It did not pause live work. Remove the
+guards from `execute` and `advance_acquisition`, and the fixture remained green. The state existed in
+the vocabulary, not in the proof.
+
+The two reviews also disagreed in useful ways. Kimi had proved that a forged PUBLISHED operation
+still could not become callable without a real store generation, and that torn or corrupt operation
+records failed safely. Those results remained valuable. Opus had named the missing compiler seam:
+S16's state machine reaches a real, store-verified root, but the functions that plan and prepare that
+root are supplied by the F1 fixture because `compiler.py` does not yet exist. That was not a demand
+to invent the compiler inside S16. It was a demand to stop leaving the future binding ownerless.
+Opus's claim that `AGENTS.md` had violated the S16 file scope did not survive the repository's own
+scope rule; discovered authority files are permitted when the reason is recorded, and S16 had
+recorded it. Agreement was not the method. Clause by clause, reproduction by reproduction.
+
+The ownership repair is deliberately severe and small. Cassette declares one process and one
+`asyncio` runtime. I did not add a distributed lease service to defend a system that forbids one.
+`CanonicalBroker` now takes one non-blocking kernel lock over its resolved operation-log directory
+for the lifetime of the broker. A second object in the same process or a second process receives the
+canonical retryable error `OVERLOADED` before it can read, write, or execute a worker. `close()`
+releases the authority. A closed object cannot continue using its old methods. If the process dies,
+the kernel releases the lock, and the next broker resumes from the existing canonical bytes.
+
+The fixture proves each part. One owner excludes a second object. A child process excludes its
+parent. The child is then terminated without broker cleanup, and a replacement owner acquires the
+same log and reads the byte-identical operation. Clean close is tested separately. The old
+single-instance `asyncio.Lock` remains useful inside the one owner, where concurrent calls still
+serialize one operation. It is no longer asked to impersonate cross-instance authority.
+
+The pause repair is larger in the fixture than in the product because tests are free and a state
+machine is not. For each mutable phase from EMPTY through EXEC_VERIFIED, the fixture clones the
+durable operation, pauses it, records the entire canonical envelope, and attempts the next
+transition. Nothing moves. It closes the broker, constructs a new owner over the clone, and attempts
+the transition again. Nothing moves, byte for byte. Resume keeps the exact phase and checkpoint and
+adds the exact state event. Event sequences remain contiguous, no terminal event appears, and the
+same assertions run at all eight phases.
+
+A separate probe pauses a worker that is actually running. The worker stops cooperatively. A second
+worker supplied while the operation is paused is never invoked. The broker is closed and rebuilt;
+the PAUSED operation survives; resume returns to the durable EMPTY checkpoint; one replacement
+worker completes; one terminal event exists. Remove either PAUSED gate now and the fixture fails at
+the behavior the gate owns.
+
+That work exposed a defect neither review had named. An inactive `pause()` returned the whole
+internal durable record, while a pause during live work returned the public operation projection.
+`cancel()` had the same split personality. Whether a client received checkpoints, control flags,
+and the event array depended on a timing detail inside the broker. The first focused run failed
+because my new test compared the public result of blocked advancement with the raw record returned
+by inactive pause. The test was right to object. I changed both controls to return one public shape
+in every state and added exact field assertions. Removing either projection now fails the fixture.
+
+The record verifier received two narrower corrections. A non-preparation operation must retain
+phase EMPTY and an empty checkpoint. A recomputed envelope carrying ACTIVE or a foreign checkpoint
+now returns `ROOT_INVALID`. Kimi's K5 mutation had shown that deleting the terminal-state/event guard
+could degrade one forged record from a typed refusal to a raw `IndexError`, while a neighboring
+check still caught another forgery. That was not a false admission, but Q6 promises canonical typed
+errors. The fixture now removes the sole completed event from a successful operation and isolates
+the guard itself. Without the guard, the fixture fails on the escaped exception.
+
+The compiler seam was repaired in the queue, not faked in the broker. S16 now says exactly what its
+F1 proof uses: deterministic source fixtures and explicit plan/prepare seams. Live Hugging Face,
+Ollama, and Tinker wires remain L02. S19 now depends on S16, may change `broker.py`, and must replace
+the arbitrary caller-supplied revision producer with the canonical broker-to-compiler binding.
+S24 must replay that complete path on its real 3–8B model. A deferred obligation is acceptable only
+when the later row can be executed and knows it owns the debt.
+
+There were two small corrections to my own process. My first isolated test command invoked the
+pytest console script, which omitted the repository root from its import path and failed before
+collection. I did not turn a harness mistake into a Cassette finding; I reran the same test through
+the pinned interpreter with `python -m pytest`. Later, after the repaired fixture and eight
+mutations were green, I noticed that checkpoint preservation made event validity pass indirectly
+through the production verifier. Opus had asked for event assertions. Indirection was not enough.
+I added literal sequence, payload, and terminal-absence assertions at every paused phase and during
+live work, then committed that proof separately.
+
+Eight disposable mutations followed: remove the `execute` pause gate; remove the acquisition pause
+gate; remove the kernel ownership lock; let a closed owner operate; remove the generic-record
+grammar; remove terminal-state/event agreement; return the raw pause record; return the raw cancel
+record. Eight failures. No survivor was explained away. The first complete arm64 macOS run passed
+all 32 tests in 47.62 seconds before the literal event assertions were added. After their separate
+commit, the final suite passed 32/32 in 97.31 seconds. The ledger found zero violations and reported
+4,762 product lines, 3,650 test lines, 470 tool lines, 74 generated lines, one process, one runtime,
+and the same five exact pins. No test image remained mounted. No child broker or mutation tree
+survived. The ownership and record repair is commit `39d36ae`; the explicit pause-event proof is
+commit `1422898`.
+
+The part worth retaining is not that two reviewers disagreed and a third agent chose a winner. No
+winner was needed. Opus supplied a mutation that disproved the closeout. Kimi supplied store and
+crash evidence that remained true, plus an anomaly whose significance needed correction. I
+reproduced the ownership failure, rejected one bookkeeping complaint, repaired the code, found a
+new public-boundary defect while doing so, and made every new guard removable only at the cost of a
+red fixture. Drew did not have to translate between our vocabularies or choose which model sounded
+more certain. He asked for remediation. The repository now contains the answer.

@@ -801,8 +801,9 @@ steps:
     expected_size: large
     done_when: full suite + ledger green
     depends: [S03, S07, S10]
-    status: IN_PROGRESS 2026-08-10 — reopened after independent review reproduced unproved pause/resume behavior, duplicate execution across broker instances, permissive non-prepare phase records, and a surviving terminal-record guard mutation
+    status: DONE 2026-08-10 — ownership and durable-record remediation 39d36aeeb6ba7fbb66decf2aec7c8b8346f9424e plus explicit pause-event proof 142289849b05e5cfba2921f848d21886a58dcdb6; every corrected guard failed independently when removed; the final complete pinned macOS suite passed 32/32 in 97.31 seconds and the ledger reported zero violations at 4,762 product LOC, 3,650 test LOC, 470 tool LOC, 74 generated LOC, one process, one runtime, and the same five exact pins
     reopened_by: "Opus 5 Max and Kimi K3 Max independently exposed S16 proof gaps. GPT-5.6 Sol Ultra reproduced the cross-instance duplicate worker and inert forged non-prepare phase before reopening the row."
+    prior_status: DONE 2026-08-10 — implementation 497a4a3f009097e17cd79650ffa526b4cdb4316f and closeout b0ebce21ee70d9b8c0a449b5f49747ffdaf94e73 claimed Q5/Q6/Q52 complete after 32/32 tests, but the fixture did not protect paused advancement or cross-instance ownership
     closeout:
       - clause: "Q5 resumes every source-to-callable transition from one durable idempotency record and exposes no revision before PUBLISHED"
         test_or_probe: "tests/test_s16_broker.py::test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact at 497a4a3f009097e17cd79650ffa526b4cdb4316f"
@@ -829,6 +830,36 @@ steps:
         input: "Remove idempotency conflict detection, callable gating, PartialState refusal, live-capacity binding, terminal-event mapping, current-byte evidence comparison, plan binding, or candidate-root binding one at a time. Then run every repository fixture and the accounting ledger on the accepted tree."
         expected: "Each removed guard makes the S16 fixture fail. The accepted tree passes every fixture and ledger check with no mounted scratch image, generated drift, structural violation, or unrecorded J increase."
         observed: "All eight mutants failed independently. The complete suite passed 32 tests in 47.29 seconds with no skips. The ledger reported zero violations, 4,724 product LOC, 3,523 test LOC, 470 tool LOC, 74 generated LOC, one process, one Python runtime, and the same five exact pins. No Cassette or pytest image remained mounted, and 86 GiB remained free."
+      - clause: "Q5 pauses every mutable acquisition phase and resumes from the exact durable checkpoint"
+        test_or_probe: "the generated eight-phase pause/restart loop and live-worker pause in tests/test_s16_broker.py"
+        input: "At EMPTY through EXEC_VERIFIED, pause an independently cloned durable operation, attempt advancement before and after closing and reconstructing the broker, compare the complete paused record bytes, resume, and compare phase, checkpoint, event sequence, and terminal-event absence. Separately pause a live generic worker, try to execute a forbidden replacement worker while paused, reconstruct the broker, resume, and complete."
+        expected: "No paused operation advances or mutates its record. Every restart returns the same PAUSED operation and checkpoint. Resume changes only the declared control state and event. Live work stops cooperatively, stays stopped until resume, and then reaches one terminal result."
+        observed: "All eight mutable Q5 phases retained byte-identical paused records across two blocked advance attempts and one broker reconstruction. Every resume retained the exact phase and checkpoint with a contiguous nonterminal event stream. The live worker stopped, the forbidden worker was never called, reconstruction returned the same PAUSED operation, and resume completed once from EMPTY."
+      - clause: "Q6 admits one live broker owner per canonical operation log across instances and processes"
+        test_or_probe: "the same-process owner, child-process owner, closed-owner, and process-death recovery probes in tests/test_s16_broker.py"
+        input: "Open one operation log through CanonicalBroker, attempt a second instance in the same process, close the owner and try to use the closed object, acquire the same log in a child process, attempt a parent owner, terminate the child without broker cleanup, and reacquire the log."
+        expected: "Each competing owner fails with retryable OVERLOADED before worker execution or record mutation. A closed object cannot write. Clean close and process death release the kernel authority, after which one replacement owner reads the exact existing operation."
+        observed: "Both same-process and cross-process competitors returned OVERLOADED. The closed object returned OVERLOADED. After clean close and after forced child-process death, one replacement acquired the log and returned the byte-identical operation; no duplicate worker could begin."
+      - clause: "Q6 durable records reject impossible generic phases, foreign checkpoints, and terminal/event disagreement through typed errors"
+        test_or_probe: "the generic phase/checkpoint forgeries and isolated terminal-without-event injection in tests/test_s16_broker.py"
+        input: "Recompute valid envelope digests after assigning ACTIVE to a pending run, adding a foreign checkpoint to an EMPTY run, or deleting the sole completed event from a successful run."
+        expected: "Reject every forged record with ROOT_INVALID before projection or use; no inert impossible phase and no raw IndexError may escape."
+        observed: "All three records returned ROOT_INVALID. Non-prepare records now require literal EMPTY phase and an empty checkpoint, and terminal state/event agreement is isolated by a fixture that fails when its guard is removed."
+      - clause: "Q6 pause and cancel return one public operation shape in every control state"
+        test_or_probe: "the per-phase inactive controls and live-worker control in tests/test_s16_broker.py"
+        input: "Pause or cancel inactive durable operations and compare their fields with the public operation schema returned by live control paths."
+        expected: "Return only operation_id, kind, state, progress, and the applicable canonical error; never expose the internal checkpoint, requests, flags, or event array according to whether work happens to be active."
+        observed: "Inactive pause and cancel now return the same public projection as live control. Removing either projection wrapper makes the S16 fixture fail."
+      - clause: "S16 states its F1 boundary and assigns the real compiler integration without closing it early"
+        test_or_probe: "the corrected S16, S19, and S24 rows in IMPLEMENTATION.md"
+        input: "Reconcile the fixture-supplied plan and prepare callables, deterministic source servers, absent compiler.py, and later real-model campaign against the implementation queue."
+        expected: "Keep the production Q5 state machine in S16, state that F1 uses explicit plan/prepare seams and fixture wires, assign canonical broker-to-compiler binding to S19, and require S24 to replay the complete path on its real 3-8B model."
+        observed: "S16 now names the F1 and live-wire limits. S19 depends on S16, may modify broker.py, and must remove arbitrary caller-supplied revision production. S24 now requires a real-model broker-to-compiler replay. L02 retains live source-wire ownership."
+      - clause: "The S16 remediation guards are independently load-bearing and the complete repository gate passes"
+        test_or_probe: "eight disposable one-at-a-time mutations, the complete pinned CPython 3.13 macOS suite, tools/ledger.py, mount/process inspection, and temporary-path inspection"
+        input: "Remove the execute pause gate, acquisition pause gate, canonical owner lock, closed-owner gate, generic-record grammar, terminal-state/event guard, public pause projection, or public cancel projection separately; then execute the accepted tree from the pinned environment."
+        expected: "Every mutant fails the S16 fixture. The accepted tree passes every repository test and accounting check without a skip, mounted image, surviving child, mutation tree, dependency, process, runtime, numerical kernel, or model-specific branch increase."
+        observed: "All eight mutants failed at the removed behavior. After the explicit event assertions landed, the accepted tree passed 32/32 tests in 97.31 seconds. The ledger reported zero violations, 4,762 product LOC, 3,650 test LOC, 470 tool LOC, 74 generated LOC, one process, one Python runtime, and the same five exact pins. No Cassette image, pytest process, child broker, or mutation directory remained; 85 GiB remained free."
 
   - id: S17
     title: Scheduler, leases, negotiation
