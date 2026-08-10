@@ -177,6 +177,8 @@ class TransformerTrace:
     schedule: ResidencyStep
     planned_pages: tuple[str, ...]
     operator_cases: tuple[str, ...]
+    position_offset: int
+    logits_shape: tuple[int, ...]
     page_reads: int
     load_bytes: int
     model_tensor_bytes: int
@@ -185,6 +187,10 @@ class TransformerTrace:
     runtime_buffer_bytes: int
     model_memory_bytes: int
     metal_peak_bytes: int
+    epsilon_exec: float
+    delta_exec: float
+    loss_coefficient: float
+    remainder_bound: float
 
 
 @dataclass(frozen=True)
@@ -1396,6 +1402,17 @@ def _matmul(values: Sequence[object], _: dict) -> object:
     return mx.matmul(values[0], values[1])
 
 
+def _elementwise_add(values: Sequence[object], _: dict) -> object:
+    mx, _ = _mlx_runtime()
+    return mx.add(values[0], values[1])
+
+
+def _activation(values: Sequence[object], _: dict) -> object:
+    import mlx.nn as nn
+
+    return nn.silu(values[0])
+
+
 def _quantized_matmul(values: Sequence[object], parameters: dict) -> object:
     mx, _ = _mlx_runtime()
     return mx.quantized_matmul(values[0], values[1], values[2], values[3], **parameters)
@@ -1445,6 +1462,8 @@ def _optimizer(values: Sequence[object], parameters: dict) -> object:
 
 
 _EXECUTORS = {
+    "activation": _activation,
+    "add": _elementwise_add,
     "attention": _attention,
     "autograd": _autograd,
     "convolution": _convolution,
@@ -2511,22 +2530,56 @@ class CertifiedPager:
 
 @dataclass(frozen=True)
 class _TransformerRuntimeStep:
-    embedding_case_id: str
-    projection_case_id: str
-    attention_case_id: str
-    embedding_shape: tuple[int, ...]
-    projection_shape: tuple[int, ...]
-    attention_shape: tuple[int, ...]
+    operator_cases: tuple[str, ...]
+    position_offset: int
     token_count: int
     vocabulary_size: int
     metadata: bytes
-    embedding_page: str
-    query_page: str
-    key_page: str
-    exact_value_page: str
-    sampled_value_pages: tuple[tuple[int, str], ...]
+    parameter_pages: tuple[tuple[str, str], ...]
+    exact_correction_page: str | None
+    sampled_correction_pages: tuple[tuple[int, str], ...]
     model_tensor_bytes: int
     activation_bytes: int
+    epsilon_exec: Fraction
+    delta_exec: Fraction
+    loss_coefficient: Fraction
+    remainder_bound: Fraction
+
+
+_TRANSFORMER_PARAMETER_ROLES = (
+    "embedding",
+    "norm_attention",
+    "query",
+    "key",
+    "value",
+    "attention_output",
+    "norm_ffn",
+    "ffn_up_base",
+    "ffn_down",
+    "norm_final",
+    "unembedding",
+)
+_TRANSFORMER_OPERATOR_KINDS = (
+    "embedding",
+    "norm",
+    "matmul",
+    "matmul",
+    "matmul",
+    "rope",
+    "rope",
+    "attention",
+    "matmul",
+    "add",
+    "norm",
+    "matmul",
+    "matmul",
+    "add",
+    "activation",
+    "matmul",
+    "add",
+    "norm",
+    "matmul",
+)
 
 
 def _real_matrix(
@@ -2540,7 +2593,7 @@ def _real_matrix(
         raise _runtime_error(
             "CAPABILITY_MISMATCH",
             object_id,
-            "Q36: real F3 attention representation",
+            "Q36: real F3 transformer representation",
             f"{label} contains an imaginary component",
         )
     return tuple(tuple(scalar[0] for scalar in row) for row in matrix)
@@ -2552,7 +2605,7 @@ def _float32_payload(
     label: str,
 ) -> bytes:
     try:
-        return struct.pack(
+        payload = struct.pack(
             f"<{sum(len(row) for row in matrix)}f",
             *(float(value) for row in matrix for value in row),
         )
@@ -2563,6 +2616,14 @@ def _float32_payload(
             "Q36: finite float32 transformer representation",
             f"{label} cannot be represented as finite float32: {exc}",
         ) from exc
+    if any(not math.isfinite(value) for value in struct.unpack(f"<{len(payload) // 4}f", payload)):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q36: finite float32 transformer representation",
+            f"{label} contains a non-finite float32 value",
+        )
+    return payload
 
 
 def _transpose_matrix(
@@ -2591,150 +2652,352 @@ def _transformer_metadata(
     })
 
 
+def _transformer_case_rows(
+    raw_cases: object,
+    position_offset: int,
+    object_id: str,
+) -> tuple[tuple[str, ...], tuple[dict, ...]]:
+    case_ids = tuple(
+        _runtime_identifier(
+            case_id,
+            object_id,
+            "Q30/Q36: generated F3 decoder graph",
+            "operator case",
+        )
+        for case_id in _runtime_items(raw_cases, object_id, "F3 operator cases")
+    )
+    rows = tuple(_CASES.get(case_id) for case_id in case_ids)
+    if len(rows) != len(_TRANSFORMER_OPERATOR_KINDS) or any(row is None for row in rows):
+        raise _runtime_error(
+            "UNSUPPORTED_OPERATOR",
+            object_id,
+            "Q30/Q36: generated F3 decoder graph",
+            "the protected graph must name every generated decoder operation exactly once",
+        )
+    if tuple(row["operator"] for row in rows) != _TRANSFORMER_OPERATOR_KINDS:
+        raise _runtime_error(
+            "UNSUPPORTED_OPERATOR",
+            object_id,
+            "Q30/Q36: generated F3 decoder graph",
+            "the protected graph is not embedding, pre-norm attention, residual, pre-norm SiLU FFN, residual, final norm, and vocabulary projection",
+        )
+    hidden_shape = [2, 4]
+    matrix_shape = [4, 4]
+    if (
+        rows[0]["input_shapes"] != [matrix_shape, [2]]
+        or rows[0]["output_shape"] != hidden_shape
+        or any(
+            row["input_shapes"] != [hidden_shape, matrix_shape]
+            or row["output_shape"] != hidden_shape
+            for row in (*rows[2:5], rows[8], *rows[11:13], rows[15], rows[18])
+        )
+        or any(
+            row["input_shapes"] != [hidden_shape, [4]]
+            or row["output_shape"] != hidden_shape
+            for row in (rows[1], rows[10], rows[17])
+        )
+        or any(
+            row["input_shapes"] != [hidden_shape, hidden_shape]
+            or row["output_shape"] != hidden_shape
+            for row in (rows[9], rows[13], rows[16])
+        )
+        or rows[14]["input_shapes"] != [hidden_shape]
+        or rows[14]["output_shape"] != hidden_shape
+        or any(
+            row["input_shapes"] != [[1, 1, 2, 4]]
+            or row["output_shape"] != [1, 1, 2, 4]
+            for row in rows[5:7]
+        )
+        or rows[5]["parameters"].get("offset") != position_offset
+        or rows[6]["parameters"].get("offset") != position_offset
+        or rows[7]["input_shapes"] != [[1, 1, 2, 4]] * 3
+        or rows[7]["output_shape"] != [1, 1, 2, 4]
+        or rows[7]["parameters"].get("mask") != "causal"
+    ):
+        raise _runtime_error(
+            "UNSUPPORTED_OPERATOR",
+            object_id,
+            "Q30/Q36: generated F3 decoder tuple",
+            "one generated dtype, shape, position, or causal-attention tuple differs from the protected graph",
+        )
+    return case_ids, rows
+
+
 def _bind_transformer_steps(
     runtime_steps: tuple[_CompiledRuntimeStep, ...],
+    certificate: dict,
     evidence: dict,
     locations: dict[str, object],
     profile: dict,
     object_id: str,
 ) -> tuple[tuple[_TransformerRuntimeStep, ...], int]:
     target = evidence["target"]
-    if target["field"] != "REAL" or len(target["shape"]) != 2:
+    if target["field"] != "REAL" or target["shape"] != [4, 4]:
         raise _runtime_error(
             "UNSUPPORTED_OPERATOR",
             object_id,
             "Q36: F3 transformer target representation",
-            "certified F3 attention requires one real matrix target",
+            "the F3 decoder requires one real 4x4 feed-forward target",
         )
-    target_shape = tuple(target["shape"])
-    embedding_cases = [row for row in DISPATCH_ROWS if row["operator"] == "embedding"]
-    projection_cases = [row for row in DISPATCH_ROWS if row["operator"] == "matmul"]
-    if len(embedding_cases) != 1 or len(projection_cases) != 1:
+    graph = _runtime_record(
+        evidence["trace_contract"]["protected_trace_family"],
+        {
+            "architecture",
+            "hidden_size",
+            "horizon",
+            "name",
+            "steps",
+            "token_count",
+            "vocabulary_size",
+        },
+        object_id,
+        "protected F3 graph",
+    )
+    _runtime_identifier(
+        graph["name"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "graph name",
+    )
+    architecture = _runtime_identifier(
+        graph["architecture"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "graph architecture",
+    )
+    hidden_size = _runtime_u64(
+        graph["hidden_size"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "hidden size",
+    )
+    token_count = _runtime_u64(
+        graph["token_count"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "token count",
+    )
+    vocabulary_size = _runtime_u64(
+        graph["vocabulary_size"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "vocabulary size",
+    )
+    horizon = _runtime_u64(
+        graph["horizon"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "graph horizon",
+    )
+    if (
+        architecture != "PRENORM_CAUSAL_DECODER"
+        or hidden_size != 4
+        or token_count != 2
+        or vocabulary_size != 4
+        or horizon != len(runtime_steps)
+    ):
         raise _runtime_error(
-            "UNSUPPORTED_OPERATOR",
+            "CAPABILITY_MISMATCH",
             object_id,
-            "Q36: generated F3 transformer graph",
-            "the generated table must identify one embedding and one projection tuple",
+            "Q19/Q36: protected decoder graph",
+            "the protected graph must declare the generated 4-wide, two-token causal decoder and its complete horizon",
         )
-    embedding_case = embedding_cases[0]
-    projection_case = projection_cases[0]
+    graph_steps = _runtime_items(graph["steps"], object_id, "protected F3 graph steps")
+    if len(graph_steps) != len(runtime_steps):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q19/Q36: protected decoder graph",
+            "the protected graph requires one record per certified schedule step",
+        )
     atom_rows = {row["atom_id"]: row for row in evidence["atoms"]}
+    operation_rows = {
+        row["operation_id"]: row
+        for row in evidence["execution_contract"]["operations"]
+    }
+    operation_claims = {
+        row["operation_id"]: row
+        for row in certificate["execution_contract"]["operations"]
+    }
+    matrix_bytes = 4 * 4 * 4
+    vector_bytes = 4 * 4
+    role_lengths = {
+        role: vector_bytes if role.startswith("norm_") else matrix_bytes
+        for role in _TRANSFORMER_PARAMETER_ROLES
+    }
     bound_steps = []
-    kv_capacity = 0
     activation_peak = 0
-    for step in runtime_steps:
-        case = _CASES.get(step.operator_case_id)
-        if (
-            case is None
-            or case["operator"] != "attention"
-            or case["input_dtypes"] != ["float32", "float32", "float32"]
-            or case["output_dtype"] != "float32"
-        ):
+    kv_bytes_per_step = 2 * 4 * 4
+    for index, (step, raw_graph_step) in enumerate(
+        zip(runtime_steps, graph_steps, strict=True)
+    ):
+        graph_step = _runtime_record(
+            raw_graph_step,
+            {"operator_cases", "parameters", "position_offset", "step"},
+            object_id,
+            "protected F3 graph step",
+        )
+        graph_step_index = _runtime_u64(
+            graph_step["step"],
+            object_id,
+            "Q19/Q36: protected decoder position",
+            "graph step",
+        )
+        position_offset = _runtime_u64(
+            graph_step["position_offset"],
+            object_id,
+            "Q19/Q36: protected decoder position",
+            "position offset",
+        )
+        if graph_step_index != index or position_offset != index:
             raise _runtime_error(
-                "UNSUPPORTED_OPERATOR",
-                step.operator_case_id,
-                "Q36: generated F3 attention tuple",
-                "the F3 transformer requires one generated float32 attention case",
+                "CAPABILITY_MISMATCH",
+                object_id,
+                "Q19/Q36: protected decoder position",
+                "prefill and decode require contiguous step and RoPE offsets from zero",
             )
-        attention_shape = tuple(case["input_shapes"][2])
-        if (
-            tuple(reversed(projection_case["input_shapes"][1])) != target_shape
-            or embedding_case["output_shape"] != projection_case["input_shapes"][0]
-            or math.prod(projection_case["output_shape"]) != math.prod(attention_shape)
-            or len(attention_shape) < 2
-            or math.prod(attention_shape[:-2]) != 1
-            or case["input_shapes"][0] != case["input_shapes"][1]
-            or case["input_shapes"][0] != case["input_shapes"][2]
-            or case["output_shape"] != case["input_shapes"][2]
-        ):
+        operator_cases, case_rows = _transformer_case_rows(
+            graph_step["operator_cases"],
+            position_offset,
+            object_id,
+        )
+        if step.operator_case_id != operator_cases[11]:
             raise _runtime_error(
                 "UNSUPPORTED_OPERATOR",
                 step.operator_case_id,
-                "Q36: generated F3 attention tuple",
-                "query, key, value, output, and certified matrix shapes must agree",
+                "Q19/Q36: certified stochastic operation",
+                "the certified target must be the feed-forward up projection used before SiLU",
+            )
+        parameters = _runtime_items(
+            graph_step["parameters"],
+            object_id,
+            "protected F3 parameter pages",
+        )
+        parameter_pages = []
+        for raw_parameter in parameters:
+            parameter = _runtime_record(
+                raw_parameter,
+                {"page_digest", "role"},
+                object_id,
+                "protected F3 parameter page",
+            )
+            role = _runtime_identifier(
+                parameter["role"],
+                object_id,
+                "Q19/Q36: protected decoder parameters",
+                "parameter role",
+            )
+            page_digest = _digest_identity(
+                parameter["page_digest"],
+                object_id,
+                "Q19/Q36: protected decoder parameters",
+                "parameter page identity",
+            )
+            parameter_pages.append((role, page_digest))
+        if tuple(role for role, _ in parameter_pages) != _TRANSFORMER_PARAMETER_ROLES:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                object_id,
+                "Q19/Q36: protected decoder parameters",
+                "the protected graph must bind every decoder parameter in execution order",
+            )
+        if any(
+            page_digest not in locations
+            or locations[page_digest].length != role_lengths[role]
+            for role, page_digest in parameter_pages
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                object_id,
+                "Q19/Q36: protected decoder parameters",
+                "one protected parameter is absent or has the wrong physical length",
             )
         atom = atom_rows[step.schedule.atom_id]
         matrix = _real_matrix(
-            atom["matrix"], target_shape, step.schedule.atom_id, "atom matrix"
+            atom["matrix"], (4, 4), step.schedule.atom_id, "atom matrix"
         )
         reconstruction = _real_matrix(
             atom["description"]["reconstruction"],
-            target_shape,
+            (4, 4),
             step.schedule.atom_id,
             "description reconstruction",
         )
-        description_payload = _float32_payload(
+        role_pages = tuple(page_digest for _, page_digest in parameter_pages)
+        base_payload = _float32_payload(
             _transpose_matrix(reconstruction),
             step.schedule.atom_id,
-            "transposed description reconstruction",
+            "transposed feed-forward base",
         )
-        embedding_bytes = math.prod(embedding_case["input_shapes"][0]) * 4
-        projection_bytes = math.prod(projection_case["input_shapes"][1]) * 4
-        exact_lengths = (embedding_bytes, projection_bytes, projection_bytes, projection_bytes)
-        if len(step.exact_pages) != 4 or any(
-            page not in locations or locations[page].length != length
-            for page, length in zip(step.exact_pages, exact_lengths, strict=True)
-        ) or (
-            step.exact_pages[3] != digest_bytes(description_payload)
-            or len(description_payload) != projection_bytes
-        ):
+        if dict(parameter_pages)["ffn_up_base"] != digest_bytes(base_payload):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 step.schedule.atom_id,
                 "Q19/Q36: physical description equals certified reconstruction",
-                "the ordered embedding, Q, K, and V pages do not encode the certified F3 description",
+                "the feed-forward base page does not encode the certified reconstruction",
             )
-        sampled_value_pages = []
-        for (unit, pages), probability in zip(
-            step.sample_units,
-            step.probabilities,
-            strict=True,
-        ):
-            if len(pages) != 1 or probability <= 0 or unit >= target_shape[1]:
-                raise _runtime_error(
-                    "CAPABILITY_MISMATCH",
-                    step.schedule.atom_id,
-                    "Q36: executable fresh residual page",
-                    "each residual column requires one positive-probability value page",
-                )
-            estimator = [list(row) for row in reconstruction]
-            for row in range(target_shape[0]):
-                estimator[row][unit] += (
-                    matrix[row][unit] - reconstruction[row][unit]
-                ) / probability
-            estimator_payload = _float32_payload(
-                _transpose_matrix(tuple(tuple(row) for row in estimator)),
-                step.schedule.atom_id,
-                f"transposed sample unit {unit} estimator",
+        exact_correction_page = None
+        sampled_correction_pages = []
+        if step.sampling_kind == "EXACT":
+            zero = tuple(tuple(Fraction(0) for _ in range(4)) for _ in range(4))
+            exact_correction_page = digest_bytes(
+                _float32_payload(zero, step.schedule.atom_id, "exact zero correction")
             )
             if (
-                pages[0] != digest_bytes(estimator_payload)
-                or pages[0] not in locations
-                or locations[pages[0]].length != len(estimator_payload)
+                step.schedule.fresh_samples
+                or step.sample_units
+                or step.exact_pages != (*role_pages, exact_correction_page)
             ):
                 raise _runtime_error(
                     "CAPABILITY_MISMATCH",
                     step.schedule.atom_id,
-                    "Q19/Q36: physical correction equals certified estimator",
-                    f"sample unit {unit} does not encode its certified float32 estimator",
-                )
-            sampled_value_pages.append((unit, pages[0]))
-        if step.sampling_kind == "EXACT":
-            if sampled_value_pages or step.schedule.fresh_samples:
-                raise _runtime_error(
-                    "CAPABILITY_MISMATCH",
-                    step.schedule.atom_id,
-                    "Q36: exact F3 description",
-                    "exact execution cannot name correction pages or samples",
+                    "Q36: exact F3 decoder description",
+                    "exact execution requires the protected parameters followed by one zero correction page",
                 )
         elif step.sampling_kind == "FRESH_RANDOM":
-            if step.schedule.fresh_samples != 1 or not sampled_value_pages:
+            if step.schedule.fresh_samples != 1 or step.exact_pages != role_pages:
                 raise _runtime_error(
                     "CAPABILITY_MISMATCH",
                     step.schedule.atom_id,
                     "Q36: fresh F3 residual estimator",
-                    "the F3 attention path requires exactly one fresh certified sample",
+                    "fresh execution requires the protected base parameters and one sampled correction",
                 )
+            for (unit, pages), probability in zip(
+                step.sample_units,
+                step.probabilities,
+                strict=True,
+            ):
+                if len(pages) != 1 or probability <= 0 or unit >= 4:
+                    raise _runtime_error(
+                        "CAPABILITY_MISMATCH",
+                        step.schedule.atom_id,
+                        "Q36: executable fresh residual page",
+                        "each residual column requires one positive-probability correction page",
+                    )
+                correction = [
+                    [Fraction(0) for _ in range(4)]
+                    for _ in range(4)
+                ]
+                for row in range(4):
+                    correction[row][unit] = (
+                        matrix[row][unit] - reconstruction[row][unit]
+                    ) / probability
+                correction_page = digest_bytes(_float32_payload(
+                    _transpose_matrix(tuple(tuple(row) for row in correction)),
+                    step.schedule.atom_id,
+                    f"transposed sample unit {unit} correction",
+                ))
+                if (
+                    pages[0] != correction_page
+                    or pages[0] not in locations
+                    or locations[pages[0]].length != matrix_bytes
+                ):
+                    raise _runtime_error(
+                        "CAPABILITY_MISMATCH",
+                        step.schedule.atom_id,
+                        "Q19/Q36: physical correction equals certified estimator",
+                        f"sample unit {unit} does not encode its certified float32 correction",
+                    )
+                sampled_correction_pages.append((unit, pages[0]))
         else:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
@@ -2742,58 +3005,67 @@ def _bind_transformer_steps(
                 "Q36: exact or fresh F3 description",
                 f"unsupported sampling kind {step.sampling_kind!r}",
             )
+        operation = operation_rows[step.schedule.operation_id]
+        claim = operation_claims[step.schedule.operation_id]
+        loss = operation["loss_propagation"]
+        coefficient = _fraction(
+            loss["coefficient"], step.schedule.operation_id, "loss coefficient"
+        )
+        remainder = _fraction(
+            loss["remainder_bound"], step.schedule.operation_id, "remainder bound"
+        )
+        epsilon = _fraction(
+            claim["epsilon_exec"], step.schedule.operation_id, "execution epsilon"
+        )
+        delta = _fraction(
+            claim["delta_exec"], step.schedule.operation_id, "execution delta"
+        )
         metadata = _transformer_metadata(
             step, atom["description"]["sampling_law_id"]
         )
-        token_bytes = math.prod(embedding_case["input_shapes"][1]) * 4
-        hidden_bytes = math.prod(embedding_case["output_shape"]) * 4
-        projection_output_bytes = math.prod(projection_case["output_shape"]) * 4
-        output_bytes = math.prod(case["output_shape"]) * 4
-        activation_bytes = (
-            token_bytes
-            + hidden_bytes
-            + 5 * projection_output_bytes
-            + output_bytes
+        token_bytes = 2 * 4
+        operator_output_bytes = sum(
+            math.prod(row["output_shape"]) * 4 for row in case_rows
         )
-        model_tensor_bytes = embedding_bytes + 3 * projection_bytes
-        maximum_route = 4 + (1 if sampled_value_pages else 0)
-        maximum_load = sum(exact_lengths) + (
-            projection_bytes if sampled_value_pages else 0
+        activation_bytes = token_bytes + operator_output_bytes + 2 * 2 * 4 * 4
+        model_tensor_bytes = matrix_bytes * 9 + vector_bytes * 3
+        route_pages = len(role_pages) + 1
+        route_bytes = sum(role_lengths.values()) + matrix_bytes
+        description_bytes = sum(
+            locations[page_digest].length for page_digest in step.exact_pages
         )
-        dynamic_memory = maximum_load + model_tensor_bytes + len(metadata)
+        dynamic_memory = route_bytes + model_tensor_bytes + len(metadata)
         if (
-            step.schedule.description_bytes != sum(exact_lengths)
+            step.schedule.description_bytes != description_bytes
             or step.schedule.metadata_bytes != len(metadata)
-            or step.schedule.page_reads != maximum_route
-            or step.schedule.load_bytes != maximum_load
+            or step.schedule.page_reads != route_pages
+            or step.schedule.load_bytes != route_bytes
             or step.schedule.dynamic_memory_bytes != dynamic_memory
         ):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 step.schedule.operation_id,
                 "Q63: transformer trace equals certified schedule",
-                "description, metadata, page, traffic, or dynamic-memory demand differs from the executable route",
+                "description, metadata, page, traffic, or dynamic-memory demand differs from the executable decoder route",
             )
         bound_steps.append(_TransformerRuntimeStep(
-            embedding_case_id=embedding_case["case_id"],
-            projection_case_id=projection_case["case_id"],
-            attention_case_id=case["case_id"],
-            embedding_shape=tuple(embedding_case["input_shapes"][0]),
-            projection_shape=tuple(projection_case["input_shapes"][1]),
-            attention_shape=attention_shape,
-            token_count=math.prod(embedding_case["input_shapes"][1]),
-            vocabulary_size=embedding_case["input_shapes"][0][0],
+            operator_cases=operator_cases,
+            position_offset=position_offset,
+            token_count=2,
+            vocabulary_size=4,
             metadata=metadata,
-            embedding_page=step.exact_pages[0],
-            query_page=step.exact_pages[1],
-            key_page=step.exact_pages[2],
-            exact_value_page=step.exact_pages[3],
-            sampled_value_pages=tuple(sampled_value_pages),
+            parameter_pages=tuple(parameter_pages),
+            exact_correction_page=exact_correction_page,
+            sampled_correction_pages=tuple(sampled_correction_pages),
             model_tensor_bytes=model_tensor_bytes,
             activation_bytes=activation_bytes,
+            epsilon_exec=epsilon,
+            delta_exec=delta,
+            loss_coefficient=coefficient,
+            remainder_bound=remainder,
         ))
-        kv_capacity += 2 * projection_output_bytes
         activation_peak = max(activation_peak, activation_bytes)
+    kv_capacity = len(bound_steps) * kv_bytes_per_step
     if (
         profile["context_bytes"] != kv_capacity
         or profile["activation_bytes"] != activation_peak
@@ -2804,7 +3076,7 @@ def _bind_transformer_steps(
             "CAPABILITY_MISMATCH",
             object_id,
             "Q63: F3 recurrent and activation placement",
-            "the profile must reserve exactly the F3 KV horizon and activation peak without cache or training state",
+            "the profile must reserve exactly the decoder KV horizon and activation peak without cache or training state",
         )
     fixed_memory = sum(
         profile[name]
@@ -2825,7 +3097,7 @@ def _bind_transformer_steps(
             "CAPABILITY_MISMATCH",
             object_id,
             "Q63: transformer live-memory schedule",
-            "one trace step differs from the admitted fixed plus dynamic memory equation",
+            "one decoder step differs from the admitted fixed plus dynamic memory equation",
         )
     return tuple(bound_steps), kv_capacity
 
@@ -2866,8 +3138,13 @@ def _flatten_runtime_values(value: object) -> tuple[float, ...]:
     return (float(value),)
 
 
+def _float32_array(payload: bytes, shape: tuple[int, ...], mx):
+    values = struct.unpack(f"<{len(payload) // 4}f", payload)
+    return mx.array(values, dtype=mx.float32).reshape(shape)
+
+
 class CertifiedTransformer(CertifiedPager):
-    """Q36 F3 attention execution with certificate-bound pages, logits, and KV commit."""
+    """Q36 F3 causal decoder execution with certificate-bound pages and atomic KV commit."""
 
     def __init__(
         self,
@@ -2879,9 +3156,28 @@ class CertifiedTransformer(CertifiedPager):
         page_map: object,
     ):
         super().__init__(cartridge, plan, certificate, evidence, profile, page_map)
-        assert isinstance(evidence, dict) and isinstance(profile, dict)
+        assert (
+            isinstance(plan, dict)
+            and isinstance(certificate, dict)
+            and isinstance(evidence, dict)
+            and isinstance(profile, dict)
+        )
+        protected_graph = evidence["trace_contract"]["protected_trace_family"]
+        if plan["tensor_graph_digest"] != _runtime_document_digest(
+            protected_graph,
+            plan["plan_id"],
+            "Q19/Q36: immutable protected decoder graph",
+            "protected decoder graph",
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                plan["plan_id"],
+                "Q19/Q36: immutable protected decoder graph",
+                "the compiled plan and certified protected graph differ",
+            )
         self._transformer_steps, kv_capacity = _bind_transformer_steps(
             self._steps,
+            certificate,
             evidence,
             self._locations,
             self._profile,
@@ -2889,6 +3185,7 @@ class CertifiedTransformer(CertifiedPager):
         )
         self._kv = bytearray(kv_capacity)
         self._kv_length = 0
+        self._last_token: int | None = None
         self.last_transformer: TransformerExecution | None = None
 
     @property
@@ -2913,6 +3210,13 @@ class CertifiedTransformer(CertifiedPager):
                 transformer_step.vocabulary_size,
                 self._certificate_id,
             )
+            if self._last_token is not None and token_values[0] != self._last_token:
+                raise _runtime_error(
+                    "INVALID_REQUEST",
+                    self._certificate_id,
+                    "Q36: coherent recurrent token history",
+                    "decode must begin with the last token committed by the preceding step",
+                )
             step, sample_units, seed, planned_pages, payloads = (
                 await self._prepare_execution(
                     selection,
@@ -2921,11 +3225,12 @@ class CertifiedTransformer(CertifiedPager):
                     transitions,
                 )
             )
-            value_page = (
-                transformer_step.exact_value_page
+            correction_page = (
+                transformer_step.exact_correction_page
                 if step.sampling_kind == "EXACT"
-                else dict(transformer_step.sampled_value_pages)[sample_units[0]]
+                else dict(transformer_step.sampled_correction_pages)[sample_units[0]]
             )
+            assert correction_page is not None
             observed_reads = len(payloads)
             observed_load = sum(len(payload) for payload in payloads.values())
             if (
@@ -2939,7 +3244,7 @@ class CertifiedTransformer(CertifiedPager):
                     "observed page reads or loaded bytes differ from the certified schedule",
                 )
             mx, _ = _mlx_runtime()
-            _require_runtime(transformer_step.attention_case_id, mx)
+            _require_runtime(transformer_step.operator_cases[0], mx)
             mx.synchronize()
             mx.clear_cache()
             baseline = mx.get_active_memory()
@@ -2947,91 +3252,80 @@ class CertifiedTransformer(CertifiedPager):
             states = {page_digest: "RESIDENT" for page_digest in planned_pages}
             for page_digest in planned_pages:
                 _move_page(states, transitions, page_digest, "GPU_SUBMITTED")
-            embedding_array = mx.array(
-                struct.unpack(
-                    f"<{len(payloads[transformer_step.embedding_page]) // 4}f",
-                    payloads[transformer_step.embedding_page],
-                ),
-                dtype=mx.float32,
-            ).reshape(transformer_step.embedding_shape)
-            query_weight = mx.array(
-                struct.unpack(
-                    f"<{len(payloads[transformer_step.query_page]) // 4}f",
-                    payloads[transformer_step.query_page],
-                ),
-                dtype=mx.float32,
-            ).reshape(transformer_step.projection_shape)
-            key_weight = mx.array(
-                struct.unpack(
-                    f"<{len(payloads[transformer_step.key_page]) // 4}f",
-                    payloads[transformer_step.key_page],
-                ),
-                dtype=mx.float32,
-            ).reshape(transformer_step.projection_shape)
-            value_weight = mx.array(
-                struct.unpack(
-                    f"<{len(payloads[value_page]) // 4}f",
-                    payloads[value_page],
-                ),
-                dtype=mx.float32,
-            ).reshape(transformer_step.projection_shape)
+            matrices = {
+                role: _float32_array(
+                    payloads[page_digest],
+                    (4,) if role.startswith("norm_") else (4, 4),
+                    mx,
+                )
+                for role, page_digest in transformer_step.parameter_pages
+            }
+            correction = _float32_array(payloads[correction_page], (4, 4), mx)
             token_array = mx.array(token_values, dtype=mx.uint32)
-            hidden = dispatch(
-                transformer_step.embedding_case_id,
-                (embedding_array, token_array),
+            cases = transformer_step.operator_cases
+            hidden = dispatch(cases[0], (matrices["embedding"], token_array))
+            attention_input = dispatch(
+                cases[1], (hidden, matrices["norm_attention"])
             )
-            query_array = dispatch(
-                transformer_step.projection_case_id,
-                (hidden, query_weight),
-            )
-            key_array = dispatch(
-                transformer_step.projection_case_id,
-                (hidden, key_weight),
-            )
-            value_array = dispatch(
-                transformer_step.projection_case_id,
-                (hidden, value_weight),
-            )
-            key_values = _flatten_runtime_values(key_array.tolist())
-            value_values = _flatten_runtime_values(value_array.tolist())
+            query = dispatch(cases[2], (attention_input, matrices["query"]))
+            key = dispatch(cases[3], (attention_input, matrices["key"]))
+            value = dispatch(cases[4], (attention_input, matrices["value"]))
+            rotated_query = dispatch(cases[5], (query.reshape(1, 1, 2, 4),))
+            rotated_key = dispatch(cases[6], (key.reshape(1, 1, 2, 4),))
+            current_key = _flatten_runtime_values(rotated_key.tolist())
+            current_value = _flatten_runtime_values(value.tolist())
+            key_values = current_key
+            value_values = current_value
             if self._kv_length:
-                prior = self.kv_snapshot[-2 * len(key_values) * 4 :]
-                prior_key = struct.unpack(
-                    f"<{len(key_values)}f", prior[: len(key_values) * 4]
-                )
-                prior_value = struct.unpack(
-                    f"<{len(value_values)}f", prior[len(key_values) * 4 :]
-                )
-                row_width = transformer_step.attention_shape[-1]
-                key_values = (*prior_key[:row_width], *key_values[row_width:])
-                value_values = (*prior_value[:row_width], *value_values[row_width:])
-            effective_key = mx.array(key_values, dtype=mx.float32).reshape(
-                transformer_step.attention_shape
-            )
+                prior = self.kv_snapshot[-32:]
+                prior_key = struct.unpack("<4f", prior[:16])
+                prior_value = struct.unpack("<4f", prior[16:])
+                key_values = (*prior_key, *current_key[4:])
+                value_values = (*prior_value, *current_value[4:])
+            effective_key = mx.array(key_values, dtype=mx.float32).reshape(1, 1, 2, 4)
             effective_value = mx.array(value_values, dtype=mx.float32).reshape(
-                transformer_step.attention_shape
+                1, 1, 2, 4
             )
-            logits_array = dispatch(
-                transformer_step.attention_case_id,
-                (
-                    query_array.reshape(transformer_step.attention_shape),
-                    effective_key,
-                    effective_value,
-                ),
+            attention = dispatch(
+                cases[7], (rotated_query, effective_key, effective_value)
+            ).reshape(2, 4)
+            attention_output = dispatch(
+                cases[8], (attention, matrices["attention_output"])
             )
-            key_payload = struct.pack(
-                f"<{len(key_values)}f",
-                *key_values,
+            residual_attention = dispatch(cases[9], (hidden, attention_output))
+            feed_forward_input = dispatch(
+                cases[10], (residual_attention, matrices["norm_ffn"])
             )
-            value_payload = struct.pack(
-                f"<{len(value_values)}f",
-                *value_values,
+            base_output = dispatch(
+                cases[11], (feed_forward_input, matrices["ffn_up_base"])
             )
-            logits = _flatten_runtime_values(logits_array.tolist())
-            logits_payload = struct.pack(f"<{len(logits)}f", *logits)
+            correction_output = dispatch(
+                cases[12], (feed_forward_input, correction)
+            )
+            feed_forward_up = dispatch(
+                cases[13], (base_output, correction_output)
+            )
+            activated = dispatch(cases[14], (feed_forward_up,))
+            feed_forward_down = dispatch(
+                cases[15], (activated, matrices["ffn_down"])
+            )
+            residual_output = dispatch(
+                cases[16], (residual_attention, feed_forward_down)
+            )
+            final_hidden = dispatch(
+                cases[17], (residual_output, matrices["norm_final"])
+            )
+            full_logits = dispatch(
+                cases[18], (final_hidden, matrices["unembedding"])
+            )
+            current_key_payload = struct.pack("<4f", *current_key[4:])
+            current_value_payload = struct.pack("<4f", *current_value[4:])
+            logits = _flatten_runtime_values(full_logits.tolist())[-4:]
+            logits_payload = struct.pack("<4f", *logits)
             metal_peak = mx.get_peak_memory() - baseline
             runtime_bytes = metal_peak - (
-                transformer_step.activation_bytes + transformer_step.model_tensor_bytes
+                transformer_step.activation_bytes
+                + transformer_step.model_tensor_bytes
             )
             if runtime_bytes != self._profile["runtime_buffer_bytes"]:
                 raise _runtime_error(
@@ -3057,7 +3351,7 @@ class CertifiedTransformer(CertifiedPager):
                     "Q63: transformer trace equals certified schedule",
                     f"observed {observed_memory} model bytes; schedule declares {step.schedule.live_memory_bytes}",
                 )
-            kv_end = self._kv_length + len(key_payload) + len(value_payload)
+            kv_end = self._kv_length + 32
             if kv_end > len(self._kv):
                 raise _runtime_error(
                     "MEMORY_BUDGET_EXCEEDED",
@@ -3083,19 +3377,18 @@ class CertifiedTransformer(CertifiedPager):
                 ),
                 transitions=tuple(transitions),
             )
-            self._kv[self._kv_length:kv_end] = key_payload + value_payload
+            self._kv[self._kv_length:kv_end] = (
+                current_key_payload + current_value_payload
+            )
             self._kv_length = kv_end
+            self._last_token = token_values[-1]
             trace = TransformerTrace(
                 phase="PREFILL" if step.schedule.step == 0 else "DECODE",
                 schedule=step.schedule,
                 planned_pages=planned_pages,
-                operator_cases=(
-                    transformer_step.embedding_case_id,
-                    transformer_step.projection_case_id,
-                    transformer_step.projection_case_id,
-                    transformer_step.projection_case_id,
-                    transformer_step.attention_case_id,
-                ),
+                operator_cases=cases,
+                position_offset=transformer_step.position_offset,
+                logits_shape=(transformer_step.vocabulary_size,),
                 page_reads=observed_reads,
                 load_bytes=observed_load,
                 model_tensor_bytes=transformer_step.model_tensor_bytes,
@@ -3104,6 +3397,10 @@ class CertifiedTransformer(CertifiedPager):
                 runtime_buffer_bytes=runtime_bytes,
                 model_memory_bytes=observed_memory,
                 metal_peak_bytes=metal_peak,
+                epsilon_exec=float(transformer_step.epsilon_exec),
+                delta_exec=float(transformer_step.delta_exec),
+                loss_coefficient=float(transformer_step.loss_coefficient),
+                remainder_bound=float(transformer_step.remainder_bound),
             )
             committed = TransformerExecution(
                 page_execution=page_execution,

@@ -31,15 +31,21 @@ from tools.ledger import run as run_ledger
 
 REPO = Path(__file__).resolve().parent.parent
 RUNTIME_COMMIT = "365d6f29b47686a9f5401f6a9ec5825fee162d69"
-DISPATCH_DIGEST = "sha256:db0c5bae5819952f448174049b5acbb1dcc95ccd49437da45c881eed7250b32f"
+DISPATCH_DIGEST = "sha256:fba00edac946e57c7f1195e4e840b2cfba7552ea9811848318fb56ba58090457"
 CASE_IDS = [
     "mlx.matmul.f32.2x3_3x2",
+    "mlx.matmul.f32.2x4_4x4",
+    "mlx.add.f32.2x4",
+    "mlx.silu.f32.2x4",
     "mlx.quantized_matmul.affine4.f32.1x32_2x32",
     "mlx.rms_norm.f32.2x4",
     "mlx.rope.traditional.f32.1x1x2x4",
+    "mlx.rope.traditional.f32.1x1x2x4.offset1",
     "mlx.attention.f32.1x1x2x2",
+    "mlx.attention.causal.f32.1x1x2x4",
     "mlx.conv1d.f32.1x4x1_1x2x1",
     "mlx.embedding.f32_u32.4x3_2",
+    "mlx.embedding.f32_u32.4x4_2",
     "mlx.categorical.f32_u32.2x3_2",
     "mlx.autograd_sum.f32.2x3",
     "mlx.sgd.f32.3",
@@ -403,12 +409,20 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
         )
 
     rope_input = [[[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]]]
-    rope_reference = [[[[1.0, 2.0, 3.0, 4.0], []]]]
-    for pair, angle in [((5.0, 6.0), 1.0), ((7.0, 8.0), 0.01)]:
-        left, right = pair
-        rope_reference[0][0][1].extend(
-            [left * math.cos(angle) - right * math.sin(angle), left * math.sin(angle) + right * math.cos(angle)]
-        )
+
+    def rope_reference(offset: int) -> list:
+        reference = [[[[] for _ in range(2)]]]
+        for position, row in enumerate(rope_input[0][0], start=offset):
+            for left, right, frequency in (
+                (row[0], row[1], 1.0),
+                (row[2], row[3], 0.01),
+            ):
+                angle = position * frequency
+                reference[0][0][position - offset].extend((
+                    left * math.cos(angle) - right * math.sin(angle),
+                    left * math.sin(angle) + right * math.cos(angle),
+                ))
+        return reference
 
     attention_scale = 2**-0.5
     attention_reference = []
@@ -418,6 +432,19 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
         first, second = [value / total for value in weights_row]
         attention_reference.append([first + 3.0 * second, 2.0 * first + 4.0 * second])
 
+    causal_weight = math.exp(0.5) / (1.0 + math.exp(0.5))
+    causal_attention_reference = [[[[1.0, 2.0, 3.0, 4.0], [
+        (1.0 - causal_weight) * 1.0 + causal_weight * 4.0,
+        (1.0 - causal_weight) * 2.0 + causal_weight * 3.0,
+        (1.0 - causal_weight) * 3.0 + causal_weight * 2.0,
+        (1.0 - causal_weight) * 4.0 + causal_weight * 1.0,
+    ]]]]
+    silu_input = [[-1.0, -0.5, 0.0, 0.5], [1.0, 2.0, -2.0, 3.0]]
+    silu_reference = [
+        [value / (1.0 + math.exp(-value)) for value in row]
+        for row in silu_input
+    ]
+
     return {
         CASE_IDS[0]: (
             [
@@ -426,13 +453,34 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
             ],
             [[22.0, 28.0], [49.0, 64.0]],
         ),
-        CASE_IDS[1]: ([xq, packed, scales, biases], [quantized_reference]),
+        CASE_IDS[1]: (
+            [
+                mx.array([[1, 2, 3, 4], [-1, 0.5, 2, -0.5]], dtype=mx.float32),
+                mx.array([
+                    [0.5, -0.25, 0.75, 0.0],
+                    [0.25, 0.5, -0.5, 1.0],
+                    [-0.75, 0.25, 0.5, -0.25],
+                    [1.0, -0.5, 0.25, 0.5],
+                ], dtype=mx.float32),
+            ],
+            [[2.75, -0.5, 2.25, 3.25], [-2.375, 1.25, -0.125, -0.25]],
+        ),
         CASE_IDS[2]: (
+            [
+                mx.array([[1, 2, 3, 4], [-1, -2, -3, -4]], dtype=mx.float32),
+                mx.array([[0.5, -0.5, 1.5, -1.5], [2, -2, 0.25, -0.25]], dtype=mx.float32),
+            ],
+            [[1.5, 1.5, 4.5, 2.5], [1.0, -4.0, -2.75, -4.25]],
+        ),
+        CASE_IDS[3]: ([mx.array(silu_input, dtype=mx.float32)], silu_reference),
+        CASE_IDS[4]: ([xq, packed, scales, biases], [quantized_reference]),
+        CASE_IDS[5]: (
             [mx.array(norm_input, dtype=mx.float32), mx.array(norm_weight, dtype=mx.float32)],
             norm_reference,
         ),
-        CASE_IDS[3]: ([mx.array(rope_input, dtype=mx.float32)], rope_reference),
-        CASE_IDS[4]: (
+        CASE_IDS[6]: ([mx.array(rope_input, dtype=mx.float32)], rope_reference(0)),
+        CASE_IDS[7]: ([mx.array(rope_input, dtype=mx.float32)], rope_reference(1)),
+        CASE_IDS[8]: (
             [
                 mx.array([[[[1, 0], [0, 1]]]], dtype=mx.float32),
                 mx.array([[[[1, 0], [0, 1]]]], dtype=mx.float32),
@@ -440,32 +488,52 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
             ],
             [[attention_reference]],
         ),
-        CASE_IDS[5]: (
+        CASE_IDS[9]: (
+            [
+                mx.array([[[[1, 0, 0, 0], [0, 1, 0, 0]]]], dtype=mx.float32),
+                mx.array([[[[1, 0, 0, 0], [0, 1, 0, 0]]]], dtype=mx.float32),
+                mx.array([[[[1, 2, 3, 4], [4, 3, 2, 1]]]], dtype=mx.float32),
+            ],
+            causal_attention_reference,
+        ),
+        CASE_IDS[10]: (
             [
                 mx.array([[[1], [2], [3], [4]]], dtype=mx.float32),
                 mx.array([[[2], [1]]], dtype=mx.float32),
             ],
             [[[4.0], [7.0], [10.0]]],
         ),
-        CASE_IDS[6]: (
+        CASE_IDS[11]: (
             [
                 mx.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=mx.float32),
                 mx.array([3, 1], dtype=mx.uint32),
             ],
             [[10.0, 11.0, 12.0], [4.0, 5.0, 6.0]],
         ),
-        CASE_IDS[7]: (
+        CASE_IDS[12]: (
+            [
+                mx.array([
+                    [1, 2, 3, 4],
+                    [5, 6, 7, 8],
+                    [9, 10, 11, 12],
+                    [13, 14, 15, 16],
+                ], dtype=mx.float32),
+                mx.array([2, 0], dtype=mx.uint32),
+            ],
+            [[9.0, 10.0, 11.0, 12.0], [1.0, 2.0, 3.0, 4.0]],
+        ),
+        CASE_IDS[13]: (
             [
                 mx.array([[0, 1, 2], [2, 1, 0]], dtype=mx.float32),
                 mx.array([0, 17], dtype=mx.uint32),
             ],
             [1, 0],
         ),
-        CASE_IDS[8]: (
+        CASE_IDS[14]: (
             [mx.array([[1, 2, 3], [4, 5, 6]], dtype=mx.float32)],
             [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
         ),
-        CASE_IDS[9]: (
+        CASE_IDS[15]: (
             [
                 mx.array([1.0, 2.0, 3.0], dtype=mx.float32),
                 mx.array([0.5, -0.5, 0.25], dtype=mx.float32),
@@ -590,6 +658,8 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
     assert list(rows) == CASE_IDS
     assert set(cases) == set(rows)
     assert {row["operator"] for row in rows.values()} == {
+        "activation",
+        "add",
         "attention",
         "autograd",
         "convolution",
@@ -645,7 +715,9 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
     )
     assert repository_owned_dependencies(consumer, native_repo) == ["libcassette.dylib"]
     pager_tree = ast.parse((REPO / "pager.py").read_text(encoding="utf-8"))
-    executor_names = {f"_{row['operator']}" for row in rows.values()}
+    executor_names = {
+        pager._EXECUTORS[row["operator"]].__name__ for row in rows.values()
+    }
     executor_functions = [
         node
         for node in pager_tree.body
