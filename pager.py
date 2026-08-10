@@ -1,8 +1,9 @@
-# pager.py — certificate recomputation, memory schedules, and pinned MLX dispatch (Q19/Q30/Q33/Q40/Q47/Q63); depends on errors.py, schema, store.py.
-"""Recompute compiled-plan claims, admit bounded residency, and execute generated MLX cases."""
+# pager.py — certificate recomputation, page readiness, selection, and pinned MLX dispatch (Q19/Q20/Q30/Q33/Q40/Q47/Q63/Q64); depends on errors.py, schema, store.py.
+"""Admit certified schedules, validate their pages before use, and dispatch through MLX."""
 
 from __future__ import annotations
 
+import asyncio
 import importlib.metadata
 import math
 import platform
@@ -10,11 +11,12 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 
 from errors import CassetteError
 from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, OPERATOR_DISPATCH, Q40_MODES
 from schema.validator import validate
-from store import canonical_bytes, digest_bytes
+from store import _read_page, canonical_bytes, digest_bytes, page_locations
 
 _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
 _GIB = 1024**3
@@ -26,8 +28,15 @@ _ZERO = (Fraction(0), Fraction(0))
 _MLX = None
 
 
-def _error(code: str, object_id: str, invariant: str, detail: str) -> CassetteError:
-    return CassetteError(code, object_id, invariant, "terminal", detail)
+def _error(
+    code: str,
+    object_id: str,
+    invariant: str,
+    detail: str,
+    *,
+    retryability: str = "terminal",
+) -> CassetteError:
+    return CassetteError(code, object_id, invariant, retryability, detail)
 
 
 def validate_plan(plan: object, certificate: object) -> None:
@@ -120,6 +129,42 @@ class CertifiedSchedule:
     available_bytes: int
     peak_live_bytes: int
     steps: tuple[ResidencyStep, ...]
+
+
+@dataclass(frozen=True)
+class NativePrefetch:
+    """Q64 prediction metadata that may order reads but never alter the source route."""
+
+    page_candidates: tuple[str, ...]
+    confidence: float
+    bytes: int
+
+
+@dataclass(frozen=True)
+class CompiledSelection:
+    """Q64 selection record presented before one compiled schedule step may acquire pages."""
+
+    observed_condition: str
+    atom_id: str
+    service_face: tuple[str, ...]
+    certificate_digest: str
+    description_digest: str
+    execution_seed_or_exact_schedule: int | str
+    bytes: int
+
+
+@dataclass(frozen=True)
+class PageExecution:
+    """Q20 committed page-use record; failures publish no instance of this object."""
+
+    mode: str
+    step: int | None
+    certificate_digest: str | None
+    planned_pages: tuple[str, ...]
+    sample_units: tuple[int, ...]
+    execution_seed: int | None
+    output_digest: str
+    transitions: tuple[tuple[str, str, str], ...]
 
 
 def _reject_evidence(object_id: str, label: str, detail: str) -> None:
@@ -1438,3 +1483,796 @@ def dispatch(case_id: str, inputs: Sequence[object]) -> object:
             f"declared {row['output_dtype']} {row['output_shape']}; received {output_dtype} {output_shape}",
         )
     return result
+
+
+_PAGE_STATES = {
+    "ABSENT": frozenset({"ACQUIRING"}),
+    "ACQUIRING": frozenset({"HASHED", "FAILED"}),
+    "HASHED": frozenset({"RESIDENT"}),
+    "RESIDENT": frozenset({"GPU_SUBMITTED"}),
+    "GPU_SUBMITTED": frozenset({"RECLAIMABLE"}),
+    "RECLAIMABLE": frozenset(),
+    "FAILED": frozenset(),
+}
+_HEX = frozenset("0123456789abcdef")
+
+
+@dataclass(frozen=True)
+class _CompiledRuntimeStep:
+    schedule: ResidencyStep
+    service_face: tuple[str, ...]
+    description_digest: str
+    exact_pages: tuple[str, ...]
+    sample_units: tuple[tuple[int, tuple[str, ...]], ...]
+    probabilities: tuple[Fraction, ...]
+    sampling_kind: str
+    exact_schedule: str
+
+
+def _runtime_error(
+    code: str,
+    object_id: str,
+    invariant: str,
+    detail: str,
+    *,
+    retryability: str = "terminal",
+) -> CassetteError:
+    return _error(
+        code,
+        object_id,
+        invariant,
+        detail,
+        retryability=retryability,
+    )
+
+
+def _runtime_record(
+    value: object,
+    fields: set[str],
+    object_id: str,
+    label: str,
+) -> dict:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            f"Q20: immutable {label}",
+            f"requires exactly {sorted(fields)}",
+        )
+    return value
+
+
+def _runtime_items(value: object, object_id: str, label: str) -> tuple:
+    if not isinstance(value, (list, tuple)):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            f"Q20: immutable {label}",
+            "requires an ordered collection",
+        )
+    return tuple(value)
+
+
+def _page_identity(value: object, object_id: str, invariant: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("blake3:")
+        or len(value) != 71
+        or not set(value[7:]) <= _HEX
+    ):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            invariant,
+            "requires one canonical BLAKE3 page identity",
+        )
+    return value
+
+
+def _ordered_unique(values: Sequence[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
+
+
+def _move_page(
+    states: dict[str, str],
+    transitions: list[tuple[str, str, str]],
+    page_digest: str,
+    target: str,
+) -> None:
+    source = states[page_digest]
+    if target not in _PAGE_STATES[source]:
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            page_digest,
+            "Q20: page-readiness state machine",
+            f"illegal transition {source} -> {target}",
+        )
+    states[page_digest] = target
+    transitions.append((page_digest, source, target))
+
+
+def _deadline(value: object, object_id: str) -> float | None:
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise _runtime_error(
+            "INVALID_REQUEST",
+            object_id,
+            "Q20: bounded page-readiness deadline",
+            "timeout_seconds must be a finite nonnegative number or None",
+        )
+    return float(value)
+
+
+def _cancelled(cancel_event: asyncio.Event | None, object_id: str) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise _runtime_error(
+            "OPERATION_CANCELLED",
+            object_id,
+            "Q20: cancellation before page consumption",
+            "the operation was cancelled before command submission",
+            retryability="retryable",
+        )
+
+
+async def _acquire_pages(
+    cartridge: Path,
+    locations: dict[str, object],
+    ordered_pages: tuple[str, ...],
+    timeout_seconds: float | None,
+    cancel_event: asyncio.Event | None,
+    object_id: str,
+    transitions: list[tuple[str, str, str]],
+) -> dict[str, bytes]:
+    states = {page_digest: "ABSENT" for page_digest in ordered_pages}
+    payloads: dict[str, bytes] = {}
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            for page_digest in ordered_pages:
+                _cancelled(cancel_event, object_id)
+                _move_page(states, transitions, page_digest, "ACQUIRING")
+                location = locations.get(page_digest)
+                if location is None:
+                    _move_page(states, transitions, page_digest, "FAILED")
+                    raise _runtime_error(
+                        "PAGE_CORRUPT",
+                        page_digest,
+                        "Q20: every planned page exists before consumption",
+                        "the selected root has no physical record for this planned page",
+                    )
+                try:
+                    payload = await asyncio.to_thread(_read_page, cartridge, location)
+                except CassetteError:
+                    _move_page(states, transitions, page_digest, "FAILED")
+                    raise
+                if cancel_event is not None and cancel_event.is_set():
+                    _move_page(states, transitions, page_digest, "FAILED")
+                    _cancelled(cancel_event, object_id)
+                _move_page(states, transitions, page_digest, "HASHED")
+                _move_page(states, transitions, page_digest, "RESIDENT")
+                payloads[page_digest] = payload
+    except TimeoutError as exc:
+        for page_digest, state in tuple(states.items()):
+            if state == "ACQUIRING":
+                _move_page(states, transitions, page_digest, "FAILED")
+        raise _runtime_error(
+            "WORKING_SET_TIMEOUT",
+            object_id,
+            "Q20: page readiness before command submission",
+            "the declared page-readiness deadline expired",
+            retryability="retryable",
+        ) from exc
+    except asyncio.CancelledError as exc:
+        for page_digest, state in tuple(states.items()):
+            if state == "ACQUIRING":
+                _move_page(states, transitions, page_digest, "FAILED")
+        raise _runtime_error(
+            "OPERATION_CANCELLED",
+            object_id,
+            "Q20: cancellation before page consumption",
+            "the execution task was cancelled before command completion",
+            retryability="retryable",
+        ) from exc
+    return payloads
+
+
+def _submit_resident_pages(
+    payloads: dict[str, bytes],
+    ordered_pages: tuple[str, ...],
+    transitions: list[tuple[str, str, str]],
+    object_id: str,
+) -> None:
+    """Fence one real MLX command on pages whose content identities were just verified."""
+
+    states = {page_digest: "RESIDENT" for page_digest in ordered_pages}
+    try:
+        mx, _ = _mlx_runtime()
+        _require_runtime(object_id, mx)
+        arrays = tuple(
+            mx.array(bytearray(payloads[page_digest]), dtype=mx.uint8)
+            for page_digest in ordered_pages
+        )
+        for page_digest in ordered_pages:
+            _move_page(states, transitions, page_digest, "GPU_SUBMITTED")
+        mx.eval(*arrays)
+    except CassetteError:
+        raise
+    except Exception as exc:
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q20: resident pages submitted through pinned MLX",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
+    for page_digest in ordered_pages:
+        _move_page(states, transitions, page_digest, "RECLAIMABLE")
+
+
+def _execution_digest(
+    mode: str,
+    route: tuple[str, ...],
+    payloads: dict[str, bytes],
+    *,
+    atom_id: str | None = None,
+    sample_units: tuple[int, ...] = (),
+) -> str:
+    return _digest({
+        "mode": mode,
+        "atom_id": atom_id,
+        "route": [
+            {"page_digest": page_digest, "payload_digest": digest_bytes(payloads[page_digest])}
+            for page_digest in route
+        ],
+        "sample_units": list(sample_units),
+    })
+
+
+class NativePager:
+    """Q20/Q64 exact source-route execution; prediction may change read order only."""
+
+    def __init__(self, cartridge: str | Path, root_digest: str):
+        self._cartridge = Path(cartridge)
+        self._root_digest = root_digest
+        self._locations = {
+            location.page_digest: location
+            for location in page_locations(self._cartridge, root_digest)
+        }
+        self.last_attempt_transitions: tuple[tuple[str, str, str], ...] = ()
+
+    async def execute(
+        self,
+        source_route: Sequence[str],
+        prefetch: NativePrefetch,
+        *,
+        timeout_seconds: float | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> PageExecution:
+        route = tuple(
+            _page_identity(
+                page_digest,
+                self._root_digest,
+                "Q20: source-native planned page identity",
+            )
+            for page_digest in source_route
+        )
+        if not route or len(route) != len(set(route)):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._root_digest,
+                "Q20: source-native planned pages",
+                "the source route must name at least one distinct page",
+            )
+        if not isinstance(prefetch, NativePrefetch):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._root_digest,
+                "Q64: non-semantic native prefetch",
+                "NativePrefetch is required",
+            )
+        candidates = tuple(
+            _page_identity(
+                page_digest,
+                self._root_digest,
+                "Q64: native prefetch page identity",
+            )
+            for page_digest in prefetch.page_candidates
+        )
+        if len(candidates) != len(set(candidates)):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._root_digest,
+                "Q64: non-semantic native prefetch",
+                "prefetch candidates may not repeat",
+            )
+        if (
+            isinstance(prefetch.confidence, bool)
+            or not isinstance(prefetch.confidence, (int, float))
+            or not math.isfinite(prefetch.confidence)
+            or not 0 <= prefetch.confidence <= 1
+            or isinstance(prefetch.bytes, bool)
+            or not isinstance(prefetch.bytes, int)
+            or not 0 <= prefetch.bytes <= _MAX_U64
+        ):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._root_digest,
+                "Q64: bounded native prefetch record",
+                "confidence must be in [0,1] and bytes must be unsigned 64-bit",
+            )
+        deadline = _deadline(timeout_seconds, self._root_digest)
+        route_set = set(route)
+        acquisition_order = _ordered_unique(
+            (*[page for page in candidates if page in route_set], *route)
+        )
+        transitions: list[tuple[str, str, str]] = []
+        try:
+            payloads = await _acquire_pages(
+                self._cartridge,
+                self._locations,
+                acquisition_order,
+                deadline,
+                cancel_event,
+                self._root_digest,
+                transitions,
+            )
+            _cancelled(cancel_event, self._root_digest)
+            _submit_resident_pages(
+                payloads,
+                acquisition_order,
+                transitions,
+                self._root_digest,
+            )
+        finally:
+            self.last_attempt_transitions = tuple(transitions)
+        return PageExecution(
+            mode="NATIVE_EXACT",
+            step=None,
+            certificate_digest=None,
+            planned_pages=route,
+            sample_units=(),
+            execution_seed=None,
+            output_digest=_execution_digest("NATIVE_EXACT", route, payloads),
+            transitions=tuple(transitions),
+        )
+
+
+def _bind_runtime_steps(
+    plan: dict,
+    certificate: dict,
+    evidence: dict,
+    schedule: CertifiedSchedule,
+    page_map: dict,
+    locations: dict[str, object],
+) -> tuple[_CompiledRuntimeStep, ...]:
+    rows = _runtime_items(page_map["steps"], plan["plan_id"], "page-map steps")
+    if len(rows) != len(schedule.steps):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            plan["plan_id"],
+            "Q20: complete certified page map",
+            "one page-map row is required for every certified schedule step",
+        )
+
+    atom_claims = {row["atom_id"]: row for row in certificate["atoms"]}
+    atom_evidence = {row["atom_id"]: row for row in evidence["atoms"]}
+    service_faces = {
+        row["face_id"]: tuple(row["condition_ids"])
+        for row in certificate["compatibility"]["service_faces"]
+    }
+    operation_laws = {
+        row["operation_id"]: row["sampling_law_id"]
+        for row in evidence["execution_contract"]["operations"]
+    }
+    sampling_laws = {
+        row["sampling_law_id"]: row
+        for row in evidence["execution_contract"]["sampling_laws"]
+    }
+    runtime_steps = []
+    for expected, raw in zip(schedule.steps, rows, strict=True):
+        row = _runtime_record(
+            raw,
+            {
+                "atom_id",
+                "description_digest",
+                "exact_pages",
+                "operation_id",
+                "sample_units",
+                "step",
+            },
+            plan["plan_id"],
+            "page-map step",
+        )
+        if (
+            row["step"] != expected.step
+            or row["operation_id"] != expected.operation_id
+            or row["atom_id"] != expected.atom_id
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                plan["plan_id"],
+                "Q20: certified schedule page relation",
+                "page-map step, operation, and atom must equal the certified schedule",
+            )
+        atom_claim = atom_claims[expected.atom_id]
+        description_digest = _digest(atom_claim["description"])
+        if row["description_digest"] != description_digest:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.atom_id,
+                "Q20: immutable compiled description",
+                "page-map description identity differs from the certificate",
+            )
+        exact_pages = tuple(
+            _page_identity(
+                page_digest,
+                expected.atom_id,
+                "Q20: exact description page identity",
+            )
+            for page_digest in _runtime_items(
+                row["exact_pages"], expected.atom_id, "exact description pages"
+            )
+        )
+        if not exact_pages or len(exact_pages) != len(set(exact_pages)):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.atom_id,
+                "Q20: exact description pages",
+                "each compiled step requires distinct exact description pages",
+            )
+        law = sampling_laws[operation_laws[expected.operation_id]]
+        distributions = {
+            item["atom_id"]: item["columns"]
+            for item in law["law"].get("atom_distributions", [])
+        }
+        expected_distribution = distributions.get(expected.atom_id, [])
+        expected_units = tuple(item["column"] for item in expected_distribution)
+        probabilities = tuple(
+            Fraction(item["probability"]) for item in expected_distribution
+        )
+        sample_rows = _runtime_items(
+            row["sample_units"], expected.atom_id, "sample page units"
+        )
+        sample_units = []
+        for sample_row in sample_rows:
+            sample = _runtime_record(
+                sample_row,
+                {"page_digests", "unit"},
+                expected.atom_id,
+                "sample page unit",
+            )
+            pages = tuple(
+                _page_identity(
+                    page_digest,
+                    expected.atom_id,
+                    "Q20: sampled correction page identity",
+                )
+                for page_digest in _runtime_items(
+                    sample["page_digests"], expected.atom_id, "sampled correction pages"
+                )
+            )
+            if not pages or len(pages) != len(set(pages)):
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    expected.atom_id,
+                    "Q20: sampled correction pages",
+                    "every sample unit requires distinct pages",
+                )
+            sample_units.append((sample["unit"], pages))
+        if tuple(unit for unit, _ in sample_units) != expected_units:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.atom_id,
+                "Q20: certified sampling page catalog",
+                "sample units must equal the recomputed sampling-law support",
+            )
+        if (law["kind"] == "EXACT") != (not sample_units and not probabilities):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.atom_id,
+                "Q20: declared exact or stochastic page plan",
+                "EXACT forbids sample pages; FRESH_RANDOM requires them",
+            )
+        possible_routes = [exact_pages]
+        if sample_units:
+            possible_routes.append(_ordered_unique((
+                *exact_pages,
+                *(page for _, pages in sample_units for page in pages),
+            )))
+        if max(len(route) for route in possible_routes) > expected.page_reads:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.operation_id,
+                "Q20: certified page-read count",
+                "one possible correction route exceeds the certified page-read count",
+            )
+        for route in possible_routes:
+            known_bytes = sum(
+                locations[page_digest].length
+                for page_digest in route
+                if page_digest in locations
+            )
+            if known_bytes > expected.load_bytes:
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    expected.operation_id,
+                    "Q20: certified page byte count",
+                    "known pages exceed the certified load-byte bound",
+                )
+        runtime_steps.append(_CompiledRuntimeStep(
+            schedule=expected,
+            service_face=service_faces[atom_claim["service_face_id"]],
+            description_digest=description_digest,
+            exact_pages=exact_pages,
+            sample_units=tuple(sample_units),
+            probabilities=probabilities,
+            sampling_kind=law["kind"],
+            exact_schedule=certificate["trace_contract"]["schedule_digest"],
+        ))
+        if atom_evidence[expected.atom_id]["description"]["sampling_law_id"] != law["sampling_law_id"]:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                expected.atom_id,
+                "Q20: admitted sampling-law relation",
+                "atom description and operation name different sampling laws",
+            )
+    return tuple(runtime_steps)
+
+
+def _draw_units(
+    step: _CompiledRuntimeStep,
+    certificate_id: str,
+    seed_or_schedule: int | str,
+) -> tuple[tuple[int, ...], int | None]:
+    if step.sampling_kind == "EXACT":
+        if seed_or_schedule != step.exact_schedule:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                certificate_id,
+                "Q20: exact certified execution schedule",
+                "EXACT execution requires the immutable schedule identity",
+            )
+        return (), None
+    if (
+        isinstance(seed_or_schedule, bool)
+        or not isinstance(seed_or_schedule, int)
+        or not 0 <= seed_or_schedule <= _MAX_U64
+    ):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            certificate_id,
+            "Q20: certified fresh-random seed contract",
+            "FRESH_RANDOM requires one recorded unsigned 64-bit counter key",
+        )
+    denominators = [probability.denominator for probability in step.probabilities]
+    denominator = math.lcm(*denominators)
+    weights = [
+        probability.numerator * (denominator // probability.denominator)
+        for probability in step.probabilities
+    ]
+    total = sum(weights)
+    ceiling = 1 << 256
+    accepted = ceiling - ceiling % total
+    unit_ids = tuple(unit for unit, _ in step.sample_units)
+    draws = []
+    for draw in range(step.schedule.fresh_samples):
+        attempt = 0
+        while True:
+            block = digest_bytes(canonical_bytes({
+                "certificate_id": certificate_id,
+                "step": step.schedule.step,
+                "seed": seed_or_schedule,
+                "draw": draw,
+                "attempt": attempt,
+            }))
+            value = int(block[7:], 16)
+            attempt += 1
+            if value < accepted:
+                target = value % total
+                break
+        cursor = 0
+        for unit, weight in zip(unit_ids, weights, strict=True):
+            cursor += weight
+            if target < cursor:
+                draws.append(unit)
+                break
+    return tuple(draws), seed_or_schedule
+
+
+class CertifiedPager:
+    """Q20/Q64 compiled execution bound to one recomputed certificate and page map."""
+
+    def __init__(
+        self,
+        cartridge: str | Path,
+        plan: object,
+        certificate: object,
+        evidence: object,
+        profile: object,
+        page_map: object,
+    ):
+        schedule = admit_schedule(plan, certificate, evidence, profile)
+        assert isinstance(plan, dict) and isinstance(certificate, dict) and isinstance(evidence, dict)
+        map_record = _runtime_record(
+            page_map,
+            {"root_digest", "steps"},
+            plan["plan_id"],
+            "page map",
+        )
+        root_digest = _page_identity(
+            map_record["root_digest"],
+            plan["plan_id"],
+            "Q20: page-map root identity",
+        )
+        if _digest(map_record) != plan["page_map_digest"]:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                plan["plan_id"],
+                "Q20: immutable page-map identity",
+                "the canonical page map does not match the compiled plan",
+            )
+        self._cartridge = Path(cartridge)
+        locations = {
+            location.page_digest: location
+            for location in page_locations(self._cartridge, root_digest)
+        }
+        self._steps = _bind_runtime_steps(
+            plan,
+            certificate,
+            evidence,
+            schedule,
+            map_record,
+            locations,
+        )
+        self._locations = locations
+        self._certificate_id = schedule.certificate_id
+        self._support = frozenset(evidence["observation_contract"]["support"])
+        self._cover = {
+            row["condition_id"]: row["atom_id"]
+            for row in certificate["compatibility"]["cover"]
+        }
+        self._next_step = 0
+        self.last_attempt_transitions: tuple[tuple[str, str, str], ...] = ()
+        self.last_committed: PageExecution | None = None
+        self.replay_selection: CompiledSelection | None = None
+
+    @property
+    def next_step(self) -> int:
+        return self._next_step
+
+    def _validate_selection(
+        self,
+        selection: object,
+    ) -> tuple[_CompiledRuntimeStep, tuple[int, ...], int | None]:
+        if self._next_step >= len(self._steps):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                self._certificate_id,
+                "Q64: certified execution horizon",
+                "the immutable certificate has no further schedule step",
+            )
+        if not isinstance(selection, CompiledSelection):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._certificate_id,
+                "Q64: compiled selection record",
+                "CompiledSelection is required",
+            )
+        step = self._steps[self._next_step]
+        if selection.certificate_digest != self._certificate_id:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                selection.certificate_digest or "certificate:missing",
+                "Q64: immutable compiled certificate",
+                "selection certificate differs from the admitted revision",
+            )
+        if selection.observed_condition not in self._support:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                selection.observed_condition or "condition:missing",
+                "Q64: certified observation support",
+                "compiled selection rejects every off-support observation",
+            )
+        if (
+            self._cover.get(selection.observed_condition) != selection.atom_id
+            or selection.atom_id != step.schedule.atom_id
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                selection.atom_id or "atom:missing",
+                "Q64: certified atom cover",
+                "the selected atom does not cover this condition at this schedule step",
+            )
+        if selection.service_face != step.service_face:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                selection.atom_id,
+                "Q64: certified service face",
+                "the selection presents a forged or incomplete service face",
+            )
+        if selection.description_digest != step.description_digest:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                selection.atom_id,
+                "Q20: immutable compiled description",
+                "selection description differs from the admitted certificate",
+            )
+        if (
+            isinstance(selection.bytes, bool)
+            or not isinstance(selection.bytes, int)
+            or selection.bytes != step.schedule.load_bytes
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                step.schedule.operation_id,
+                "Q20: certified selection byte count",
+                f"selection must declare exactly {step.schedule.load_bytes} bytes",
+            )
+        draws, seed = _draw_units(
+            step,
+            self._certificate_id,
+            selection.execution_seed_or_exact_schedule,
+        )
+        return step, draws, seed
+
+    async def execute(
+        self,
+        selection: CompiledSelection,
+        *,
+        timeout_seconds: float | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> PageExecution:
+        transitions: list[tuple[str, str, str]] = []
+        try:
+            step, sample_units, seed = self._validate_selection(selection)
+            deadline = _deadline(timeout_seconds, self._certificate_id)
+            sample_pages = dict(step.sample_units)
+            planned_pages = _ordered_unique((
+                *step.exact_pages,
+                *(page
+                  for unit in sample_units
+                  for page in sample_pages[unit]),
+            ))
+            self.replay_selection = selection
+            payloads = await _acquire_pages(
+                self._cartridge,
+                self._locations,
+                planned_pages,
+                deadline,
+                cancel_event,
+                self._certificate_id,
+                transitions,
+            )
+            _cancelled(cancel_event, self._certificate_id)
+            _submit_resident_pages(
+                payloads,
+                planned_pages,
+                transitions,
+                self._certificate_id,
+            )
+            committed = PageExecution(
+                mode="COMPILED_CERTIFIED",
+                step=step.schedule.step,
+                certificate_digest=self._certificate_id,
+                planned_pages=planned_pages,
+                sample_units=sample_units,
+                execution_seed=seed,
+                output_digest=_execution_digest(
+                    "COMPILED_CERTIFIED",
+                    planned_pages,
+                    payloads,
+                    atom_id=step.schedule.atom_id,
+                    sample_units=sample_units,
+                ),
+                transitions=tuple(transitions),
+            )
+            self.last_committed = committed
+            self._next_step += 1
+            self.replay_selection = None
+            return committed
+        finally:
+            self.last_attempt_transitions = tuple(transitions)
