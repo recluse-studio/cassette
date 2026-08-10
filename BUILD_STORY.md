@@ -4835,3 +4835,109 @@ directions, and the step found two real defects inside its own closeout — a fo
 and a custom-JSONL decode that checked shape but not action semantics — and repaired them rather
 than recording them as passes. Its acceptance boundary is the best in the queue: "The row ends at
 translation" is the sentence S16 and S17 were missing, written without anyone having to ask for it.
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 51 — 2026-08-10, S18, the evidence that changed the code, and the answer beneath the answer
+
+S18 reached me through a brief collapse of chronology. Drew asked whether we had already executed,
+reviewed, remediated, and committed the step. Then he withdrew the two artifacts he had just sent
+and asked whether an earlier pair had existed. I kept answering the history around his question
+instead of the question itself. He wanted one fact: had I seen one prior Kimi review and one prior
+Claude review before the pair now on screen? No. I should have said no. We went in a circle before
+he stopped it.
+
+Frustration entered. Then an apology entered, even though the useful correction was already clear.
+Drew attached the reviews again and declared them the reviews to assess. That small reset matters to
+this account. The repository could tell us which commits existed. It could not tell us which
+artifact he meant in a conversation where two review pairs had crossed. The only honest authority
+was the human clarification, and my first duty was to receive it without converting it into another
+explanation of why I had been confused.
+
+The two reviews did not agree in the simple way a green check suggests. Kimi K3 Max found one
+runtime defect: `to_wire_events(None)` raised Python's raw `TypeError` instead of Cassette's typed
+`INVALID_REQUEST`. I reproduced it. Then I widened the same boundary by one inch and found more:
+an object, a string, and a tuple were all iterable enough to pass as empty event streams, and the
+custom decoder had the same fault around its `records` member. Kimi had found the door. The defect
+occupied the frame.
+
+Opus 5 Max made two different claims. The exact counting claim was wrong. The four protocol commits
+did not appear in only two places; they also lived in the generator and the implementation record.
+The commits were not invented either. Each resolved at its upstream repository. Its Codex finding
+was not an implementation gap: Q76 says app-server must be mapped when app-server integration is
+used, and Cassette's S18 Codex route is the other branch, a Responses-compatible model provider for
+Codex. We had not used app-server. The choice did need to be written down so a later agent could not
+quietly reinterpret the conditional as an omission.
+
+Yet the center of Opus's first claim was sound. The fixture compared a generated local table with a
+handwritten local table. The hashes could be real and the test could still know nothing about the
+files at those hashes. Two copies agreeing is not provenance. It is typography with witnesses.
+Drew did not ask me to offer him a menu of possible remedies. He asked me to remediate S18 based on
+what I found. I therefore went to the exact commits.
+
+That changed the task. The OpenAI and Ollama OpenAPI documents matched the declared route families.
+The Hermes documentation and server route table matched its server contract. OpenClaw did not
+match the generated Gateway row. At the pinned v4 commit, `chat.send` requires an
+`idempotencyKey` inside `params`; Cassette supplied only the outer request ID. The HTTP model alias
+is `openclaw/main`, while the Gateway field is the raw `agentId`, `main`; Cassette sent the HTTP
+alias into the Gateway field. Most seriously, the event map emitted `session.operation`,
+`session.message`, and `session.tool` states that were not the pinned chat-event contract. The
+review had asked whether our evidence was reproducible. Reproducing it proved that part of the
+product was wrong.
+
+This is the progression worth keeping. Had I treated the evidence finding as a documentation
+problem, I would have added citations around a false implementation. Had I treated the review as
+an authority, I would also have added app-server work that S18 did not use. The correct move sat
+between them: reject the review's false particulars, retain its valid challenge, and follow that
+challenge until it touched the code.
+
+The repair stayed within the generated-map design. I added exact list guards on both event
+directions. I recorded ten complete upstream source files at four exact commits, with SHA-256
+digests, paths, routes, transports, and integration modes in
+`research/S18_PROTOCOL_EVIDENCE.json`. That record is evidence, not a second runtime authority;
+`tools/genschema.py` remains the map authority. The fixture now compares the generated map with
+the independent record, and an online replay rehashed every complete source file successfully.
+
+For OpenClaw Gateway v4, the generated request now carries the required inner
+`params.idempotencyKey` and the outer frame ID as an equality-checked mirror. It derives the raw
+Gateway agent ID from the explicit HTTP alias. Its native event surface now maps only the pinned
+`chat` states Cassette can preserve exactly: status, delta, final, and aborted, each with the
+required session key. Reasoning, tool, usage, and full-error events without an exact mapping return
+`CAPABILITY_MISMATCH`. The old map had made a larger claim. The new map is smaller and true.
+
+Two of my own checks tried to lie before the product did. In the first source-digest replay, I named
+a zsh loop variable `path`. In zsh, `path` is tied to `PATH`; the loop erased command lookup and
+then reported that `curl`, `shasum`, and `awk` did not exist. Renaming the variable to
+`source_path` exposed a second quoting error in my raw-URL construction. The third run was the first
+valid run, and all ten digests matched. None of the first two results said anything about the
+evidence.
+
+Then the first mutation run said the encoder-list mutant survived. It had not. Pytest was launched
+from the Cassette checkout and imported the accepted adapter instead of the disposable copy. I had
+built a mutation harness that tested the unmutated code. I discarded the result, moved the
+disposable tree to Trash, reran from inside a fresh mutation root, and required Python to import
+that tree. Five mutants then died independently: encoder list shape, decoder list shape, required
+Gateway session field, mirrored idempotency equality, and generated-map agreement with the evidence
+record. The harness error belongs here because a mutation claim without import provenance is the
+same species of mistake as a protocol claim without source provenance.
+
+One last piece of syntax tried its luck. My first local commit command passed `\n` as literal text
+inside the commit body. The files were correct, but the ledger could not see `Reused instead of
+authored` or `Deleted` at the start of their own lines. The commit was local and unpublished, so I
+amended only its message before recording its hash. The repair is
+`589be7cf42fa3484b2342935c38d6c3e29fcdf28`.
+
+The accepted tree passed 34 of 34 tests on this Mac in 102.92 seconds. The ledger reported zero
+violations, 5,846 product lines, 4,594 test lines, 498 tool lines, 95 generated lines, five exact
+dependencies, one process, and one Python runtime. No mutation tree or cartridge image remained
+mounted. Seventy-nine gibibytes remained free.
+
+What happened between Drew and me was not overhead around that result. It was the route to it. He
+forced the chronology back into focus. The reviewers split the perimeter: one found the runtime
+shape, one asked the evidence question while overstating its particulars. I checked both, disagreed
+where the files disagreed, and then let the pinned hardware-and-code-level facts reopen the code.
+The useful unit was not consensus. It was a chain in which every participant could be wrong, every
+claim had somewhere concrete to land, and the final map became narrower because reality was
+narrower. S18 closes again on that basis.
