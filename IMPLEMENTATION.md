@@ -865,11 +865,12 @@ steps:
     title: Scheduler, leases, negotiation
     env: any
     files: [broker.py]
+    discovered_scope: "tests/test_s17_broker.py is the single executable fixture for Q65/Q77. No new on-disk authority, dependency, schema, adapter, pager behavior, or model-specific branch is introduced. broker.py remains the one Q78 broker authority above 800 physical lines because negotiation, queue admission, leases, activation, cache identity, cancellation, and canonical operation events meet at one run-admission boundary; splitting them would create a second scheduler or operation authority."
     invariants: [Q65 acceptance (competing clients, switches, no stale cache), Q77 acceptance (exact pre-admission accept/reject)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S16]
-    status: TODO
+    status: IN_PROGRESS
 
   - id: S18
     title: Named-agent adapters

@@ -1,9 +1,10 @@
-# broker.py — durable source-to-callable operations and canonical Q6 events (Q5/Q6/Q52); depends on errors.py, schema, sources.py, store.py.
-"""Own the one operation log and drive preparation without reading cartridge extents."""
+# broker.py — canonical operations, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on errors.py, schema, sources.py, store.py.
+"""Own the operation log and the single broker admission and dispatch authority."""
 
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -50,6 +51,37 @@ _OPERATION_ID = re.compile(r"op-[0-9a-f]{64}")
 _DIGEST = re.compile(r"blake3:[0-9a-f]{64}")
 _SOURCE_DIGEST = re.compile(r"(?:blake3|sha256):[0-9a-f]{64}|git-sha1:[0-9a-f]{40}")
 _MAX_RECORD_BYTES = 4 * 1024 * 1024
+_MAX_TEXT = 512
+_MAX_CAPABILITY_ITEMS = 64
+_MAX_NEGOTIATIONS = 1024
+_MAX_CLIENT_QUEUE = 8
+_MAX_QUEUE = 64
+_MAX_COST = 16
+_AGE_PROMOTION = 4
+_Q77_FIELDS = (
+    "cassette_protocol", "adapter_version", "model_revision", "source_parent",
+    "execution_mode", "plan_id", "performance_tier", "training_tier", "modalities",
+    "input_limits", "context_limit", "reasoning_fields", "reasoning_history_policy",
+    "tool_schema", "structured_output", "sampling", "streaming", "cancellation",
+    "conversation_state_contract",
+)
+_PROFILE_FIELDS = frozenset((*_Q77_FIELDS, "precision", "semantic_state", "field_provenance"))
+_NEGOTIATED_FIELDS = frozenset((*_Q77_FIELDS, "field_provenance", "negotiation_id"))
+_TEXT_FIELDS = frozenset({
+    "cassette_protocol", "adapter_version", "execution_mode", "performance_tier",
+    "training_tier", "reasoning_history_policy", "conversation_state_contract", "precision",
+})
+_DIGEST_FIELDS = frozenset({"model_revision", "source_parent", "plan_id", "semantic_state"})
+_SEQUENCE_FIELDS = frozenset({"modalities", "reasoning_fields", "sampling"})
+_BOOLEAN_FIELDS = frozenset({"structured_output", "streaming", "cancellation"})
+_PROVENANCE_STATUSES = frozenset({
+    "EXACT", "BEST_EFFORT", "PROVIDER_MANAGED", "UNKNOWN", "UNSUPPORTED",
+})
+_FOUNDATIONAL_FIELDS = frozenset({
+    "cassette_protocol", "adapter_version", "model_revision", "source_parent",
+    "execution_mode", "plan_id", "performance_tier", "training_tier", "precision",
+    "semantic_state",
+})
 _RECORD_FIELDS = frozenset({
     "version", "operation_id", "request_digest", "kind", "target", "phase", "state",
     "progress", "checkpoint", "result", "error", "cancel_requested", "pause_requested",
@@ -117,9 +149,115 @@ class AcquisitionContext:
     prepare: Callable[[ResolvedSource, tuple[PartialState, ...], str], object]
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledLease:
+    """One broker-issued lease; equality with the live table is its authority."""
+
+    lease_id: str
+    lease_epoch: int
+    operation_id: str
+    kind: str
+    client_id: str
+    context_id: str
+    negotiation_id: str
+    model_revision: str
+    plan_id: str
+    cache_key: tuple[str, str, str, str]
+
+
+@dataclass(slots=True)
+class _QueuedRun:
+    operation_id: str
+    client_id: str
+    context_id: str
+    request: dict
+    lease_kind: str
+    cost: int
+    negotiation: dict
+    profile_id: str
+    cache_key: tuple[str, str, str, str]
+    pages: tuple[str, ...]
+    worker: Callable[[ScheduledLease], object]
+    future: asyncio.Future
+    enqueued_turn: int
+
+
 class _ControlStop(Exception):
     def __init__(self, action: str):
         self.action = action
+
+
+def _json_copy(value: object, object_id: str, field: str) -> object:
+    """Return a detached canonical JSON value after enforcing the broker byte bound."""
+
+    _json_digest(value, object_id, field)
+    return json.loads(canonical_bytes(value), object_pairs_hook=_unique_object)
+
+
+def _text(value: object, object_id: str, field: str) -> str:
+    if not isinstance(value, str) or not value or len(value) > _MAX_TEXT:
+        _reject("INVALID_REQUEST", object_id, f"{field} must be 1..{_MAX_TEXT} characters")
+    return value
+
+
+def _strings(value: object, object_id: str, field: str) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or len(value) > _MAX_CAPABILITY_ITEMS
+        or any(not isinstance(item, str) or not item or len(item) > _MAX_TEXT for item in value)
+        or value != sorted(set(value))
+    ):
+        _reject("INVALID_REQUEST", object_id, f"{field} must be a sorted unique bounded string array")
+    return value
+
+
+def _limits(value: object, object_id: str, field: str) -> dict[str, int]:
+    if (
+        not isinstance(value, dict)
+        or not value
+        or len(value) > _MAX_CAPABILITY_ITEMS
+        or list(value) != sorted(value)
+        or any(not isinstance(name, str) or not name or len(name) > _MAX_TEXT for name in value)
+        or any(type(limit) is not int or not 0 <= limit < 2**64 for limit in value.values())
+    ):
+        _reject("INVALID_REQUEST", object_id, f"{field} must be a sorted bounded unsigned-integer object")
+    return value
+
+
+def _profile(value: object, object_id: str) -> dict:
+    """Validate one immutable callable profile and its field-level authority."""
+
+    if not isinstance(value, dict) or set(value) != _PROFILE_FIELDS:
+        _reject("INVALID_REQUEST", object_id, "capability profile has an incorrect field set")
+    for field in _TEXT_FIELDS:
+        _text(value[field], object_id, field)
+    for field in _DIGEST_FIELDS:
+        _exact_digest(value[field], object_id, field)
+    for field in _SEQUENCE_FIELDS:
+        _strings(value[field], object_id, field)
+    for field in _BOOLEAN_FIELDS:
+        if type(value[field]) is not bool:
+            _reject("INVALID_REQUEST", object_id, f"{field} must be boolean")
+    if type(value["context_limit"]) is not int or not 1 <= value["context_limit"] < 2**64:
+        _reject("INVALID_REQUEST", object_id, "context_limit must be a positive unsigned integer")
+    _limits(value["input_limits"], object_id, "input_limits")
+    if value["tool_schema"] is not None:
+        _exact_digest(value["tool_schema"], object_id, "tool_schema")
+    provenance = value["field_provenance"]
+    expected = frozenset((*_Q77_FIELDS, "precision", "semantic_state"))
+    if not isinstance(provenance, dict) or set(provenance) != expected:
+        _reject("INVALID_REQUEST", object_id, "field_provenance must account for every profile field")
+    for field, record in provenance.items():
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"status", "evidence"}
+            or record["status"] not in _PROVENANCE_STATUSES
+        ):
+            _reject("INVALID_REQUEST", object_id, f"field_provenance.{field} is malformed")
+        _exact_digest(record["evidence"], object_id, f"field_provenance.{field}.evidence")
+    if any(provenance[field]["status"] != "EXACT" for field in _FOUNDATIONAL_FIELDS):
+        _reject("CAPABILITY_MISMATCH", object_id, "callable identity and execution fields must be EXACT")
+    return _json_copy(value, object_id, "capability profile")
 
 
 def _reject(
@@ -305,7 +443,14 @@ def _partials_from(records: object, revision: ResolvedSource, object_id: str) ->
 class CanonicalBroker:
     """Persist Q6 operations and execute each Q5 transition from its last durable phase."""
 
-    def __init__(self, operation_log: str | Path):
+    def __init__(self, operation_log: str | Path, *, cache_page_limit: int = 64):
+        if type(cache_page_limit) is not int or not 1 <= cache_page_limit <= 4096:
+            _reject(
+                "INVALID_REQUEST",
+                "broker:cache",
+                "cache_page_limit must be an integer in 1..4096",
+                invariant="Q65: bounded cache residency",
+            )
         self.operation_log = Path(operation_log)
         self._owner_fd: int | None = None
         try:
@@ -339,6 +484,30 @@ class CanonicalBroker:
         self._execution_locks: dict[str, asyncio.Lock] = {}
         self._control_signals: dict[str, asyncio.Event] = {}
         self._active: dict[str, bool] = {}
+        self._profiles: dict[str, dict] = {}
+        self._profile_activators: dict[str, Callable[[ScheduledLease, dict], object]] = {}
+        self._revision_profiles: dict[str, list[str]] = {}
+        self._aliases: dict[str, str] = {}
+        self._negotiation_sequence = 0
+        self._negotiations: dict[str, dict] = {}
+        self._queues: dict[str, deque[_QueuedRun]] = {}
+        self._scheduler_lock = asyncio.Lock()
+        self._client_order: list[str] = []
+        self._deficits: dict[str, int] = {}
+        self._queue_cursor = 0
+        self._scheduler_turn = 0
+        self._scheduler_task: asyncio.Task | None = None
+        self._scheduled: dict[str, asyncio.Future] = {}
+        self._leases: dict[str, ScheduledLease] = {}
+        self._lease_epoch = 0
+        self._active_cache_key: tuple[str, str, str, str] | None = None
+        self._cache_page_limit = cache_page_limit
+        self._cache: dict[tuple[tuple[str, str, str, str], str], int] = {}
+        self._cache_pins: dict[tuple[tuple[str, str, str, str], str], set[str]] = {}
+        self._cache_clock = 0
+        self._page_churn = 0
+        self._switches = 0
+        self._age_promotions = 0
 
     def close(self) -> None:
         """Release this process's sole authority over the canonical operation log."""
@@ -346,6 +515,14 @@ class CanonicalBroker:
         descriptor = self._owner_fd
         if descriptor is None:
             return
+        if self._scheduler_task is not None or self._leases or any(self._queues.values()):
+            _reject(
+                "OVERLOADED",
+                f"broker:{self.operation_log}",
+                "broker cannot close while scheduled work or a lease remains live",
+                invariant="Q65: leases end before broker ownership",
+                retryability="retryable",
+            )
         self._owner_fd = None
         try:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
@@ -378,6 +555,584 @@ class CanonicalBroker:
         _json_digest(request, request["idempotency_key"], "request")
         identity = digest_bytes(canonical_bytes({"idempotency_key": request["idempotency_key"]}))
         return "op-" + identity[7:]
+
+    def register_capability(
+        self,
+        model_ref: str,
+        profile: dict,
+        activate: Callable[[ScheduledLease, dict], object],
+    ) -> str:
+        """Register immutable capability data and bind one mutable alias to it."""
+
+        model_ref = _text(model_ref, "capability:registration", "model_ref")
+        if not callable(activate):
+            _reject("INVALID_REQUEST", model_ref, "activate must be callable", invariant="Q65: SWITCH lease")
+        profile = _profile(profile, model_ref)
+        exact_revision_ref = _DIGEST.fullmatch(model_ref) is not None
+        if exact_revision_ref and model_ref != profile["model_revision"]:
+            _reject(
+                "IDENTITY_MISMATCH",
+                model_ref,
+                "an immutable revision reference cannot alias another revision",
+                invariant="Q77: exact model revision discovery",
+            )
+        profile_id = digest_bytes(canonical_bytes(profile))
+        existing = self._profiles.get(profile_id)
+        if existing is None:
+            self._profiles[profile_id] = profile
+            self._profile_activators[profile_id] = activate
+            self._revision_profiles.setdefault(profile["model_revision"], []).append(profile_id)
+            self._revision_profiles[profile["model_revision"]].sort()
+        elif existing != profile or self._profile_activators[profile_id] is not activate:
+            _reject(
+                "IDEMPOTENCY_CONFLICT",
+                profile_id,
+                "an immutable capability profile cannot change its activation authority",
+                invariant="Q77: immutable callable profile",
+            )
+        current = self._aliases.get(model_ref)
+        if not exact_revision_ref and current != profile_id:
+            self._aliases[model_ref] = profile_id
+            self._negotiations = {
+                identity: entry for identity, entry in self._negotiations.items()
+                if entry["model_ref"] != model_ref or entry["operation_id"] is not None
+            }
+        return profile_id
+
+    def capabilities(self) -> tuple[dict, ...]:
+        """Expose bounded machine-readable profiles with their current model references."""
+
+        aliases = {}
+        for model_ref, profile_id in self._aliases.items():
+            aliases.setdefault(profile_id, []).append(model_ref)
+        records = []
+        for profile_id in sorted(self._profiles):
+            profile = self._profiles[profile_id]
+            records.append({
+                "profile_id": profile_id,
+                "model_refs": sorted({profile["model_revision"], *aliases.get(profile_id, [])}),
+                "capability": _json_copy(profile, profile_id, "capability profile"),
+            })
+        return tuple(records)
+
+    def negotiate(self, requested: dict) -> dict:
+        """Return one immutable exact subset, or reject before queue or lease admission."""
+
+        object_id = "negotiation:unidentified"
+        if not isinstance(requested, dict) or "model_ref" not in requested:
+            _reject("INVALID_REQUEST", object_id, "negotiation requires model_ref")
+        model_ref = _text(requested["model_ref"], object_id, "model_ref")
+        object_id = f"negotiation:{model_ref}"
+        allowed = frozenset({"model_ref", *_Q77_FIELDS})
+        if not set(requested) <= allowed:
+            _reject("INVALID_REQUEST", object_id, "negotiation contains an unknown field")
+        _json_digest(requested, object_id, "requested capability")
+        self._validate_requested(requested, object_id)
+        profile_ids = self._resolve_profiles(model_ref, object_id)
+        matches = [
+            profile_id for profile_id in profile_ids
+            if self._supports(self._profiles[profile_id], requested)
+        ]
+        if len(matches) != 1:
+            detail = "requested capability is unsupported" if not matches else "requested capability is ambiguous"
+            _reject("CAPABILITY_MISMATCH", object_id, detail, invariant="Q77: exact pre-admission negotiation")
+        if len(self._negotiations) >= _MAX_NEGOTIATIONS:
+            _reject(
+                "OVERLOADED",
+                object_id,
+                "pending negotiation table is full",
+                invariant="Q77: bounded pre-admission state",
+                retryability="retryable",
+            )
+        profile_id = matches[0]
+        profile = self._profiles[profile_id]
+        capability = self._selected_capability(profile, requested)
+        self._negotiation_sequence += 1
+        material = {
+            "profile_id": profile_id,
+            "model_ref": model_ref,
+            "sequence": self._negotiation_sequence,
+            "requested_digest": digest_bytes(canonical_bytes(requested)),
+            "capability": capability,
+        }
+        negotiation_id = digest_bytes(canonical_bytes(material))
+        record = {**capability, "negotiation_id": negotiation_id}
+        self._negotiations.setdefault(negotiation_id, {
+            **material,
+            "record": record,
+            "cache_key": (
+                profile["model_revision"], profile["plan_id"], profile["precision"],
+                profile["semantic_state"],
+            ),
+            "operation_id": None,
+        })
+        return _json_copy(record, negotiation_id, "negotiated capability")
+
+    async def dispatch(
+        self,
+        client_id: str,
+        context_id: str,
+        request: dict,
+        negotiation: dict,
+        lease_kind: str,
+        worker: Callable[[ScheduledLease], object],
+        *,
+        cost: int = 1,
+        pages: tuple[str, ...] = (),
+    ) -> dict:
+        """Admit one negotiated operation to the sole bounded Q65 scheduler."""
+
+        client_id = _text(client_id, "scheduler:client", "client_id")
+        context_id = _text(context_id, f"scheduler:{client_id}", "context_id")
+        if lease_kind not in {"EXEC", "WRITE"}:
+            _reject("INVALID_REQUEST", client_id, "lease_kind must be EXEC or WRITE")
+        if type(cost) is not int or not 1 <= cost <= _MAX_COST:
+            _reject("INVALID_REQUEST", client_id, f"cost must be an integer in 1..{_MAX_COST}")
+        if not callable(worker):
+            _reject("INVALID_REQUEST", client_id, "worker must be callable")
+        pages = self._page_ids(pages, client_id)
+        operation_id = self.operation_id(request)
+        path_exists = self._path(operation_id).exists()
+        if path_exists:
+            operation = self.issue(request)
+            if operation["state"] in _TERMINAL_STATES or operation["state"] == "PAUSED":
+                return operation
+        entry = self._negotiation(negotiation, operation_id)
+        capability = entry["record"]
+        arguments = request.get("arguments")
+        if (
+            request.get("target") != capability["model_revision"]
+            or not isinstance(arguments, dict)
+            or arguments.get("negotiation_id") != capability["negotiation_id"]
+            or arguments.get("context_ref") != context_id
+        ):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                operation_id,
+                "request target, negotiation, or context differs from pre-admission",
+                invariant="Q77: stable run identity",
+            )
+        duplicate = None
+        async with self._scheduler_lock:
+            entry = self._negotiation(negotiation, operation_id)
+            duplicate = self._scheduled.get(operation_id)
+            if duplicate is not None:
+                self.issue(request)
+            else:
+                bound = entry["operation_id"]
+                if bound is not None and bound != operation_id:
+                    _reject(
+                        "CAPABILITY_MISMATCH",
+                        operation_id,
+                        "one negotiation cannot admit two operations",
+                        invariant="Q77: one immutable negotiation per run",
+                    )
+                queue = self._queues.get(client_id)
+                if (
+                    self._queued_count() >= _MAX_QUEUE
+                    or (queue is not None and len(queue) >= _MAX_CLIENT_QUEUE)
+                ):
+                    _reject(
+                        "OVERLOADED",
+                        operation_id,
+                        "scheduler queue bound was reached before operation admission",
+                        invariant="Q65: bounded client queues",
+                        retryability="retryable",
+                    )
+                if not path_exists:
+                    self.issue(request)
+                entry["operation_id"] = operation_id
+                loop = asyncio.get_running_loop()
+                duplicate = loop.create_future()
+                work = _QueuedRun(
+                    operation_id, client_id, context_id,
+                    _json_copy(request, operation_id, "scheduled request"), lease_kind, cost,
+                    _json_copy(capability, operation_id, "negotiated capability"),
+                    entry["profile_id"], entry["cache_key"], pages, worker, duplicate,
+                    self._scheduler_turn,
+                )
+                if client_id not in self._queues:
+                    self._queues[client_id] = deque()
+                    self._client_order.append(client_id)
+                    self._deficits[client_id] = 0
+                self._queues[client_id].append(work)
+                self._scheduled[operation_id] = duplicate
+                self._prefetch(entry["cache_key"], pages)
+                if self._scheduler_task is None:
+                    self._scheduler_task = asyncio.create_task(self._drain())
+        return await asyncio.shield(duplicate)
+
+    def scheduler_status(self) -> dict:
+        """Return the bounded live scheduler, lease, activation, and cache state."""
+
+        return {
+            "draining": self._scheduler_task is not None,
+            "queues": {client: len(queue) for client, queue in sorted(self._queues.items()) if queue},
+            "leases": [self._lease_record(lease) for lease in self._leases.values()],
+            "active_cache_key": None if self._active_cache_key is None else list(self._active_cache_key),
+            "cache": [
+                {
+                    "cache_key": list(cache_key),
+                    "page": page,
+                    "pinned": bool(self._cache_pins.get((cache_key, page))),
+                }
+                for cache_key, page in sorted(self._cache)
+            ],
+            "page_churn": self._page_churn,
+            "switches": self._switches,
+            "age_promotions": self._age_promotions,
+        }
+
+    def cache_contains(self, lease: ScheduledLease, page_digest: str) -> bool:
+        """Resolve a page only through the exact live revision-plan-precision-semantic key."""
+
+        lease = self._live_lease(lease)
+        _exact_digest(page_digest, lease.operation_id, "page digest")
+        key = (lease.cache_key, page_digest)
+        return key in self._cache and lease.lease_id in self._cache_pins.get(key, set())
+
+    @staticmethod
+    def _validate_requested(requested: dict, object_id: str) -> None:
+        for field, value in requested.items():
+            if field == "model_ref":
+                continue
+            if field in _TEXT_FIELDS:
+                _text(value, object_id, field)
+            elif field in _DIGEST_FIELDS:
+                _exact_digest(value, object_id, field)
+            elif field in _SEQUENCE_FIELDS:
+                _strings(value, object_id, field)
+            elif field in _BOOLEAN_FIELDS:
+                if type(value) is not bool:
+                    _reject("INVALID_REQUEST", object_id, f"{field} must be boolean")
+            elif field == "context_limit":
+                if type(value) is not int or not 1 <= value < 2**64:
+                    _reject("INVALID_REQUEST", object_id, "context_limit must be a positive unsigned integer")
+            elif field == "input_limits":
+                _limits(value, object_id, field)
+            elif field == "tool_schema":
+                if value is not None:
+                    _exact_digest(value, object_id, field)
+            else:
+                _reject("INVALID_REQUEST", object_id, f"{field} is not requestable")
+
+    def _resolve_profiles(self, model_ref: str, object_id: str) -> list[str]:
+        alias = self._aliases.get(model_ref)
+        if alias is not None:
+            return [alias]
+        profiles = self._revision_profiles.get(model_ref)
+        if profiles:
+            return list(profiles)
+        _reject("CAPABILITY_MISMATCH", object_id, "model_ref does not resolve to a callable profile")
+
+    @staticmethod
+    def _supports(profile: dict, requested: dict) -> bool:
+        for field, desired in requested.items():
+            if field == "model_ref":
+                continue
+            if profile["field_provenance"][field]["status"] != "EXACT":
+                return False
+            available = profile[field]
+            if field in _SEQUENCE_FIELDS:
+                if not set(desired) <= set(available):
+                    return False
+            elif field in _BOOLEAN_FIELDS:
+                if desired and not available:
+                    return False
+            elif field == "tool_schema":
+                if desired is not None and desired != available:
+                    return False
+            elif field == "input_limits":
+                if any(name not in available or limit > available[name] for name, limit in desired.items()):
+                    return False
+            elif field == "context_limit":
+                if desired > available:
+                    return False
+            elif desired != available:
+                return False
+        return True
+
+    @staticmethod
+    def _selected_capability(profile: dict, requested: dict) -> dict:
+        selected = {field: profile[field] for field in _Q77_FIELDS}
+        for field in (*_SEQUENCE_FIELDS, *_BOOLEAN_FIELDS, "tool_schema", "input_limits", "context_limit"):
+            if field in requested:
+                selected[field] = requested[field]
+        selected["field_provenance"] = {
+            field: profile["field_provenance"][field] for field in _Q77_FIELDS
+        }
+        return _json_copy(selected, profile["model_revision"], "selected capability")
+
+    def _negotiation(self, value: object, operation_id: str) -> dict:
+        if not isinstance(value, dict) or set(value) != _NEGOTIATED_FIELDS:
+            _reject("CAPABILITY_MISMATCH", operation_id, "negotiation record has an incorrect field set")
+        negotiation_id = value.get("negotiation_id")
+        if not isinstance(negotiation_id, str) or _DIGEST.fullmatch(negotiation_id) is None:
+            _reject("CAPABILITY_MISMATCH", operation_id, "negotiation identity is malformed")
+        entry = self._negotiations.get(negotiation_id)
+        if entry is None or entry["record"] != value:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                operation_id,
+                "negotiation was not issued by this broker or its bytes changed",
+                invariant="Q77: broker-issued immutable negotiation",
+            )
+        return entry
+
+    def _page_ids(self, pages: object, object_id: str) -> tuple[str, ...]:
+        if (
+            not isinstance(pages, tuple)
+            or len(pages) > self._cache_page_limit
+            or list(pages) != sorted(set(pages))
+            or any(not isinstance(page, str) or _DIGEST.fullmatch(page) is None for page in pages)
+        ):
+            _reject(
+                "MEMORY_BUDGET_EXCEEDED",
+                object_id,
+                "scheduled pages must be a sorted unique tuple within the cache-page bound",
+                invariant="Q65: bounded page churn",
+            )
+        return pages
+
+    def _queued_count(self) -> int:
+        return sum(len(queue) for queue in self._queues.values())
+
+    async def _drain(self) -> None:
+        while True:
+            async with self._scheduler_lock:
+                if self._queued_count() == 0:
+                    self._reset_scheduler()
+                    return
+                work = self._select()
+            try:
+                result = await self._run_scheduled(work)
+            except asyncio.CancelledError:
+                if not work.future.done():
+                    work.future.cancel()
+                raise
+            except CassetteError as error:
+                record = self._load(work.operation_id)
+                result = self._operation(record) if record["state"] in _TERMINAL_STATES else self._operation(
+                    self._failed(record, error)
+                )
+            except Exception as error:
+                failure = CassetteError(
+                    "CAPABILITY_MISMATCH",
+                    work.operation_id,
+                    "Q65/Q77: scheduled work remains one typed operation",
+                    "terminal",
+                    f"scheduler raised {type(error).__name__}",
+                )
+                result = self._operation(self._failed(self._load(work.operation_id), failure))
+            async with self._scheduler_lock:
+                self._scheduled.pop(work.operation_id, None)
+                if result["state"] in _TERMINAL_STATES:
+                    self._negotiations.pop(work.negotiation["negotiation_id"], None)
+                if not work.future.done():
+                    work.future.set_result(result)
+                if self._queued_count() == 0:
+                    self._reset_scheduler()
+                    return
+
+    def _reset_scheduler(self) -> None:
+        self._queues.clear()
+        self._client_order.clear()
+        self._deficits.clear()
+        self._queue_cursor = 0
+        self._scheduler_task = None
+
+    def _select(self) -> _QueuedRun:
+        while True:
+            client_count = len(self._client_order)
+            for _ in range(client_count):
+                client = self._client_order[self._queue_cursor % client_count]
+                self._queue_cursor = (self._queue_cursor + 1) % client_count
+                queue = self._queues[client]
+                if not queue:
+                    continue
+                self._deficits[client] += 1
+                work = queue[0]
+                promoted = self._scheduler_turn - work.enqueued_turn >= _AGE_PROMOTION
+                if work.cost <= self._deficits[client] or promoted:
+                    queue.popleft()
+                    if promoted and work.cost > self._deficits[client]:
+                        self._age_promotions += 1
+                        self._deficits[client] = 0
+                    else:
+                        self._deficits[client] -= work.cost
+                    self._scheduler_turn += 1
+                    return work
+            self._scheduler_turn += 1
+
+    async def _run_scheduled(self, work: _QueuedRun) -> dict:
+        operation = self.status(work.operation_id)
+        if operation["state"] in _TERMINAL_STATES or operation["state"] == "PAUSED":
+            return operation
+        stopped = await self._activate(work)
+        if stopped is not None:
+            return stopped
+        operation = self.status(work.operation_id)
+        if operation["state"] in _TERMINAL_STATES or operation["state"] == "PAUSED":
+            return operation
+        self._prefetch(work.cache_key, work.pages)
+        if any((work.cache_key, page) not in self._cache for page in work.pages):
+            _reject(
+                "MEMORY_BUDGET_EXCEEDED",
+                work.operation_id,
+                "required pages do not fit after the prior lease quiesced",
+                invariant="Q65: pinned pages are not evicted",
+            )
+        lease = self._grant(work, work.lease_kind)
+        self._pin(lease, work.pages)
+
+        async def execute_worker():
+            value = work.worker(lease)
+            value = await value if inspect.isawaitable(value) else value
+            if not isinstance(value, dict):
+                _reject("INVALID_REQUEST", work.operation_id, "scheduled worker must return one result object")
+            if work.lease_kind == "WRITE":
+                boundary = value.get("committed_boundary")
+                if not isinstance(boundary, str) or _DIGEST.fullmatch(boundary) is None:
+                    _reject(
+                        "CAPABILITY_MISMATCH",
+                        work.operation_id,
+                        "WRITE work must end at one immutable committed_boundary",
+                        invariant="Q65: training yields only at a committed step boundary",
+                    )
+            return {
+                "client_id": work.client_id,
+                "context_id": work.context_id,
+                "negotiated_capability": work.negotiation,
+                "value": value,
+            }
+
+        try:
+            return await self.execute(work.request, execute_worker)
+        finally:
+            self._unpin(lease, work.pages)
+            self._release(lease)
+
+    async def _activate(self, work: _QueuedRun) -> dict | None:
+        if self._active_cache_key == work.cache_key:
+            return None
+        lease = self._grant(work, "SWITCH")
+        try:
+            activator = self._profile_activators[work.profile_id]
+            try:
+                await self._controlled(
+                    work.operation_id,
+                    lambda: activator(lease, work.negotiation),
+                    cancellable=True,
+                )
+            except _ControlStop as stopped:
+                return self._operation(self._stop(self._load(work.operation_id), stopped.action))
+            self._active_cache_key = work.cache_key
+            self._switches += 1
+            return None
+        finally:
+            self._release(lease)
+
+    def _grant(self, work: _QueuedRun, kind: str) -> ScheduledLease:
+        if self._leases:
+            _reject(
+                "OVERLOADED",
+                work.operation_id,
+                f"{kind} lease cannot overlap {next(iter(self._leases.values())).kind}",
+                invariant="Q65: EXEC WRITE and SWITCH are mutually exclusive",
+                retryability="retryable",
+            )
+        lease_id = digest_bytes(canonical_bytes({
+            "operation_id": work.operation_id,
+            "kind": kind,
+            "negotiation_id": work.negotiation["negotiation_id"],
+            "lease_epoch": self._lease_epoch + 1,
+        }))
+        self._lease_epoch += 1
+        lease = ScheduledLease(
+            lease_id, self._lease_epoch, work.operation_id, kind, work.client_id, work.context_id,
+            work.negotiation["negotiation_id"], work.negotiation["model_revision"],
+            work.negotiation["plan_id"], work.cache_key,
+        )
+        self._leases[lease_id] = lease
+        return lease
+
+    def _release(self, lease: ScheduledLease) -> None:
+        lease = self._live_lease(lease)
+        if any(lease.lease_id in pins for pins in self._cache_pins.values()):
+            _reject(
+                "ROOT_INVALID",
+                lease.operation_id,
+                "lease cannot release while one cache page remains pinned",
+                invariant="Q65: pinned cache lifetime equals lease lifetime",
+            )
+        del self._leases[lease.lease_id]
+
+    def _live_lease(self, lease: object) -> ScheduledLease:
+        if not isinstance(lease, ScheduledLease) or self._leases.get(lease.lease_id) != lease:
+            _reject(
+                "INVALID_REQUEST",
+                getattr(lease, "operation_id", "lease:unidentified"),
+                "lease is absent, stale, or forged",
+                invariant="Q65: one live lease table",
+            )
+        return lease
+
+    @staticmethod
+    def _lease_record(lease: ScheduledLease) -> dict:
+        return {
+            "lease_id": lease.lease_id,
+            "lease_epoch": lease.lease_epoch,
+            "operation_id": lease.operation_id,
+            "kind": lease.kind,
+            "client_id": lease.client_id,
+            "context_id": lease.context_id,
+            "negotiation_id": lease.negotiation_id,
+            "model_revision": lease.model_revision,
+            "plan_id": lease.plan_id,
+            "cache_key": list(lease.cache_key),
+        }
+
+    def _prefetch(self, cache_key: tuple[str, str, str, str], pages: tuple[str, ...]) -> None:
+        admitted = set()
+        for page in pages:
+            key = (cache_key, page)
+            self._cache_clock += 1
+            if key in self._cache:
+                self._cache[key] = self._cache_clock
+                admitted.add(key)
+                continue
+            if len(self._cache) >= self._cache_page_limit:
+                candidates = [
+                    (age, candidate) for candidate, age in self._cache.items()
+                    if not self._cache_pins.get(candidate) and candidate not in admitted
+                ]
+                if not candidates:
+                    continue
+                _, victim = min(candidates)
+                self._cache.pop(victim)
+                self._cache_pins.pop(victim, None)
+                self._page_churn += 1
+            self._cache[key] = self._cache_clock
+            admitted.add(key)
+
+    def _pin(self, lease: ScheduledLease, pages: tuple[str, ...]) -> None:
+        lease = self._live_lease(lease)
+        for page in pages:
+            key = (lease.cache_key, page)
+            if key not in self._cache:
+                _reject("PAGE_CORRUPT", page, "scheduled page is not resident", invariant="Q65: cache pin")
+            self._cache_pins.setdefault(key, set()).add(lease.lease_id)
+
+    def _unpin(self, lease: ScheduledLease, pages: tuple[str, ...]) -> None:
+        lease = self._live_lease(lease)
+        for page in pages:
+            key = (lease.cache_key, page)
+            pins = self._cache_pins.get(key)
+            if pins is None or lease.lease_id not in pins:
+                _reject("ROOT_INVALID", page, "lease does not own the declared cache pin")
+            pins.remove(lease.lease_id)
+            if not pins:
+                self._cache_pins.pop(key)
 
     def issue(self, request: dict) -> dict:
         """Create one operation or return the exact operation already bound to its key."""
