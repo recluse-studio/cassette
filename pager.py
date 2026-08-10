@@ -22,6 +22,7 @@ _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
 _GIB = 1024**3
 _MAX_ITEMS = 1_048_576
 _MAX_U64 = 2**64 - 1
+_MAX_BINARY64_INTEGER = int(sys.float_info.max)
 # Admit the complete finite binary64 span, then stop exact-scalar growth at that boundary.
 _MAX_EXACT_BITS = sys.float_info.max_exp + sys.float_info.mant_dig
 _ZERO = (Fraction(0), Fraction(0))
@@ -1542,18 +1543,66 @@ def _runtime_record(
     return value
 
 
-def _runtime_items(value: object, object_id: str, label: str) -> tuple:
+def _runtime_items(
+    value: object,
+    object_id: str,
+    label: str,
+    *,
+    code: str = "CAPABILITY_MISMATCH",
+    invariant: str | None = None,
+) -> tuple:
     if not isinstance(value, (list, tuple)):
         raise _runtime_error(
-            "CAPABILITY_MISMATCH",
+            code,
             object_id,
-            f"Q20: immutable {label}",
+            invariant or f"Q20: immutable {label}",
             "requires an ordered collection",
         )
     return tuple(value)
 
 
-def _page_identity(value: object, object_id: str, invariant: str) -> str:
+def _runtime_identifier(
+    value: object,
+    object_id: str,
+    invariant: str,
+    label: str,
+    *,
+    code: str = "CAPABILITY_MISMATCH",
+) -> str:
+    if not isinstance(value, str) or not 1 <= len(value) <= 256:
+        raise _runtime_error(
+            code,
+            object_id,
+            invariant,
+            f"{label} requires a nonempty identifier of at most 256 characters",
+        )
+    return value
+
+
+def _runtime_u64(
+    value: object,
+    object_id: str,
+    invariant: str,
+    label: str,
+) -> int:
+    if type(value) is not int or not 0 <= value <= _MAX_U64:
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            invariant,
+            f"{label} requires an unsigned 64-bit integer",
+        )
+    return value
+
+
+def _digest_identity(
+    value: object,
+    object_id: str,
+    invariant: str,
+    label: str,
+    *,
+    code: str = "CAPABILITY_MISMATCH",
+) -> str:
     if (
         not isinstance(value, str)
         or not value.startswith("blake3:")
@@ -1561,12 +1610,29 @@ def _page_identity(value: object, object_id: str, invariant: str) -> str:
         or not set(value[7:]) <= _HEX
     ):
         raise _runtime_error(
+            code,
+            object_id,
+            invariant,
+            f"{label} requires one canonical BLAKE3 identity",
+        )
+    return value
+
+
+def _runtime_document_digest(
+    value: object,
+    object_id: str,
+    invariant: str,
+    label: str,
+) -> str:
+    try:
+        return _digest(value)
+    except CassetteError as exc:
+        raise _runtime_error(
             "CAPABILITY_MISMATCH",
             object_id,
             invariant,
-            "requires one canonical BLAKE3 page identity",
-        )
-    return value
+            f"{label} requires canonical JSON data: {exc.detail}",
+        ) from exc
 
 
 def _ordered_unique(values: Sequence[str]) -> tuple[str, ...]:
@@ -1594,22 +1660,28 @@ def _move_page(
 def _deadline(value: object, object_id: str) -> float | None:
     if value is None:
         return None
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value < 0
-    ):
+    if type(value) is int:
+        valid = 0 <= value <= _MAX_BINARY64_INTEGER
+    else:
+        valid = type(value) is float and math.isfinite(value) and value >= 0
+    if not valid:
         raise _runtime_error(
             "INVALID_REQUEST",
             object_id,
             "Q20: bounded page-readiness deadline",
-            "timeout_seconds must be a finite nonnegative number or None",
+            "timeout_seconds must be a finite nonnegative binary64-representable number or None",
         )
     return float(value)
 
 
 def _cancelled(cancel_event: asyncio.Event | None, object_id: str) -> None:
+    if cancel_event is not None and not isinstance(cancel_event, asyncio.Event):
+        raise _runtime_error(
+            "INVALID_REQUEST",
+            object_id,
+            "Q20: cancellation control",
+            "cancel_event must be an asyncio.Event or None",
+        )
     if cancel_event is not None and cancel_event.is_set():
         raise _runtime_error(
             "OPERATION_CANCELLED",
@@ -1753,12 +1825,19 @@ class NativePager:
         cancel_event: asyncio.Event | None = None,
     ) -> PageExecution:
         route = tuple(
-            _page_identity(
+            _digest_identity(
                 page_digest,
                 self._root_digest,
                 "Q20: source-native planned page identity",
+                "source-route page identity",
             )
-            for page_digest in source_route
+            for page_digest in _runtime_items(
+                source_route,
+                self._root_digest,
+                "source-native planned pages",
+                code="INVALID_REQUEST",
+                invariant="Q20: source-native planned pages",
+            )
         )
         if not route or len(route) != len(set(route)):
             raise _runtime_error(
@@ -1775,12 +1854,19 @@ class NativePager:
                 "NativePrefetch is required",
             )
         candidates = tuple(
-            _page_identity(
+            _digest_identity(
                 page_digest,
                 self._root_digest,
                 "Q64: native prefetch page identity",
+                "prefetch page identity",
             )
-            for page_digest in prefetch.page_candidates
+            for page_digest in _runtime_items(
+                prefetch.page_candidates,
+                self._root_digest,
+                "native prefetch page candidates",
+                code="INVALID_REQUEST",
+                invariant="Q64: native prefetch page candidates",
+            )
         )
         if len(candidates) != len(set(candidates)):
             raise _runtime_error(
@@ -1790,12 +1876,9 @@ class NativePager:
                 "prefetch candidates may not repeat",
             )
         if (
-            isinstance(prefetch.confidence, bool)
-            or not isinstance(prefetch.confidence, (int, float))
-            or not math.isfinite(prefetch.confidence)
+            type(prefetch.confidence) not in (int, float)
             or not 0 <= prefetch.confidence <= 1
-            or isinstance(prefetch.bytes, bool)
-            or not isinstance(prefetch.bytes, int)
+            or type(prefetch.bytes) is not int
             or not 0 <= prefetch.bytes <= _MAX_U64
         ):
             raise _runtime_error(
@@ -1887,10 +1970,28 @@ def _bind_runtime_steps(
             plan["plan_id"],
             "page-map step",
         )
+        row_step = _runtime_u64(
+            row["step"],
+            plan["plan_id"],
+            "Q20: certified schedule page relation",
+            "page-map step",
+        )
+        row_operation_id = _runtime_identifier(
+            row["operation_id"],
+            plan["plan_id"],
+            "Q20: certified schedule page relation",
+            "page-map operation_id",
+        )
+        row_atom_id = _runtime_identifier(
+            row["atom_id"],
+            plan["plan_id"],
+            "Q20: certified schedule page relation",
+            "page-map atom_id",
+        )
         if (
-            row["step"] != expected.step
-            or row["operation_id"] != expected.operation_id
-            or row["atom_id"] != expected.atom_id
+            row_step != expected.step
+            or row_operation_id != expected.operation_id
+            or row_atom_id != expected.atom_id
         ):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
@@ -1900,7 +2001,13 @@ def _bind_runtime_steps(
             )
         atom_claim = atom_claims[expected.atom_id]
         description_digest = _digest(atom_claim["description"])
-        if row["description_digest"] != description_digest:
+        row_description_digest = _digest_identity(
+            row["description_digest"],
+            expected.atom_id,
+            "Q20: immutable compiled description",
+            "page-map description identity",
+        )
+        if row_description_digest != description_digest:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 expected.atom_id,
@@ -1908,10 +2015,11 @@ def _bind_runtime_steps(
                 "page-map description identity differs from the certificate",
             )
         exact_pages = tuple(
-            _page_identity(
+            _digest_identity(
                 page_digest,
                 expected.atom_id,
                 "Q20: exact description page identity",
+                "exact description page identity",
             )
             for page_digest in _runtime_items(
                 row["exact_pages"], expected.atom_id, "exact description pages"
@@ -1946,10 +2054,11 @@ def _bind_runtime_steps(
                 "sample page unit",
             )
             pages = tuple(
-                _page_identity(
+                _digest_identity(
                     page_digest,
                     expected.atom_id,
                     "Q20: sampled correction page identity",
+                    "sampled correction page identity",
                 )
                 for page_digest in _runtime_items(
                     sample["page_digests"], expected.atom_id, "sampled correction pages"
@@ -1962,7 +2071,15 @@ def _bind_runtime_steps(
                     "Q20: sampled correction pages",
                     "every sample unit requires distinct pages",
                 )
-            sample_units.append((sample["unit"], pages))
+            sample_units.append((
+                _runtime_u64(
+                    sample["unit"],
+                    expected.atom_id,
+                    "Q20: certified sampling page catalog",
+                    "sample unit",
+                ),
+                pages,
+            ))
         if tuple(unit for unit, _ in sample_units) != expected_units:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
@@ -2103,12 +2220,18 @@ class CertifiedPager:
             plan["plan_id"],
             "page map",
         )
-        root_digest = _page_identity(
+        root_digest = _digest_identity(
             map_record["root_digest"],
             plan["plan_id"],
             "Q20: page-map root identity",
+            "page-map root identity",
         )
-        if _digest(map_record) != plan["page_map_digest"]:
+        if _runtime_document_digest(
+            map_record,
+            plan["plan_id"],
+            "Q20: immutable page-map identity",
+            "page map",
+        ) != plan["page_map_digest"]:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 plan["plan_id"],
@@ -2163,41 +2286,86 @@ class CertifiedPager:
                 "CompiledSelection is required",
             )
         step = self._steps[self._next_step]
-        if selection.certificate_digest != self._certificate_id:
+        certificate_digest = _digest_identity(
+            selection.certificate_digest,
+            self._certificate_id,
+            "Q64: compiled selection record",
+            "selection certificate_digest",
+            code="INVALID_REQUEST",
+        )
+        observed_condition = _runtime_identifier(
+            selection.observed_condition,
+            self._certificate_id,
+            "Q64: compiled selection record",
+            "selection observed_condition",
+            code="INVALID_REQUEST",
+        )
+        atom_id = _runtime_identifier(
+            selection.atom_id,
+            self._certificate_id,
+            "Q64: compiled selection record",
+            "selection atom_id",
+            code="INVALID_REQUEST",
+        )
+        if not isinstance(selection.service_face, tuple):
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                self._certificate_id,
+                "Q64: compiled selection record",
+                "selection service_face requires an ordered tuple",
+            )
+        service_face = tuple(
+            _runtime_identifier(
+                condition,
+                self._certificate_id,
+                "Q64: compiled selection record",
+                "selection service-face condition",
+                code="INVALID_REQUEST",
+            )
+            for condition in selection.service_face
+        )
+        description_digest = _digest_identity(
+            selection.description_digest,
+            self._certificate_id,
+            "Q64: compiled selection record",
+            "selection description_digest",
+            code="INVALID_REQUEST",
+        )
+        if certificate_digest != self._certificate_id:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
-                selection.certificate_digest or "certificate:missing",
+                certificate_digest,
                 "Q64: immutable compiled certificate",
                 "selection certificate differs from the admitted revision",
             )
-        if selection.observed_condition not in self._support:
+        if observed_condition not in self._support:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
-                selection.observed_condition or "condition:missing",
+                observed_condition,
                 "Q64: certified observation support",
                 "compiled selection rejects every off-support observation",
             )
         if (
-            self._cover.get(selection.observed_condition) != selection.atom_id
-            or selection.atom_id != step.schedule.atom_id
+            self._cover.get(observed_condition) != atom_id
+            or atom_id != step.schedule.atom_id
         ):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
-                selection.atom_id or "atom:missing",
+                atom_id,
                 "Q64: certified atom cover",
                 "the selected atom does not cover this condition at this schedule step",
             )
-        if selection.service_face != step.service_face:
+        if service_face != step.service_face:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
-                selection.atom_id,
+                atom_id,
                 "Q64: certified service face",
                 "the selection presents a forged or incomplete service face",
             )
-        if selection.description_digest != step.description_digest:
+        if description_digest != step.description_digest:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
-                selection.atom_id,
+                atom_id,
                 "Q20: immutable compiled description",
                 "selection description differs from the admitted certificate",
             )

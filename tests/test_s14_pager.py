@@ -218,6 +218,80 @@ def test_q20_q64_f3_page_readiness_replay_and_selection_failure(tmp_path):
         root_digest, pages
     )
 
+    def reject_page_map(candidate_map, invariant):
+        candidate_plan = copy.deepcopy(plan)
+        candidate_plan["page_map_digest"] = _digest(candidate_map)
+        _seal(candidate_plan, "plan_id")
+        with pytest.raises(CassetteError) as caught:
+            pager.CertifiedPager(
+                cartridge,
+                candidate_plan,
+                certificate,
+                evidence,
+                profile,
+                candidate_map,
+            )
+        assert caught.value.code == "CAPABILITY_MISMATCH"
+        assert caught.value.failed_invariant == invariant
+
+    for malformed_step in (False, 0.0):
+        candidate_map = copy.deepcopy(page_map)
+        candidate_map["steps"][0]["step"] = malformed_step
+        reject_page_map(
+            candidate_map,
+            "Q20: certified schedule page relation",
+        )
+    for malformed_unit in (False, 0.0):
+        candidate_map = copy.deepcopy(page_map)
+        candidate_map["steps"][0]["sample_units"][0]["unit"] = malformed_unit
+        reject_page_map(
+            candidate_map,
+            "Q20: certified sampling page catalog",
+        )
+    extra_unit_map = copy.deepcopy(page_map)
+    extra_unit_map["steps"][0]["sample_units"].append({
+        "unit": 2,
+        "page_digests": [pages["residual.one"]],
+    })
+    reject_page_map(
+        extra_unit_map,
+        "Q20: certified sampling page catalog",
+    )
+    forged_description_map = copy.deepcopy(page_map)
+    forged_description_map["steps"][0]["description_digest"] = digest_bytes(
+        b"S14 forged description identity"
+    )
+    reject_page_map(
+        forged_description_map,
+        "Q20: immutable compiled description",
+    )
+    noncanonical_map = copy.deepcopy(page_map)
+    noncanonical_map["steps"][0]["sample_units"][0]["page_digests"] = [object()]
+    with pytest.raises(CassetteError) as noncanonical:
+        pager.CertifiedPager(
+            cartridge,
+            plan,
+            certificate,
+            evidence,
+            profile,
+            noncanonical_map,
+        )
+    assert noncanonical.value.code == "CAPABILITY_MISMATCH"
+    assert noncanonical.value.failed_invariant == "Q20: immutable page-map identity"
+
+    illegal_states = {pages["description"]: "ABSENT"}
+    illegal_transitions = []
+    with pytest.raises(CassetteError) as illegal_transition:
+        pager._move_page(
+            illegal_states,
+            illegal_transitions,
+            pages["description"],
+            "HASHED",
+        )
+    assert illegal_transition.value.failed_invariant == "Q20: page-readiness state machine"
+    assert illegal_states == {pages["description"]: "ABSENT"}
+    assert illegal_transitions == []
+
     underread_plan = copy.deepcopy(plan)
     underread_certificate = copy.deepcopy(certificate)
     underread_evidence = copy.deepcopy(evidence)
@@ -244,6 +318,46 @@ def test_q20_q64_f3_page_readiness_replay_and_selection_failure(tmp_path):
 
     async def exercise():
         route = (pages["description"], pages["residual.zero"])
+        first_selection = _selection(certificate, evidence, 0)
+        await _assert_error(
+            "INVALID_REQUEST",
+            pager.NativePager(cartridge, root_digest).execute(
+                None, pager.NativePrefetch((), 0.0, 0)
+            ),
+            "Q20: source-native planned pages",
+        )
+        await _assert_error(
+            "INVALID_REQUEST",
+            pager.NativePager(cartridge, root_digest).execute(
+                route, pager.NativePrefetch(None, 0.0, 0)
+            ),
+            "Q64: native prefetch page candidates",
+        )
+        await _assert_error(
+            "INVALID_REQUEST",
+            pager.NativePager(cartridge, root_digest).execute(
+                route,
+                pager.NativePrefetch((), 0.0, 0),
+                cancel_event=object(),
+            ),
+            "Q20: cancellation control",
+        )
+        await _assert_error(
+            "INVALID_REQUEST",
+            pager.NativePager(cartridge, root_digest).execute(
+                route,
+                pager.NativePrefetch((), 0.0, 0),
+                timeout_seconds=10**400,
+            ),
+            "Q20: bounded page-readiness deadline",
+        )
+        await _assert_error(
+            "INVALID_REQUEST",
+            pager.NativePager(cartridge, root_digest).execute(
+                route, pager.NativePrefetch((), 10**400, 0)
+            ),
+            "Q64: bounded native prefetch record",
+        )
         baseline = await pager.NativePager(cartridge, root_digest).execute(
             route, pager.NativePrefetch((), 0.0, 0)
         )
@@ -344,10 +458,41 @@ def test_q20_q64_f3_page_readiness_replay_and_selection_failure(tmp_path):
             assert candidate.last_committed is None
             assert candidate.last_attempt_transitions == ()
 
+        malformed_selections = [
+            replace(first_selection, certificate_digest=["forged"]),
+            replace(first_selection, observed_condition=[]),
+            replace(first_selection, atom_id=["forged"]),
+            replace(first_selection, service_face=["condition.forged"]),
+            replace(first_selection, description_digest=["forged"]),
+        ]
+        for malformed_selection in malformed_selections:
+            candidate = pager.CertifiedPager(
+                cartridge, plan, certificate, evidence, profile, page_map
+            )
+            await _assert_error(
+                "INVALID_REQUEST",
+                candidate.execute(malformed_selection),
+                "Q64: compiled selection record",
+            )
+            assert candidate.next_step == 0
+            assert candidate.last_committed is None
+            assert candidate.last_attempt_transitions == ()
+
+        malformed_cancel = pager.CertifiedPager(
+            cartridge, plan, certificate, evidence, profile, page_map
+        )
+        await _assert_error(
+            "INVALID_REQUEST",
+            malformed_cancel.execute(first_selection, cancel_event=object()),
+            "Q20: cancellation control",
+        )
+        assert malformed_cancel.next_step == 0
+        assert malformed_cancel.last_committed is None
+        assert malformed_cancel.replay_selection == first_selection
+
         timed = pager.CertifiedPager(
             cartridge, plan, certificate, evidence, profile, page_map
         )
-        first_selection = _selection(certificate, evidence, 0)
         first_commit = await timed.execute(first_selection)
         timed_selection = _selection(certificate, evidence, 1)
         await _assert_error(
