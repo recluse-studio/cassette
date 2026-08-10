@@ -153,6 +153,21 @@ def _codec(value: object, name: str, *, encode: bool, adapter: "NamedAdapter") -
         return deepcopy(value)
     if name == "model":
         return adapter._wire_model(value) if encode else adapter._canonical_model(value)
+    if name == "agent":
+        prefix = adapter._definition.get("agent_prefix")
+        if not isinstance(prefix, str) or not prefix:
+            raise _fail("INVALID_REQUEST", adapter.name, "generated agent prefix is absent")
+        if encode:
+            wire_ref = adapter._wire_model(value)
+            if not isinstance(wire_ref, str) or not wire_ref.startswith(prefix) or wire_ref == prefix:
+                raise _fail(
+                    "CAPABILITY_MISMATCH", str(wire_ref),
+                    "the OpenClaw HTTP alias has no exact Gateway agent identifier",
+                )
+            return wire_ref[len(prefix):]
+        if not isinstance(value, str) or not value:
+            raise _fail("INVALID_REQUEST", adapter.name, "Gateway agent identifier is absent")
+        return adapter._canonical_model(prefix + value)
     if name == "json":
         if encode:
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
@@ -170,7 +185,10 @@ def _mapped(source: dict, target: dict, fields: list[dict], adapter: "NamedAdapt
         value = _pop(source, field["canonical"])
         if value is _MISSING:
             continue
-        _put(target, field["wire"], _codec(value, field["codec"], encode=True, adapter=adapter))
+        encoded = _codec(value, field["codec"], encode=True, adapter=adapter)
+        _put(target, field["wire"], encoded)
+        for mirror in field.get("mirrors", []):
+            _put(target, mirror, encoded)
 
 
 def _unmapped(source: dict, target: dict, fields: list[dict], adapter: "NamedAdapter") -> None:
@@ -178,6 +196,13 @@ def _unmapped(source: dict, target: dict, fields: list[dict], adapter: "NamedAda
         value = _pop(source, field["wire"])
         if value is _MISSING:
             continue
+        for mirror in field.get("mirrors", []):
+            mirrored = _pop(source, mirror)
+            if mirrored is _MISSING or mirrored != value:
+                raise _fail(
+                    "INVALID_REQUEST", adapter.name,
+                    "mirrored provider fields are absent or disagree",
+                )
         _put(target, field["canonical"], _codec(value, field["codec"], encode=False, adapter=adapter))
 
 
@@ -347,6 +372,8 @@ class NamedAdapter:
                 )
         _set_static(wire, selected["static"])
         _mapped(canonical, wire, selected["fields"], self)
+        if any(_get(wire, path) is _MISSING for path in selected["required_wire"]):
+            raise _fail("INVALID_REQUEST", self.name, "wire request lacks a required provider field")
         if canonical.get("generation") == {}:
             del canonical["generation"]
         if canonical:
@@ -372,6 +399,8 @@ class NamedAdapter:
         if not isinstance(work["body"], dict):
             raise _fail("INVALID_REQUEST", self.name, "wire body must be an object")
         work["headers"] = _headers(work["headers"], self.name, forbid_sensitive=False)
+        if any(_get(work, path) is _MISSING for path in selected["required_wire"]):
+            raise _fail("INVALID_REQUEST", self.name, "wire request lacks a required provider field")
         for mapping in selected["fields"]:
             path = mapping["wire"]
             if path[:1] != ["headers"] or _get(work, path) is not _MISSING:
@@ -598,6 +627,8 @@ class NamedAdapter:
         """Encode an ordered canonical event trace through one generated event map."""
         selected_name = surface or self._definition["default_surface"]
         selected = self._surface(selected_name)
+        if not isinstance(events, list):
+            raise _fail("INVALID_REQUEST", self.name, "canonical events must be an array")
         canonical = [_validated("run_event", event) for event in events]
         self._trace(canonical, f"{self.name}:{selected_name}")
         if selected_name == "canonical":
@@ -627,6 +658,8 @@ class NamedAdapter:
                 raise _fail("INVALID_REQUEST", self.name, "generated event map omitted canonical identity")
             if "payload" in event:
                 _put(frame, ["x_cassette", "payload"], event["payload"])
+            if any(_get(frame, path) is _MISSING for path in spec["required"]):
+                raise _fail("INVALID_REQUEST", self.name, "wire event lacks a required provider field")
             frames.append(frame)
         return {"encoding": event_format["encoding"], "frames": frames}
 
@@ -637,6 +670,8 @@ class NamedAdapter:
         if selected_name == "canonical":
             if not isinstance(wire, dict) or set(wire) != {"encoding", "records"} or wire.get("encoding") != "jsonl":
                 raise _fail("INVALID_REQUEST", self.name, "custom events require JSONL records")
+            if not isinstance(wire["records"], list):
+                raise _fail("INVALID_REQUEST", self.name, "custom event records must be an array")
             result = [_validated("run_event", event) for event in wire["records"]]
             self._trace(result, self.name)
             return result
@@ -656,6 +691,8 @@ class NamedAdapter:
             if len(matches) != 1:
                 raise _fail("INVALID_REQUEST", self.name, "wire event selector is absent or ambiguous")
             event_type, spec = matches[0]
+            if any(_get(supplied, path) is _MISSING for path in spec["required"]):
+                raise _fail("INVALID_REQUEST", self.name, "wire event lacks a required provider field")
             work = deepcopy(supplied)
             _remove_static(work, spec["selector"])
             _remove_static(work, spec["static"])

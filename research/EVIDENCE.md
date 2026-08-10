@@ -132,20 +132,28 @@ personal configuration supplied evidence.
 
 ## E-008 — Named-agent protocol authorities
 
-- **Status:** `SPECIFIED`.
+- **Status:** `OBSERVED` for the four exact upstream revisions used by S18; `SPECIFIED` for the
+  canonical Cassette wire. Captured 2026-08-10.
+- **Method:** Fetch each named source file from its exact upstream commit, hash its complete bytes
+  with SHA-256, and record the repository, commit, path, digest, integration mode, routes, and
+  transport in `S18_PROTOCOL_EVIDENCE.json`. Compare S18's generated maps with that independent
+  record. The record is evidence, not a second runtime-map authority.
 - **Result:** Codex app-server is a versioned JSONL, JSON-RPC-like thread/turn/item protocol whose
   generated schema is the authority for one exact Codex build. OpenAI Responses uses HTTP and SSE.
   Ollama uses HTTP and streamed NDJSON. OpenClaw exposes OpenAI-compatible HTTP surfaces and its own
   versioned Gateway protocol. Hermes Agent exposes an OpenAI-compatible agent API; raw Hermes model
   weights do not define a client protocol. Tinker exposes training and checkpoint operations, while
   its OpenAI-compatible inference surface is beta and capability-limited. These contracts require a
-  canonical broker with adapters; no single external wire format preserves all semantics.
+  canonical broker with adapters; no single external wire format preserves all semantics. S18 uses
+  Codex as an OpenAI Responses client of a Cassette provider. It does not use or emulate Codex
+  app-server; Q76 reopens if that integration is later added. The pinned OpenClaw v4 evidence also
+  requires `chat.send.params.idempotencyKey`, a raw Gateway `agentId`, and `chat` event states; event
+  semantics absent from that pinned subset are refused rather than emitted as invented events.
 - **Authorities:**
-  `https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md`,
-  `https://github.com/openai/openai-openapi`, `https://docs.ollama.com/api/introduction`,
-  `https://github.com/openclaw/openclaw/blob/main/docs/gateway/protocol.md`,
-  `https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/api-server.md`,
-  `https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/`.
+  `S18_PROTOCOL_EVIDENCE.json`; the exact commit URLs and complete-file digests recorded there;
+  `https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md` only for the inactive
+  conditional app-server clause; and `https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/`
+  for the later Tinker adapter boundary.
 - **Supported questions:** Q5–Q6, Q9–Q10, Q31–Q33, Q49, Q52, Q65–Q67, Q76–Q77, Q80.
 
 ## E-009 — First-principles service bounds

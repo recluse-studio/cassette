@@ -76,13 +76,22 @@ Q77_PROVENANCE_STATUSES = [
 Q76_FIELD_STATUSES = ["BEST_EFFORT", "EXACT", "PROVIDER_MANAGED", "UNSUPPORTED"]
 
 
-def adapter_field(canonical: str, wire: str, codec: str = "identity") -> dict:
+def adapter_field(
+    canonical: str,
+    wire: str,
+    codec: str = "identity",
+    *,
+    mirrors: tuple[str, ...] = (),
+) -> dict:
     """Describe one generated, reversible Q31 field movement."""
-    return {
+    field = {
         "canonical": canonical.split("."),
         "wire": wire.split("."),
         "codec": codec,
     }
+    if mirrors:
+        field["mirrors"] = [path.split(".") for path in mirrors]
+    return field
 
 
 def adapter_surface(
@@ -96,6 +105,7 @@ def adapter_surface(
     event_features: dict[str, str] | None = None,
     static: dict[str, object] | None = None,
     blocked_wire: dict[str, str] | None = None,
+    required_wire: tuple[str, ...] = (),
 ) -> dict:
     """Build one generated request/stream surface without client code branches."""
     return {
@@ -110,6 +120,7 @@ def adapter_surface(
         "blocked_wire": {
             path: status for path, status in sorted((blocked_wire or {}).items())
         },
+        "required_wire": [path.split(".") for path in required_wire],
     }
 
 
@@ -118,9 +129,15 @@ def adapter_event(
     fields: list[dict],
     *,
     static: dict[str, object] | None = None,
+    required: tuple[str, ...] = (),
 ) -> dict:
     """Build one generated canonical-event to provider-frame mapping."""
-    return {"selector": selector, "fields": fields, "static": static or {}}
+    return {
+        "selector": selector,
+        "fields": fields,
+        "static": static or {},
+        "required": [path.split(".") for path in required],
+    }
 
 
 _RUN_SEQUENCE = [
@@ -349,73 +366,43 @@ ADAPTER_EVENT_FORMATS = {
         "encoding": "json",
         "events": {
             "started": adapter_event(
-                {"type": "event", "event": "session.operation", "payload.status": "started"},
+                {
+                    "type": "event", "event": "chat",
+                    "payload.state": "status", "payload.phase": "starting_model",
+                },
                 [
                     adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.model_ref", "payload.agentId", "model"),
+                    adapter_field("sequence", "payload.seq"),
+                    adapter_field("payload.model_ref", "payload.agentId", "agent"),
                 ],
+                required=("payload.sessionKey",),
             ),
             "output_delta": adapter_event(
-                {"type": "event", "event": "session.message", "payload.kind": "assistant"},
+                {"type": "event", "event": "chat", "payload.state": "delta"},
                 [
                     adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
+                    adapter_field("sequence", "payload.seq"),
                     adapter_field("payload.text", "payload.deltaText"),
                 ],
-            ),
-            "tool_call": adapter_event(
-                {"type": "event", "event": "session.tool", "payload.status": "started"},
-                [
-                    adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.id", "payload.toolCallId"),
-                    adapter_field("payload.name", "payload.toolName"),
-                    adapter_field("payload.arguments", "payload.arguments"),
-                ],
-            ),
-            "tool_result": adapter_event(
-                {"type": "event", "event": "session.tool", "payload.status": "succeeded"},
-                [
-                    adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.id", "payload.toolCallId"),
-                    adapter_field("payload.output", "payload.output"),
-                ],
-            ),
-            "usage": adapter_event(
-                {"type": "event", "event": "cassette.usage"},
-                [
-                    adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.input_tokens", "payload.inputTokens"),
-                    adapter_field("payload.output_tokens", "payload.outputTokens"),
-                ],
+                required=("payload.sessionKey",),
             ),
             "completed": adapter_event(
-                {"type": "event", "event": "session.operation", "payload.status": "succeeded"},
+                {"type": "event", "event": "chat", "payload.state": "final"},
                 [
                     adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.finish_reason", "payload.finishReason"),
+                    adapter_field("sequence", "payload.seq"),
+                    adapter_field("payload.finish_reason", "payload.stopReason"),
                 ],
+                required=("payload.sessionKey",),
             ),
             "cancelled": adapter_event(
-                {"type": "event", "event": "session.operation", "payload.status": "cancelled"},
+                {"type": "event", "event": "chat", "payload.state": "aborted"},
                 [
                     adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.reason", "payload.reason"),
+                    adapter_field("sequence", "payload.seq"),
+                    adapter_field("payload.reason", "payload.stopReason"),
                 ],
-            ),
-            "failed": adapter_event(
-                {"type": "event", "event": "session.operation", "payload.status": "failed"},
-                [
-                    adapter_field("run_id", "payload.runId"),
-                    adapter_field("sequence", "seq"),
-                    adapter_field("payload.error.code", "payload.errorCode"),
-                    adapter_field("payload.error.detail", "payload.error"),
-                ],
+                required=("payload.sessionKey",),
             ),
         },
     },
@@ -631,6 +618,7 @@ ADAPTER_PROTOCOLS = {
         "commit": "810c3510ee6102e7a263553f871a11233708e275",
         "namespace": "openclaw.gateway.v4",
         "model_scope": "agent",
+        "agent_prefix": "openclaw/",
         "requires_server_contract": False,
         "default_surface": "responses",
         "discovery": {"method": "GET", "path": "/v1/models", "format": "openai_models"},
@@ -679,8 +667,11 @@ ADAPTER_PROTOCOLS = {
             "gateway": adapter_surface(
                 "WS", "gateway:v4", "json",
                 [
-                    adapter_field("idempotency_key", "body.id"),
-                    adapter_field("model_ref", "body.params.agentId", "model"),
+                    adapter_field(
+                        "idempotency_key", "body.params.idempotencyKey",
+                        mirrors=("body.id",),
+                    ),
+                    adapter_field("model_ref", "body.params.agentId", "agent"),
                     adapter_field("input", "body.params.message"),
                     adapter_field("context_ref", "body.params.sessionKey"),
                 ],
@@ -690,10 +681,14 @@ ADAPTER_PROTOCOLS = {
                 },
                 event_format="openclaw_gateway_v4",
                 event_features={
-                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "UNSUPPORTED",
                     "structured_output": "UNSUPPORTED", "streaming": "EXACT",
                 },
                 static={"body.type": "req", "body.method": "chat.send"},
+                required_wire=(
+                    "body.id", "body.params.idempotencyKey", "body.params.sessionKey",
+                    "body.params.message",
+                ),
             ),
         },
         "operations": q6_routes(

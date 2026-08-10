@@ -1,0 +1,115 @@
+{
+  "record": "S18_PROTOCOL_EVIDENCE_V1",
+  "observed_at": "2026-08-10",
+  "role": "independent_upstream_evidence_not_runtime_authority",
+  "boundaries": {
+    "codex_app_server_integration": "not_used_q76_reopens_if_added",
+    "live_client_execution": "deferred_to_L04"
+  },
+  "adapters": {
+    "codex": {
+      "adapter_version": "openai-responses@9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
+      "authority": "https://github.com/openai/openai-openapi",
+      "commit": "9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
+      "integration_mode": "openai_responses_provider",
+      "sources": [
+        {
+          "path": "openapi.yaml",
+          "sha256": "b8872c4a90ead36285606c1d3cb3eee8d489083e187b3736637fa4eb3d692c9f"
+        }
+      ],
+      "discovery": {"method": "GET", "path": "/v1/models"},
+      "surfaces": {
+        "responses": {"method": "POST", "path": "/v1/responses", "stream": "sse"}
+      }
+    },
+    "ollama": {
+      "adapter_version": "ollama-api@a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
+      "authority": "https://github.com/ollama/ollama",
+      "commit": "a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
+      "integration_mode": "ollama_http_api",
+      "sources": [
+        {
+          "path": "docs/openapi.yaml",
+          "sha256": "9c660bb9a714bcb746cff7ec4270a0e43f63b705f7f3362fcc335f18b5d0b178"
+        }
+      ],
+      "discovery": {"method": "GET", "path": "/api/tags"},
+      "surfaces": {
+        "chat": {"method": "POST", "path": "/api/chat", "stream": "ndjson"},
+        "generate": {"method": "POST", "path": "/api/generate", "stream": "ndjson"}
+      }
+    },
+    "openclaw": {
+      "adapter_version": "openclaw-gateway-v4@810c3510ee6102e7a263553f871a11233708e275",
+      "authority": "https://github.com/openclaw/openclaw",
+      "commit": "810c3510ee6102e7a263553f871a11233708e275",
+      "integration_mode": "openai_http_and_gateway_v4_chat_events",
+      "sources": [
+        {
+          "path": "docs/gateway/protocol.md",
+          "sha256": "c4a58de70b9ed0544ce6a5cdc81aada067c00a8bae4d93bc6e6ceb0236e0e9c2"
+        },
+        {
+          "path": "docs/gateway/openai-http-api.md",
+          "sha256": "388d903126901f79c40886628318a5751c5b7b2739878b0952e4dab58a74bed2"
+        },
+        {
+          "path": "docs/gateway/openresponses-http-api.md",
+          "sha256": "5bfd6ca3bf0cecd761fde865b41a95cff3fc5681f74f31b3adae5cd2e0b0be95"
+        },
+        {
+          "path": "packages/gateway-protocol/src/schema/frames.ts",
+          "sha256": "b652fe2e1d49131d6c95000b1a5858e21b7c12ece43b0e3dba58232371a35f78"
+        },
+        {
+          "path": "packages/gateway-protocol/src/schema/logs-chat.ts",
+          "sha256": "a5786a958ffa19e14d58d12d7a240791fe3052f6f4dfaa5be7a35ec8a69df7b7"
+        },
+        {
+          "path": "packages/gateway-protocol/src/version.ts",
+          "sha256": "7e115c318086327828e8bc1f2cb35656504a42b7fa580005b3bba3e8a8b7da0f"
+        }
+      ],
+      "discovery": {"method": "GET", "path": "/v1/models"},
+      "surfaces": {
+        "responses": {"method": "POST", "path": "/v1/responses", "stream": "sse"},
+        "chat": {"method": "POST", "path": "/v1/chat/completions", "stream": "sse"},
+        "gateway": {"method": "WS", "path": "gateway:v4", "stream": "json"}
+      }
+    },
+    "hermes": {
+      "adapter_version": "hermes-agent-api@a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
+      "authority": "https://github.com/NousResearch/hermes-agent",
+      "commit": "a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
+      "integration_mode": "hermes_api_server",
+      "sources": [
+        {
+          "path": "website/docs/user-guide/features/api-server.md",
+          "sha256": "d2ca1cf2aa07adc86d28dab36e4eb19e006cd030e47abe4a8db7c33d6fc60414"
+        },
+        {
+          "path": "gateway/platforms/api_server.py",
+          "sha256": "1ea02f9072a60883d0775884bbfcf248503912553a92a0de05ac75bed5b0b2cd"
+        }
+      ],
+      "discovery": {"method": "GET", "path": "/v1/models"},
+      "surfaces": {
+        "responses": {"method": "POST", "path": "/v1/responses", "stream": "sse"},
+        "chat": {"method": "POST", "path": "/v1/chat/completions", "stream": "sse"},
+        "agent": {"method": "POST", "path": "/v1/runs", "stream": "sse"}
+      }
+    },
+    "custom": {
+      "adapter_version": "cassette-q31-v1",
+      "authority": "https://recluse.studio/cassette/schema/v1",
+      "commit": null,
+      "integration_mode": "canonical_q31_jsonl",
+      "sources": [],
+      "discovery": {"method": "JSONL", "path": "capabilities"},
+      "surfaces": {
+        "canonical": {"method": "JSONL", "path": "run", "stream": "jsonl"}
+      }
+    }
+  }
+}

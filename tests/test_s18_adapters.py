@@ -3,7 +3,9 @@
 
 import ast
 from copy import deepcopy
+import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -20,6 +22,7 @@ ERROR = {
     "retryability": "terminal",
     "detail": "provider refused the exact request",
 }
+PROTOCOL_EVIDENCE = Path(__file__).parents[1] / "research" / "S18_PROTOCOL_EVIDENCE.json"
 
 
 def _adapter(name: str) -> NamedAdapter:
@@ -136,6 +139,66 @@ def _trace(namespace: str, *, reasoning: bool = True) -> list[dict]:
     return events
 
 
+def _openclaw_gateway_trace(*, terminal: str = "completed") -> list[dict]:
+    """Return only the canonical events carried exactly by pinned Gateway v4 chat events."""
+    events = [
+        {"run_id": "run-1", "sequence": 0, "type": "started", "payload": {"model_ref": MODEL_REF}},
+        {"run_id": "run-1", "sequence": 1, "type": "output_delta", "payload": {"text": "answer"}},
+        {
+            "run_id": "run-1", "sequence": 2, "type": terminal,
+            "payload": {"finish_reason": "stop"} if terminal == "completed" else {"reason": "client"},
+        },
+    ]
+    for event in events:
+        event["extensions"] = {
+            "openclaw.gateway.v4": {"frame": {"payload": {"sessionKey": "session-3"}}}
+        }
+    return events
+
+
+def _strict_json_object(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for name, value in pairs:
+        assert name not in result, f"duplicate protocol-evidence member {name!r}"
+        result[name] = value
+    return result
+
+
+def _protocol_evidence() -> dict:
+    document = json.loads(
+        PROTOCOL_EVIDENCE.read_text(encoding="utf-8"),
+        object_pairs_hook=_strict_json_object,
+    )
+    assert document["record"] == "S18_PROTOCOL_EVIDENCE_V1"
+    assert document["role"] == "independent_upstream_evidence_not_runtime_authority"
+    assert document["boundaries"] == {
+        "codex_app_server_integration": "not_used_q76_reopens_if_added",
+        "live_client_execution": "deferred_to_L04",
+    }
+    expected = {}
+    for name, record in document["adapters"].items():
+        sources = record["sources"]
+        assert sources if name != "custom" else sources == []
+        assert record["integration_mode"]
+        if name != "custom":
+            assert re.fullmatch(r"[0-9a-f]{40}", record["commit"])
+            assert record["adapter_version"].endswith("@" + record["commit"])
+        for source in sources:
+            assert source["path"] and ".." not in Path(source["path"]).parts
+            assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
+        expected[name] = {
+            "version": record["adapter_version"],
+            "commit": record["commit"],
+            "authority": record["authority"],
+            "discovery": (record["discovery"]["method"], record["discovery"]["path"]),
+            "surfaces": {
+                surface: (fields["method"], fields["path"], fields["stream"])
+                for surface, fields in record["surfaces"].items()
+            },
+        }
+    return expected
+
+
 def _rejected(code: str, call) -> CassetteError:
     with pytest.raises(CassetteError) as caught:
         call()
@@ -146,54 +209,7 @@ def _rejected(code: str, call) -> CassetteError:
 def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication():
     """Q31/Q76 acceptance: every named wire is lossless where exact and refuses every false claim."""
 
-    expected = {
-        "codex": {
-            "version": "openai-responses@9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
-            "commit": "9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
-            "authority": "https://github.com/openai/openai-openapi",
-            "discovery": ("GET", "/v1/models"),
-            "surfaces": {"responses": ("POST", "/v1/responses", "sse")},
-        },
-        "ollama": {
-            "version": "ollama-api@a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
-            "commit": "a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
-            "authority": "https://github.com/ollama/ollama",
-            "discovery": ("GET", "/api/tags"),
-            "surfaces": {
-                "chat": ("POST", "/api/chat", "ndjson"),
-                "generate": ("POST", "/api/generate", "ndjson"),
-            },
-        },
-        "openclaw": {
-            "version": "openclaw-gateway-v4@810c3510ee6102e7a263553f871a11233708e275",
-            "commit": "810c3510ee6102e7a263553f871a11233708e275",
-            "authority": "https://github.com/openclaw/openclaw",
-            "discovery": ("GET", "/v1/models"),
-            "surfaces": {
-                "responses": ("POST", "/v1/responses", "sse"),
-                "chat": ("POST", "/v1/chat/completions", "sse"),
-                "gateway": ("WS", "gateway:v4", "json"),
-            },
-        },
-        "hermes": {
-            "version": "hermes-agent-api@a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
-            "commit": "a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
-            "authority": "https://github.com/NousResearch/hermes-agent",
-            "discovery": ("GET", "/v1/models"),
-            "surfaces": {
-                "responses": ("POST", "/v1/responses", "sse"),
-                "chat": ("POST", "/v1/chat/completions", "sse"),
-                "agent": ("POST", "/v1/runs", "sse"),
-            },
-        },
-        "custom": {
-            "version": "cassette-q31-v1",
-            "commit": None,
-            "authority": "https://recluse.studio/cassette/schema/v1",
-            "discovery": ("JSONL", "capabilities"),
-            "surfaces": {"canonical": ("JSONL", "run", "jsonl")},
-        },
-    }
+    expected = _protocol_evidence()
     assert set(expected) == {"codex", "ollama", "openclaw", "hermes", "custom"}
     for name, literal in expected.items():
         definition = _adapter(name).definition
@@ -387,7 +403,10 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
         "method": "WS", "path": "gateway:v4", "headers": {},
         "body": {
             "type": "req", "method": "chat.send", "id": "openclaw-gateway",
-            "params": {"agentId": AGENT_REF, "message": "hello", "sessionKey": "session-3"},
+            "params": {
+                "agentId": "main", "idempotencyKey": "openclaw-gateway",
+                "message": "hello", "sessionKey": "session-3",
+            },
         },
     }
     assert _adapter("openclaw").from_wire_request(
@@ -468,22 +487,25 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
     }
 
     openclaw_trace = _trace("openclaw.gateway.v4", reasoning=False)
-    for surface in ("responses", "chat", "gateway"):
+    for surface in ("responses", "chat"):
         wire = _adapter("openclaw").to_wire_events(openclaw_trace, surface=surface)
         assert _adapter("openclaw").from_wire_events(wire, surface=surface) == openclaw_trace
         assert (
             wire["frames"][0].get("response", {}).get("model")
             or wire["frames"][0].get("model")
-            or wire["frames"][0].get("payload", {}).get("agentId")
         ) == AGENT_REF
-    gateway_wire = _adapter("openclaw").to_wire_events(openclaw_trace, surface="gateway")
-    assert [frame["event"] for frame in gateway_wire["frames"]] == [
-        "session.operation", "session.message", "session.tool", "session.tool",
-        "cassette.usage", "session.operation",
+    gateway_trace = _openclaw_gateway_trace()
+    gateway_wire = _adapter("openclaw").to_wire_events(gateway_trace, surface="gateway")
+    assert _adapter("openclaw").from_wire_events(gateway_wire, surface="gateway") == gateway_trace
+    assert [frame["event"] for frame in gateway_wire["frames"]] == ["chat", "chat", "chat"]
+    assert [frame["payload"]["state"] for frame in gateway_wire["frames"]] == [
+        "status", "delta", "final",
     ]
+    assert gateway_wire["frames"][0]["payload"]["agentId"] == "main"
+    assert all(frame["payload"]["sessionKey"] == "session-3" for frame in gateway_wire["frames"])
 
     for name, surface in {
-        "codex": None, "ollama": None, "openclaw": "gateway", "hermes": "agent",
+        "codex": None, "ollama": None, "openclaw": "responses", "hermes": "agent",
         "custom": None,
     }.items():
         adapter = _adapter(name)
@@ -502,6 +524,13 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
         for terminal_trace in (cancelled, failed):
             wire = adapter.to_wire_events(terminal_trace, surface=surface)
             assert adapter.from_wire_events(wire, surface=surface) == terminal_trace
+    gateway_cancelled = _openclaw_gateway_trace(terminal="cancelled")
+    gateway_cancelled_wire = _adapter("openclaw").to_wire_events(
+        gateway_cancelled, surface="gateway"
+    )
+    assert _adapter("openclaw").from_wire_events(
+        gateway_cancelled_wire, surface="gateway"
+    ) == gateway_cancelled
 
     # Q6 status/training stay canonical extensions unless the pinned wire has an exact native cancel.
     cancel = {
@@ -642,6 +671,53 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
             _trace("openclaw.gateway.v4"), surface="responses"
         ),
     )
+    for unsupported_type in ("reasoning_delta", "tool_call", "tool_result", "usage", "failed"):
+        event = {
+            "run_id": "run-1", "sequence": 0, "type": unsupported_type,
+            "payload": ERROR if unsupported_type == "failed" else {},
+            "extensions": {
+                "openclaw.gateway.v4": {"frame": {"payload": {"sessionKey": "session-3"}}}
+            },
+        }
+        if unsupported_type == "failed":
+            event["payload"] = {"error": ERROR}
+        _rejected(
+            "CAPABILITY_MISMATCH",
+            lambda event=event: _adapter("openclaw").to_wire_events([event], surface="gateway"),
+        )
+
+    missing_gateway_session = _openclaw_gateway_trace()
+    del missing_gateway_session[0]["extensions"]
+    _rejected(
+        "INVALID_REQUEST",
+        lambda: _adapter("openclaw").to_wire_events(missing_gateway_session, surface="gateway"),
+    )
+    mismatched_gateway_id = deepcopy(openclaw_gateway_wire)
+    mismatched_gateway_id["body"]["id"] = "another-id"
+    _rejected(
+        "INVALID_REQUEST",
+        lambda: _adapter("openclaw").from_wire_request(mismatched_gateway_id, surface="gateway"),
+    )
+    gateway_without_session = deepcopy(openclaw_gateway)
+    del gateway_without_session["context_ref"]
+    _rejected(
+        "INVALID_REQUEST",
+        lambda: _adapter("openclaw").to_wire_request(gateway_without_session, surface="gateway"),
+    )
+
+    for malformed_events in (None, {}, "", ()):
+        _rejected(
+            "INVALID_REQUEST",
+            lambda malformed_events=malformed_events: _adapter("codex").to_wire_events(
+                malformed_events
+            ),
+        )
+        _rejected(
+            "INVALID_REQUEST",
+            lambda malformed_events=malformed_events: _adapter("custom").from_wire_events(
+                {"encoding": "jsonl", "records": malformed_events}
+            ),
+        )
 
     bad_sequence = _trace("openai.responses")
     bad_sequence[2]["sequence"] = 1
