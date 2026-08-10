@@ -307,13 +307,64 @@ class CanonicalBroker:
 
     def __init__(self, operation_log: str | Path):
         self.operation_log = Path(operation_log)
+        self._owner_fd: int | None = None
         try:
             self.operation_log.mkdir(parents=True, exist_ok=True)
         except OSError as error:
             _reject("DURABILITY_UNSUPPORTED", "broker:operation-log", f"operation-log creation failed: {error}")
+        self.operation_log = self.operation_log.resolve()
+        descriptor = -1
+        try:
+            descriptor = os.open(self.operation_log, os.O_RDONLY)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            with suppress(OSError):
+                os.close(descriptor)
+            _reject(
+                "OVERLOADED",
+                f"broker:{self.operation_log}",
+                "operation log already has one live broker owner",
+                retryability="retryable",
+            )
+        except OSError as error:
+            if descriptor >= 0:
+                with suppress(OSError):
+                    os.close(descriptor)
+            _reject(
+                "DURABILITY_UNSUPPORTED",
+                f"broker:{self.operation_log}",
+                f"operation-log ownership failed: {error}",
+            )
+        self._owner_fd = descriptor
         self._execution_locks: dict[str, asyncio.Lock] = {}
         self._control_signals: dict[str, asyncio.Event] = {}
         self._active: dict[str, bool] = {}
+
+    def close(self) -> None:
+        """Release this process's sole authority over the canonical operation log."""
+
+        descriptor = self._owner_fd
+        if descriptor is None:
+            return
+        self._owner_fd = None
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+        except OSError as error:
+            with suppress(OSError):
+                os.close(descriptor)
+            _reject(
+                "DURABILITY_UNSUPPORTED",
+                f"broker:{self.operation_log}",
+                f"operation-log ownership release failed: {error}",
+            )
+
+    def __del__(self):
+        descriptor = getattr(self, "_owner_fd", None)
+        if descriptor is not None:
+            self._owner_fd = None
+            with suppress(OSError):
+                os.close(descriptor)
 
     @staticmethod
     def operation_id(request: dict) -> str:
@@ -392,7 +443,9 @@ class CanonicalBroker:
         self._signal(operation_id).set()
         if operation_id in self._active:
             return self._operation(record)
-        return self._terminal(record, self._cancel_error(record), "CANCELLED", "cancelled")
+        return self._operation(self._terminal(
+            record, self._cancel_error(record), "CANCELLED", "cancelled"
+        ))
 
     def pause(self, operation_id: str) -> dict:
         """Pause before another mutable side effect and retain the last completed Q5 phase."""
@@ -407,7 +460,7 @@ class CanonicalBroker:
         self._signal(operation_id).set()
         if operation_id in self._active:
             return self._operation(record)
-        return self._paused(record)
+        return self._operation(self._paused(record))
 
     def resume(self, operation_id: str) -> dict:
         """Clear one durable pause request without changing its last completed phase."""
@@ -830,6 +883,8 @@ class CanonicalBroker:
             if record["phase"] == "ACTIVE" and record["state"] != "SUCCEEDED":
                 _reject("ROOT_INVALID", object_id, "ACTIVE preparation must be successful")
             self._verify_checkpoint(record, object_id)
+        elif record["phase"] != "EMPTY" or record["checkpoint"]:
+            _reject("ROOT_INVALID", object_id, "non-preparation operation must retain EMPTY phase and checkpoint")
         return record
 
     def _verify_checkpoint(self, record: dict, object_id: str) -> None:
@@ -1032,6 +1087,13 @@ class CanonicalBroker:
         return event
 
     def _path(self, operation_id: str) -> Path:
+        if self._owner_fd is None:
+            _reject(
+                "OVERLOADED",
+                f"broker:{self.operation_log}",
+                "operation-log owner is closed",
+                retryability="retryable",
+            )
         if not isinstance(operation_id, str) or _OPERATION_ID.fullmatch(operation_id) is None:
             _reject("OPERATION_NOT_FOUND", "operation:unidentified", "operation_id is malformed")
         return self.operation_log / f"{operation_id}.json"

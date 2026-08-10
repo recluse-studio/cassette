@@ -9,6 +9,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -235,6 +237,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                         location["cartridge"].rename(moved)
                         location["cartridge"] = moved
                         toggle = "a" if toggle == "b" else "b"
+                        broker.close()
                         broker = CanonicalBroker(log)
                         assert broker.issue(request)["operation_id"] == operation_id
                 assert operation["state"] == "SUCCEEDED", operation
@@ -263,13 +266,35 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     result = cancelled.cancel(operation_id)
                     assert result["state"] == "CANCELLED"
                     assert result["error"]["code"] == "OPERATION_CANCELLED"
+                    assert set(result) == {"operation_id", "kind", "state", "progress", "error"}
                     cancel_events = cancelled.events(operation_id)
                     assert [event["sequence"] for event in cancel_events] == list(range(len(cancel_events)))
                     assert len(_terminal_events(cancel_events)) == 1
+                    cancelled.close()
 
-                paused = CanonicalBroker(clone("PLANNED", "paused"))
-                assert paused.pause(operation_id)["state"] == "PAUSED"
-                assert paused.resume(operation_id)["state"] == "RUNNING"
+                for phase in EXPECTED_PHASES[:8]:
+                    paused_log = clone(phase, "paused")
+                    paused = CanonicalBroker(paused_log)
+                    paused_operation = paused.pause(operation_id)
+                    assert paused_operation["state"] == "PAUSED"
+                    assert set(paused_operation) == {"operation_id", "kind", "state", "progress"}
+                    paused_path = paused.operation_log / f"{operation_id}.json"
+                    paused_bytes = paused_path.read_bytes()
+                    paused_checkpoint = json.loads(paused_bytes)["record"]["checkpoint"]
+                    assert asyncio.run(paused.advance_acquisition(request, context())) == paused_operation
+                    assert paused_path.read_bytes() == paused_bytes
+                    paused.close()
+
+                    paused = CanonicalBroker(paused_log)
+                    assert paused.status(operation_id) == paused_operation
+                    assert asyncio.run(paused.advance_acquisition(request, context())) == paused_operation
+                    assert paused_path.read_bytes() == paused_bytes
+                    resumed = paused.resume(operation_id)
+                    assert resumed["state"] == ("PENDING" if phase == "EMPTY" else "RUNNING")
+                    resumed_record = json.loads(paused_path.read_bytes())["record"]
+                    assert resumed_record["phase"] == phase
+                    assert resumed_record["checkpoint"] == paused_checkpoint
+                    paused.close()
 
                 partial_only = CanonicalBroker(clone("PREPARING", "partial-only"))
                 bad_context = replace(context(), prepare=lambda _revision, partials, _plan: partials[0])
@@ -277,6 +302,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                 assert refused["state"] == "FAILED"
                 assert refused["error"]["code"] == "CAPABILITY_MISMATCH"
                 assert "PartialState is insufficient" in refused["error"]["detail"]
+                partial_only.close()
 
                 verified_artifacts = materials[kind].artifacts
                 valid_root = operation["result"]["root_digest"]
@@ -325,6 +351,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     attack_result = asyncio.run(attacked.advance_acquisition(request, attack_context))
                     assert attack_result["state"] == "FAILED"
                     assert attack_result["error"]["code"] == "IDENTITY_MISMATCH"
+                    attacked.close()
 
                 changed_capacity = CapacityReservation(
                     operation_id,
@@ -341,11 +368,13 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                 ))
                 assert changed_result["state"] == "FAILED"
                 assert changed_result["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+                changed.close()
 
                 assert not any(
                     SECRET.encode() in path.read_bytes() for path in log.iterdir() if path.is_file()
                 )
             finally:
+                broker.close()
                 release_capacity(reservation)
                 os.close(data_fd)
                 os.close(state_fd)
@@ -361,7 +390,54 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
     assert len({tuple(trace) for trace in phase_traces.values()}) == 1
     assert all(trace == ["resolve", "artifacts", "metadata", "requirements", "range"] for trace in request_traces.values())
 
-    generic = CanonicalBroker(tmp_path / "generic-log")
+    ownership_log = tmp_path / "ownership-log"
+    owner = CanonicalBroker(ownership_log)
+    ownership_request = {
+        "protocol_version": "1",
+        "operation": "run",
+        "idempotency_key": "s16-canonical-owner",
+        "arguments": {},
+    }
+    owned_operation = owner.issue(ownership_request)
+    with pytest.raises(CassetteError) as competing_instance:
+        CanonicalBroker(ownership_log)
+    assert competing_instance.value.code == "OVERLOADED"
+    owner.close()
+    with pytest.raises(CassetteError) as closed_owner:
+        owner.status(owned_operation["operation_id"])
+    assert closed_owner.value.code == "OVERLOADED"
+
+    child_code = (
+        "from broker import CanonicalBroker; import sys; "
+        "broker = CanonicalBroker(sys.argv[1]); print('owned', flush=True); "
+        "sys.stdin.read()"
+    )
+    child_environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    child = subprocess.Popen(
+        [sys.executable, "-c", child_code, str(ownership_log)],
+        cwd=Path(__file__).resolve().parent.parent,
+        env=child_environment,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert child.stdout is not None
+    try:
+        assert child.stdout.readline() == "owned\n"
+        with pytest.raises(CassetteError) as competing_process:
+            CanonicalBroker(ownership_log)
+        assert competing_process.value.code == "OVERLOADED"
+    finally:
+        child.terminate()
+        _, child_error = child.communicate(timeout=10)
+    assert not child_error
+    replacement = CanonicalBroker(ownership_log)
+    assert replacement.issue(ownership_request) == owned_operation
+    replacement.close()
+
+    generic_log = tmp_path / "generic-log"
+    generic = CanonicalBroker(generic_log)
     issued_operations = (
         "capabilities", "source.resolve", "source.acquire", "model.activate", "run",
         "operation.status", "training", "recovery", "revision.remove",
@@ -425,6 +501,54 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
 
     asyncio.run(execute_duplicate_once())
 
+    async def pause_running_worker():
+        request = {
+            "protocol_version": "1",
+            "operation": "run",
+            "idempotency_key": "s16-cooperative-pause",
+            "arguments": {},
+        }
+        started = asyncio.Event()
+        worker_stopped = asyncio.Event()
+        calls = 0
+
+        async def worker():
+            nonlocal calls
+            calls += 1
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                worker_stopped.set()
+
+        task = asyncio.create_task(generic.execute(request, worker))
+        await started.wait()
+        operation_id = CanonicalBroker.operation_id(request)
+        assert generic.pause(operation_id)["state"] == "RUNNING"
+        paused_operation = await task
+        assert paused_operation["state"] == "PAUSED"
+        assert worker_stopped.is_set()
+
+        async def forbidden_worker():
+            nonlocal calls
+            calls += 1
+            return {"forbidden": "paused work executed"}
+
+        assert await generic.execute(request, forbidden_worker) == paused_operation
+        assert calls == 1
+        return request, paused_operation
+
+    paused_request, paused_operation = asyncio.run(pause_running_worker())
+    generic.close()
+    generic = CanonicalBroker(generic_log)
+    assert generic.status(paused_operation["operation_id"]) == paused_operation
+    assert generic.resume(paused_operation["operation_id"])["state"] == "PENDING"
+    resumed_operation = asyncio.run(generic.execute(
+        paused_request, lambda: {"result": "resumed from the durable EMPTY checkpoint"}
+    ))
+    assert resumed_operation["state"] == "SUCCEEDED"
+    assert resumed_operation["result"] == {"result": "resumed from the durable EMPTY checkpoint"}
+
     async def cancel_running_worker():
         request = {
             "protocol_version": "1",
@@ -449,6 +573,26 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
         assert len(_terminal_events(generic.events(operation_id))) == 1
 
     asyncio.run(cancel_running_worker())
+
+    for label, field, value in (
+        ("phase", "phase", "ACTIVE"),
+        ("checkpoint", "checkpoint", {"foreign": "authority"}),
+    ):
+        grammar_request = {
+            "protocol_version": "1",
+            "operation": "run",
+            "idempotency_key": f"s16-forged-generic-{label}",
+            "arguments": {},
+        }
+        grammar_operation = generic.issue(grammar_request)
+        grammar_path = generic.operation_log / f"{grammar_operation['operation_id']}.json"
+        grammar_envelope = json.loads(grammar_path.read_bytes())
+        grammar_envelope["record"][field] = value
+        grammar_envelope["digest"] = digest_bytes(canonical_bytes(grammar_envelope["record"]))
+        grammar_path.write_bytes(canonical_bytes(grammar_envelope))
+        with pytest.raises(CassetteError) as forged_grammar:
+            generic.status(grammar_operation["operation_id"])
+        assert forged_grammar.value.code == "ROOT_INVALID"
 
     valid_request = {
         "protocol_version": "1",
@@ -482,6 +626,22 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
         generic.status(terminal["operation_id"])
     assert forged_terminal.value.code == "ROOT_INVALID"
 
+    orphan_request = {
+        "protocol_version": "1",
+        "operation": "run",
+        "idempotency_key": "s16-terminal-without-event",
+        "arguments": {},
+    }
+    orphan = asyncio.run(generic.execute(orphan_request, lambda: {"result": "verified"}))
+    orphan_path = generic.operation_log / f"{orphan['operation_id']}.json"
+    orphan_envelope = json.loads(orphan_path.read_bytes())
+    orphan_envelope["record"]["events"].pop()
+    orphan_envelope["digest"] = digest_bytes(canonical_bytes(orphan_envelope["record"]))
+    orphan_path.write_bytes(canonical_bytes(orphan_envelope))
+    with pytest.raises(CassetteError) as orphan_terminal:
+        generic.status(orphan["operation_id"])
+    assert orphan_terminal.value.code == "ROOT_INVALID"
+
     tree = ast.parse((Path(__file__).resolve().parent.parent / "broker.py").read_text(encoding="utf-8"))
     source_kinds = set(source_fixture._FIXTURES)
     for node in ast.walk(tree):
@@ -492,3 +652,4 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                 if isinstance(item, ast.Constant) and isinstance(item.value, str)
             }
             assert source_kinds.isdisjoint(literals)
+    generic.close()
