@@ -129,6 +129,7 @@ class CertifiedSchedule:
     reserve_bytes: int
     memory_ceiling_bytes: int
     available_bytes: int
+    cache_budget_bytes: int
     peak_live_bytes: int
     steps: tuple[ResidencyStep, ...]
 
@@ -1361,6 +1362,7 @@ def admit_schedule(
         reserve_bytes=reserve,
         memory_ceiling_bytes=ceiling,
         available_bytes=available,
+        cache_budget_bytes=memory["cache_bytes"],
         peak_live_bytes=peak_live,
         steps=tuple(schedule_steps),
     )

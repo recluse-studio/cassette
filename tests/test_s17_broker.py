@@ -1,22 +1,25 @@
-# test_s17_broker.py — S17 Q65/Q77 scheduler, lease, cache, and negotiation fixture; depends on broker.py, errors.py, store.py.
+# test_s17_broker.py — S17 Q47/Q65/Q77 scheduler, lease, cache, and negotiation fixture; depends on broker.py, errors.py, pager.py, schema/tables.py, schema/validator.py, store.py.
 """Attack pre-admission identity, fair dispatch, exclusion, switching, and cache reuse."""
 
 import asyncio
 from dataclasses import replace
+import json
+from pathlib import Path
 
 import pytest
 
 from broker import CanonicalBroker, ScheduledLease
 from errors import CassetteError
-from store import digest_bytes
-
-
-Q77_FIELDS = (
-    "cassette_protocol", "adapter_version", "model_revision", "source_parent",
-    "execution_mode", "plan_id", "performance_tier", "training_tier", "modalities",
-    "input_limits", "context_limit", "reasoning_fields", "reasoning_history_policy",
-    "tool_schema", "structured_output", "sampling", "streaming", "cancellation",
-    "conversation_state_contract",
+from pager import CertifiedSchedule
+from schema.tables import Q77_FIELDS
+from schema.validator import validate
+from store import (
+    PAGE_BYTES,
+    ArtifactIdentity,
+    IdentityTuple,
+    digest_bytes,
+    import_safetensors,
+    page_locations,
 )
 
 
@@ -68,6 +71,64 @@ def _request(negotiation: dict, key: str, context_id: str, operation: str = "run
     }
 
 
+def _write_safetensors(path: Path, payload: bytes) -> None:
+    header = {
+        "fixture.weight": {
+            "dtype": "U8",
+            "shape": [len(payload)],
+            "data_offsets": [0, len(payload)],
+        }
+    }
+    encoded = json.dumps(header, separators=(",", ":")).encode()
+    encoded += b" " * (-len(encoded) % 8)
+    path.write_bytes(len(encoded).to_bytes(8, "little") + encoded + payload)
+
+
+def _cartridge(tmp_path: Path) -> tuple[Path, str, tuple]:
+    source = tmp_path / "s17-model.safetensors"
+    payload = b"".join(bytes([index]) * PAGE_BYTES for index in range(1, 7)) + b"tail-page"
+    _write_safetensors(source, payload)
+    artifact = ArtifactIdentity(source.name, source.stat().st_size, digest_bytes(source.read_bytes()))
+    material = IdentityTuple(
+        revision_kind="executable",
+        source_kind="huggingface",
+        source_alias="fixture/s17@main",
+        canonical_locator="fixture/s17",
+        requested_revision="main",
+        immutable_revision="git-sha1:0123456789abcdef0123456789abcdef01234567",
+        artifacts=(artifact,),
+        format_versions=(("safetensors", "0.6.2"),),
+        tensor_index_digest=_digest("s17-index"),
+        config_digest=_digest("s17-config"),
+        architecture="S17BoundaryTransformer",
+        operator_set=("matmul",),
+        tokenizer_digest=_digest("s17-tokenizer"),
+        processor_digest=_digest("s17-processor"),
+        template_digest=_digest("s17-template"),
+        precision_scheme="u8-fixture",
+        license_digest=_digest("s17-license"),
+        parent_ids=(_digest("s17-parent"),),
+        transform_manifest_digest=_digest("s17-transform"),
+    )
+    cartridge = tmp_path / "cartridge"
+    root_digest = import_safetensors({source.name: source}, cartridge, material)
+    return cartridge, root_digest, page_locations(cartridge, root_digest)
+
+
+def _schedule(profile: dict, cache_budget_bytes: int) -> CertifiedSchedule:
+    return CertifiedSchedule(
+        plan_id=profile["plan_id"],
+        certificate_id=_digest(f"{profile['plan_id']}:certificate"),
+        profile_digest=_digest(f"{profile['plan_id']}:hardware"),
+        reserve_bytes=0,
+        memory_ceiling_bytes=cache_budget_bytes,
+        available_bytes=cache_budget_bytes,
+        cache_budget_bytes=cache_budget_bytes,
+        peak_live_bytes=cache_budget_bytes,
+        steps=(),
+    )
+
+
 async def _idle(broker: CanonicalBroker) -> None:
     for _ in range(200):
         state = broker.scheduler_status()
@@ -81,12 +142,22 @@ async def _reached(event: asyncio.Event) -> None:
     await asyncio.wait_for(event.wait(), 3)
 
 
-def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_path):
-    """Q65/Q77 acceptance: reject before admission, dispatch fairly, exclude races, and never reuse stale cache."""
+def test_q47_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_path):
+    """Q47/Q65/Q77 acceptance: reject before admission, dispatch fairly, and bound cache bytes."""
 
     async def scenario():
+        cartridge, root_digest, locations = _cartridge(tmp_path)
+        full_pages = tuple(sorted(
+            location.page_digest for location in locations if location.length == PAGE_BYTES
+        ))
+        tail_pages = tuple(sorted(
+            location.page_digest for location in locations if location.length < PAGE_BYTES
+        ))
+        assert len(full_pages) == 6
+        assert [location.length for location in locations if location.page_digest in tail_pages] == [9]
+        cache_budget_bytes = 4 * PAGE_BYTES
         log = tmp_path / "operations"
-        broker = CanonicalBroker(log, cache_page_limit=4)
+        broker = CanonicalBroker(log)
         activations = []
 
         def activator(label: str):
@@ -125,25 +196,53 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         )
         best_effort = _profile("best-effort")
         best_effort["field_provenance"]["structured_output"]["status"] = "BEST_EFFORT"
+        assert validate("callable_capability", profile_a) == []
+        malformed_profile = {**profile_a, "field_provenance": dict(profile_a["field_provenance"])}
+        del malformed_profile["field_provenance"]["plan_id"]
+        assert validate("callable_capability", malformed_profile)
         activate_a = activator("a")
         activate_b = activator("b")
         activate_limited = activator("limited")
         activate_best_effort = activator("best-effort")
-        profile_a_id = broker.register_capability("model/current", profile_a, activate_a)
-        assert broker.register_capability("model/a", profile_a, activate_a) == profile_a_id
-        profile_b_id = broker.register_capability("model/b", profile_b, activate_b)
-        limited_id = broker.register_capability("model/limited", limited, activate_limited)
-        best_effort_id = broker.register_capability(
-            "model/best-effort", best_effort, activate_best_effort,
-        )
-        assert broker.register_capability(
-            profile_a["model_revision"], profile_a, activate_a,
-        ) == profile_a_id
+
+        def register(
+            model_ref: str,
+            profile: dict,
+            activate,
+            *,
+            cache_bytes: int = cache_budget_bytes,
+            target: CanonicalBroker = broker,
+        ) -> str:
+            return target.register_capability(
+                model_ref,
+                profile,
+                activate,
+                schedule=_schedule(profile, cache_bytes),
+                cartridge=cartridge,
+                root_digest=root_digest,
+            )
+
+        profile_a_id = register("model/current", profile_a, activate_a)
+        assert register("model/a", profile_a, activate_a) == profile_a_id
+        profile_b_id = register("model/b", profile_b, activate_b)
+        limited_id = register("model/limited", limited, activate_limited)
+        best_effort_id = register("model/best-effort", best_effort, activate_best_effort)
+        assert register(profile_a["model_revision"], profile_a, activate_a) == profile_a_id
+        invalid_profile = {
+            **profile_a,
+            "field_provenance": {
+                field: dict(record) for field, record in profile_a["field_provenance"].items()
+            },
+        }
+        invalid_profile["field_provenance"]["streaming"]["status"] = "FABRICATED"
         with pytest.raises(CassetteError) as caught:
-            broker.register_capability("model/foreign-activator", profile_a, activate_b)
+            register("model/invalid-profile", invalid_profile, activate_a)
+        assert caught.value.code == "INVALID_REQUEST"
+        with pytest.raises(CassetteError) as caught:
+            register("model/foreign-activator", profile_a, activate_b)
         assert caught.value.code == "IDEMPOTENCY_CONFLICT"
         with pytest.raises(CassetteError) as caught:
-            broker.register_capability(profile_a["model_revision"], profile_b, activate_b)
+            register(profile_a["model_revision"], profile_b, activate_b)
         assert caught.value.code == "IDENTITY_MISMATCH"
         assert broker.negotiate({"model_ref": profile_a["model_revision"]})[
             "model_revision"
@@ -172,6 +271,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
             cancellation=False,
         )
         negotiated = broker.negotiate(requested)
+        assert validate("negotiated_capability", negotiated) == []
         assert set(negotiated) == {*Q77_FIELDS, "field_provenance", "negotiation_id"}
         assert negotiated["model_revision"] == profile_a["model_revision"]
         assert negotiated["modalities"] == ["text"]
@@ -231,6 +331,9 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         with pytest.raises(CassetteError) as caught:
             broker.negotiate({"model_ref": "model/current", "foreign": True})
         assert caught.value.code == "INVALID_REQUEST"
+        with pytest.raises(CassetteError) as caught:
+            broker.negotiate({"model_ref": "model/current", "context_limit": True})
+        assert caught.value.code == "INVALID_REQUEST"
         assert not tuple(log.glob("*.json"))
 
         forged = broker.negotiate({"model_ref": "model/a"})
@@ -280,7 +383,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         saved_leases = []
         first_started = asyncio.Event()
         first_release = asyncio.Event()
-        a_pages = tuple(sorted((_digest("a-page-1"), _digest("a-page-2"))))
+        a_pages = full_pages[:2]
 
         async def first_worker(lease: ScheduledLease):
             run_order.append("first")
@@ -290,6 +393,8 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
                 profile_a["model_revision"], profile_a["plan_id"], profile_a["precision"],
                 profile_a["semantic_state"],
             )
+            assert broker.scheduler_status()["cache_bytes"] == 2 * PAGE_BYTES
+            assert broker.scheduler_status()["cache_budget_bytes"] == 4 * PAGE_BYTES
             assert all(broker.cache_contains(lease, page) for page in a_pages)
             forged_lease = replace(lease, context_id="ctx-foreign")
             with pytest.raises(CassetteError) as caught:
@@ -422,7 +527,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
             "alias-old", "ctx-alias-old", queued_old_request, queued_old, "EXEC", queued_old_worker,
         ))
         await asyncio.sleep(0)
-        assert broker.register_capability("model/current", profile_b, activate_b) == profile_b_id
+        assert register("model/current", profile_b, activate_b) == profile_b_id
         stale_request = _request(stale_unadmitted, "s17-alias-stale", "ctx-alias-stale")
         stale_id = broker.operation_id(stale_request)
         with pytest.raises(CassetteError) as caught:
@@ -433,7 +538,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         assert caught.value.code == "CAPABILITY_MISMATCH"
         assert not (log / f"{stale_id}.json").exists()
 
-        b_pages = tuple(sorted(_digest(f"b-page-{index}") for index in range(4)))
+        b_pages = full_pages[2:]
         new_capability = broker.negotiate({"model_ref": "model/current"})
         assert new_capability["model_revision"] == profile_b["model_revision"]
         new_request = _request(new_capability, "s17-alias-new", "ctx-alias-new")
@@ -454,6 +559,8 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         ))
         await asyncio.sleep(0)
         prefetched = broker.scheduler_status()
+        assert prefetched["cache_bytes"] == 4 * PAGE_BYTES
+        assert prefetched["cache_budget_bytes"] == 4 * PAGE_BYTES
         assert all(
             any(row["page"] == page and row["pinned"] for row in prefetched["cache"])
             for page in a_pages
@@ -472,13 +579,14 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
             profile_b["semantic_state"],
         ]
         assert switched["page_churn"] - churn_before == 2
+        assert switched["cache_bytes"] == 4 * PAGE_BYTES
         assert [item[0] for item in activations] == ["a", "b"]
         with pytest.raises(CassetteError) as caught:
             broker.cache_contains(alias_lease[0], a_pages[0])
         assert caught.value.code == "INVALID_REQUEST"
         await _idle(broker)
 
-        broker.register_capability("model/race", profile_a, activate_a)
+        register("model/race", profile_a, activate_a)
         race_capability = broker.negotiate({"model_ref": "model/race"})
         race_request = _request(race_capability, "s17-alias-race", "ctx-alias-race")
         race_id = broker.operation_id(race_request)
@@ -490,7 +598,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
             ))
             await asyncio.sleep(0)
             await asyncio.sleep(0)
-            broker.register_capability("model/race", profile_b, activate_b)
+            register("model/race", profile_b, activate_b)
         finally:
             broker._scheduler_lock.release()
         with pytest.raises(CassetteError) as caught:
@@ -726,7 +834,7 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         def bounded_activate(lease: ScheduledLease, capability: dict):
             raise AssertionError((lease, capability))
 
-        bounded.register_capability("model/bounded", bounded_profile, bounded_activate)
+        register("model/bounded", bounded_profile, bounded_activate, target=bounded)
         for _ in range(1024):
             bounded.negotiate({"model_ref": "model/bounded"})
         with pytest.raises(CassetteError) as caught:
@@ -734,5 +842,172 @@ def test_q65_q77_exact_negotiation_fair_leases_switches_and_cache_identity(tmp_p
         assert caught.value.code == "OVERLOADED"
         assert not tuple(bounded_log.glob("*.json"))
         bounded.close()
+
+        boundary_log = tmp_path / "byte-boundary-operations"
+        boundary = CanonicalBroker(boundary_log)
+
+        def boundary_activate(lease: ScheduledLease, capability: dict):
+            assert lease.kind == "SWITCH"
+            assert capability["plan_id"] == lease.plan_id
+
+        tail_profile = _profile("tail-boundary")
+        full_profile = _profile("full-boundary")
+        short_profile = _profile("short-boundary")
+        wide_profile = _profile("wide-boundary")
+        register(
+            "model/tail-boundary",
+            tail_profile,
+            boundary_activate,
+            cache_bytes=9,
+            target=boundary,
+        )
+        register(
+            "model/full-boundary",
+            full_profile,
+            boundary_activate,
+            cache_bytes=PAGE_BYTES,
+            target=boundary,
+        )
+        register(
+            "model/short-boundary",
+            short_profile,
+            boundary_activate,
+            cache_bytes=PAGE_BYTES - 1,
+            target=boundary,
+        )
+        register(
+            "model/wide-boundary",
+            wide_profile,
+            boundary_activate,
+            cache_bytes=PAGE_BYTES + 9,
+            target=boundary,
+        )
+
+        tail_capability = boundary.negotiate({"model_ref": "model/tail-boundary"})
+        tail_request = _request(tail_capability, "s17-tail-equality", "ctx-tail-equality")
+        tail_result = await boundary.dispatch(
+            "boundary",
+            "ctx-tail-equality",
+            tail_request,
+            tail_capability,
+            "EXEC",
+            lambda lease: {"lease": lease.lease_id},
+            pages=tail_pages,
+        )
+        assert tail_result["state"] == "SUCCEEDED"
+        tail_status = boundary.scheduler_status()
+        assert tail_status["cache_bytes"] == 9
+        assert tail_status["cache_budget_bytes"] == 9
+        assert tail_status["cache"][0]["length"] == 9
+
+        count_capability = boundary.negotiate({"model_ref": "model/tail-boundary"})
+        count_request = _request(count_capability, "s17-count-is-not-bytes", "ctx-count-is-not-bytes")
+        count_id = boundary.operation_id(count_request)
+        with pytest.raises(CassetteError) as caught:
+            await boundary.dispatch(
+                "boundary",
+                "ctx-count-is-not-bytes",
+                count_request,
+                count_capability,
+                "EXEC",
+                lambda lease: {"unreachable": lease.lease_id},
+                pages=(full_pages[0],),
+            )
+        assert caught.value.code == "MEMORY_BUDGET_EXCEEDED"
+        assert not (boundary_log / f"{count_id}.json").exists()
+
+        pinned_started = asyncio.Event()
+        pinned_release = asyncio.Event()
+
+        async def pinned_worker(lease: ScheduledLease):
+            assert boundary.cache_contains(lease, tail_pages[0])
+            pinned_started.set()
+            await pinned_release.wait()
+            return {"lease": lease.lease_id}
+
+        pinned_capability = boundary.negotiate({"model_ref": "model/tail-boundary"})
+        pinned_request = _request(pinned_capability, "s17-pinned-tail", "ctx-pinned-tail")
+        pinned_task = asyncio.create_task(boundary.dispatch(
+            "boundary",
+            "ctx-pinned-tail",
+            pinned_request,
+            pinned_capability,
+            "EXEC",
+            pinned_worker,
+            pages=tail_pages,
+        ))
+        await _reached(pinned_started)
+        wide_capability = boundary.negotiate({"model_ref": "model/wide-boundary"})
+        wide_request = _request(wide_capability, "s17-wide-prefetch", "ctx-wide-prefetch")
+        wide_task = asyncio.create_task(boundary.dispatch(
+            "boundary",
+            "ctx-wide-prefetch",
+            wide_request,
+            wide_capability,
+            "EXEC",
+            lambda lease: {"resident": boundary.cache_contains(lease, full_pages[0])},
+            pages=(full_pages[0],),
+        ))
+        await asyncio.sleep(0)
+        prefetch_status = boundary.scheduler_status()
+        assert prefetch_status["cache_bytes"] == 9
+        assert prefetch_status["cache_budget_bytes"] == 9
+        assert all(row["page"] != full_pages[0] for row in prefetch_status["cache"])
+        pinned_release.set()
+        pinned_result, wide_result = await asyncio.gather(pinned_task, wide_task)
+        assert pinned_result["state"] == "SUCCEEDED"
+        assert wide_result["result"]["value"]["resident"]
+        assert boundary.scheduler_status()["cache_bytes"] == PAGE_BYTES + 9
+        assert boundary.scheduler_status()["cache_budget_bytes"] == PAGE_BYTES + 9
+
+        full_capability = boundary.negotiate({"model_ref": "model/full-boundary"})
+        full_request = _request(full_capability, "s17-full-equality", "ctx-full-equality")
+        full_result = await boundary.dispatch(
+            "boundary",
+            "ctx-full-equality",
+            full_request,
+            full_capability,
+            "EXEC",
+            lambda lease: {"lease": lease.lease_id},
+            pages=(full_pages[0],),
+        )
+        assert full_result["state"] == "SUCCEEDED"
+        full_status = boundary.scheduler_status()
+        assert full_status["cache_bytes"] == PAGE_BYTES
+        assert full_status["cache_budget_bytes"] == PAGE_BYTES
+        assert [row["length"] for row in full_status["cache"]] == [PAGE_BYTES]
+
+        short_capability = boundary.negotiate({"model_ref": "model/short-boundary"})
+        short_request = _request(short_capability, "s17-full-minus-one", "ctx-full-minus-one")
+        short_id = boundary.operation_id(short_request)
+        with pytest.raises(CassetteError) as caught:
+            await boundary.dispatch(
+                "boundary",
+                "ctx-full-minus-one",
+                short_request,
+                short_capability,
+                "EXEC",
+                lambda lease: {"unreachable": lease.lease_id},
+                pages=(full_pages[0],),
+            )
+        assert caught.value.code == "MEMORY_BUDGET_EXCEEDED"
+        assert not (boundary_log / f"{short_id}.json").exists()
+
+        unknown_capability = boundary.negotiate({"model_ref": "model/full-boundary"})
+        unknown_request = _request(unknown_capability, "s17-unknown-page", "ctx-unknown-page")
+        unknown_id = boundary.operation_id(unknown_request)
+        with pytest.raises(CassetteError) as caught:
+            await boundary.dispatch(
+                "boundary",
+                "ctx-unknown-page",
+                unknown_request,
+                unknown_capability,
+                "EXEC",
+                lambda lease: {"unreachable": lease.lease_id},
+                pages=(_digest("not-in-the-root"),),
+            )
+        assert caught.value.code == "PAGE_CORRUPT"
+        assert not (boundary_log / f"{unknown_id}.json").exists()
+        boundary.close()
 
     asyncio.run(scenario())

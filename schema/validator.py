@@ -23,16 +23,29 @@ def _validate(schema, value, path):
         if target not in _schemas():
             return [f"{path}: unknown schema reference {schema['$ref']!r}"]
         return _validate(_schemas()[target], value, path)
+    if "anyOf" in schema:
+        if any(not _validate(candidate, value, path) for candidate in schema["anyOf"]):
+            return []
+        return [f"{path}: value does not match any allowed shape"]
     kind = schema.get("type")
     if kind == "object":
         if not isinstance(value, dict):
             return [f"{path}: expected object"]
         properties = schema.get("properties", {})
+        patterns = schema.get("patternProperties", {})
+        matched = {
+            name: [shape for pattern, shape in patterns.items() if re.fullmatch(pattern, name)]
+            for name in value
+        }
         defects = [
             f"{path}.{name}: unknown field"
             for name in sorted(set(value) - set(properties))
-            if schema.get("additionalProperties") is False
+            if schema.get("additionalProperties") is False and not matched[name]
         ]
+        if len(value) < schema.get("minProperties", 0):
+            defects.append(f"{path}: requires at least {schema['minProperties']} properties")
+        if len(value) > schema.get("maxProperties", len(value)):
+            defects.append(f"{path}: permits at most {schema['maxProperties']} properties")
         defects.extend(
             f"{path}.{name}: required field missing"
             for name in schema.get("required", [])
@@ -40,6 +53,9 @@ def _validate(schema, value, path):
         )
         for name in sorted(set(value) & set(properties)):
             defects.extend(_validate(properties[name], value[name], f"{path}.{name}"))
+        for name in sorted(set(value) - set(properties)):
+            for shape in matched[name]:
+                defects.extend(_validate(shape, value[name], f"{path}.{name}"))
         return defects
     if kind == "array":
         if not isinstance(value, list):
@@ -52,7 +68,13 @@ def _validate(schema, value, path):
         if "items" in schema:
             for index, item in enumerate(value):
                 defects.extend(_validate(schema["items"], item, f"{path}[{index}]"))
+        if schema.get("uniqueItems") and any(
+            item == prior for index, item in enumerate(value) for prior in value[:index]
+        ):
+            defects.append(f"{path}: items must be unique")
         return defects
+    if kind == "null":
+        return [] if value is None else [f"{path}: expected null"]
     expected = {"string": str, "integer": int, "number": (int, float), "boolean": bool}.get(kind)
     if expected is not None:
         if isinstance(value, bool) and kind in ("integer", "number"):

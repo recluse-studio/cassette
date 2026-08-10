@@ -540,6 +540,7 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
     assert schedule.reserve_bytes == 4 * GIB
     assert schedule.memory_ceiling_bytes == 12 * GIB
     assert schedule.available_bytes == 10 * GIB
+    assert schedule.cache_budget_bytes == profile["cache_bytes"]
     assert schedule.peak_live_bytes == 10 * GIB
     assert [step.step for step in schedule.steps] == [0, 1, 2]
     assert [step.atom_id for step in schedule.steps] == list(ATOMS)
@@ -565,9 +566,11 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
         candidate_plan, candidate_certificate, candidate_evidence, candidate_profile = _fixture()
         candidate_profile = _profile(field)
         _bind(candidate_plan, candidate_certificate, candidate_profile)
-        assert pager.admit_schedule(
+        candidate_schedule = pager.admit_schedule(
             candidate_plan, candidate_certificate, candidate_evidence, candidate_profile
-        ).peak_live_bytes == 10 * GIB
+        )
+        assert candidate_schedule.peak_live_bytes == 10 * GIB
+        assert candidate_schedule.cache_budget_bytes == candidate_profile["cache_bytes"]
         candidate_profile[field] += 1
         _bind(candidate_plan, candidate_certificate, candidate_profile)
         with pytest.raises(CassetteError) as exceeded:

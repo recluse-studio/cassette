@@ -1,4 +1,4 @@
-# genschema.py — emits Q6/Q9/Q19/Q30/Q31/Q33/Q40/Q50/Q57 contracts and generated tables; depends on errors.py.
+# genschema.py — emits Q6/Q9/Q19/Q30/Q31/Q33/Q40/Q50/Q57/Q77 contracts and generated tables; depends on errors.py.
 """Generate Cassette's machine contracts. Files under schema/ are never hand-edited.
 
 The emitted documents are JSON Schema Draft 2020-12 contracts. The generated validator executes
@@ -44,6 +44,34 @@ REMOTE_METADATA_FIELDS = [
     "revision_ancestry",
     "training_precision",
     "source_validators",
+]
+Q77_FIELDS = [
+    "cassette_protocol",
+    "adapter_version",
+    "model_revision",
+    "source_parent",
+    "execution_mode",
+    "plan_id",
+    "performance_tier",
+    "training_tier",
+    "modalities",
+    "input_limits",
+    "context_limit",
+    "reasoning_fields",
+    "reasoning_history_policy",
+    "tool_schema",
+    "structured_output",
+    "sampling",
+    "streaming",
+    "cancellation",
+    "conversation_state_contract",
+]
+Q77_PROVENANCE_STATUSES = [
+    "BEST_EFFORT",
+    "EXACT",
+    "PROVIDER_MANAGED",
+    "UNKNOWN",
+    "UNSUPPORTED",
 ]
 MAX_IDENTIFIER_BYTES = 256
 MAX_TEXT_BYTES = 4096
@@ -419,6 +447,67 @@ def record(
         "properties": properties,
         "required": sorted(set(properties) - set(optional)),
     }
+
+
+def q77_properties() -> dict[str, dict]:
+    """Return the one bounded structural definition for every Q77 field."""
+
+    bounded_strings = {**bounded_array(bounded_text(), maximum=64), "uniqueItems": True}
+    return {
+        "cassette_protocol": bounded_text(),
+        "adapter_version": bounded_text(),
+        "model_revision": digest(),
+        "source_parent": digest(),
+        "execution_mode": bounded_text(),
+        "plan_id": digest(),
+        "performance_tier": bounded_text(),
+        "training_tier": bounded_text(),
+        "modalities": bounded_strings,
+        "input_limits": {
+            "type": "object",
+            "additionalProperties": False,
+            "minProperties": 1,
+            "maxProperties": 64,
+            "patternProperties": {
+                r"^[^\x00-\x1f\x7f]{1,512}$": integer(),
+            },
+        },
+        "context_limit": integer(minimum=1),
+        "reasoning_fields": bounded_strings,
+        "reasoning_history_policy": bounded_text(),
+        "tool_schema": {"anyOf": [digest(), {"type": "null"}]},
+        "structured_output": {"type": "boolean"},
+        "sampling": bounded_strings,
+        "streaming": {"type": "boolean"},
+        "cancellation": {"type": "boolean"},
+        "conversation_state_contract": bounded_text(),
+    }
+
+
+Q77_PROVENANCE = record(
+    "Q77 field provenance",
+    "Q77",
+    {
+        "status": text(enum=Q77_PROVENANCE_STATUSES, maximum=32),
+        "evidence": digest(),
+    },
+)
+Q77_FIELD_PROVENANCE = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {field: ref("capability_field_provenance") for field in Q77_FIELDS},
+    "required": sorted(Q77_FIELDS),
+}
+Q77_PROFILE_PROVENANCE = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        **{field: ref("capability_field_provenance") for field in Q77_FIELDS},
+        "precision": ref("capability_field_provenance"),
+        "semantic_state": ref("capability_field_provenance"),
+    },
+    "required": sorted((*Q77_FIELDS, "precision", "semantic_state")),
+}
 
 
 REMOTE_FIELD = record(
@@ -862,6 +951,35 @@ CONTRACTS: dict[str, dict] = {
             "performance_tiers": array({"type": "object"}),
         },
     ),
+    "capability_field_provenance": Q77_PROVENANCE,
+    "capability_request": record(
+        "Q77 capability request",
+        "Q77",
+        {
+            "model_ref": bounded_text(),
+            **q77_properties(),
+        },
+        optional=tuple(Q77_FIELDS),
+    ),
+    "callable_capability": record(
+        "Q77 callable capability",
+        "Q77",
+        {
+            **q77_properties(),
+            "precision": bounded_text(),
+            "semantic_state": digest(),
+            "field_provenance": Q77_PROFILE_PROVENANCE,
+        },
+    ),
+    "negotiated_capability": record(
+        "Q77 negotiated capability",
+        "Q77",
+        {
+            **q77_properties(),
+            "field_provenance": Q77_FIELD_PROVENANCE,
+            "negotiation_id": digest(),
+        },
+    ),
     "run_request": record(
         "Canonical run request",
         "Q31",
@@ -1007,16 +1125,29 @@ def _validate(schema, value, path):
         if target not in _schemas():
             return [f"{{path}}: unknown schema reference {{schema['$ref']!r}}"]
         return _validate(_schemas()[target], value, path)
+    if "anyOf" in schema:
+        if any(not _validate(candidate, value, path) for candidate in schema["anyOf"]):
+            return []
+        return [f"{{path}}: value does not match any allowed shape"]
     kind = schema.get("type")
     if kind == "object":
         if not isinstance(value, dict):
             return [f"{{path}}: expected object"]
         properties = schema.get("properties", {{}})
+        patterns = schema.get("patternProperties", {{}})
+        matched = {{
+            name: [shape for pattern, shape in patterns.items() if re.fullmatch(pattern, name)]
+            for name in value
+        }}
         defects = [
             f"{{path}}.{{name}}: unknown field"
             for name in sorted(set(value) - set(properties))
-            if schema.get("additionalProperties") is False
+            if schema.get("additionalProperties") is False and not matched[name]
         ]
+        if len(value) < schema.get("minProperties", 0):
+            defects.append(f"{{path}}: requires at least {{schema['minProperties']}} properties")
+        if len(value) > schema.get("maxProperties", len(value)):
+            defects.append(f"{{path}}: permits at most {{schema['maxProperties']}} properties")
         defects.extend(
             f"{{path}}.{{name}}: required field missing"
             for name in schema.get("required", [])
@@ -1024,6 +1155,9 @@ def _validate(schema, value, path):
         )
         for name in sorted(set(value) & set(properties)):
             defects.extend(_validate(properties[name], value[name], f"{{path}}.{{name}}"))
+        for name in sorted(set(value) - set(properties)):
+            for shape in matched[name]:
+                defects.extend(_validate(shape, value[name], f"{{path}}.{{name}}"))
         return defects
     if kind == "array":
         if not isinstance(value, list):
@@ -1036,7 +1170,13 @@ def _validate(schema, value, path):
         if "items" in schema:
             for index, item in enumerate(value):
                 defects.extend(_validate(schema["items"], item, f"{{path}}[{{index}}]"))
+        if schema.get("uniqueItems") and any(
+            item == prior for index, item in enumerate(value) for prior in value[:index]
+        ):
+            defects.append(f"{{path}}: items must be unique")
         return defects
+    if kind == "null":
+        return [] if value is None else [f"{{path}}: expected null"]
     expected = {{"string": str, "integer": int, "number": (int, float), "boolean": bool}}.get(kind)
     if expected is not None:
         if isinstance(value, bool) and kind in ("integer", "number"):
@@ -1093,6 +1233,7 @@ def emit(outdir: Path) -> dict[str, str]:
         f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
+        f"Q77_FIELDS = {pprint.pformat(Q77_FIELDS, sort_dicts=True, width=100)}\n"
         f"CERTIFICATE_DIMENSIONS = {pprint.pformat(certificate_dimensions, sort_dicts=True, width=100)}\n"
     )
     put("tables.py", tables)

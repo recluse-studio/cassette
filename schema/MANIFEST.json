@@ -1,8 +1,12 @@
 {
+  "callable_capability.json": "6e93cc36f958b23dafda280375a05c86be0188efab3b8680af714967dfc8d3a0",
+  "capability_field_provenance.json": "c19b20289b6d381887efe4ab0a30ccaf9a6b4344dc7c434c4a255fdeaebc3bf1",
   "capability_profile.json": "ebbd55731f03a6095b8aafe8b8bee658a06605f1ad11f47ab38f8050f9848ebf",
+  "capability_request.json": "00438cd3a2c215b24e09da080326c88eb2aa08216427519b91c2a1fc7cec246f",
   "error.json": "4665d53782b610a7e36c9164d03e805f7d8fe5cd74bdf2727610a7d2d5ff2072",
   "execution_plan.json": "1a922522379d6a4e0464c1aec7156ccaaf772b80e0e5c88ce423ff91fb3a2a90",
   "mathematical_certificate.json": "6e7bc53432859543bc148e5aa7d595e86f0130bd5aa02047053e088934f2403d",
+  "negotiated_capability.json": "76ebd34e8a804602446b4e3675b899c770accb6cb11b97f8414885bd8a7c2a11",
   "operation.json": "5c76e77a1adbd4568546c640c6f8ef0c08f6c1fb5dbfebcaa43ed4a936b20463",
   "operator_dispatch.json": "21b1dbd55a80e0ec35515200e1daf03e253f8688dc2e9658c8633013a76568dd",
   "remote_metadata.json": "3da766417388bd6d34499dd760aaf110cb469a8f43314c368b42f893dbd01ab6",
@@ -12,8 +16,8 @@
   "run_event.json": "d33c75a4b235b4f975ab662ae6dfd69128a7ab62d17de3d9304e89af9e1833a7",
   "run_request.json": "0462fd01a44433f04df26cfa952654eaa3a3a1c9c3c7afa278b45c549924fd48",
   "source_descriptor.json": "febc9b9c3ffa590ee7741038300b995943bd6af45c0599dee6e21ee978e7af69",
-  "tables.py": "84107299401cef547f3f11f930661c8543ef86ab5c6db8ef48d88bec61d8bfc9",
+  "tables.py": "d6f1edc8fdb0ba5fb494b4ec1f1983553547911c569911a2cbd1cc481d7ed718",
   "tensor_map.json": "e8c4c07ecbb65f7920e9e5593e2523d8f5c24055d27e1b4d4081063b57182637",
   "tensor_span.json": "c8262fe8a7944ea216c72469dc4b421391b34a74f5b60fa12459e7a114a14335",
-  "validator.py": "524722225e40bd72275df245e480a2137c4bc23d915270d99c7aa34c897f7a96"
+  "validator.py": "0be12051123dd9296ae8b610dcc77f5db3c50f4a6acff7658023f3c54be4078b"
 }

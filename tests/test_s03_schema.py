@@ -1,4 +1,4 @@
-# test_s03_schema.py — F0 fixtures for the S03 Q6/Q9/Q31/Q50/Q57 contracts; depends on tools/genschema.py, schema/validator.py, tools/ledger.py.
+# test_s03_schema.py — F0 fixtures for the S03 Q6/Q9/Q31/Q50/Q57/Q77 contracts; depends on tools/genschema.py, schema/tables.py, schema/validator.py, tools/ledger.py.
 """S03 proves the generated contracts, serialization round-trip, and hand-edit rejection."""
 
 import hashlib
@@ -8,16 +8,28 @@ import subprocess
 import sys
 from pathlib import Path
 
+from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from tools.genschema import emit
 from tools.ledger import check_generated_integrity
 
 REPO = Path(__file__).resolve().parent.parent
+EXPECTED_Q77_FIELDS = (
+    "cassette_protocol", "adapter_version", "model_revision", "source_parent",
+    "execution_mode", "plan_id", "performance_tier", "training_tier", "modalities",
+    "input_limits", "context_limit", "reasoning_fields", "reasoning_history_policy",
+    "tool_schema", "structured_output", "sampling", "streaming", "cancellation",
+    "conversation_state_contract",
+)
 EXPECTED_KINDS = {
+    "callable_capability",
+    "capability_field_provenance",
+    "capability_request",
     "capability_profile",
     "error",
     "execution_plan",
     "mathematical_certificate",
+    "negotiated_capability",
     "operation",
     "operator_dispatch",
     "remote_metadata",
@@ -62,6 +74,14 @@ EXPECTED_FIELDS = {
         "structured_output", "streaming", "cancellation", "training", "source",
         "performance_tiers",
     },
+    "capability_field_provenance": {"status", "evidence"},
+    "capability_request": {"model_ref", *EXPECTED_Q77_FIELDS},
+    "callable_capability": {
+        *EXPECTED_Q77_FIELDS, "precision", "semantic_state", "field_provenance",
+    },
+    "negotiated_capability": {
+        *EXPECTED_Q77_FIELDS, "field_provenance", "negotiation_id",
+    },
     "run_request": {
         "idempotency_key", "model_ref", "input", "context_ref", "generation", "reasoning",
         "output_schema", "tools",
@@ -105,6 +125,7 @@ EXPECTED_OPTIONAL = {
         "expected_identity",
     },
     "remote_metadata_field": {"value"},
+    "capability_request": set(EXPECTED_Q77_FIELDS),
 }
 
 
@@ -388,6 +409,31 @@ EXECUTION_PLAN = {
     "artifact_refs": [DIGESTS[1]],
     "weight_payload_bytes": 0,
 }
+Q77_CAPABILITY = {
+    "cassette_protocol": "1",
+    "adapter_version": "fixture-v1",
+    "model_revision": DIGESTS[0],
+    "source_parent": DIGESTS[1],
+    "execution_mode": "COMPILED_CERTIFIED",
+    "plan_id": DIGESTS[2],
+    "performance_tier": "FRONTIER_CLASS",
+    "training_tier": "B",
+    "modalities": ["text", "vision"],
+    "input_limits": {"images": 2, "input_bytes": 4096},
+    "context_limit": 8192,
+    "reasoning_fields": ["effort", "history"],
+    "reasoning_history_policy": "preserve",
+    "tool_schema": DIGESTS[3],
+    "structured_output": True,
+    "sampling": ["seed", "temperature"],
+    "streaming": True,
+    "cancellation": True,
+    "conversation_state_contract": "immutable-context-v1",
+}
+Q77_FIELD_PROVENANCE = {
+    field: {"status": "EXACT", "evidence": DIGESTS[4]}
+    for field in EXPECTED_Q77_FIELDS
+}
 GOLDEN = {
     "error": {
         "code": "PAGE_CORRUPT",
@@ -421,6 +467,31 @@ GOLDEN = {
         "training": {"tiers": ["adapter"]},
         "source": {"kinds": ["huggingface"]},
         "performance_tiers": [{"id": "frontier-class"}],
+    },
+    "capability_field_provenance": {
+        "status": "EXACT",
+        "evidence": DIGESTS[4],
+    },
+    "capability_request": {
+        "model_ref": "model/current",
+        "modalities": ["text"],
+        "context_limit": 4096,
+        "streaming": True,
+    },
+    "callable_capability": {
+        **Q77_CAPABILITY,
+        "precision": "q4",
+        "semantic_state": DIGESTS[5],
+        "field_provenance": {
+            **Q77_FIELD_PROVENANCE,
+            "precision": {"status": "EXACT", "evidence": DIGESTS[6]},
+            "semantic_state": {"status": "EXACT", "evidence": DIGESTS[7]},
+        },
+    },
+    "negotiated_capability": {
+        **Q77_CAPABILITY,
+        "field_provenance": Q77_FIELD_PROVENANCE,
+        "negotiation_id": DIGESTS[8],
     },
     "run_request": {
         "idempotency_key": "run-request-1",
@@ -484,7 +555,8 @@ def run_generator(root: Path) -> subprocess.CompletedProcess:
 
 
 def test_exact_contract_set_is_json_schema_and_round_trips():
-    """Q6/Q9/Q31/Q50/Q57: every specified record is generated, exact, and JSON-round-trippable."""
+    """Q6/Q9/Q31/Q50/Q57/Q77: each record is generated, exact, and round-trippable."""
+    assert tuple(Q77_FIELDS) == EXPECTED_Q77_FIELDS
     assert set(GOLDEN) == EXPECTED_KINDS
     assert {path.stem for path in (REPO / "schema").glob("*.json") if path.name != "MANIFEST.json"} == EXPECTED_KINDS
     for kind, obj in GOLDEN.items():
@@ -499,7 +571,7 @@ def test_exact_contract_set_is_json_schema_and_round_trips():
 
 
 def test_q31_q50_q57_shapes_are_complete():
-    """Q6/Q9/Q31/Q50/Q57: every formal record has its complete exact field boundary."""
+    """Q6/Q9/Q31/Q50/Q57/Q77: each formal record has its exact field boundary."""
     assert set(EXPECTED_FIELDS) == EXPECTED_KINDS
     for kind, fields in EXPECTED_FIELDS.items():
         schema = json.loads((REPO / "schema" / f"{kind}.json").read_text(encoding="utf-8"))
@@ -510,7 +582,7 @@ def test_q31_q50_q57_shapes_are_complete():
 
 
 def test_malformed_f0_instances_are_rejected():
-    """Q6/Q9/Q31/Q50/Q57: F0 rejects omissions, type errors, unknowns, bad bounds, and bad refs."""
+    """Q6/Q9/Q31/Q50/Q57/Q77: F0 rejects omissions, type errors, unknowns, and bad bounds."""
     missing = dict(GOLDEN["error"])
     del missing["code"]
     assert any("required field missing" in defect for defect in validate("error", missing))
@@ -543,6 +615,25 @@ def test_malformed_f0_instances_are_rejected():
     assert any("below 1" in defect for defect in validate("tensor_map", bad_span))
     bad_error = {**GOLDEN["operation"], "error": {"code": "PAGE_CORRUPT"}}
     assert any("required field missing" in defect for defect in validate("operation", bad_error))
+    bad_q77_limit = {
+        **GOLDEN["capability_request"],
+        "input_limits": {"input_bytes": True},
+    }
+    assert any("bool is not" in defect for defect in validate("capability_request", bad_q77_limit))
+    bad_q77_profile = {
+        **GOLDEN["callable_capability"],
+        "modalities": ["text", "text"],
+    }
+    assert any("unique" in defect for defect in validate("callable_capability", bad_q77_profile))
+    missing_q77_provenance = {
+        **GOLDEN["negotiated_capability"],
+        "field_provenance": dict(GOLDEN["negotiated_capability"]["field_provenance"]),
+    }
+    del missing_q77_provenance["field_provenance"]["plan_id"]
+    assert any(
+        "required field missing" in defect
+        for defect in validate("negotiated_capability", missing_q77_provenance)
+    )
     assert validate("no_such_kind", {}) == ["unknown contract kind 'no_such_kind'"]
 
 

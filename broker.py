@@ -1,4 +1,4 @@
-# broker.py — canonical operations, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on errors.py, schema, sources.py, store.py.
+# broker.py — canonical operations, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on errors.py, pager.py, schema, sources.py, store.py.
 """Own the operation log and the single broker admission and dispatch authority."""
 
 from __future__ import annotations
@@ -14,8 +14,11 @@ import json
 import os
 from pathlib import Path
 import re
+from types import MappingProxyType
 
 from errors import CassetteError
+from pager import CertifiedSchedule
+from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
 from store import (
@@ -58,25 +61,8 @@ _MAX_CLIENT_QUEUE = 8
 _MAX_QUEUE = 64
 _MAX_COST = 16
 _AGE_PROMOTION = 4
-_Q77_FIELDS = (
-    "cassette_protocol", "adapter_version", "model_revision", "source_parent",
-    "execution_mode", "plan_id", "performance_tier", "training_tier", "modalities",
-    "input_limits", "context_limit", "reasoning_fields", "reasoning_history_policy",
-    "tool_schema", "structured_output", "sampling", "streaming", "cancellation",
-    "conversation_state_contract",
-)
-_PROFILE_FIELDS = frozenset((*_Q77_FIELDS, "precision", "semantic_state", "field_provenance"))
-_NEGOTIATED_FIELDS = frozenset((*_Q77_FIELDS, "field_provenance", "negotiation_id"))
-_TEXT_FIELDS = frozenset({
-    "cassette_protocol", "adapter_version", "execution_mode", "performance_tier",
-    "training_tier", "reasoning_history_policy", "conversation_state_contract", "precision",
-})
-_DIGEST_FIELDS = frozenset({"model_revision", "source_parent", "plan_id", "semantic_state"})
 _SEQUENCE_FIELDS = frozenset({"modalities", "reasoning_fields", "sampling"})
 _BOOLEAN_FIELDS = frozenset({"structured_output", "streaming", "cancellation"})
-_PROVENANCE_STATUSES = frozenset({
-    "EXACT", "BEST_EFFORT", "PROVIDER_MANAGED", "UNKNOWN", "UNSUPPORTED",
-})
 _FOUNDATIONAL_FIELDS = frozenset({
     "cassette_protocol", "adapter_version", "model_revision", "source_parent",
     "execution_mode", "plan_id", "performance_tier", "training_tier", "precision",
@@ -182,6 +168,15 @@ class _QueuedRun:
     enqueued_turn: int
 
 
+@dataclass(frozen=True, slots=True)
+class _CacheAuthority:
+    """One pager-admitted byte budget bound to one verified store page catalog."""
+
+    root_digest: str
+    cache_budget_bytes: int
+    page_lengths: Mapping[str, int]
+
+
 class _ControlStop(Exception):
     def __init__(self, action: str):
         self.action = action
@@ -227,34 +222,13 @@ def _limits(value: object, object_id: str, field: str) -> dict[str, int]:
 def _profile(value: object, object_id: str) -> dict:
     """Validate one immutable callable profile and its field-level authority."""
 
-    if not isinstance(value, dict) or set(value) != _PROFILE_FIELDS:
-        _reject("INVALID_REQUEST", object_id, "capability profile has an incorrect field set")
-    for field in _TEXT_FIELDS:
-        _text(value[field], object_id, field)
-    for field in _DIGEST_FIELDS:
-        _exact_digest(value[field], object_id, field)
+    defects = validate("callable_capability", value)
+    if defects:
+        _reject("INVALID_REQUEST", object_id, "; ".join(defects), invariant="Q77: generated callable profile")
     for field in _SEQUENCE_FIELDS:
         _strings(value[field], object_id, field)
-    for field in _BOOLEAN_FIELDS:
-        if type(value[field]) is not bool:
-            _reject("INVALID_REQUEST", object_id, f"{field} must be boolean")
-    if type(value["context_limit"]) is not int or not 1 <= value["context_limit"] < 2**64:
-        _reject("INVALID_REQUEST", object_id, "context_limit must be a positive unsigned integer")
     _limits(value["input_limits"], object_id, "input_limits")
-    if value["tool_schema"] is not None:
-        _exact_digest(value["tool_schema"], object_id, "tool_schema")
     provenance = value["field_provenance"]
-    expected = frozenset((*_Q77_FIELDS, "precision", "semantic_state"))
-    if not isinstance(provenance, dict) or set(provenance) != expected:
-        _reject("INVALID_REQUEST", object_id, "field_provenance must account for every profile field")
-    for field, record in provenance.items():
-        if (
-            not isinstance(record, dict)
-            or set(record) != {"status", "evidence"}
-            or record["status"] not in _PROVENANCE_STATUSES
-        ):
-            _reject("INVALID_REQUEST", object_id, f"field_provenance.{field} is malformed")
-        _exact_digest(record["evidence"], object_id, f"field_provenance.{field}.evidence")
     if any(provenance[field]["status"] != "EXACT" for field in _FOUNDATIONAL_FIELDS):
         _reject("CAPABILITY_MISMATCH", object_id, "callable identity and execution fields must be EXACT")
     return _json_copy(value, object_id, "capability profile")
@@ -443,14 +417,7 @@ def _partials_from(records: object, revision: ResolvedSource, object_id: str) ->
 class CanonicalBroker:
     """Persist Q6 operations and execute each Q5 transition from its last durable phase."""
 
-    def __init__(self, operation_log: str | Path, *, cache_page_limit: int = 64):
-        if type(cache_page_limit) is not int or not 1 <= cache_page_limit <= 4096:
-            _reject(
-                "INVALID_REQUEST",
-                "broker:cache",
-                "cache_page_limit must be an integer in 1..4096",
-                invariant="Q65: bounded cache residency",
-            )
+    def __init__(self, operation_log: str | Path):
         self.operation_log = Path(operation_log)
         self._owner_fd: int | None = None
         try:
@@ -501,9 +468,11 @@ class CanonicalBroker:
         self._leases: dict[str, ScheduledLease] = {}
         self._lease_epoch = 0
         self._active_cache_key: tuple[str, str, str, str] | None = None
-        self._cache_page_limit = cache_page_limit
+        self._cache_authorities: dict[tuple[str, str, str, str], _CacheAuthority] = {}
         self._cache: dict[tuple[tuple[str, str, str, str], str], int] = {}
         self._cache_pins: dict[tuple[tuple[str, str, str, str], str], set[str]] = {}
+        self._cache_bytes = 0
+        self._cache_budget_bytes = 0
         self._cache_clock = 0
         self._page_churn = 0
         self._switches = 0
@@ -561,13 +530,49 @@ class CanonicalBroker:
         model_ref: str,
         profile: dict,
         activate: Callable[[ScheduledLease, dict], object],
+        *,
+        schedule: CertifiedSchedule,
+        cartridge: str | Path,
+        root_digest: str,
     ) -> str:
-        """Register immutable capability data and bind one mutable alias to it."""
+        """Bind one callable profile to pager admission and a verified store page catalog."""
 
         model_ref = _text(model_ref, "capability:registration", "model_ref")
         if not callable(activate):
             _reject("INVALID_REQUEST", model_ref, "activate must be callable", invariant="Q65: SWITCH lease")
         profile = _profile(profile, model_ref)
+        if (
+            not isinstance(schedule, CertifiedSchedule)
+            or schedule.plan_id != profile["plan_id"]
+            or type(schedule.cache_budget_bytes) is not int
+            or not 0 <= schedule.cache_budget_bytes < 2**64
+        ):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                model_ref,
+                "callable profile must carry its exact pager-admitted Q47 cache budget",
+                invariant="Q47/Q65: one cache-byte authority",
+            )
+        root_digest = _exact_digest(root_digest, model_ref, "cache root_digest")
+        locations = page_locations(cartridge, root_digest)
+        page_lengths = MappingProxyType({location.page_digest: location.length for location in locations})
+        cache_key = (
+            profile["model_revision"], profile["plan_id"], profile["precision"],
+            profile["semantic_state"],
+        )
+        authority = _CacheAuthority(root_digest, schedule.cache_budget_bytes, page_lengths)
+        existing_authority = self._cache_authorities.get(cache_key)
+        if existing_authority is not None and (
+            existing_authority.root_digest != authority.root_digest
+            or existing_authority.cache_budget_bytes != authority.cache_budget_bytes
+            or existing_authority.page_lengths != authority.page_lengths
+        ):
+            _reject(
+                "IDEMPOTENCY_CONFLICT",
+                model_ref,
+                "one cache identity cannot change its root, page lengths, or Q47 byte budget",
+                invariant="Q47/Q65: immutable cache authority",
+            )
         exact_revision_ref = _DIGEST.fullmatch(model_ref) is not None
         if exact_revision_ref and model_ref != profile["model_revision"]:
             _reject(
@@ -590,6 +595,7 @@ class CanonicalBroker:
                 "an immutable capability profile cannot change its activation authority",
                 invariant="Q77: immutable callable profile",
             )
+        self._cache_authorities.setdefault(cache_key, authority)
         current = self._aliases.get(model_ref)
         if not exact_revision_ref and current != profile_id:
             self._aliases[model_ref] = profile_id
@@ -623,7 +629,7 @@ class CanonicalBroker:
             _reject("INVALID_REQUEST", object_id, "negotiation requires model_ref")
         model_ref = _text(requested["model_ref"], object_id, "model_ref")
         object_id = f"negotiation:{model_ref}"
-        allowed = frozenset({"model_ref", *_Q77_FIELDS})
+        allowed = frozenset({"model_ref", *Q77_FIELDS})
         if not set(requested) <= allowed:
             _reject("INVALID_REQUEST", object_id, "negotiation contains an unknown field")
         _json_digest(requested, object_id, "requested capability")
@@ -657,6 +663,14 @@ class CanonicalBroker:
         }
         negotiation_id = digest_bytes(canonical_bytes(material))
         record = {**capability, "negotiation_id": negotiation_id}
+        defects = validate("negotiated_capability", record)
+        if defects:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                object_id,
+                "; ".join(defects),
+                invariant="Q77: generated negotiated capability",
+            )
         self._negotiations.setdefault(negotiation_id, {
             **material,
             "record": record,
@@ -712,6 +726,7 @@ class CanonicalBroker:
                 "request target, negotiation, or context differs from pre-admission",
                 invariant="Q77: stable run identity",
             )
+        self._page_bytes(entry["cache_key"], pages, operation_id)
         duplicate = None
         async with self._scheduler_lock:
             entry = self._negotiation(negotiation, operation_id)
@@ -770,10 +785,13 @@ class CanonicalBroker:
             "queues": {client: len(queue) for client, queue in sorted(self._queues.items()) if queue},
             "leases": [self._lease_record(lease) for lease in self._leases.values()],
             "active_cache_key": None if self._active_cache_key is None else list(self._active_cache_key),
+            "cache_bytes": self._cache_bytes,
+            "cache_budget_bytes": self._cache_budget_bytes,
             "cache": [
                 {
                     "cache_key": list(cache_key),
                     "page": page,
+                    "length": self._cache_authorities[cache_key].page_lengths[page],
                     "pinned": bool(self._cache_pins.get((cache_key, page))),
                 }
                 for cache_key, page in sorted(self._cache)
@@ -793,28 +811,13 @@ class CanonicalBroker:
 
     @staticmethod
     def _validate_requested(requested: dict, object_id: str) -> None:
-        for field, value in requested.items():
-            if field == "model_ref":
-                continue
-            if field in _TEXT_FIELDS:
-                _text(value, object_id, field)
-            elif field in _DIGEST_FIELDS:
-                _exact_digest(value, object_id, field)
-            elif field in _SEQUENCE_FIELDS:
-                _strings(value, object_id, field)
-            elif field in _BOOLEAN_FIELDS:
-                if type(value) is not bool:
-                    _reject("INVALID_REQUEST", object_id, f"{field} must be boolean")
-            elif field == "context_limit":
-                if type(value) is not int or not 1 <= value < 2**64:
-                    _reject("INVALID_REQUEST", object_id, "context_limit must be a positive unsigned integer")
-            elif field == "input_limits":
-                _limits(value, object_id, field)
-            elif field == "tool_schema":
-                if value is not None:
-                    _exact_digest(value, object_id, field)
-            else:
-                _reject("INVALID_REQUEST", object_id, f"{field} is not requestable")
+        defects = validate("capability_request", requested)
+        if defects:
+            _reject("INVALID_REQUEST", object_id, "; ".join(defects), invariant="Q77: generated capability request")
+        for field in sorted(_SEQUENCE_FIELDS & requested.keys()):
+            _strings(requested[field], object_id, field)
+        if "input_limits" in requested:
+            _limits(requested["input_limits"], object_id, "input_limits")
 
     def _resolve_profiles(self, model_ref: str, object_id: str) -> list[str]:
         alias = self._aliases.get(model_ref)
@@ -854,18 +857,19 @@ class CanonicalBroker:
 
     @staticmethod
     def _selected_capability(profile: dict, requested: dict) -> dict:
-        selected = {field: profile[field] for field in _Q77_FIELDS}
+        selected = {field: profile[field] for field in Q77_FIELDS}
         for field in (*_SEQUENCE_FIELDS, *_BOOLEAN_FIELDS, "tool_schema", "input_limits", "context_limit"):
             if field in requested:
                 selected[field] = requested[field]
         selected["field_provenance"] = {
-            field: profile["field_provenance"][field] for field in _Q77_FIELDS
+            field: profile["field_provenance"][field] for field in Q77_FIELDS
         }
         return _json_copy(selected, profile["model_revision"], "selected capability")
 
     def _negotiation(self, value: object, operation_id: str) -> dict:
-        if not isinstance(value, dict) or set(value) != _NEGOTIATED_FIELDS:
-            _reject("CAPABILITY_MISMATCH", operation_id, "negotiation record has an incorrect field set")
+        defects = validate("negotiated_capability", value)
+        if defects:
+            _reject("CAPABILITY_MISMATCH", operation_id, "; ".join(defects), invariant="Q77: generated negotiation")
         negotiation_id = value.get("negotiation_id")
         if not isinstance(negotiation_id, str) or _DIGEST.fullmatch(negotiation_id) is None:
             _reject("CAPABILITY_MISMATCH", operation_id, "negotiation identity is malformed")
@@ -882,17 +886,43 @@ class CanonicalBroker:
     def _page_ids(self, pages: object, object_id: str) -> tuple[str, ...]:
         if (
             not isinstance(pages, tuple)
-            or len(pages) > self._cache_page_limit
             or list(pages) != sorted(set(pages))
             or any(not isinstance(page, str) or _DIGEST.fullmatch(page) is None for page in pages)
         ):
             _reject(
                 "MEMORY_BUDGET_EXCEEDED",
                 object_id,
-                "scheduled pages must be a sorted unique tuple within the cache-page bound",
+                "scheduled pages must be a sorted unique tuple of canonical page identities",
                 invariant="Q65: bounded page churn",
             )
         return pages
+
+    def _page_bytes(
+        self,
+        cache_key: tuple[str, str, str, str],
+        pages: tuple[str, ...],
+        object_id: str,
+    ) -> int:
+        authority = self._cache_authorities.get(cache_key)
+        if authority is None:
+            _reject("ROOT_INVALID", object_id, "cache identity has no verified page authority")
+        missing = [page for page in pages if page not in authority.page_lengths]
+        if missing:
+            _reject(
+                "PAGE_CORRUPT",
+                missing[0],
+                "scheduled page is absent from the verified root index",
+                invariant="Q62/Q65: verified page identity before cache admission",
+            )
+        required = sum(authority.page_lengths[page] for page in pages)
+        if required > authority.cache_budget_bytes:
+            _reject(
+                "MEMORY_BUDGET_EXCEEDED",
+                object_id,
+                f"required cache pages need {required} bytes; Q47 admitted {authority.cache_budget_bytes}",
+                invariant="Q47/Q65: cache admission is denominated in bytes",
+            )
+        return required
 
     def _queued_count(self) -> int:
         return sum(len(queue) for queue in self._queues.values())
@@ -1093,6 +1123,9 @@ class CanonicalBroker:
         }
 
     def _prefetch(self, cache_key: tuple[str, str, str, str], pages: tuple[str, ...]) -> None:
+        budget_key = self._active_cache_key or cache_key
+        budget = self._cache_authorities[budget_key].cache_budget_bytes
+        self._cache_budget_bytes = budget
         admitted = set()
         for page in pages:
             key = (cache_key, page)
@@ -1101,26 +1134,41 @@ class CanonicalBroker:
                 self._cache[key] = self._cache_clock
                 admitted.add(key)
                 continue
-            if len(self._cache) >= self._cache_page_limit:
-                candidates = [
-                    (age, candidate) for candidate, age in self._cache.items()
-                    if not self._cache_pins.get(candidate) and candidate not in admitted
-                ]
-                if not candidates:
-                    continue
-                _, victim = min(candidates)
-                self._cache.pop(victim)
-                self._cache_pins.pop(victim, None)
-                self._page_churn += 1
+            length = self._cache_authorities[cache_key].page_lengths[page]
+            if not self._make_cache_room(length, budget, admitted):
+                continue
             self._cache[key] = self._cache_clock
+            self._cache_bytes += length
             admitted.add(key)
+        self._make_cache_room(0, budget, admitted)
+
+    def _make_cache_room(
+        self,
+        needed_bytes: int,
+        budget_bytes: int,
+        protected: set[tuple[tuple[str, str, str, str], str]],
+    ) -> bool:
+        while self._cache_bytes + needed_bytes > budget_bytes:
+            candidates = [
+                (age, candidate) for candidate, age in self._cache.items()
+                if not self._cache_pins.get(candidate) and candidate not in protected
+            ]
+            if not candidates:
+                return False
+            _, victim = min(candidates)
+            victim_key, victim_page = victim
+            self._cache_bytes -= self._cache_authorities[victim_key].page_lengths[victim_page]
+            self._cache.pop(victim)
+            self._cache_pins.pop(victim, None)
+            self._page_churn += 1
+        return True
 
     def _pin(self, lease: ScheduledLease, pages: tuple[str, ...]) -> None:
         lease = self._live_lease(lease)
         for page in pages:
             key = (lease.cache_key, page)
             if key not in self._cache:
-                _reject("PAGE_CORRUPT", page, "scheduled page is not resident", invariant="Q65: cache pin")
+                _reject("PAGE_CORRUPT", page, "scheduled page lacks cache admission", invariant="Q65: cache pin")
             self._cache_pins.setdefault(key, set()).add(lease.lease_id)
 
     def _unpin(self, lease: ScheduledLease, pages: tuple[str, ...]) -> None:
