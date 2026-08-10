@@ -1,4 +1,4 @@
-# pager.py — certificate recomputation, page readiness, selection, and pinned MLX dispatch (Q19/Q20/Q30/Q33/Q40/Q47/Q63/Q64); depends on errors.py, schema, store.py.
+# pager.py — certificate recomputation, page readiness, certified transformer execution, and pinned MLX dispatch (Q19/Q20/Q30/Q33/Q36/Q40/Q47/Q63/Q64); depends on errors.py, schema, store.py.
 """Admit certified schedules, validate their pages before use, and dispatch through MLX."""
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ import asyncio
 import importlib.metadata
 import math
 import platform
+import struct
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -166,6 +167,36 @@ class PageExecution:
     execution_seed: int | None
     output_digest: str
     transitions: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class TransformerTrace:
+    """Q63 observed F3 residency, traffic, and MLX allocation for one schedule instant."""
+
+    phase: str
+    schedule: ResidencyStep
+    planned_pages: tuple[str, ...]
+    operator_cases: tuple[str, ...]
+    page_reads: int
+    load_bytes: int
+    model_tensor_bytes: int
+    activation_bytes: int
+    kv_reserved_bytes: int
+    runtime_buffer_bytes: int
+    model_memory_bytes: int
+    metal_peak_bytes: int
+
+
+@dataclass(frozen=True)
+class TransformerExecution:
+    """Q36 committed F3 logits and recurrent state; failures publish no instance."""
+
+    page_execution: PageExecution
+    logits: tuple[float, ...]
+    logits_digest: str
+    kv_digest: str
+    kv_bytes: int
+    trace: TransformerTrace
 
 
 def _reject_evidence(object_id: str, label: str, detail: str) -> None:
@@ -1501,6 +1532,7 @@ _HEX = frozenset("0123456789abcdef")
 @dataclass(frozen=True)
 class _CompiledRuntimeStep:
     schedule: ResidencyStep
+    operator_case_id: str
     service_face: tuple[str, ...]
     description_digest: str
     exact_pages: tuple[str, ...]
@@ -1947,8 +1979,8 @@ def _bind_runtime_steps(
         row["face_id"]: tuple(row["condition_ids"])
         for row in certificate["compatibility"]["service_faces"]
     }
-    operation_laws = {
-        row["operation_id"]: row["sampling_law_id"]
+    operation_rows = {
+        row["operation_id"]: row
         for row in evidence["execution_contract"]["operations"]
     }
     sampling_laws = {
@@ -2032,7 +2064,8 @@ def _bind_runtime_steps(
                 "Q20: exact description pages",
                 "each compiled step requires distinct exact description pages",
             )
-        law = sampling_laws[operation_laws[expected.operation_id]]
+        operation = operation_rows[expected.operation_id]
+        law = sampling_laws[operation["sampling_law_id"]]
         distributions = {
             item["atom_id"]: item["columns"]
             for item in law["law"].get("atom_distributions", [])
@@ -2096,10 +2129,16 @@ def _bind_runtime_steps(
             )
         possible_routes = [exact_pages]
         if sample_units:
-            possible_routes.append(_ordered_unique((
-                *exact_pages,
-                *(page for _, pages in sample_units for page in pages),
-            )))
+            if expected.fresh_samples == 1:
+                possible_routes.extend(
+                    _ordered_unique((*exact_pages, *pages))
+                    for _, pages in sample_units
+                )
+            else:
+                possible_routes.append(_ordered_unique((
+                    *exact_pages,
+                    *(page for _, pages in sample_units for page in pages),
+                )))
         if max(len(route) for route in possible_routes) > expected.page_reads:
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
@@ -2122,6 +2161,7 @@ def _bind_runtime_steps(
                 )
         runtime_steps.append(_CompiledRuntimeStep(
             schedule=expected,
+            operator_case_id=operation["operator_case_id"],
             service_face=service_faces[atom_claim["service_face_id"]],
             description_digest=description_digest,
             exact_pages=exact_pages,
@@ -2252,6 +2292,8 @@ class CertifiedPager:
             locations,
         )
         self._locations = locations
+        self._schedule = schedule
+        self._profile = dict(profile)
         self._certificate_id = schedule.certificate_id
         self._support = frozenset(evidence["observation_contract"]["support"])
         self._cover = {
@@ -2387,6 +2429,39 @@ class CertifiedPager:
         )
         return step, draws, seed
 
+    async def _prepare_execution(
+        self,
+        selection: CompiledSelection,
+        timeout_seconds: float | None,
+        cancel_event: asyncio.Event | None,
+        transitions: list[tuple[str, str, str]],
+    ) -> tuple[
+        _CompiledRuntimeStep,
+        tuple[int, ...],
+        int | None,
+        tuple[str, ...],
+        dict[str, bytes],
+    ]:
+        step, sample_units, seed = self._validate_selection(selection)
+        deadline = _deadline(timeout_seconds, self._certificate_id)
+        sample_pages = dict(step.sample_units)
+        planned_pages = _ordered_unique((
+            *step.exact_pages,
+            *(page for unit in sample_units for page in sample_pages[unit]),
+        ))
+        self.replay_selection = selection
+        payloads = await _acquire_pages(
+            self._cartridge,
+            self._locations,
+            planned_pages,
+            deadline,
+            cancel_event,
+            self._certificate_id,
+            transitions,
+        )
+        _cancelled(cancel_event, self._certificate_id)
+        return step, sample_units, seed, planned_pages, payloads
+
     async def execute(
         self,
         selection: CompiledSelection,
@@ -2396,26 +2471,14 @@ class CertifiedPager:
     ) -> PageExecution:
         transitions: list[tuple[str, str, str]] = []
         try:
-            step, sample_units, seed = self._validate_selection(selection)
-            deadline = _deadline(timeout_seconds, self._certificate_id)
-            sample_pages = dict(step.sample_units)
-            planned_pages = _ordered_unique((
-                *step.exact_pages,
-                *(page
-                  for unit in sample_units
-                  for page in sample_pages[unit]),
-            ))
-            self.replay_selection = selection
-            payloads = await _acquire_pages(
-                self._cartridge,
-                self._locations,
-                planned_pages,
-                deadline,
-                cancel_event,
-                self._certificate_id,
-                transitions,
+            step, sample_units, seed, planned_pages, payloads = (
+                await self._prepare_execution(
+                    selection,
+                    timeout_seconds,
+                    cancel_event,
+                    transitions,
+                )
             )
-            _cancelled(cancel_event, self._certificate_id)
             _submit_resident_pages(
                 payloads,
                 planned_pages,
@@ -2439,6 +2502,619 @@ class CertifiedPager:
                 transitions=tuple(transitions),
             )
             self.last_committed = committed
+            self._next_step += 1
+            self.replay_selection = None
+            return committed
+        finally:
+            self.last_attempt_transitions = tuple(transitions)
+
+
+@dataclass(frozen=True)
+class _TransformerRuntimeStep:
+    embedding_case_id: str
+    projection_case_id: str
+    attention_case_id: str
+    embedding_shape: tuple[int, ...]
+    projection_shape: tuple[int, ...]
+    attention_shape: tuple[int, ...]
+    token_count: int
+    vocabulary_size: int
+    metadata: bytes
+    embedding_page: str
+    query_page: str
+    key_page: str
+    exact_value_page: str
+    sampled_value_pages: tuple[tuple[int, str], ...]
+    model_tensor_bytes: int
+    activation_bytes: int
+
+
+def _real_matrix(
+    value: object,
+    shape: tuple[int, int],
+    object_id: str,
+    label: str,
+) -> tuple[tuple[Fraction, ...], ...]:
+    matrix = _matrix(value, shape, "REAL", object_id, label)
+    if any(scalar[1] for row in matrix for scalar in row):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q36: real F3 attention representation",
+            f"{label} contains an imaginary component",
+        )
+    return tuple(tuple(scalar[0] for scalar in row) for row in matrix)
+
+
+def _float32_payload(
+    matrix: tuple[tuple[Fraction, ...], ...],
+    object_id: str,
+    label: str,
+) -> bytes:
+    try:
+        return struct.pack(
+            f"<{sum(len(row) for row in matrix)}f",
+            *(float(value) for row in matrix for value in row),
+        )
+    except (OverflowError, struct.error) as exc:
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q36: finite float32 transformer representation",
+            f"{label} cannot be represented as finite float32: {exc}",
+        ) from exc
+
+
+def _transpose_matrix(
+    matrix: tuple[tuple[Fraction, ...], ...],
+) -> tuple[tuple[Fraction, ...], ...]:
+    return tuple(tuple(row[column] for row in matrix) for column in range(len(matrix[0])))
+
+
+def _transformer_metadata(
+    step: _CompiledRuntimeStep,
+    sampling_law_id: str,
+) -> bytes:
+    return canonical_bytes({
+        "atom_id": step.schedule.atom_id,
+        "operation_id": step.schedule.operation_id,
+        "sampling_kind": step.sampling_kind,
+        "sampling_law_id": sampling_law_id,
+        "sample_units": [
+            {"probability": str(probability), "unit": unit}
+            for (unit, _), probability in zip(
+                step.sample_units,
+                step.probabilities,
+                strict=True,
+            )
+        ],
+    })
+
+
+def _bind_transformer_steps(
+    runtime_steps: tuple[_CompiledRuntimeStep, ...],
+    evidence: dict,
+    locations: dict[str, object],
+    profile: dict,
+    object_id: str,
+) -> tuple[tuple[_TransformerRuntimeStep, ...], int]:
+    target = evidence["target"]
+    if target["field"] != "REAL" or len(target["shape"]) != 2:
+        raise _runtime_error(
+            "UNSUPPORTED_OPERATOR",
+            object_id,
+            "Q36: F3 transformer target representation",
+            "certified F3 attention requires one real matrix target",
+        )
+    target_shape = tuple(target["shape"])
+    embedding_cases = [row for row in DISPATCH_ROWS if row["operator"] == "embedding"]
+    projection_cases = [row for row in DISPATCH_ROWS if row["operator"] == "matmul"]
+    if len(embedding_cases) != 1 or len(projection_cases) != 1:
+        raise _runtime_error(
+            "UNSUPPORTED_OPERATOR",
+            object_id,
+            "Q36: generated F3 transformer graph",
+            "the generated table must identify one embedding and one projection tuple",
+        )
+    embedding_case = embedding_cases[0]
+    projection_case = projection_cases[0]
+    atom_rows = {row["atom_id"]: row for row in evidence["atoms"]}
+    bound_steps = []
+    kv_capacity = 0
+    activation_peak = 0
+    for step in runtime_steps:
+        case = _CASES.get(step.operator_case_id)
+        if (
+            case is None
+            or case["operator"] != "attention"
+            or case["input_dtypes"] != ["float32", "float32", "float32"]
+            or case["output_dtype"] != "float32"
+        ):
+            raise _runtime_error(
+                "UNSUPPORTED_OPERATOR",
+                step.operator_case_id,
+                "Q36: generated F3 attention tuple",
+                "the F3 transformer requires one generated float32 attention case",
+            )
+        attention_shape = tuple(case["input_shapes"][2])
+        if (
+            tuple(reversed(projection_case["input_shapes"][1])) != target_shape
+            or embedding_case["output_shape"] != projection_case["input_shapes"][0]
+            or math.prod(projection_case["output_shape"]) != math.prod(attention_shape)
+            or len(attention_shape) < 2
+            or math.prod(attention_shape[:-2]) != 1
+            or case["input_shapes"][0] != case["input_shapes"][1]
+            or case["input_shapes"][0] != case["input_shapes"][2]
+            or case["output_shape"] != case["input_shapes"][2]
+        ):
+            raise _runtime_error(
+                "UNSUPPORTED_OPERATOR",
+                step.operator_case_id,
+                "Q36: generated F3 attention tuple",
+                "query, key, value, output, and certified matrix shapes must agree",
+            )
+        atom = atom_rows[step.schedule.atom_id]
+        matrix = _real_matrix(
+            atom["matrix"], target_shape, step.schedule.atom_id, "atom matrix"
+        )
+        reconstruction = _real_matrix(
+            atom["description"]["reconstruction"],
+            target_shape,
+            step.schedule.atom_id,
+            "description reconstruction",
+        )
+        description_payload = _float32_payload(
+            _transpose_matrix(reconstruction),
+            step.schedule.atom_id,
+            "transposed description reconstruction",
+        )
+        embedding_bytes = math.prod(embedding_case["input_shapes"][0]) * 4
+        projection_bytes = math.prod(projection_case["input_shapes"][1]) * 4
+        exact_lengths = (embedding_bytes, projection_bytes, projection_bytes, projection_bytes)
+        if len(step.exact_pages) != 4 or any(
+            page not in locations or locations[page].length != length
+            for page, length in zip(step.exact_pages, exact_lengths, strict=True)
+        ) or (
+            step.exact_pages[3] != digest_bytes(description_payload)
+            or len(description_payload) != projection_bytes
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                step.schedule.atom_id,
+                "Q19/Q36: physical description equals certified reconstruction",
+                "the ordered embedding, Q, K, and V pages do not encode the certified F3 description",
+            )
+        sampled_value_pages = []
+        for (unit, pages), probability in zip(
+            step.sample_units,
+            step.probabilities,
+            strict=True,
+        ):
+            if len(pages) != 1 or probability <= 0 or unit >= target_shape[1]:
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    step.schedule.atom_id,
+                    "Q36: executable fresh residual page",
+                    "each residual column requires one positive-probability value page",
+                )
+            estimator = [list(row) for row in reconstruction]
+            for row in range(target_shape[0]):
+                estimator[row][unit] += (
+                    matrix[row][unit] - reconstruction[row][unit]
+                ) / probability
+            estimator_payload = _float32_payload(
+                _transpose_matrix(tuple(tuple(row) for row in estimator)),
+                step.schedule.atom_id,
+                f"transposed sample unit {unit} estimator",
+            )
+            if (
+                pages[0] != digest_bytes(estimator_payload)
+                or pages[0] not in locations
+                or locations[pages[0]].length != len(estimator_payload)
+            ):
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    step.schedule.atom_id,
+                    "Q19/Q36: physical correction equals certified estimator",
+                    f"sample unit {unit} does not encode its certified float32 estimator",
+                )
+            sampled_value_pages.append((unit, pages[0]))
+        if step.sampling_kind == "EXACT":
+            if sampled_value_pages or step.schedule.fresh_samples:
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    step.schedule.atom_id,
+                    "Q36: exact F3 description",
+                    "exact execution cannot name correction pages or samples",
+                )
+        elif step.sampling_kind == "FRESH_RANDOM":
+            if step.schedule.fresh_samples != 1 or not sampled_value_pages:
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    step.schedule.atom_id,
+                    "Q36: fresh F3 residual estimator",
+                    "the F3 attention path requires exactly one fresh certified sample",
+                )
+        else:
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                step.schedule.atom_id,
+                "Q36: exact or fresh F3 description",
+                f"unsupported sampling kind {step.sampling_kind!r}",
+            )
+        metadata = _transformer_metadata(
+            step, atom["description"]["sampling_law_id"]
+        )
+        token_bytes = math.prod(embedding_case["input_shapes"][1]) * 4
+        hidden_bytes = math.prod(embedding_case["output_shape"]) * 4
+        projection_output_bytes = math.prod(projection_case["output_shape"]) * 4
+        output_bytes = math.prod(case["output_shape"]) * 4
+        activation_bytes = (
+            token_bytes
+            + hidden_bytes
+            + 5 * projection_output_bytes
+            + output_bytes
+        )
+        model_tensor_bytes = embedding_bytes + 3 * projection_bytes
+        maximum_route = 4 + (1 if sampled_value_pages else 0)
+        maximum_load = sum(exact_lengths) + (
+            projection_bytes if sampled_value_pages else 0
+        )
+        dynamic_memory = maximum_load + model_tensor_bytes + len(metadata)
+        if (
+            step.schedule.description_bytes != sum(exact_lengths)
+            or step.schedule.metadata_bytes != len(metadata)
+            or step.schedule.page_reads != maximum_route
+            or step.schedule.load_bytes != maximum_load
+            or step.schedule.dynamic_memory_bytes != dynamic_memory
+        ):
+            raise _runtime_error(
+                "CAPABILITY_MISMATCH",
+                step.schedule.operation_id,
+                "Q63: transformer trace equals certified schedule",
+                "description, metadata, page, traffic, or dynamic-memory demand differs from the executable route",
+            )
+        bound_steps.append(_TransformerRuntimeStep(
+            embedding_case_id=embedding_case["case_id"],
+            projection_case_id=projection_case["case_id"],
+            attention_case_id=case["case_id"],
+            embedding_shape=tuple(embedding_case["input_shapes"][0]),
+            projection_shape=tuple(projection_case["input_shapes"][1]),
+            attention_shape=attention_shape,
+            token_count=math.prod(embedding_case["input_shapes"][1]),
+            vocabulary_size=embedding_case["input_shapes"][0][0],
+            metadata=metadata,
+            embedding_page=step.exact_pages[0],
+            query_page=step.exact_pages[1],
+            key_page=step.exact_pages[2],
+            exact_value_page=step.exact_pages[3],
+            sampled_value_pages=tuple(sampled_value_pages),
+            model_tensor_bytes=model_tensor_bytes,
+            activation_bytes=activation_bytes,
+        ))
+        kv_capacity += 2 * projection_output_bytes
+        activation_peak = max(activation_peak, activation_bytes)
+    if (
+        profile["context_bytes"] != kv_capacity
+        or profile["activation_bytes"] != activation_peak
+        or profile["cache_bytes"] != 0
+        or profile["training_window_bytes"] != 0
+    ):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q63: F3 recurrent and activation placement",
+            "the profile must reserve exactly the F3 KV horizon and activation peak without cache or training state",
+        )
+    fixed_memory = sum(
+        profile[name]
+        for name in (
+            "activation_bytes",
+            "cache_bytes",
+            "context_bytes",
+            "runtime_buffer_bytes",
+            "training_window_bytes",
+        )
+    )
+    if any(
+        runtime.schedule.live_memory_bytes
+        != fixed_memory + runtime.schedule.dynamic_memory_bytes
+        for runtime in runtime_steps
+    ):
+        raise _runtime_error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q63: transformer live-memory schedule",
+            "one trace step differs from the admitted fixed plus dynamic memory equation",
+        )
+    return tuple(bound_steps), kv_capacity
+
+
+def _runtime_tokens(
+    value: object,
+    count: int,
+    vocabulary_size: int,
+    object_id: str,
+) -> tuple[int, ...]:
+    if not isinstance(value, (list, tuple)) or len(value) != count:
+        raise _runtime_error(
+            "INVALID_REQUEST",
+            object_id,
+            "Q36: bounded transformer activation",
+            f"tokens require exactly {count} unsigned indices",
+        )
+    tokens = []
+    for item in value:
+        if type(item) is not int or not 0 <= item < vocabulary_size:
+            raise _runtime_error(
+                "INVALID_REQUEST",
+                object_id,
+                "Q36: bounded transformer activation",
+                f"every token must be an integer in [0,{vocabulary_size})",
+            )
+        tokens.append(item)
+    return tuple(tokens)
+
+
+def _flatten_runtime_values(value: object) -> tuple[float, ...]:
+    if isinstance(value, list):
+        return tuple(
+            scalar
+            for item in value
+            for scalar in _flatten_runtime_values(item)
+        )
+    return (float(value),)
+
+
+class CertifiedTransformer(CertifiedPager):
+    """Q36 F3 attention execution with certificate-bound pages, logits, and KV commit."""
+
+    def __init__(
+        self,
+        cartridge: str | Path,
+        plan: object,
+        certificate: object,
+        evidence: object,
+        profile: object,
+        page_map: object,
+    ):
+        super().__init__(cartridge, plan, certificate, evidence, profile, page_map)
+        assert isinstance(evidence, dict) and isinstance(profile, dict)
+        self._transformer_steps, kv_capacity = _bind_transformer_steps(
+            self._steps,
+            evidence,
+            self._locations,
+            self._profile,
+            self._certificate_id,
+        )
+        self._kv = bytearray(kv_capacity)
+        self._kv_length = 0
+        self.last_transformer: TransformerExecution | None = None
+
+    @property
+    def kv_snapshot(self) -> bytes:
+        return bytes(self._kv[: self._kv_length])
+
+    async def execute_token(
+        self,
+        selection: CompiledSelection,
+        tokens: object,
+        *,
+        timeout_seconds: float | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> TransformerExecution:
+        transitions: list[tuple[str, str, str]] = []
+        try:
+            preview, _, _ = self._validate_selection(selection)
+            transformer_step = self._transformer_steps[preview.schedule.step]
+            token_values = _runtime_tokens(
+                tokens,
+                transformer_step.token_count,
+                transformer_step.vocabulary_size,
+                self._certificate_id,
+            )
+            step, sample_units, seed, planned_pages, payloads = (
+                await self._prepare_execution(
+                    selection,
+                    timeout_seconds,
+                    cancel_event,
+                    transitions,
+                )
+            )
+            value_page = (
+                transformer_step.exact_value_page
+                if step.sampling_kind == "EXACT"
+                else dict(transformer_step.sampled_value_pages)[sample_units[0]]
+            )
+            observed_reads = len(payloads)
+            observed_load = sum(len(payload) for payload in payloads.values())
+            if (
+                observed_reads != step.schedule.page_reads
+                or observed_load != step.schedule.load_bytes
+            ):
+                raise _runtime_error(
+                    "CAPABILITY_MISMATCH",
+                    step.schedule.operation_id,
+                    "Q63: no hidden transformer traffic",
+                    "observed page reads or loaded bytes differ from the certified schedule",
+                )
+            mx, _ = _mlx_runtime()
+            _require_runtime(transformer_step.attention_case_id, mx)
+            mx.synchronize()
+            mx.clear_cache()
+            baseline = mx.get_active_memory()
+            mx.reset_peak_memory()
+            states = {page_digest: "RESIDENT" for page_digest in planned_pages}
+            for page_digest in planned_pages:
+                _move_page(states, transitions, page_digest, "GPU_SUBMITTED")
+            embedding_array = mx.array(
+                struct.unpack(
+                    f"<{len(payloads[transformer_step.embedding_page]) // 4}f",
+                    payloads[transformer_step.embedding_page],
+                ),
+                dtype=mx.float32,
+            ).reshape(transformer_step.embedding_shape)
+            query_weight = mx.array(
+                struct.unpack(
+                    f"<{len(payloads[transformer_step.query_page]) // 4}f",
+                    payloads[transformer_step.query_page],
+                ),
+                dtype=mx.float32,
+            ).reshape(transformer_step.projection_shape)
+            key_weight = mx.array(
+                struct.unpack(
+                    f"<{len(payloads[transformer_step.key_page]) // 4}f",
+                    payloads[transformer_step.key_page],
+                ),
+                dtype=mx.float32,
+            ).reshape(transformer_step.projection_shape)
+            value_weight = mx.array(
+                struct.unpack(
+                    f"<{len(payloads[value_page]) // 4}f",
+                    payloads[value_page],
+                ),
+                dtype=mx.float32,
+            ).reshape(transformer_step.projection_shape)
+            token_array = mx.array(token_values, dtype=mx.uint32)
+            hidden = dispatch(
+                transformer_step.embedding_case_id,
+                (embedding_array, token_array),
+            )
+            query_array = dispatch(
+                transformer_step.projection_case_id,
+                (hidden, query_weight),
+            )
+            key_array = dispatch(
+                transformer_step.projection_case_id,
+                (hidden, key_weight),
+            )
+            value_array = dispatch(
+                transformer_step.projection_case_id,
+                (hidden, value_weight),
+            )
+            key_values = _flatten_runtime_values(key_array.tolist())
+            value_values = _flatten_runtime_values(value_array.tolist())
+            if self._kv_length:
+                prior = self.kv_snapshot[-2 * len(key_values) * 4 :]
+                prior_key = struct.unpack(
+                    f"<{len(key_values)}f", prior[: len(key_values) * 4]
+                )
+                prior_value = struct.unpack(
+                    f"<{len(value_values)}f", prior[len(key_values) * 4 :]
+                )
+                row_width = transformer_step.attention_shape[-1]
+                key_values = (*prior_key[:row_width], *key_values[row_width:])
+                value_values = (*prior_value[:row_width], *value_values[row_width:])
+            effective_key = mx.array(key_values, dtype=mx.float32).reshape(
+                transformer_step.attention_shape
+            )
+            effective_value = mx.array(value_values, dtype=mx.float32).reshape(
+                transformer_step.attention_shape
+            )
+            logits_array = dispatch(
+                transformer_step.attention_case_id,
+                (
+                    query_array.reshape(transformer_step.attention_shape),
+                    effective_key,
+                    effective_value,
+                ),
+            )
+            key_payload = struct.pack(
+                f"<{len(key_values)}f",
+                *key_values,
+            )
+            value_payload = struct.pack(
+                f"<{len(value_values)}f",
+                *value_values,
+            )
+            logits = _flatten_runtime_values(logits_array.tolist())
+            logits_payload = struct.pack(f"<{len(logits)}f", *logits)
+            metal_peak = mx.get_peak_memory() - baseline
+            runtime_bytes = metal_peak - (
+                transformer_step.activation_bytes + transformer_step.model_tensor_bytes
+            )
+            if runtime_bytes != self._profile["runtime_buffer_bytes"]:
+                raise _runtime_error(
+                    "MEMORY_BUDGET_EXCEEDED",
+                    step.schedule.operation_id,
+                    "Q63: no hidden transformer allocation",
+                    f"MLX used {runtime_bytes} runtime bytes; the certified trace declares {self._profile['runtime_buffer_bytes']}",
+                )
+            observed_memory = sum((
+                self._profile["cache_bytes"],
+                len(self._kv),
+                observed_load,
+                transformer_step.model_tensor_bytes,
+                len(transformer_step.metadata),
+                transformer_step.activation_bytes,
+                runtime_bytes,
+                self._profile["training_window_bytes"],
+            ))
+            if observed_memory != step.schedule.live_memory_bytes:
+                raise _runtime_error(
+                    "MEMORY_BUDGET_EXCEEDED",
+                    step.schedule.operation_id,
+                    "Q63: transformer trace equals certified schedule",
+                    f"observed {observed_memory} model bytes; schedule declares {step.schedule.live_memory_bytes}",
+                )
+            kv_end = self._kv_length + len(key_payload) + len(value_payload)
+            if kv_end > len(self._kv):
+                raise _runtime_error(
+                    "MEMORY_BUDGET_EXCEEDED",
+                    self._certificate_id,
+                    "Q36/Q63: KV horizon reservation",
+                    "the next recurrent commit exceeds the admitted KV extent",
+                )
+            for page_digest in planned_pages:
+                _move_page(states, transitions, page_digest, "RECLAIMABLE")
+            page_execution = PageExecution(
+                mode="COMPILED_CERTIFIED_TRANSFORMER",
+                step=step.schedule.step,
+                certificate_digest=self._certificate_id,
+                planned_pages=planned_pages,
+                sample_units=sample_units,
+                execution_seed=seed,
+                output_digest=_execution_digest(
+                    "COMPILED_CERTIFIED_TRANSFORMER",
+                    planned_pages,
+                    payloads,
+                    atom_id=step.schedule.atom_id,
+                    sample_units=sample_units,
+                ),
+                transitions=tuple(transitions),
+            )
+            self._kv[self._kv_length:kv_end] = key_payload + value_payload
+            self._kv_length = kv_end
+            trace = TransformerTrace(
+                phase="PREFILL" if step.schedule.step == 0 else "DECODE",
+                schedule=step.schedule,
+                planned_pages=planned_pages,
+                operator_cases=(
+                    transformer_step.embedding_case_id,
+                    transformer_step.projection_case_id,
+                    transformer_step.projection_case_id,
+                    transformer_step.projection_case_id,
+                    transformer_step.attention_case_id,
+                ),
+                page_reads=observed_reads,
+                load_bytes=observed_load,
+                model_tensor_bytes=transformer_step.model_tensor_bytes,
+                activation_bytes=transformer_step.activation_bytes,
+                kv_reserved_bytes=len(self._kv),
+                runtime_buffer_bytes=runtime_bytes,
+                model_memory_bytes=observed_memory,
+                metal_peak_bytes=metal_peak,
+            )
+            committed = TransformerExecution(
+                page_execution=page_execution,
+                logits=logits,
+                logits_digest=digest_bytes(logits_payload),
+                kv_digest=digest_bytes(self.kv_snapshot),
+                kv_bytes=self._kv_length,
+                trace=trace,
+            )
+            self.last_committed = page_execution
+            self.last_transformer = committed
             self._next_step += 1
             self.replay_selection = None
             return committed
