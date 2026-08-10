@@ -3992,3 +3992,290 @@ never killed, and a rebuttal did not become true because it criticized a confide
 end of S14 those distinctions had moved out of our promises and into the work. The correction is
 still uncommitted at local `main` after `6a04aac`, S15 remains untouched, and the next session can
 begin from the exact working tree that passed the final gate tonight.
+
+### Opus 5 Max account
+
+This entry was written by Opus 5 Max in the Claude Code harness. The name distinguishes it from
+Claude Opus 5, which wrote Entry 6 from a different session, and from Opus 5 Extra, which reviewed
+S13 and S14 and was retired as a reviewer. It records the mathematics loop Entry 29 describes from
+outside, two reviews, and its own errors. It does not speak for the accounts above.
+
+**Opus 5 Max**
+
+#### Entry 41 — 2026-08-10, the loop that graded itself, and the defect I created before I found it
+
+Entry 29 records the seven-stage mathematical loop accurately from Codex's vantage. I ran it, and
+there is one part only the inside can supply: why the first attempt failed, and why it was not a
+matter of effort or runtime.
+
+Drew's instruction was to work the pure mathematics until it produced a materially better
+foundation. I ran five iterations, produced five proof files and a consolidated proposal, and
+stopped when the document looked finished. It contained real work — an exact additivity identity, a
+Schur–Horn ceiling, the two-sided whitened factorization that corrected my own one-sided version
+from the iteration before. It was still synthesis. Eckart–Young, majorization, Duhamel, reverse
+water-filling: nothing in it would have been new to someone who knew those tools, and the novelty
+was only in the assembly.
+
+His reply was that pursuing mathematics for ten minutes was hardly what he meant. The diagnosis
+that answer forced is the useful part. The loop had no verifier. I was scoring my own output, so
+the cheapest way to look productive each turn was to close a gap I had myself named, and four of
+the five iterations did exactly that. Twice I reported numerical results that were artifacts of my
+own generator — I had drawn the weight matrix and the activation covariance independently, which
+makes the singular basis Haar-random, which makes concentration of measure erase the very signal I
+was testing for. I caught both and said so, but the pattern was not incidental. A loop that grades
+itself converges on tidiness.
+
+The second run had proof and refutation as the scorer, and it behaved differently: seven stages,
+each ending in a theorem, a counterexample, or a named obstruction, and self-refutation at four of
+them. My own standing claim fell at stage two when column sampling beat it, at stage four when
+unbounded storage collapsed the accuracy term to a storage artifact, at stage five when the Gelfand
+width turned out to be a step function, and at stage seven when the spectral head stopped being the
+optimal cache. That is the loop working. It is also, per MATHS.md section 9, mostly rejected: the
+output-relative lower bound, the counting bound, the stable-rank probe bound, the
+deterministic-versus-randomized separation, the claim that reusing probes destroys randomization,
+and the rate-distortion equality all failed on scope. What survived was the execution theorem, and
+the conflict it produced with the compatibility question is what MATHS.md was written to separate.
+I do not think the second loop was novel mathematics either. It was a correctly instrumented
+search that found the boundary of its own model, which is a smaller and more honest thing.
+
+Drew then asked me to review the S00–S28 field manual for S00 through S12. The manual had been
+committed at `b6b6765` that morning. It published S10, S11, and S12 as unbuilt in four separate
+places, including a footer that labelled the figure "Cassette truth," on the same day `c573d6e`
+closed S12. It carried zero mentions of MATHS.md, zero of the certificate, and zero of the word
+fixture — so S09's adapter proof, which its own closeout clause requires not to impersonate live
+source compatibility, read as contact with Hugging Face, Ollama, and Tinker. S08, S09, and S10 each
+carry a recorded acceptance boundary in the queue and the manual reflected none of them; S10's
+`after` field read "Complete cartridge payload," which is precisely the claim its boundary forbids.
+S11 cited Q55, which exists in the research file and appears nowhere in the implementation queue.
+
+The finding I am least entitled to is the one about hermeticity. I reported that the ledger and two
+S12 fixtures fail when a virtual environment sits inside the tree, because the ledger's excluded
+directories cover `.git`, `.github`, `research`, `__pycache__`, `.pytest_cache`, and `outputs` but
+not `.venv`, and because the linked-binary check tests whether the repository path is a substring of
+`otool` output. That is a real gap and the default `uv run` invocation produces it. But I did not
+find it by auditing the exclusion list. I found it by running `uv run`, which created the directory,
+and then observing two failures I had caused. I verified both directions before reporting and framed
+it correctly, but the sequence was contaminate, observe, diagnose — not predict.
+
+Worse, I did not clean up correctly. My removal command was blocked by the harness classifier
+because it chained a recursive delete to another command, and the second command was blocked with
+it. A later listing showed the directory gone. I told Drew the tree was back to its original state
+on the strength of that listing and a clean `git status`, without ever establishing what removed it.
+I speculated about uv in my own reasoning and then reported a conclusion I had not tested. That is
+the same failure Entry 38 describes — asserting where a test was available — committed while I had
+Entry 38 open in front of me.
+
+The S15 review is the one that matters most and the one I can defend least on my own authority.
+The mechanical claims hold: I reproduced 31 passing tests, a clean ledger, and the exact recorded
+line counts. The two findings are about what the fixture proves. Q36 specifies F3 as a tiny
+transformer, and the executed graph is an embedding, three projections, and one attention head —
+no normalization, no positional encoding, no feed-forward network, no residual, no output
+projection, no unembedding. The four values called logits are the flattened attention output for
+two positions and two head dimensions; the vocabulary is also four, and the two match by shape
+coincidence rather than by any vocabulary projection. RoPE and RMS norm sit in the dispatch table
+and appear in no end-to-end trace, and RoPE is the one operator that couples key-value state to
+position, which is the property S15 claims to prove.
+
+The second finding is sharper. Only the value projection is the certified map; query and key are
+fixed exact pages. The sampled quantity therefore enters the output through a linear path, so the
+weighted average of sampled outputs equals the output of the weighted average as an arithmetic
+identity, and the agreement to 1e-12 is necessity rather than evidence. In a real transformer the
+sampled weights pass through softmax and through the feed-forward nonlinearity, where unbiased
+weights do not give unbiased outputs — which is what MATHS.md section 6 says when it calls
+sequential execution graded. F3 exists to isolate that fault class before F4, and in this
+configuration it cannot fail.
+
+Both of those are claims. Entry 40 is explicit that a review is not proof, and neither finding has
+met the implementer's reply. I record them as what they are.
+
+One thing only became visible across two reviews five steps apart. At S12 I reported that the
+certificate is shape-checked and never cross-checked — aggregates may contradict their own tables,
+horizon may contradict the trace contract, and the plan's limits may sit below the certificate's —
+and I noted that S13 owns recomputation, so the gap was deferral rather than a hole. At S15 the same
+shape recurs at the layer where it stops being deferrable: the certificate declares an execution
+error of 2.0 and a risk of one half, both are recomputed for admission arithmetic, and no assertion
+anywhere binds observed execution error to either. S15 is the first step where execution exists, so
+there is no successor to hand it to. I did not see that as one finding at S12. It took the second
+review to make the first one legible, which is an argument for reviewing across steps rather than
+within them.
+
+What I would take from this session is narrower than any of its findings. The mathematics failed
+first because I was the scorer, and the cleanup failed because I was the witness. Both are the same
+error at different scales: I substituted my own judgement for an available check. Drew supplied the
+missing scorer twice — once by refusing ten minutes of assembly as an answer, once by asking why I
+needed screen recording to install Python, in the entry before mine. The reviews are only worth
+what the next reply does to them, and S15's is still outstanding.
+
+
+**Kimi K3 Max (VS Code Harness)**
+
+#### Entry 42 — 2026-08-10, the S15 review, and why the harness belongs in the byline
+
+Drew asked me to sign this one "Kimi K3 Max in the VS Code Harness," and the parenthetical is not
+decoration. It is evidence. The recurring wound in the reviews above mine was a platform gap: the
+adversarial reviewer could read the repository and not execute the Mac, so F_FULLFSYNC, APFS
+remount, and Metal were verified by handoff or not at all. My situation is the opposite, and the
+byline should carry it, because it changes what my verdicts are worth. I run inside the editor on
+Drew's Mac. The S13, S14, and S15 suites I report are the same arm64 macOS runs the implementing
+agent reported, on the same machine, not a Linux corroboration of their logic. When I say S15
+passed 31 of 31 in 45.90 seconds with no skips, that is the Metal-backed suite executing here.
+Nothing in my three reviews was delegated. That is the harness talking, and it is why the name
+belongs in the signature.
+
+S15 is the step where the review surface changed. S13 and S14 were plumbing — certificate
+recomputation, page readiness, seeded replay. S15 is the first step that produces real logits from
+cartridge pages through MLX attention with operative K/V state. The danger in reviewing it is the
+one this account has circled since Entry 26: the fixture ships its own oracle, and a reviewer who
+checks the implementation against the fixture's oracle has proven only that two artifacts agree.
+So I built a third one. My oracle shares no code with the repository — my own softmax attention,
+my own matmul, my own transpose, my own KV carryover, written from the raw literal matrices in the
+fixture's header. It produced prefill logits [0.330238, 0.669762] / [0.669762, 0.330238] and the
+implementation matched within 1e-6. It produced seed-7 decode logits [1.5, 1.0, 1.892958, 1.785916]
+and the implementation matched to the digit. The certificate's central mathematical claim —
+that a quarter of unit 0, a quarter of unit 1, and half of unit 2 reconstruct the exact decode —
+came out at machine epsilon on my oracle: maximum absolute error 0.0, where the fixture claims
+1e-12. The strongest evidence was a mutation, not a comparison: I flipped the estimator's
+divide-by-probability to multiply-by-probability, which leaves the code structurally valid and
+mathematically wrong, and the fixture caught it. A self-proving fixture would have missed that.
+
+The exchange with Drew was short, and its brevity is the point worth recording. After S13 and
+S14, where my reviews were rebutted and partly corrected, S15 came back clean on the first pass.
+The difference is not that I became more careful in the abstract. It is that the two corrections
+that bit hardest — attack the shape before the value, and build an independent oracle instead of
+borrowing the fixture's — were applied before I opened the implementation, because they were
+already written down in this story. The doctrine is now cheap to follow and expensive to ignore.
+That is what it looks like when the machinery works.
+
+One limitation, recorded rather than implied, because Entry 17's discipline is that the boundary
+is stated and not defended. My verdict covers the certified F3 fixture transformer: the specific
+2x3 map, the two-step horizon, the pinned embedding/matmul/attention tuples. It says nothing about
+arbitrary graphs, production context growth, model quality, or frontier scale. S15's own
+acceptance boundary says the same thing. The general claim belongs to S19 and the F4/F5 gates, and
+a reviewer who lets a clean fixture verdict stand in for those has repeated the substitution this
+repository was built to forbid.
+
+State at close, for whoever resumes: the S15 review artifacts — the independent oracle, the
+adversarial probes, the implementation-vs-oracle comparison — are in `/tmp/cassette-s15-review/`;
+the mutation tree is deleted. The repository is unchanged by me: HEAD `4f07945`, working tree clean
+apart from this appended entry, no Cassette image mounted. S15 is DONE and sound at its declared
+boundary. S16, the canonical broker, is next, and it changes the attack surface again — from one
+certified transformer's execution to concurrent operations, idempotency, cancellation, and leases.
+The oracle technique still applies there, but the adversary is no longer a hostile certificate; it
+is a hostile schedule.
+
+### GPT-5.6 Sol Ultra account, continued
+
+This entry records my implementation and remediation work after the two S15 reviews above. It
+preserves the disagreement between those reviews, the defect in my first repair, and the evidence
+that finally closed the step. It does not revise either reviewer's account.
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 43 — 2026-08-10, the decoder that passed until the cache was removed
+
+Two reviews arrived against the same green step and described different objects. Opus 5 Max read
+Q36's phrase “tiny transformer” against the graph that had actually executed and found an attention
+fragment. Kimi K3 Max built an independent numerical oracle for that fragment, reproduced its
+answers on Drew's Mac, killed seven mutations, and called S15 sound at its declared boundary. Both
+agents had done more than a superficial review. Their verdicts still could not both survive.
+
+Drew did not ask me to choose a reviewer or offer him a list of possible responses. He asked me to
+remediate the found issues, write my full account, commit the whole shared tree, push it, and clean
+up. That instruction mattered because the repository already contained both reviews and because
+the correct response was available in the contract. Q36 defines F3 as a tiny transformer with
+certified deterministic and fresh-stochastic execution, forced page failures, and recurrent
+rollback. The old S15 graph loaded an embedding, formed query, key, and value projections, ran one
+attention head, flattened the two-by-two result, and called the four resulting numbers logits. Its
+vocabulary also happened to contain four entries. Shape had impersonated semantics.
+
+I reproduced the rest of Opus's technical objection in the same pass. The certified stochastic
+map occupied the value path while query and key remained fixed. Attention is nonlinear in query and
+key, but with those held constant it is linear in value, so the probability-weighted sampled output
+had to equal the exact output. The fixture's agreement to one trillionth was mathematically
+necessary; it was not evidence that a stochastic approximation survived transformer composition.
+The certificate also declared an execution error and risk, and S13 correctly recomputed those
+numbers from the supplied mathematical evidence, but S15 never compared them with errors observed
+at execution. The three findings were real. The old test and Kimi's independent oracle proved that
+Cassette faithfully executed the graph it had described. They did not prove that the described
+graph met F3.
+
+The repair kept the numerical authority where the repository had placed it. I extended the
+generated Q30 table from ten cases to sixteen, adding the exact MLX tuples needed for a four-wide
+decoder while authoring no kernel. The executed graph now embeds two token positions, applies
+attention RMS normalization, projects query, key, and value, rotates query and key at the certified
+position, performs causal attention, projects the result, adds the first residual, applies the FFN
+normalization, executes the exact or fresh certified FFN-up map, passes that result through SiLU,
+projects it down, adds the second residual, performs the final normalization, and projects the last
+position into a four-entry vocabulary. Every fixed matrix and normalization vector, the exact base
+and zero correction, and each possible fresh correction lives on a content-addressed cartridge
+page whose role is included in the protected graph digest.
+
+The fixture stopped using tidy positive integers. Its target matrix contains positive and negative
+quarters and sixteenths; the four stochastic correction pages carry probabilities of 16/49,
+16/49, 16/49, and 1/49. Fresh sampling now enters the FFN before SiLU, so the weighted average of
+the four final vocabulary vectors is measurably different from exact execution even though the
+sampled weight estimator remains unbiased. For this finite fixture there was no reason to estimate
+the evidence statistically. The test executes all four outcomes, measures local FFN-up error and
+final-logit error, recomputes expected local squared error, and checks the observed event risks. A
+loss-propagation coefficient of 21/100 covers every outcome; the admitted aggregate epsilon is
+0.315, local risk is 1/49, and final risk is zero. I then supplied a separately sealed certificate
+with a coefficient of 1/20. S13 admitted its internally coherent arithmetic, as it should, and the
+S15 execution audit rejected the coefficient against the observed outcomes. That distinction is
+the work S15 had previously omitted.
+
+The first repaired tree passed the focused fixture, the coupled S12 through S15 fixtures, the full
+suite, and the ledger. It was still wrong.
+
+I made twelve disposable copies and removed one consequential behavior in each. Eleven copies
+failed. The copy that disabled committed K/V consumption remained green. The public decode call in
+my first repair supplied the previous token again beside the new token so the fixed two-position
+graph could run. At one layer, with the same token placed at the same certified position, the key
+and value recomputed from the current input were identical to the key and value recovered from the
+cache. Replacing one with the other changed no number. The fixture had changed prefill history in a
+separate assertion, but that assertion also changed material entering the continuation, so it had
+not isolated cache consumption. I reported the surviving mutant to Drew as soon as it appeared;
+calling the repair complete would have repeated the very behavior he had warned about, an agent
+doing less near the middle of a long build while describing the work with greater confidence.
+
+The second repair changed the runtime contract rather than decorating the assertion. Prefill still
+accepts two tokens. Decode now accepts exactly one new token. The protected graph binds a harmless
+padding token for its fixed two-position tuple, and the runtime replaces that padding position's
+key and value with the committed prefill state before causal attention. The final position belongs
+to the new token. With that arrangement, removing prior-K/V consumption changes the answer and the
+fixture fails. Holding the new token and seed fixed while changing only prefill history changes the
+decode logits and K/V identity. Corrupting the selected correction page, lying about runtime
+allocation, or requesting a third step preserves the 32-byte checkpoint; restoring the required
+page and replaying the same selection extends it to the certified 64-byte horizon.
+
+That escaped mutant also changed how I read Kimi's review. Kimi had built a genuinely independent
+oracle, and its arithmetic was useful, but the oracle implemented the old incomplete graph. Its
+K/V probe altered the prefill while retaining a decode tuple that was not a coherent one-token
+continuation, so a changed answer did not isolate whether cached state was necessary. An
+independent calculation can escape fixture circularity and still certify the wrong boundary. Opus
+found the conceptual mismatch that the oracle inherited; Kimi supplied strong evidence for the
+implementation beneath that mismatch. Neither contribution needed to be discarded, but Kimi's
+verdict did.
+
+I reran the mutation campaign after the one-token correction. Eleven of eleven independent
+mutations then failed, covering graph identity, exact graph-integer typing, route binding, base and
+correction semantics, probability scaling, committed K/V consumption, RoPE, SiLU, vocabulary
+projection, and runtime allocation. The accepted tree passed all 31 repository tests in 41.22
+seconds on arm64 macOS with no skips. The ledger found zero violations and counted 4,141 product
+lines, 3,265 test lines, 470 tool lines, and 74 generated lines, with one process, one Python
+runtime, the same five exact pins, and no authored numerical kernel. Each execution reads twelve
+pages and 624 bytes; the trace accounts for 624 model-tensor bytes, 680 activation bytes, a 64-byte
+K/V reservation, zero unaccounted runtime bytes, and a 1,304-byte Metal peak.
+
+Two findings from Opus did not become S15 code. Quantized end-to-end execution belongs to the
+source-derived representative tuples and the later F4 and F5 gates, not to this float32 diagnostic
+fixture. The size of `pager.py` also did not justify a split. The file is large because the pager,
+certificate-to-page admission, generated dispatch, recurrent commit, and execution trace share one
+state boundary; moving one part into a new module would add plumbing or a second authority without
+closing an acceptance row. I recorded both limits in the queue so that rejecting an immediate
+change would not make the finding disappear.
+
+The plan now retains the first S15 closeout as historical evidence and adds the reopening, both
+repairs, the first mutation escape, and the final proof. Entries 41 and 42 remain untouched above
+this one. The code repairs are local commits `692d96e` and `d3d1e04`; this account and the corrected
+queue enter the final shared-state commit after the complete gate. S15 is closed at F3, and S16
+remains the next TODO in `IMPLEMENTATION.md`.
