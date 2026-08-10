@@ -1,4 +1,4 @@
-# genschema.py — emits Q6/Q9/Q19/Q30/Q31/Q33/Q40/Q50/Q57/Q77 contracts and generated tables; depends on errors.py.
+# genschema.py — emits Q6/Q9/Q19/Q30/Q31/Q33/Q40/Q50/Q57/Q76/Q77 contracts and generated tables; depends on errors.py.
 """Generate Cassette's machine contracts. Files under schema/ are never hand-edited.
 
 The emitted documents are JSON Schema Draft 2020-12 contracts. The generated validator executes
@@ -73,6 +73,718 @@ Q77_PROVENANCE_STATUSES = [
     "UNKNOWN",
     "UNSUPPORTED",
 ]
+Q76_FIELD_STATUSES = ["BEST_EFFORT", "EXACT", "PROVIDER_MANAGED", "UNSUPPORTED"]
+
+
+def adapter_field(canonical: str, wire: str, codec: str = "identity") -> dict:
+    """Describe one generated, reversible Q31 field movement."""
+    return {
+        "canonical": canonical.split("."),
+        "wire": wire.split("."),
+        "codec": codec,
+    }
+
+
+def adapter_surface(
+    method: str,
+    path: str,
+    stream: str,
+    fields: list[dict],
+    features: dict[str, str],
+    *,
+    event_format: str,
+    event_features: dict[str, str] | None = None,
+    static: dict[str, object] | None = None,
+    blocked_wire: dict[str, str] | None = None,
+) -> dict:
+    """Build one generated request/stream surface without client code branches."""
+    return {
+        "method": method,
+        "path": path,
+        "stream": stream,
+        "fields": fields,
+        "features": features,
+        "event_features": event_features or features,
+        "event_format": event_format,
+        "static": static or {},
+        "blocked_wire": {
+            path: status for path, status in sorted((blocked_wire or {}).items())
+        },
+    }
+
+
+def adapter_event(
+    selector: dict[str, object],
+    fields: list[dict],
+    *,
+    static: dict[str, object] | None = None,
+) -> dict:
+    """Build one generated canonical-event to provider-frame mapping."""
+    return {"selector": selector, "fields": fields, "static": static or {}}
+
+
+_RUN_SEQUENCE = [
+    adapter_field("run_id", "x_cassette.run_id"),
+    adapter_field("sequence", "x_cassette.sequence"),
+]
+_RESPONSE_SEQUENCE = [
+    adapter_field("run_id", "x_cassette.run_id"),
+    adapter_field("sequence", "sequence_number"),
+]
+ADAPTER_EVENT_FORMATS = {
+    "canonical_jsonl": {"encoding": "jsonl", "events": {}},
+    "responses_sse": {
+        "encoding": "sse",
+        "events": {
+            "started": adapter_event(
+                {"type": "response.created"},
+                [
+                    adapter_field("run_id", "response.id"),
+                    adapter_field("sequence", "sequence_number"),
+                    adapter_field("payload.model_ref", "response.model", "model"),
+                ],
+                static={"response.status": "in_progress"},
+            ),
+            "reasoning_delta": adapter_event(
+                {"type": "response.reasoning_summary_text.delta"},
+                [*_RESPONSE_SEQUENCE, adapter_field("payload.text", "delta")],
+            ),
+            "output_delta": adapter_event(
+                {"type": "response.output_text.delta"},
+                [*_RESPONSE_SEQUENCE, adapter_field("payload.text", "delta")],
+            ),
+            "tool_call": adapter_event(
+                {"type": "response.output_item.done"},
+                [
+                    *_RESPONSE_SEQUENCE,
+                    adapter_field("payload.id", "item.call_id"),
+                    adapter_field("payload.name", "item.name"),
+                    adapter_field("payload.arguments", "item.arguments", "json"),
+                ],
+                static={"item.type": "function_call"},
+            ),
+            "tool_result": adapter_event(
+                {"type": "cassette.tool_result"},
+                [
+                    *_RESPONSE_SEQUENCE,
+                    adapter_field("payload.id", "tool_result.call_id"),
+                    adapter_field("payload.output", "tool_result.output"),
+                ],
+            ),
+            "usage": adapter_event(
+                {"type": "cassette.usage"},
+                [
+                    *_RESPONSE_SEQUENCE,
+                    adapter_field("payload.input_tokens", "usage.input_tokens"),
+                    adapter_field("payload.output_tokens", "usage.output_tokens"),
+                ],
+            ),
+            "completed": adapter_event(
+                {"type": "response.completed"},
+                [
+                    adapter_field("run_id", "response.id"),
+                    adapter_field("sequence", "sequence_number"),
+                    adapter_field("payload.finish_reason", "x_cassette.finish_reason"),
+                ],
+                static={"response.status": "completed"},
+            ),
+            "cancelled": adapter_event(
+                {"type": "cassette.cancelled"},
+                [*_RESPONSE_SEQUENCE, adapter_field("payload.reason", "reason")],
+            ),
+            "failed": adapter_event(
+                {"type": "response.failed"},
+                [
+                    adapter_field("run_id", "response.id"),
+                    adapter_field("sequence", "sequence_number"),
+                    adapter_field("payload.error.code", "response.error.code"),
+                    adapter_field("payload.error.detail", "response.error.message"),
+                ],
+                static={"response.status": "failed"},
+            ),
+        },
+    },
+    "chat_sse": {
+        "encoding": "sse",
+        "events": {
+            "started": adapter_event(
+                {"x_cassette.type": "started"},
+                [*_RUN_SEQUENCE, adapter_field("payload.model_ref", "model", "model")],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "reasoning_delta": adapter_event(
+                {"x_cassette.type": "reasoning_delta"},
+                [*_RUN_SEQUENCE, adapter_field("payload.text", "choices.0.delta.reasoning")],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "output_delta": adapter_event(
+                {"x_cassette.type": "output_delta"},
+                [*_RUN_SEQUENCE, adapter_field("payload.text", "choices.0.delta.content")],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "tool_call": adapter_event(
+                {"x_cassette.type": "tool_call"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.id", "choices.0.delta.tool_calls.0.id"),
+                    adapter_field("payload.name", "choices.0.delta.tool_calls.0.function.name"),
+                    adapter_field(
+                        "payload.arguments",
+                        "choices.0.delta.tool_calls.0.function.arguments",
+                        "json",
+                    ),
+                ],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "tool_result": adapter_event(
+                {"x_cassette.type": "tool_result"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.id", "x_cassette.call_id"),
+                    adapter_field("payload.output", "x_cassette.output"),
+                ],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "usage": adapter_event(
+                {"x_cassette.type": "usage"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.input_tokens", "usage.prompt_tokens"),
+                    adapter_field("payload.output_tokens", "usage.completion_tokens"),
+                ],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "completed": adapter_event(
+                {"x_cassette.type": "completed"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.finish_reason", "choices.0.finish_reason"),
+                ],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "cancelled": adapter_event(
+                {"x_cassette.type": "cancelled"},
+                [*_RUN_SEQUENCE, adapter_field("payload.reason", "x_cassette.reason")],
+                static={"object": "chat.completion.chunk"},
+            ),
+            "failed": adapter_event(
+                {"x_cassette.type": "failed"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.error.code", "error.code"),
+                    adapter_field("payload.error.detail", "error.message"),
+                ],
+                static={"object": "chat.completion.chunk"},
+            ),
+        },
+    },
+    "ollama_ndjson": {
+        "encoding": "ndjson",
+        "events": {
+            "started": adapter_event(
+                {"x_cassette.type": "started"},
+                [*_RUN_SEQUENCE, adapter_field("payload.model_ref", "model", "model")],
+                static={"done": False},
+            ),
+            "reasoning_delta": adapter_event(
+                {"x_cassette.type": "reasoning_delta"},
+                [*_RUN_SEQUENCE, adapter_field("payload.text", "thinking")],
+                static={"done": False},
+            ),
+            "output_delta": adapter_event(
+                {"x_cassette.type": "output_delta"},
+                [*_RUN_SEQUENCE, adapter_field("payload.text", "message.content")],
+                static={"done": False, "message.role": "assistant"},
+            ),
+            "tool_call": adapter_event(
+                {"x_cassette.type": "tool_call"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.id", "message.tool_calls.0.id"),
+                    adapter_field("payload.name", "message.tool_calls.0.function.name"),
+                    adapter_field("payload.arguments", "message.tool_calls.0.function.arguments"),
+                ],
+                static={"done": False, "message.role": "assistant"},
+            ),
+            "tool_result": adapter_event(
+                {"x_cassette.type": "tool_result"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.id", "x_cassette.call_id"),
+                    adapter_field("payload.output", "x_cassette.output"),
+                ],
+                static={"done": False},
+            ),
+            "usage": adapter_event(
+                {"x_cassette.type": "usage"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.input_tokens", "prompt_eval_count"),
+                    adapter_field("payload.output_tokens", "eval_count"),
+                ],
+                static={"done": False},
+            ),
+            "completed": adapter_event(
+                {"x_cassette.type": "completed"},
+                [*_RUN_SEQUENCE, adapter_field("payload.finish_reason", "done_reason")],
+                static={"done": True},
+            ),
+            "cancelled": adapter_event(
+                {"x_cassette.type": "cancelled"},
+                [*_RUN_SEQUENCE, adapter_field("payload.reason", "x_cassette.reason")],
+                static={"done": True},
+            ),
+            "failed": adapter_event(
+                {"x_cassette.type": "failed"},
+                [
+                    *_RUN_SEQUENCE,
+                    adapter_field("payload.error.code", "x_cassette.error_code"),
+                    adapter_field("payload.error.detail", "error"),
+                ],
+                static={"done": True},
+            ),
+        },
+    },
+    "openclaw_gateway_v4": {
+        "encoding": "json",
+        "events": {
+            "started": adapter_event(
+                {"type": "event", "event": "session.operation", "payload.status": "started"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.model_ref", "payload.agentId", "model"),
+                ],
+            ),
+            "output_delta": adapter_event(
+                {"type": "event", "event": "session.message", "payload.kind": "assistant"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.text", "payload.deltaText"),
+                ],
+            ),
+            "tool_call": adapter_event(
+                {"type": "event", "event": "session.tool", "payload.status": "started"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.id", "payload.toolCallId"),
+                    adapter_field("payload.name", "payload.toolName"),
+                    adapter_field("payload.arguments", "payload.arguments"),
+                ],
+            ),
+            "tool_result": adapter_event(
+                {"type": "event", "event": "session.tool", "payload.status": "succeeded"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.id", "payload.toolCallId"),
+                    adapter_field("payload.output", "payload.output"),
+                ],
+            ),
+            "usage": adapter_event(
+                {"type": "event", "event": "cassette.usage"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.input_tokens", "payload.inputTokens"),
+                    adapter_field("payload.output_tokens", "payload.outputTokens"),
+                ],
+            ),
+            "completed": adapter_event(
+                {"type": "event", "event": "session.operation", "payload.status": "succeeded"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.finish_reason", "payload.finishReason"),
+                ],
+            ),
+            "cancelled": adapter_event(
+                {"type": "event", "event": "session.operation", "payload.status": "cancelled"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.reason", "payload.reason"),
+                ],
+            ),
+            "failed": adapter_event(
+                {"type": "event", "event": "session.operation", "payload.status": "failed"},
+                [
+                    adapter_field("run_id", "payload.runId"),
+                    adapter_field("sequence", "seq"),
+                    adapter_field("payload.error.code", "payload.errorCode"),
+                    adapter_field("payload.error.detail", "payload.error"),
+                ],
+            ),
+        },
+    },
+    "hermes_runs_sse": {
+        "encoding": "sse",
+        "events": {
+            "started": adapter_event(
+                {"event": "cassette.started"},
+                [*_RUN_SEQUENCE, adapter_field("payload.model_ref", "model", "model")],
+            ),
+            "reasoning_delta": adapter_event(
+                {"event": "reasoning.available"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.text", "text"),
+                ],
+            ),
+            "output_delta": adapter_event(
+                {"event": "message.delta"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.text", "delta"),
+                ],
+            ),
+            "tool_call": adapter_event(
+                {"event": "tool.started"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.id", "x_cassette.tool_call_id"),
+                    adapter_field("payload.name", "tool"),
+                    adapter_field("payload.arguments", "x_cassette.arguments"),
+                ],
+            ),
+            "tool_result": adapter_event(
+                {"event": "tool.completed"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.id", "x_cassette.tool_call_id"),
+                    adapter_field("payload.output", "x_cassette.output"),
+                ],
+            ),
+            "usage": adapter_event(
+                {"event": "cassette.usage"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.input_tokens", "usage.input_tokens"),
+                    adapter_field("payload.output_tokens", "usage.output_tokens"),
+                ],
+            ),
+            "completed": adapter_event(
+                {"event": "run.completed"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.finish_reason", "x_cassette.finish_reason"),
+                ],
+            ),
+            "cancelled": adapter_event(
+                {"event": "run.cancelled"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.reason", "x_cassette.reason"),
+                ],
+            ),
+            "failed": adapter_event(
+                {"event": "run.failed"},
+                [
+                    adapter_field("run_id", "run_id"),
+                    adapter_field("sequence", "x_cassette.sequence"),
+                    adapter_field("payload.error.code", "x_cassette.error_code"),
+                    adapter_field("payload.error.detail", "error"),
+                ],
+            ),
+        },
+    },
+}
+
+_ALL_EXACT = {
+    name: "EXACT"
+    for name in ("text", "reasoning", "tools", "structured_output", "streaming")
+}
+_RESPONSES_FIELDS = [
+    adapter_field("idempotency_key", "headers.Idempotency-Key"),
+    adapter_field("model_ref", "body.model", "model"),
+    adapter_field("input", "body.input"),
+    adapter_field("context_ref", "body.previous_response_id"),
+    adapter_field("generation.max_output_tokens", "body.max_output_tokens"),
+    adapter_field("generation.temperature", "body.temperature"),
+    adapter_field("generation.top_p", "body.top_p"),
+    adapter_field("generation.stream", "body.stream"),
+    adapter_field("reasoning", "body.reasoning"),
+    adapter_field("output_schema", "body.text.format"),
+    adapter_field("tools", "body.tools"),
+]
+_CHAT_FIELDS = [
+    adapter_field("idempotency_key", "headers.Idempotency-Key"),
+    adapter_field("model_ref", "body.model", "model"),
+    adapter_field("input", "body.messages"),
+    adapter_field("context_ref", "body.previous_response_id"),
+    adapter_field("generation.max_output_tokens", "body.max_completion_tokens"),
+    adapter_field("generation.temperature", "body.temperature"),
+    adapter_field("generation.top_p", "body.top_p"),
+    adapter_field("generation.stream", "body.stream"),
+    adapter_field("reasoning", "body.reasoning"),
+    adapter_field("output_schema", "body.response_format"),
+    adapter_field("tools", "body.tools"),
+]
+
+
+def q6_routes(cancel_method: str, cancel_path: str, *, native_cancel: bool) -> dict:
+    """Declare canonical operation transport without moving lifecycle ownership into adapters."""
+    return {
+        "cancel": {
+            "method": cancel_method,
+            "path": cancel_path,
+            "transport": "native" if native_cancel else "cassette_q6",
+        },
+        "status": {
+            "method": "GET",
+            "path": "/cassette/v1/operations/{operation_id}",
+            "transport": "cassette_q6",
+        },
+        "training": {
+            "method": "POST",
+            "path": "/cassette/v1/operations",
+            "transport": "cassette_q6",
+        },
+    }
+
+
+ADAPTER_PROTOCOLS = {
+    "codex": {
+        "adapter_version": "openai-responses@9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
+        "authority": "https://github.com/openai/openai-openapi",
+        "commit": "9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
+        "namespace": "openai.responses",
+        "model_scope": "model",
+        "requires_server_contract": False,
+        "default_surface": "responses",
+        "discovery": {"method": "GET", "path": "/v1/models", "format": "openai_models"},
+        "surfaces": {
+            "responses": adapter_surface(
+                "POST", "/v1/responses", "sse", _RESPONSES_FIELDS, _ALL_EXACT,
+                event_format="responses_sse",
+            )
+        },
+        "operations": q6_routes("POST", "/v1/responses/{run_id}/cancel", native_cancel=True),
+        "field_status": {
+            "discovery": "EXACT", "errors": "EXACT", "status": "EXACT", "training": "EXACT",
+            "cancellation": "EXACT",
+        },
+    },
+    "ollama": {
+        "adapter_version": "ollama-api@a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
+        "authority": "https://github.com/ollama/ollama",
+        "commit": "a836eb8c3cc21a30020aadc70a1cc06012a4ef01",
+        "namespace": "ollama.api",
+        "model_scope": "model",
+        "requires_server_contract": False,
+        "default_surface": "chat",
+        "discovery": {
+            "method": "GET", "path": "/api/tags", "format": "ollama_tags",
+            "detail_method": "POST", "detail_path": "/api/show",
+        },
+        "surfaces": {
+            "chat": adapter_surface(
+                "POST", "/api/chat", "ndjson",
+                [
+                    adapter_field("idempotency_key", "headers.X-Cassette-Idempotency-Key"),
+                    adapter_field("model_ref", "body.model", "model"),
+                    adapter_field("input", "body.messages"),
+                    adapter_field("generation.options", "body.options"),
+                    adapter_field("generation.stream", "body.stream"),
+                    adapter_field("reasoning", "body.think"),
+                    adapter_field("output_schema", "body.format"),
+                    adapter_field("tools", "body.tools"),
+                ],
+                _ALL_EXACT,
+                event_format="ollama_ndjson",
+            ),
+            "generate": adapter_surface(
+                "POST", "/api/generate", "ndjson",
+                [
+                    adapter_field("idempotency_key", "headers.X-Cassette-Idempotency-Key"),
+                    adapter_field("model_ref", "body.model", "model"),
+                    adapter_field("input", "body.prompt"),
+                    adapter_field("generation.options", "body.options"),
+                    adapter_field("generation.stream", "body.stream"),
+                    adapter_field("reasoning", "body.think"),
+                    adapter_field("output_schema", "body.format"),
+                ],
+                {**_ALL_EXACT, "tools": "UNSUPPORTED"},
+                event_format="ollama_ndjson",
+            ),
+        },
+        "operations": q6_routes(
+            "POST", "/cassette/v1/operations/{run_id}/cancel", native_cancel=False
+        ),
+        "field_status": {
+            "discovery": "EXACT", "errors": "EXACT", "status": "EXACT", "training": "EXACT",
+            "cancellation": "EXACT", "disconnect_cancellation": "PROVIDER_MANAGED",
+        },
+    },
+    "openclaw": {
+        "adapter_version": "openclaw-gateway-v4@810c3510ee6102e7a263553f871a11233708e275",
+        "authority": "https://github.com/openclaw/openclaw",
+        "commit": "810c3510ee6102e7a263553f871a11233708e275",
+        "namespace": "openclaw.gateway.v4",
+        "model_scope": "agent",
+        "requires_server_contract": False,
+        "default_surface": "responses",
+        "discovery": {"method": "GET", "path": "/v1/models", "format": "openai_models"},
+        "surfaces": {
+            "responses": adapter_surface(
+                "POST", "/v1/responses", "sse",
+                [
+                    adapter_field("idempotency_key", "headers.Idempotency-Key"),
+                    adapter_field("model_ref", "body.model", "model"),
+                    adapter_field("input", "body.input"),
+                    adapter_field("context_ref", "headers.X-OpenClaw-Session-Key"),
+                    adapter_field("generation.max_output_tokens", "body.max_output_tokens"),
+                    adapter_field("generation.stream", "body.stream"),
+                    adapter_field("tools", "body.tools"),
+                ],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="responses_sse",
+                blocked_wire={"body.reasoning": "UNSUPPORTED", "body.text.format": "UNSUPPORTED"},
+            ),
+            "chat": adapter_surface(
+                "POST", "/v1/chat/completions", "sse",
+                [
+                    adapter_field("idempotency_key", "headers.Idempotency-Key"),
+                    adapter_field("model_ref", "body.model", "model"),
+                    adapter_field("input", "body.messages"),
+                    adapter_field("context_ref", "headers.X-OpenClaw-Session-Key"),
+                    adapter_field("generation.max_output_tokens", "body.max_completion_tokens"),
+                    adapter_field("generation.temperature", "body.temperature"),
+                    adapter_field("generation.top_p", "body.top_p"),
+                    adapter_field("generation.stream", "body.stream"),
+                    adapter_field("tools", "body.tools"),
+                ],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="chat_sse",
+                blocked_wire={
+                    "body.reasoning": "UNSUPPORTED", "body.response_format": "UNSUPPORTED",
+                    "body.stop": "BEST_EFFORT",
+                },
+            ),
+            "gateway": adapter_surface(
+                "WS", "gateway:v4", "json",
+                [
+                    adapter_field("idempotency_key", "body.id"),
+                    adapter_field("model_ref", "body.params.agentId", "model"),
+                    adapter_field("input", "body.params.message"),
+                    adapter_field("context_ref", "body.params.sessionKey"),
+                ],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "UNSUPPORTED",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="openclaw_gateway_v4",
+                event_features={
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                static={"body.type": "req", "body.method": "chat.send"},
+            ),
+        },
+        "operations": q6_routes(
+            "POST", "/cassette/v1/operations/{run_id}/cancel", native_cancel=False
+        ),
+        "field_status": {
+            "discovery": "EXACT", "errors": "EXACT", "status": "EXACT", "training": "EXACT",
+            "cancellation": "EXACT", "backend_model_selection": "PROVIDER_MANAGED",
+        },
+    },
+    "hermes": {
+        "adapter_version": "hermes-agent-api@a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
+        "authority": "https://github.com/NousResearch/hermes-agent",
+        "commit": "a98aee47cecddab9ab9f58fc3a3b94b25f78d394",
+        "namespace": "hermes.agent.api",
+        "model_scope": "model",
+        "requires_server_contract": True,
+        "default_surface": "responses",
+        "discovery": {"method": "GET", "path": "/v1/models", "format": "openai_models"},
+        "surfaces": {
+            "responses": adapter_surface(
+                "POST", "/v1/responses", "sse",
+                [field for field in _RESPONSES_FIELDS if field["canonical"] not in (
+                    ["reasoning"], ["output_schema"],
+                )],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="responses_sse",
+                blocked_wire={"body.reasoning": "UNSUPPORTED", "body.text.format": "UNSUPPORTED"},
+            ),
+            "chat": adapter_surface(
+                "POST", "/v1/chat/completions", "sse",
+                [field for field in _CHAT_FIELDS if field["canonical"] not in (
+                    ["reasoning"], ["output_schema"],
+                )],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="chat_sse",
+                blocked_wire={"body.reasoning": "UNSUPPORTED", "body.response_format": "UNSUPPORTED"},
+            ),
+            "agent": adapter_surface(
+                "POST", "/v1/runs", "sse",
+                [
+                    adapter_field("idempotency_key", "headers.Idempotency-Key"),
+                    adapter_field("model_ref", "body.model", "model"),
+                    adapter_field("input", "body.input"),
+                    adapter_field("context_ref", "body.session_id"),
+                ],
+                {
+                    "text": "EXACT", "reasoning": "UNSUPPORTED", "tools": "UNSUPPORTED",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+                event_format="hermes_runs_sse",
+                event_features={
+                    "text": "EXACT", "reasoning": "EXACT", "tools": "EXACT",
+                    "structured_output": "UNSUPPORTED", "streaming": "EXACT",
+                },
+            ),
+        },
+        "operations": q6_routes("POST", "/v1/runs/{run_id}/stop", native_cancel=True),
+        "field_status": {
+            "discovery": "EXACT", "errors": "EXACT", "status": "EXACT", "training": "EXACT",
+            "cancellation": "EXACT", "raw_weight_server_contract": "UNSUPPORTED",
+        },
+    },
+    "custom": {
+        "adapter_version": "cassette-q31-v1",
+        "authority": "https://recluse.studio/cassette/schema/v1",
+        "commit": None,
+        "namespace": "cassette.q31",
+        "model_scope": "model",
+        "requires_server_contract": False,
+        "default_surface": "canonical",
+        "discovery": {"method": "JSONL", "path": "capabilities", "format": "canonical"},
+        "surfaces": {
+            "canonical": adapter_surface(
+                "JSONL", "run", "jsonl", [], _ALL_EXACT,
+                event_format="canonical_jsonl",
+            )
+        },
+        "operations": q6_routes("JSONL", "cancel", native_cancel=True),
+        "field_status": {
+            "discovery": "EXACT", "errors": "EXACT", "status": "EXACT", "training": "EXACT",
+            "cancellation": "EXACT",
+        },
+    },
+}
 MAX_IDENTIFIER_BYTES = 256
 MAX_TEXT_BYTES = 4096
 MAX_TABLE_ROWS = 1_048_576
@@ -507,6 +1219,17 @@ Q77_PROFILE_PROVENANCE = {
         "semantic_state": ref("capability_field_provenance"),
     },
     "required": sorted((*Q77_FIELDS, "precision", "semantic_state")),
+}
+Q31_EXTENSIONS = {
+    "type": "object",
+    "additionalProperties": False,
+    "maxProperties": 64,
+    "patternProperties": {
+        r"^[a-z0-9][a-z0-9._-]{0,127}$": {
+            "type": "object",
+            "maxProperties": 64,
+        }
+    },
 }
 
 
@@ -949,7 +1672,9 @@ CONTRACTS: dict[str, dict] = {
             "training": {},
             "source": {},
             "performance_tiers": array({"type": "object"}),
+            "extensions": Q31_EXTENSIONS,
         },
+        optional=("extensions",),
     ),
     "capability_field_provenance": Q77_PROVENANCE,
     "capability_request": record(
@@ -992,8 +1717,9 @@ CONTRACTS: dict[str, dict] = {
             "reasoning": {},
             "output_schema": {"type": "object"},
             "tools": array({"type": "object"}),
+            "extensions": Q31_EXTENSIONS,
         },
-        optional=("context_ref", "reasoning", "output_schema", "tools"),
+        optional=("context_ref", "reasoning", "output_schema", "tools", "extensions"),
     ),
     "run_event": record(
         "Canonical run event",
@@ -1015,7 +1741,9 @@ CONTRACTS: dict[str, dict] = {
                 ]
             ),
             "payload": {"type": "object"},
+            "extensions": Q31_EXTENSIONS,
         },
+        optional=("extensions",),
     ),
     "source_descriptor": record(
         "Normalized source descriptor",
@@ -1234,6 +1962,9 @@ def emit(outdir: Path) -> dict[str, str]:
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
         f"Q77_FIELDS = {pprint.pformat(Q77_FIELDS, sort_dicts=True, width=100)}\n"
+        f"Q76_FIELD_STATUSES = {pprint.pformat(Q76_FIELD_STATUSES, sort_dicts=True, width=100)}\n"
+        f"ADAPTER_EVENT_FORMATS = {pprint.pformat(ADAPTER_EVENT_FORMATS, sort_dicts=True, width=100)}\n"
+        f"ADAPTER_PROTOCOLS = {pprint.pformat(ADAPTER_PROTOCOLS, sort_dicts=True, width=100)}\n"
         f"CERTIFICATE_DIMENSIONS = {pprint.pformat(certificate_dimensions, sort_dicts=True, width=100)}\n"
     )
     put("tables.py", tables)

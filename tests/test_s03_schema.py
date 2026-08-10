@@ -72,7 +72,7 @@ EXPECTED_FIELDS = {
     "capability_profile": {
         "protocol_version", "model_refs", "modalities", "context", "reasoning", "tools",
         "structured_output", "streaming", "cancellation", "training", "source",
-        "performance_tiers",
+        "performance_tiers", "extensions",
     },
     "capability_field_provenance": {"status", "evidence"},
     "capability_request": {"model_ref", *EXPECTED_Q77_FIELDS},
@@ -84,9 +84,9 @@ EXPECTED_FIELDS = {
     },
     "run_request": {
         "idempotency_key", "model_ref", "input", "context_ref", "generation", "reasoning",
-        "output_schema", "tools",
+        "output_schema", "tools", "extensions",
     },
-    "run_event": {"run_id", "sequence", "type", "payload"},
+    "run_event": {"run_id", "sequence", "type", "payload", "extensions"},
     "source_descriptor": {
         "kind", "locator", "revision", "artifact_selector", "credential_ref",
         "license_acceptance_ref", "expected_identity",
@@ -119,7 +119,9 @@ EXPECTED_FIELDS = {
 EXPECTED_OPTIONAL = {
     "request": {"target"},
     "operation": {"result", "error"},
-    "run_request": {"context_ref", "reasoning", "output_schema", "tools"},
+    "capability_profile": {"extensions"},
+    "run_request": {"context_ref", "reasoning", "output_schema", "tools", "extensions"},
+    "run_event": {"extensions"},
     "source_descriptor": {
         "revision", "artifact_selector", "credential_ref", "license_acceptance_ref",
         "expected_identity",
@@ -467,6 +469,7 @@ GOLDEN = {
         "training": {"tiers": ["adapter"]},
         "source": {"kinds": ["huggingface"]},
         "performance_tiers": [{"id": "frontier-class"}],
+        "extensions": {"fixture.provider": {"model": {"region": "local"}}},
     },
     "capability_field_provenance": {
         "status": "EXACT",
@@ -501,12 +504,14 @@ GOLDEN = {
         "reasoning": {"effort": "high"},
         "output_schema": {"type": "object"},
         "tools": [{"name": "fixture"}],
+        "extensions": {"fixture.provider": {"body": {"provider_option": True}}},
     },
     "run_event": {
         "run_id": "run-1",
         "sequence": 3,
         "type": "output_delta",
         "payload": {"text": "x"},
+        "extensions": {"fixture.provider": {"frame": {"provider_sequence": 3}}},
     },
     "source_descriptor": {
         "kind": "huggingface",

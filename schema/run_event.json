@@ -4,6 +4,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "extensions": {
+      "additionalProperties": false,
+      "maxProperties": 64,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9._-]{0,127}$": {
+          "maxProperties": 64,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "payload": {
       "type": "object"
     },

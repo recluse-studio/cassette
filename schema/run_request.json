@@ -8,6 +8,17 @@
       "minLength": 1,
       "type": "string"
     },
+    "extensions": {
+      "additionalProperties": false,
+      "maxProperties": 64,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9._-]{0,127}$": {
+          "maxProperties": 64,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "generation": {
       "type": "object"
     },
