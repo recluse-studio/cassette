@@ -278,6 +278,10 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     paused_operation = paused.pause(operation_id)
                     assert paused_operation["state"] == "PAUSED"
                     assert set(paused_operation) == {"operation_id", "kind", "state", "progress"}
+                    pause_events = paused.events(operation_id)
+                    assert [event["sequence"] for event in pause_events] == list(range(len(pause_events)))
+                    assert not _terminal_events(pause_events)
+                    assert pause_events[-1]["payload"] == {"phase": phase, "state": "PAUSED"}
                     paused_path = paused.operation_log / f"{operation_id}.json"
                     paused_bytes = paused_path.read_bytes()
                     paused_checkpoint = json.loads(paused_bytes)["record"]["checkpoint"]
@@ -290,7 +294,12 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     assert asyncio.run(paused.advance_acquisition(request, context())) == paused_operation
                     assert paused_path.read_bytes() == paused_bytes
                     resumed = paused.resume(operation_id)
-                    assert resumed["state"] == ("PENDING" if phase == "EMPTY" else "RUNNING")
+                    resumed_state = "PENDING" if phase == "EMPTY" else "RUNNING"
+                    assert resumed["state"] == resumed_state
+                    resumed_events = paused.events(operation_id)
+                    assert [event["sequence"] for event in resumed_events] == list(range(len(resumed_events)))
+                    assert not _terminal_events(resumed_events)
+                    assert resumed_events[-1]["payload"] == {"phase": phase, "state": resumed_state}
                     resumed_record = json.loads(paused_path.read_bytes())["record"]
                     assert resumed_record["phase"] == phase
                     assert resumed_record["checkpoint"] == paused_checkpoint
@@ -528,6 +537,10 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
         paused_operation = await task
         assert paused_operation["state"] == "PAUSED"
         assert worker_stopped.is_set()
+        pause_events = generic.events(operation_id)
+        assert [event["sequence"] for event in pause_events] == list(range(len(pause_events)))
+        assert not _terminal_events(pause_events)
+        assert pause_events[-1]["payload"] == {"phase": "EMPTY", "state": "PAUSED"}
 
         async def forbidden_worker():
             nonlocal calls
@@ -548,6 +561,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
     ))
     assert resumed_operation["state"] == "SUCCEEDED"
     assert resumed_operation["result"] == {"result": "resumed from the durable EMPTY checkpoint"}
+    assert len(_terminal_events(generic.events(resumed_operation["operation_id"]))) == 1
 
     async def cancel_running_worker():
         request = {
