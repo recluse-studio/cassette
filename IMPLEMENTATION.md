@@ -714,11 +714,49 @@ steps:
     title: F3 end-to-end - certified tiny transformer from cartridge
     env: macos
     files: [pager.py]
+    discovered_scope: "tests/test_s15_pager.py is the single F3 fixture for Q19/Q36/Q63. pager.py remains the sole execution authority above 800 physical lines: certificate-to-page binding, page readiness, generated MLX dispatch, recurrent commit, and allocation/traffic tracing must share one state boundary, while another file would create prohibited pager plumbing or a second runtime authority."
     invariants: [F3 stage gates (one exact description and one fresh-residual-sampling description, forced page failures, seeded reproduction, KV rollback), Q19 certificate remains valid across the declared trace horizon, Q63 acceptance (trace equals certified schedule, no hidden allocation or traffic)]
+    acceptance_boundary: "S15 proves one diagnostic token-to-logit F3 transformer on the pinned generated embedding, matmul, and attention tuples. It binds a certified 2x3 linear map to transposed float32 projection pages, proves exact and one-sample fresh execution, and makes prior K/V state operative during decode. It does not claim a general compiler, arbitrary graph tuples, model quality, production context growth, or frontier-scale service; S19 and later gates own those claims."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S14, S05]
-    status: TODO
+    status: DONE 2026-08-10 — implementation bc2aaa00ae0dfb099cef95b18fd40d4c49840fd1 executes exact prefill and seeded fresh decode from verified cartridge pages through generated MLX embedding, three projections, and attention; commits operative K/V only after the complete trace passes; the final arm64 macOS suite passed 31/31 in 45.41 seconds and the ledger remained clean at 4,059 product LOC, 3,068 test LOC, 470 tool LOC, 74 generated LOC, one process, one runtime, and five exact pins
+    closeout:
+      - clause: "F3 stage gate executes one exact description and one fresh-residual-sampling description as one tiny transformer"
+        test_or_probe: "tests/test_s15_pager.py::test_q19_q36_q63_f3_transformer_trace_seed_and_kv_rollback plus its independent Python transformer and estimator oracle at bc2aaa00ae0dfb099cef95b18fd40d4c49840fd1"
+        input: "Import separate SafeTensors pages for two 120-byte descriptions of one certified A:R3->R2 map: exact B=A, and fresh B=0 with three transposed estimator pages at probabilities 1/4, 1/4, and 1/2. Execute prefill tokens (0,1) and decode tokens (2,3)."
+        expected: "Load model pages from the cartridge, dispatch only the generated embedding, matmul, and attention tuples, produce logits equal to an independently computed graph, and make the probability-weighted fresh outputs equal the exact output."
+        observed: "Exact prefill read four pages and 120 bytes; fresh decode read five pages and 144 bytes. Each trace named embedding, three matmuls, and attention. Both logits matched the independent oracle within 1e-6, and the three weighted estimator outputs matched exact decode within 1e-12."
+      - clause: "F3 forced exact and sampled page failures terminate before the affected model use"
+        test_or_probe: "the exact-page, selected-sample, and unselected-sample corruption injections in the S15 fixture"
+        input: "Corrupt the exact V page before prefill; after one committed prefill, corrupt seed 7's selected unit-2 correction page; separately corrupt one correction page that seed 7 does not select."
+        expected: "Required corruption returns PAGE_CORRUPT before GPU submission or recurrent mutation. An unselected corrupt page causes no read and no output change. Restoring the selected page permits exact replay."
+        observed: "Both required corruptions returned PAGE_CORRUPT with no GPU_SUBMITTED transition. The unselected page was absent from the planned route and decode remained byte-identical. Restored retry reproduced the clean logits and final KV digest."
+      - clause: "F3 seeded execution reproduces one immutable correction choice"
+        test_or_probe: "two complete seed-7 runs, the bounded alternate-seed sweep, and the post-closeout direct seed probe"
+        input: "Run the same certificate, exact schedule digest, tokens, and seed 7 twice; then run seeds 8 through 63 until the first different legal sample appears."
+        expected: "The same seed reproduces sampled units, page route, logits, and KV bytes; a seed selecting another unit changes the stochastic result without changing the certificate."
+        observed: "Seed 7 selected unit (2,) twice and reproduced logits plus KV digest blake3:4ad7c3b1f434c9e0097d67e896e5b01ae6a7565a07cce9fb654b99e7e6bcd07e. Seed 8 selected unit (0,) and changed both logits and KV digest."
+      - clause: "F3 K/V state is operative and rolls back on failure"
+        test_or_probe: "history substitution, selected-page failure after prefill, retry, horizon, and runtime-allocation failure inside the S15 fixture"
+        input: "Hold decode tokens and seed fixed while changing only the prefill history; snapshot the 32-byte prefill K/V state; then fail the selected decode page and retry it after byte restoration."
+        expected: "Prior K/V changes decode, failed decode preserves the last committed 32 bytes and step, and retry alone extends the state to the admitted 64-byte horizon."
+        observed: "Changing only prefill tokens changed decode logits and KV identity. Selected-page failure left next_step=1, the exact 32-byte snapshot, and the prefill result intact; retry produced the clean 64-byte state. The recurrent-state guard-removal mutant failed the independent decode oracle."
+      - clause: "Q19 remains valid across the declared exact and fresh horizon"
+        test_or_probe: "certificate admission, transposed semantic-page substitutions, exact/fresh execution, and exhausted-horizon injection in the S15 fixture"
+        input: "Use a rank-2 A in R(2x3), exact reconstruction A, zero fresh reconstruction, certified column probabilities, composition coefficient 2, and a two-step coherent trace. Reseal page maps that substitute same-length wrong description or correction pages; then request a third step."
+        expected: "Bind A to the physical A-transpose projection representation, bind every sampled column estimator to its physical transpose, preserve the conservative attention propagation bound, and reject semantic substitutions or a step beyond h=2."
+        observed: "The admitted certificate recomputed rank, zero representation loss, distortion 4, norm-squared 4, fresh traffic 2, epsilon aggregate 4, risk 1/2, and horizon 2. Wrong same-length pages failed their exact semantic relation, and the third request returned Q64 certified execution horizon without changing KV."
+      - clause: "Q63 observed traffic and model memory equal the certified schedule with no hidden allocation"
+        test_or_probe: "literal trace assertions, physical-row plus-one attacks, and the runtime-buffer mismatch injection in the S15 fixture"
+        input: "Trace both instants; separately raise the certified exact load by one byte, dynamic memory by one byte, or runtime-buffer claim from the measured 36 bytes to 37 while leaving execution unchanged."
+        expected: "Every planned page, generated operator, loaded byte, model tensor, activation, KV reservation, MLX peak, and total model byte maps to the admitted schedule; any reconciled overstatement or unobserved allocation claim fails."
+        observed: "Prefill reported description/metadata/load/dynamic/live bytes 120/144/120/384/612; decode reported 120/251/144/515/743. Both observed 120 model-tensor bytes, 128 activation bytes, 64 reserved KV bytes, 36 MLX runtime bytes, and a 284-byte Metal peak. Both plus-one physical attacks failed at Q63 schedule equality; the 37-byte runtime claim failed before commit."
+      - clause: "The S15 guards and complete repository close gate remain consequential"
+        test_or_probe: "seven one-at-a-time disposable mutations, the complete pinned CPython 3.13 macOS suite, tools/ledger.py, git diff checking, and temporary-environment cleanup"
+        input: "Remove description-page binding, correction-page binding, schedule equality, recurrent-state consumption, runtime-allocation equality, transpose binding, or the certified V projection separately; then run every repository fixture and the ledger on the accepted tree."
+        expected: "Every mutant fails the single S15 fixture. The accepted tree passes every test and ledger check with no skip, dependency, kernel, process, runtime, model branch, or generated-file change."
+        observed: "All seven mutants failed at the damaged semantic, resource, recurrent, allocation, orientation, or graph assertion. The accepted tree passed 31/31 tests in 45.41 seconds; the ledger reported zero violations and the same five exact pins. The disposable mutant trees were moved to Trash and no Cassette test image remained mounted."
 
   - id: S16
     title: Canonical broker
