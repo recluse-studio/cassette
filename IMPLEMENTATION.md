@@ -645,11 +645,55 @@ steps:
     title: Certified page readiness, stochastic correction, and selection failure
     env: macos
     files: [pager.py]
+    discovered_scope: "tests/test_s14_pager.py is the single F3 fixture for Q20/Q64. It imports the disjoint S13 certificate fixture, writes three real SafeTensors pages into one scratch cartridge, and submits only freshly verified bytes through pinned MLX. pager.py remains the sole Q78 pager and scheduler authority above 800 physical lines because page acquisition, certificate-bound selection, and command fencing share one state and one failure boundary; splitting them would add a second pager authority or cross-file plumbing."
     invariants: [Q20 acceptance (forced absent/corrupt exact and sampled pages, stale certificate, out-of-contract seed, timeout, cancel — exact replay or seeded certified replay or typed termination), Q64 acceptance (native prefetch remains non-semantic; compiled selection rejects forged faces, off-support observations, and exhausted horizons); F3 tiny-model fixtures]
+    acceptance_injections: [false-high native prefetch, false-low native prefetch, absent native exact page, corrupt native exact page, absent compiled exact page, corrupt compiled exact page, absent sampled page, corrupt sampled page, stale certificate, negative execution seed, forged service face, off-support observation, zero-second page-readiness timeout, pre-set cancellation, exhausted horizon, certified page-read count below the possible sampled-page union]
+    acceptance_boundary: "S14 resolves and validates every native or certificate-planned page, records the seeded correction schedule, and fences one real MLX command on the complete validated set. It does not claim transformer logits, recurrent-state mutation, or KV rollback: S15 owns the end-to-end exact-description and fresh-residual tiny transformer."
     expected_size: large
     done_when: full suite + ledger green
     depends: [S13, S08]
-    status: TODO
+    status: DONE 2026-08-09 — implementation e26278aadc6a2d3bd293038b509aabb69e26b9f9 binds native execution to the source route, binds compiled execution to the recomputed Q19 certificate and immutable page map, validates every exact and sampled page before one pinned MLX submission, reproduces the certified 1/5-to-4/5 residual schedule from its recorded seed, and preserves replay state on typed failure; the final suite passed 30/30 in 227.34 seconds and the ledger reported zero violations with no new dependency, process, runtime, language, kernel, or model branch
+    closeout:
+      - clause: "Q64 native prefetch cannot change the source-native semantic route"
+        test_or_probe: "the false-high, false-low, and no-prefetch executions in tests/test_s14_pager.py::test_q20_q64_f3_page_readiness_replay_and_selection_failure at e26278aadc6a2d3bd293038b509aabb69e26b9f9"
+        input: "Execute the same two-page source route with no candidates, confidence one on a valid non-route residual page, and confidence zero on only the first required page."
+        expected: "Prediction may order a required read but may neither add to nor remove from the source route. All three executions must submit the complete exact route and return one identical route-dependent result."
+        observed: "All three executions returned NATIVE_EXACT over the same two page identities and the same output digest. The false-high residual page never entered planned_pages, while the false-low record still acquired both source pages. Each required page followed ABSENT to ACQUIRING to HASHED to RESIDENT to GPU_SUBMITTED to RECLAIMABLE."
+      - clause: "Q20 absent or corrupt exact pages terminate before their first consumer"
+        test_or_probe: "the native and compiled exact-page failures in tests/test_s14_pager.py"
+        input: "Name a valid BLAKE3 digest absent from the physical index, then flip one byte at the indexed offset of the exact description page. Run both source-native and compiled-certified acquisition against the affected exact page."
+        expected: "Return PAGE_CORRUPT before GPU submission, publish no compiled PageExecution, preserve the schedule step, and consume no altered byte."
+        observed: "Every absent or corrupt exact-page attempt returned PAGE_CORRUPT. Native and compiled transition records contained no GPU_SUBMITTED state; the compiled pager remained at step zero with last_committed unset. Restoring the original segment bytes restored execution without changing page identity."
+      - clause: "Q20 fresh stochastic pages follow the immutable law and replay exactly from the recorded seed"
+        test_or_probe: "the two-column seeded replay plus absent and corrupt sampled-page injections in tests/test_s14_pager.py"
+        input: "Use two residual columns with exact probabilities 1/5 and 4/5, sixteen fresh draws, three possible physical pages, seed 7 twice, and seed 11 once. Then map both sample units to an absent digest and, separately, corrupt both indexed residual pages."
+        expected: "The same certificate and seed produce the same sample record and output. Another allowed seed follows the same certified distribution but may produce another record. Any absent or corrupt sampled page returns PAGE_CORRUPT before the affected command and leaves the step uncommitted."
+        observed: "Seed 7 reproduced (1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1) and one identical output digest on both fresh pagers. Seed 11 produced (1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1) and another output digest. Both absent and corrupt sampled-page attacks returned PAGE_CORRUPT with no GPU_SUBMITTED transition, no committed result, and next_step still zero."
+      - clause: "Q64 compiled selection rejects stale identity, foreign support, forged faces, and an exhausted horizon before page I/O"
+        test_or_probe: "the four pre-acquisition selection attacks and fourth-step horizon attack in tests/test_s14_pager.py"
+        input: "Replace the admitted certificate digest, set the observed condition outside protected support, replace the certified service face with condition.forged, and execute once beyond the three-step trace horizon."
+        expected: "Return one canonical typed error at the exact failed relation before any page transition or state advance; preserve the last valid commit when the horizon is exhausted."
+        observed: "Each attack returned CAPABILITY_MISMATCH at, respectively, Q64 immutable compiled certificate, certified observation support, certified service face, or certified execution horizon. All pre-acquisition attempts had empty transition records. After three valid commits, the fourth attempt left next_step at three and retained the step-two PageExecution byte-for-byte."
+      - clause: "Q20 out-of-contract seeds, timeout, and cancellation preserve the replay boundary"
+        test_or_probe: "the negative-seed, zero-second deadline, pre-set cancellation, and retry sequence in tests/test_s14_pager.py"
+        input: "Submit seed -1; after committing step zero, set the step-one page-readiness deadline to zero; on a fresh pager, set the cancellation event before step zero and then retry the same CompiledSelection without cancellation."
+        expected: "Reject the seed before I/O. Timeout with WORKING_SET_TIMEOUT and cancel with OPERATION_CANCELLED before submission. Preserve certificate identity, selection including seed, next step, and last committed result so the identical request can replay."
+        observed: "Seed -1 returned CAPABILITY_MISMATCH at the fresh-random seed contract with no transitions. The timed step entered no GPU_SUBMITTED state, retained the complete step-zero commit, kept next_step at one, and retained the step-one replay selection. The cancelled first step retained its selection and step zero; its immediate retry committed successfully and cleared replay_selection."
+      - clause: "The compiled page map cannot understate the union of pages reachable under fresh sampling"
+        test_or_probe: "the two-read physical-row injection in tests/test_s14_pager.py and the corrected all-unit route check in pager.py"
+        input: "Keep one exact page and two certified residual-unit pages but reseal the otherwise valid physical conversion at two page reads instead of three."
+        expected: "Reject before execution because one seeded step can draw both residual units and therefore require the union of all three pages."
+        observed: "CertifiedPager construction returned CAPABILITY_MISMATCH at Q20 certified page-read count. This injection was added after internal review found that checking each residual unit separately would admit the understated two-read row."
+      - clause: "The S14 fixture independently protects certificate identity and page-content verification"
+        test_or_probe: "two one-at-a-time guard removals in disposable copies of e26278aadc6a2d3bd293038b509aabb69e26b9f9's source state"
+        input: "First remove the runtime comparison between CompiledSelection.certificate_digest and the admitted certificate. Then replace store._read_page with an unchecked segment slice in the S14 acquisition path."
+        expected: "The first mutant must accept the stale selection and fail the fixture. The second must consume the deliberately corrupted exact page and fail the fixture."
+        observed: "The stale-certificate mutant failed because the expected CassetteError was not raised. The unchecked-read mutant failed at the corrupt exact-page injection for the same reason. Both disposable copies were removed."
+      - clause: "The complete S14 regression, accounting, and local-cleanup gates pass"
+        test_or_probe: "the complete pinned CPython 3.13 suite, tools/ledger.py, git diff checking, mounted-image inspection, process inspection, and system-volume inspection on the e26278a source state"
+        input: "Run every repository fixture on arm64 macOS with bytecode and pytest caches disabled; recompute commit law, generated integrity, tracked artifacts, imports, citations, pins, runtime confinement, and J; inspect the patch, mounted images, agent-created processes, bytecode, and free space."
+        expected: "Every fixture passes without a skip; the ledger reports no violation or added dependency, process, runtime, language, generated output, numerical kernel, or model branch; no S14 scratch cartridge, mutation copy, mounted image, or agent-created test process remains."
+        observed: "All 30 tests passed in 227.34 seconds with no skips. The ledger reported zero violations, 3,798 product LOC, 2,724 test LOC, 470 tool LOC, 74 generated LOC, one process, one Python runtime, and the same five exact dependency pins. No Cassette image or S14 process remained, the two mutation copies and S14 bytecode were removed, and 88 GiB remained free."
 
   - id: S15
     title: F3 end-to-end - certified tiny transformer from cartridge
