@@ -262,6 +262,12 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
         stale_status = deepcopy(wire)
         stale_status["body"]["x_cassette"]["field_status"]["cancellation"] = "UNSUPPORTED"
         _rejected("CAPABILITY_MISMATCH", lambda: adapter.from_wire_capabilities(stale_status))
+        stale_surface = deepcopy(wire)
+        first_surface = next(iter(stale_surface["body"]["x_cassette"]["surface_status"]))
+        stale_surface["body"]["x_cassette"]["surface_status"][first_surface]["request"][
+            "text"
+        ] = "UNSUPPORTED"
+        _rejected("CAPABILITY_MISMATCH", lambda: adapter.from_wire_capabilities(stale_surface))
 
     _rejected(
         "CAPABILITY_MISMATCH",
@@ -277,6 +283,34 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
     _rejected(
         "CAPABILITY_MISMATCH",
         lambda: _adapter("codex").to_wire_capabilities([codex_profile, codex_profile]),
+    )
+    codex_wire = _adapter("codex").to_wire_capabilities([codex_profile])
+    duplicate_sidecar = deepcopy(codex_wire)
+    duplicate_sidecar["body"]["x_cassette"]["capabilities"].append(
+        deepcopy(duplicate_sidecar["body"]["x_cassette"]["capabilities"][0])
+    )
+    _rejected(
+        "CAPABILITY_MISMATCH",
+        lambda: _adapter("codex").from_wire_capabilities(duplicate_sidecar),
+    )
+    forged_sidecar_extension = deepcopy(codex_wire)
+    forged_sidecar_extension["body"]["x_cassette"]["capabilities"][0]["extensions"] = {
+        "openai.responses": {"models": {MODEL_REF: {"forged": True}}}
+    }
+    _rejected(
+        "CAPABILITY_MISMATCH",
+        lambda: _adapter("codex").from_wire_capabilities(forged_sidecar_extension),
+    )
+    custom_profile = _profile("cassette.q31")
+    _rejected(
+        "CAPABILITY_MISMATCH",
+        lambda: _adapter("custom").to_wire_capabilities([custom_profile, custom_profile]),
+    )
+    _rejected(
+        "INVALID_REQUEST",
+        lambda: _adapter("custom").from_wire_capabilities(
+            {"encoding": "jsonl", "record": {"capabilities": []}}
+        ),
     )
     absent_model_extension = _profile("openai.responses")
     absent_model_extension["extensions"]["openai.responses"]["models"]["absent"] = {"x": 1}
@@ -398,6 +432,14 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
     assert _adapter("codex").from_wire_request(
         _adapter("codex").to_wire_request(decoded)
     ) == decoded
+    duplicate_header = _request("codex")
+    duplicate_header["extensions"]["openai.responses"]["headers"][
+        "x-provider-trace"
+    ] = "second"
+    _rejected("INVALID_REQUEST", lambda: _adapter("codex").to_wire_request(duplicate_header))
+    control_header = _request("codex")
+    control_header["extensions"]["openai.responses"]["headers"]["X-Control"] = "one\0two"
+    _rejected("INVALID_REQUEST", lambda: _adapter("codex").to_wire_request(control_header))
 
     # Complete event traces retain IDs, order, exact payloads, terminal states, and provider fields.
     full_traces = {}
@@ -497,6 +539,9 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
             if name in {"codex", "hermes"}:
                 assert cancel_wire["body"] == {}
                 assert cancel_wire["headers"] == {"Idempotency-Key": "cancel-1"}
+                lowercase_header = deepcopy(cancel_wire)
+                lowercase_header["headers"] = {"idempotency-key": "cancel-1"}
+                assert adapter.from_wire_operation("cancel", lowercase_header) == cancel
             else:
                 assert cancel_wire["body"] == cancel
     bad_status_route = _adapter("codex").to_wire_operation("status", status)
@@ -601,11 +646,24 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
     bad_sequence = _trace("openai.responses")
     bad_sequence[2]["sequence"] = 1
     _rejected("INVALID_REQUEST", lambda: _adapter("codex").to_wire_events(bad_sequence))
+    foreign_run = _trace("openai.responses")
+    foreign_run[2]["run_id"] = "run-2"
+    _rejected("INVALID_REQUEST", lambda: _adapter("codex").to_wire_events(foreign_run))
+    after_terminal = _trace("openai.responses")
+    after_terminal.append(
+        {"run_id": "run-1", "sequence": 7, "type": "usage", "payload": {"output_tokens": 8}}
+    )
+    _rejected("INVALID_REQUEST", lambda: _adapter("codex").to_wire_events(after_terminal))
     reordered = deepcopy(full_traces["codex"])
     reordered["frames"][1], reordered["frames"][2] = reordered["frames"][2], reordered["frames"][1]
     _rejected("INVALID_REQUEST", lambda: _adapter("codex").from_wire_events(reordered))
     unknown_event = {"encoding": "sse", "frames": [{"type": "response.unknown"}]}
     _rejected("INVALID_REQUEST", lambda: _adapter("codex").from_wire_events(unknown_event))
+    duplicate_tool_argument = deepcopy(full_traces["codex"])
+    duplicate_tool_argument["frames"][3]["item"]["arguments"] = '{"query":"a","query":"b"}'
+    _rejected(
+        "INVALID_REQUEST", lambda: _adapter("codex").from_wire_events(duplicate_tool_argument)
+    )
     _rejected(
         "INVALID_REQUEST",
         lambda: _adapter("codex").to_wire_operation("cancel", training),

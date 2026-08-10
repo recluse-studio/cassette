@@ -37,6 +37,15 @@ def _validated(kind: str, value: object) -> dict:
     return deepcopy(value)
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError(f"duplicate JSON member {name!r}")
+        result[name] = value
+    return result
+
+
 def _path_text(path: list[object]) -> str:
     return ".".join(str(part) for part in path)
 
@@ -150,8 +159,8 @@ def _codec(value: object, name: str, *, encode: bool, adapter: "NamedAdapter") -
         if not isinstance(value, str):
             raise _fail("INVALID_REQUEST", adapter.name, "provider tool arguments must be JSON text")
         try:
-            return json.loads(value)
-        except json.JSONDecodeError as exc:
+            return json.loads(value, object_pairs_hook=_unique_json_object)
+        except ValueError as exc:
             raise _fail("INVALID_REQUEST", adapter.name, "provider tool arguments are invalid JSON") from exc
     raise _fail("INVALID_REQUEST", adapter.name, f"unknown generated field codec {name!r}")
 
@@ -187,14 +196,19 @@ def _headers(headers: object, object_id: str, *, forbid_sensitive: bool) -> dict
         not isinstance(name, str) or not isinstance(value, str) for name, value in headers.items()
     ):
         raise _fail("INVALID_REQUEST", object_id, "wire headers must be a string map")
+    folded_names: set[str] = set()
     for name, value in headers.items():
+        folded = name.lower()
         if (
             not name or not name.isascii()
             or any(not character.isalnum() and character not in _HEADER_TOKEN for character in name)
-            or "\r" in value or "\n" in value
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
         ):
             raise _fail("INVALID_REQUEST", object_id, f"header {name!r} is not HTTP-safe")
-        if forbid_sensitive and name.lower() in _SENSITIVE_HEADERS:
+        if folded in folded_names:
+            raise _fail("INVALID_REQUEST", object_id, f"header {name!r} is duplicated by case")
+        folded_names.add(folded)
+        if forbid_sensitive and folded in _SENSITIVE_HEADERS:
             raise _fail(
                 "CAPABILITY_MISMATCH", object_id,
                 f"credential header {name!r} cannot enter the canonical extension namespace",
@@ -391,15 +405,12 @@ class NamedAdapter:
     def to_wire_capabilities(self, profiles: list[dict]) -> dict:
         """Encode exact discovery; native model rows are never treated as full capabilities."""
         self._ready()
-        if not isinstance(profiles, list) or not profiles:
-            raise _fail("INVALID_REQUEST", self.name, "discovery requires at least one capability")
-        canonical = [_validated("capability_profile", profile) for profile in profiles]
+        canonical = self._capabilities(profiles)
         discovery = self._definition["discovery"]
         if discovery["format"] == "canonical":
             return {"encoding": "jsonl", "record": {"capabilities": canonical}}
         items = []
         sidecar = []
-        seen_models: set[str] = set()
         for profile in canonical:
             extension = self._extensions(profile, {"models"})
             model_extensions = extension.get("models", {})
@@ -409,9 +420,6 @@ class NamedAdapter:
                 raise _fail("CAPABILITY_MISMATCH", self.name, "model extension names an absent model")
             sidecar.append(profile)
             for model_ref in profile["model_refs"]:
-                if model_ref in seen_models:
-                    raise _fail("CAPABILITY_MISMATCH", model_ref, "model has two capability authorities")
-                seen_models.add(model_ref)
                 extra = model_extensions.get(model_ref, {})
                 if not isinstance(extra, dict):
                     raise _fail("INVALID_REQUEST", model_ref, "model extension must be an object")
@@ -452,6 +460,19 @@ class NamedAdapter:
             ]
         return result
 
+    def _capabilities(self, profiles: object) -> list[dict]:
+        """Validate one nonempty capability set with one authority per model revision."""
+        if not isinstance(profiles, list) or not profiles:
+            raise _fail("INVALID_REQUEST", self.name, "discovery requires at least one capability")
+        canonical = [_validated("capability_profile", profile) for profile in profiles]
+        seen_models: set[str] = set()
+        for profile in canonical:
+            for model_ref in profile["model_refs"]:
+                if model_ref in seen_models:
+                    raise _fail("CAPABILITY_MISMATCH", model_ref, "model has two capability authorities")
+                seen_models.add(model_ref)
+        return canonical
+
     def from_wire_capabilities(self, wire: dict) -> list[dict]:
         """Decode discovery only when the exact Cassette capability sidecar is present."""
         self._ready()
@@ -462,7 +483,7 @@ class NamedAdapter:
             record = wire.get("record")
             if not isinstance(record, dict) or set(record) != {"capabilities"}:
                 raise _fail("INVALID_REQUEST", self.name, "custom discovery record is malformed")
-            return [_validated("capability_profile", profile) for profile in record["capabilities"]]
+            return self._capabilities(record["capabilities"])
         allowed = {"method", "path", "body"}
         if discovery["format"] == "ollama_tags":
             allowed.add("detail_requests")
@@ -499,7 +520,12 @@ class NamedAdapter:
             or sidecar["surface_status"] != expected_surface_status
         ):
             raise _fail("CAPABILITY_MISMATCH", self.name, "discovery field status is stale")
-        profiles = [_validated("capability_profile", profile) for profile in sidecar.get("capabilities", [])]
+        profiles = self._capabilities(sidecar.get("capabilities"))
+        if any("extensions" in profile for profile in profiles):
+            raise _fail(
+                "CAPABILITY_MISMATCH", self.name,
+                "native discovery sidecar cannot carry provider extension authority",
+            )
         items = body.get("models") if discovery["format"] == "ollama_tags" else body.get("data")
         if not isinstance(items, list):
             raise _fail("INVALID_REQUEST", self.name, "native discovery list is missing")
@@ -724,11 +750,12 @@ class NamedAdapter:
                 raise _fail("INVALID_REQUEST", self.name, "native operation path is malformed")
             target = wire["path"][len(prefix):len(wire["path"]) - len(suffix) if suffix else None]
             target = _route_id(target, action)
-            if set(headers) != {"Idempotency-Key"}:
+            idempotency_headers = [name for name in headers if name.lower() == "idempotency-key"]
+            if len(headers) != 1 or len(idempotency_headers) != 1:
                 raise _fail("INVALID_REQUEST", self.name, "native operation identity is missing")
             canonical = {
                 "protocol_version": "1", "operation": "cancel",
-                "idempotency_key": headers["Idempotency-Key"],
+                "idempotency_key": headers[idempotency_headers[0]],
                 "target": target, "arguments": {},
             }
             return _validated("request", canonical)
