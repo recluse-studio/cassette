@@ -2533,6 +2533,7 @@ class _TransformerRuntimeStep:
     operator_cases: tuple[str, ...]
     position_offset: int
     token_count: int
+    decode_padding_token: int
     vocabulary_size: int
     metadata: bytes
     parameter_pages: tuple[tuple[str, str], ...]
@@ -2743,6 +2744,7 @@ def _bind_transformer_steps(
         evidence["trace_contract"]["protected_trace_family"],
         {
             "architecture",
+            "decode_padding_token",
             "hidden_size",
             "horizon",
             "name",
@@ -2783,6 +2785,12 @@ def _bind_transformer_steps(
         "Q19/Q36: protected decoder graph",
         "vocabulary size",
     )
+    decode_padding_token = _runtime_u64(
+        graph["decode_padding_token"],
+        object_id,
+        "Q19/Q36: protected decoder graph",
+        "decode padding token",
+    )
     horizon = _runtime_u64(
         graph["horizon"],
         object_id,
@@ -2794,6 +2802,7 @@ def _bind_transformer_steps(
         or hidden_size != 4
         or token_count != 2
         or vocabulary_size != 4
+        or decode_padding_token >= vocabulary_size
         or horizon != len(runtime_steps)
     ):
         raise _runtime_error(
@@ -2833,7 +2842,13 @@ def _bind_transformer_steps(
     ):
         graph_step = _runtime_record(
             raw_graph_step,
-            {"operator_cases", "parameters", "position_offset", "step"},
+            {
+                "operator_cases",
+                "parameters",
+                "position_offset",
+                "request_token_count",
+                "step",
+            },
             object_id,
             "protected F3 graph step",
         )
@@ -2849,7 +2864,17 @@ def _bind_transformer_steps(
             "Q19/Q36: protected decoder position",
             "position offset",
         )
-        if graph_step_index != index or position_offset != index:
+        request_token_count = _runtime_u64(
+            graph_step["request_token_count"],
+            object_id,
+            "Q19/Q36: protected decoder position",
+            "request token count",
+        )
+        if (
+            graph_step_index != index
+            or position_offset != index
+            or request_token_count != (2 if index == 0 else 1)
+        ):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 object_id,
@@ -3051,7 +3076,8 @@ def _bind_transformer_steps(
         bound_steps.append(_TransformerRuntimeStep(
             operator_cases=operator_cases,
             position_offset=position_offset,
-            token_count=2,
+            token_count=request_token_count,
+            decode_padding_token=decode_padding_token,
             vocabulary_size=4,
             metadata=metadata,
             parameter_pages=tuple(parameter_pages),
@@ -3185,7 +3211,6 @@ class CertifiedTransformer(CertifiedPager):
         )
         self._kv = bytearray(kv_capacity)
         self._kv_length = 0
-        self._last_token: int | None = None
         self.last_transformer: TransformerExecution | None = None
 
     @property
@@ -3210,13 +3235,11 @@ class CertifiedTransformer(CertifiedPager):
                 transformer_step.vocabulary_size,
                 self._certificate_id,
             )
-            if self._last_token is not None and token_values[0] != self._last_token:
-                raise _runtime_error(
-                    "INVALID_REQUEST",
-                    self._certificate_id,
-                    "Q36: coherent recurrent token history",
-                    "decode must begin with the last token committed by the preceding step",
-                )
+            dispatch_tokens = (
+                token_values
+                if transformer_step.token_count == 2
+                else (transformer_step.decode_padding_token, token_values[0])
+            )
             step, sample_units, seed, planned_pages, payloads = (
                 await self._prepare_execution(
                     selection,
@@ -3261,7 +3284,7 @@ class CertifiedTransformer(CertifiedPager):
                 for role, page_digest in transformer_step.parameter_pages
             }
             correction = _float32_array(payloads[correction_page], (4, 4), mx)
-            token_array = mx.array(token_values, dtype=mx.uint32)
+            token_array = mx.array(dispatch_tokens, dtype=mx.uint32)
             cases = transformer_step.operator_cases
             hidden = dispatch(cases[0], (matrices["embedding"], token_array))
             attention_input = dispatch(
@@ -3381,7 +3404,6 @@ class CertifiedTransformer(CertifiedPager):
                 current_key_payload + current_value_payload
             )
             self._kv_length = kv_end
-            self._last_token = token_values[-1]
             trace = TransformerTrace(
                 phase="PREFILL" if step.schedule.step == 0 else "DECODE",
                 schedule=step.schedule,

@@ -109,7 +109,8 @@ PROBABILITIES = {
     3: Fraction(1, 49),
 }
 PREFILL_TOKENS = (0, 1)
-DECODE_TOKENS = (1, 2)
+DECODE_TOKENS = (2,)
+DECODE_INTERNAL_TOKENS = (0, 2)
 
 
 def _digest(value: object) -> str:
@@ -378,7 +379,7 @@ def _fixture(
         "seed_policy": "RECORDED_COUNTER_KEY",
     }
     exact_loss = {"coefficient": "1", "remainder_bound": "0"}
-    fresh_loss = {"coefficient": "7/40", "remainder_bound": "0"}
+    fresh_loss = {"coefficient": "21/100", "remainder_bound": "0"}
     rank_accounting = {"kind": "ATOM_BOUND", "maximum_rank": 4}
     operations = [
         {
@@ -486,7 +487,7 @@ def _fixture(
     metadata_peak = max(len(exact_metadata), len(fresh_metadata))
     resources = {
         "eta_rep": 0.0,
-        "epsilon_exec": 0.2625,
+        "epsilon_exec": 0.315,
         "delta_exec_total": 0.5,
         "atom_count": 2,
         "max_atom_rank": 4,
@@ -535,6 +536,7 @@ def _fixture(
         graph_steps.append({
             "step": step,
             "position_offset": step,
+            "request_token_count": 2 if step == 0 else 1,
             "operator_cases": list(_operator_cases(step)),
             "parameters": [
                 {"role": role, "page_digest": role_pages[role]}
@@ -544,6 +546,7 @@ def _fixture(
     protected_graph = {
         "name": "S15 two-step tiny decoder",
         "architecture": "PRENORM_CAUSAL_DECODER",
+        "decode_padding_token": 0,
         "hidden_size": 4,
         "vocabulary_size": 4,
         "token_count": 2,
@@ -1136,6 +1139,46 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         "Q36: exact F3 decoder description"
     )
 
+    semantic_base_plan = copy.deepcopy(plan)
+    semantic_base_certificate = copy.deepcopy(certificate)
+    semantic_base_evidence = copy.deepcopy(evidence)
+    semantic_base_profile = copy.deepcopy(profile)
+    semantic_base_map = copy.deepcopy(page_map)
+    semantic_base_evidence["trace_contract"]["protected_trace_family"]["steps"][0][
+        "parameters"
+    ][7]["page_digest"] = pages["fresh.unit0"]
+    semantic_base_map["steps"][0]["exact_pages"][7] = pages["fresh.unit0"]
+    _rebind(
+        semantic_base_plan,
+        semantic_base_certificate,
+        semantic_base_evidence,
+        semantic_base_profile,
+        semantic_base_map,
+    )
+    assert isinstance(
+        pager.CertifiedPager(
+            cartridge,
+            semantic_base_plan,
+            semantic_base_certificate,
+            semantic_base_evidence,
+            semantic_base_profile,
+            semantic_base_map,
+        ),
+        pager.CertifiedPager,
+    )
+    with pytest.raises(CassetteError) as semantic_base:
+        pager.CertifiedTransformer(
+            cartridge,
+            semantic_base_plan,
+            semantic_base_certificate,
+            semantic_base_evidence,
+            semantic_base_profile,
+            semantic_base_map,
+        )
+    assert semantic_base.value.failed_invariant == (
+        "Q19/Q36: physical description equals certified reconstruction"
+    )
+
     malformed_correction = copy.deepcopy(page_map)
     malformed_correction["steps"][1]["sample_units"][0]["page_digests"] = [
         pages["fresh.unit1"]
@@ -1345,24 +1388,24 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         assert malformed_tokens.last_attempt_transitions == ()
         assert malformed_tokens.kv_snapshot == b""
 
-        continuity = pager.CertifiedTransformer(
+        decode_boundary = pager.CertifiedTransformer(
             cartridge, plan, certificate, evidence, profile, page_map
         )
-        await continuity.execute_token(
+        await decode_boundary.execute_token(
             _selection(certificate, evidence, 0), PREFILL_TOKENS
         )
-        checkpoint = continuity.kv_snapshot
-        with pytest.raises(CassetteError) as history_error:
-            await continuity.execute_token(
+        checkpoint = decode_boundary.kv_snapshot
+        with pytest.raises(CassetteError) as decode_tokens:
+            await decode_boundary.execute_token(
                 _selection(certificate, evidence, 1, 7),
-                (3, 2),
+                (1, 2),
             )
-        assert history_error.value.failed_invariant == (
-            "Q36: coherent recurrent token history"
+        assert decode_tokens.value.failed_invariant == (
+            "Q36: bounded transformer activation"
         )
-        assert continuity.kv_snapshot == checkpoint
-        assert continuity.next_step == 1
-        assert continuity.last_attempt_transitions == ()
+        assert decode_boundary.kv_snapshot == checkpoint
+        assert decode_boundary.next_step == 1
+        assert decode_boundary.last_attempt_transitions == ()
 
         prefill_expected, prior, _, _ = _decoder_oracle(
             TARGET,
@@ -1371,7 +1414,7 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         )
         exact_decode, _, decoder_input, exact_up = _decoder_oracle(
             TARGET,
-            DECODE_TOKENS,
+            DECODE_INTERNAL_TOKENS,
             position_offset=1,
             prior=prior,
         )
@@ -1382,7 +1425,7 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
             transformer, prefill, decode = await run_pair(seed)
             sampled_logits, _, sampled_input, sampled_up = _decoder_oracle(
                 _correction(unit),
-                DECODE_TOKENS,
+                DECODE_INTERNAL_TOKENS,
                 position_offset=1,
                 prior=prior,
             )
@@ -1410,10 +1453,10 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         local_risk, final_risk = _assert_execution_contract(
             outcomes,
             _norm(decoder_input),
-            coefficient=7 / 40,
+            coefficient=21 / 100,
         )
         assert local_risk == pytest.approx(1 / 49)
-        assert final_risk == pytest.approx(1 / 49)
+        assert final_risk == 0.0
         low_loss_transformer = pager.CertifiedTransformer(
             cartridge,
             low_loss_plan,
@@ -1497,7 +1540,7 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         assert prefill_a.trace.epsilon_exec == 0.0
         assert decode_a.trace.epsilon_exec == 1.5
         assert decode_a.trace.delta_exec == 0.5
-        assert decode_a.trace.loss_coefficient == pytest.approx(7 / 40)
+        assert decode_a.trace.loss_coefficient == pytest.approx(21 / 100)
         assert decode_a.trace.remainder_bound == 0.0
         assert prefill_a.kv_bytes == 32
         assert decode_a.kv_bytes == 64
@@ -1505,7 +1548,7 @@ def test_q19_q36_q63_f3_decoder_trace_nonlinear_risk_and_kv_rollback(tmp_path):
         changed_transformer, _, changed_history = await run_pair(
             replay_seed,
             (0, 3),
-            (3, 2),
+            DECODE_TOKENS,
         )
         assert changed_history.logits_digest != decode_a.logits_digest
         assert changed_history.kv_digest != decode_a.kv_digest
