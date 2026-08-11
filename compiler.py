@@ -1343,7 +1343,7 @@ def _prepare_revision(
         transform_manifest_digest=transform_digest,
     )
     candidate = derive_root(cartridge, source_root_digest, compiled_material, (bundle,))
-    _verify_bundle(
+    _verify_bundle_structure(
         cartridge,
         candidate,
         source_record["identity"],
@@ -1358,7 +1358,7 @@ def _prepare_revision(
     )
 
 
-def _verify_bundle(
+def _verify_bundle_structure(
     cartridge: str | Path,
     root_digest: str,
     source_identity: str,
@@ -1509,19 +1509,19 @@ def prepare_revision(
     )
 
 
-def verify_bundle(
+def verify_bundle_structure(
     cartridge: str | Path,
     root_digest: str,
     source_identity: str,
     plan_digest: str,
     source_descriptors: Mapping[str, int] | None = None,
 ) -> tuple[dict, dict, dict, dict, str]:
-    """Reject any detached map, certificate, plan, source parent, or extent claim before publication."""
+    """Reject structurally detached maps, plans, source parents, and extent claims before publication."""
 
     return _boundary(
         "verify",
         {"identity": source_identity},
-        _verify_bundle,
+        _verify_bundle_structure,
         cartridge,
         root_digest,
         source_identity,

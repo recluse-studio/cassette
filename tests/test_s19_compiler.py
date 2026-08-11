@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import ast
 import copy
+from fractions import Fraction
+from itertools import combinations, permutations
 import os
 from pathlib import Path
 import sys
@@ -13,10 +15,11 @@ import pytest
 
 from broker import AcquisitionContext, CanonicalBroker
 import compiler
-from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle
+from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle_structure
 from compiler_fixture import artifact as compiler_artifact, sharded_artifacts
 from errors import CassetteError
 from pager import admit_schedule
+import pager
 from sources import Artifact, ResolvedSource
 from store import (
     ArtifactIdentity,
@@ -145,6 +148,51 @@ def _content_path(cartridge: Path, directory: str, digest: str) -> Path:
     return cartridge / directory / digest.removeprefix("blake3:")
 
 
+def _exact(real: int | Fraction, imaginary: int | Fraction = 0):
+    return (Fraction(real), Fraction(imaginary))
+
+
+def _oracle_multiply(left, right):
+    return (
+        left[0] * right[0] - left[1] * right[1],
+        left[0] * right[1] + left[1] * right[0],
+    )
+
+
+def _oracle_determinant(matrix):
+    size = len(matrix)
+    total = _exact(0)
+    for order in permutations(range(size)):
+        term = _exact(1)
+        for row, column in enumerate(order):
+            term = _oracle_multiply(term, matrix[row][column])
+        inversions = sum(
+            order[left] > order[right]
+            for left in range(size)
+            for right in range(left + 1, size)
+        )
+        total = (
+            total[0] + (-term[0] if inversions % 2 else term[0]),
+            total[1] + (-term[1] if inversions % 2 else term[1]),
+        )
+    return total
+
+
+def _oracle_rank(matrix):
+    row_count = len(matrix)
+    column_count = len(matrix[0])
+    for size in range(min(row_count, column_count), 0, -1):
+        for row_indexes in combinations(range(row_count), size):
+            for column_indexes in combinations(range(column_count), size):
+                minor = [
+                    [matrix[row][column] for column in column_indexes]
+                    for row in row_indexes
+                ]
+                if _oracle_determinant(minor) != _exact(0):
+                    return size
+    return 0
+
+
 def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication(tmp_path):
     """Q4/Q5/Q19/Q30/Q40/Q51/Q55/Q58/Q60/Q62 acceptance: hostile bytes cannot outrun complete proof."""
 
@@ -210,6 +258,46 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
     assert tuple(AcquisitionContext.__dataclass_fields__) == (
         "adapter", "reservation", "transfers", "cartridge",
     )
+
+    # Q19: compiler derivation and pager admission use different elimination, determinant,
+    # contraction, and loss procedures. Literal answers and a combinatorial minors oracle judge
+    # both authorities without deriving the expected result through either production path.
+    arithmetic_cases = (
+        [[_exact(0), _exact(0), _exact(0)], [_exact(0), _exact(0), _exact(0)]],
+        [[_exact(1), _exact(2), _exact(3)], [_exact(2), _exact(4), _exact(6)]],
+        [[_exact(0), _exact(1), _exact(2)], [_exact(1), _exact(0), _exact(3)], [_exact(4), _exact(5), _exact(6)]],
+        [[_exact(1), _exact(0), _exact(1)], [_exact(0), _exact(1), _exact(1)]],
+        [[_exact(1, 1), _exact(2)], [_exact(0, -1), _exact(3, 2)]],
+    )
+    for matrix in arithmetic_cases:
+        expected_rank = _oracle_rank(matrix)
+        assert compiler._rank(matrix) == expected_rank
+        assert pager._rank(matrix) == expected_rank
+        if len(matrix) == len(matrix[0]):
+            expected_determinant = _oracle_determinant(matrix)
+            assert compiler._determinant(matrix) == expected_determinant
+            assert pager._determinant(matrix) == expected_determinant
+
+    left = [_exact(1, 1), _exact(2)]
+    right = [_exact(3, -1), _exact(1, 2)]
+    metric = [[_exact(2), _exact(0)], [_exact(0), _exact(3)]]
+    assert compiler._inner(left, metric, right) == _exact(10, 4)
+    assert pager._inner(left, metric, right) == _exact(10, 4)
+    target = [_exact(1), _exact(2)]
+    atom = [_exact(1), _exact(1)]
+    assert compiler._witness_loss(target, atom, metric, "literal-witness") == Fraction(6, 5)
+    assert pager._witness_loss(target, atom, metric, "literal-witness") == Fraction(6, 5)
+
+    indefinite_metric = [[_exact(1), _exact(0)], [_exact(0), _exact(-1)]]
+    for witness_loss in (compiler._witness_loss, pager._witness_loss):
+        with pytest.raises(CassetteError) as impossible_loss:
+            witness_loss(
+                [_exact(1), _exact(0)],
+                [_exact(2), _exact(1)],
+                indefinite_metric,
+                "impossible-witness",
+            )
+        assert impossible_loss.value.code == "CAPABILITY_MISMATCH"
 
     # Q4: the production extent primitive must execute identity, shrink, and grow without a
     # second complete checkpoint. A corrupt uncommitted grow extent must resume to exact bytes.
@@ -315,7 +403,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         for label, attacked in (("swapped", swapped), ("duplicated", duplicated_inventory)):
             attacked_root = _forge(sharded_cartridge, shard_root, attacked)
             with pytest.raises(CassetteError) as refused:
-                verify_bundle(
+                verify_bundle_structure(
                     sharded_cartridge,
                     attacked_root,
                     shard_source["identity"],
@@ -355,7 +443,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         source_path.write_bytes(b"P" * len(valid_payload))
         prepared = prepare_revision(source, extents, cartridge, plan_digest)
         root = load_root(cartridge, prepared.candidate_root)
-        plan, certificate, evidence, profile, compiled_identity = verify_bundle(
+        plan, certificate, evidence, profile, compiled_identity = verify_bundle_structure(
             cartridge,
             prepared.candidate_root,
             source["identity"],
@@ -397,7 +485,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
             b"schema-valid but mathematically false metric"
         )
         false_root = _forge(cartridge, root, false_certificate)
-        structurally_valid = verify_bundle(
+        structurally_valid = verify_bundle_structure(
             cartridge,
             false_root,
             source["identity"],
@@ -488,7 +576,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         for label, attacked_bundle in attacks.items():
             attacked_root = _forge(cartridge, root, attacked_bundle)
             with pytest.raises(CassetteError) as refused:
-                verify_bundle(cartridge, attacked_root, source["identity"], plan_digest)
+                verify_bundle_structure(cartridge, attacked_root, source["identity"], plan_digest)
             assert refused.value.code in {"CAPABILITY_MISMATCH", "ROOT_INVALID"}, label
             assert recover_generation(cartridge) is None
 

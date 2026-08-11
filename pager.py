@@ -319,17 +319,18 @@ def _subtract(left, right):
 
 
 def _multiply(left, right):
-    return (left[0] * right[0] - left[1] * right[1], left[0] * right[1] + left[1] * right[0])
+    diagonal = left[0] * right[0]
+    cross = left[1] * right[1]
+    imaginary = (left[0] + left[1]) * (right[0] + right[1]) - diagonal - cross
+    return (diagonal - cross, imaginary)
 
 
 def _divide(left, right):
-    denominator = right[0] * right[0] + right[1] * right[1]
+    denominator = _absolute_squared(right)
     if denominator == 0:
         raise ZeroDivisionError
-    return (
-        (left[0] * right[0] + left[1] * right[1]) / denominator,
-        (left[1] * right[0] - left[0] * right[1]) / denominator,
-    )
+    numerator = _multiply(left, _conjugate(right))
+    return (numerator[0] / denominator, numerator[1] / denominator)
 
 
 def _conjugate(value):
@@ -360,15 +361,15 @@ def _rank(matrix) -> int:
             continue
         rows[pivot_row], rows[pivot] = rows[pivot], rows[pivot_row]
         pivot_value = rows[pivot_row][column]
-        rows[pivot_row] = [_divide(value, pivot_value) for value in rows[pivot_row]]
-        for index in range(len(rows)):
-            if index == pivot_row or rows[index][column] == _ZERO:
+        for index in range(pivot_row + 1, len(rows)):
+            if rows[index][column] == _ZERO:
                 continue
-            factor = rows[index][column]
-            rows[index] = [
-                _subtract(value, _multiply(factor, pivot_value))
-                for value, pivot_value in zip(rows[index], rows[pivot_row], strict=True)
-            ]
+            factor = _divide(rows[index][column], pivot_value)
+            for target_column in range(column, len(rows[index])):
+                rows[index][target_column] = _subtract(
+                    rows[index][target_column],
+                    _multiply(factor, rows[pivot_row][target_column]),
+                )
         pivot_row += 1
         if pivot_row == len(rows):
             break
@@ -377,9 +378,11 @@ def _rank(matrix) -> int:
 
 def _determinant(matrix) -> tuple[Fraction, Fraction]:
     rows = [list(row) for row in matrix]
-    result = (Fraction(1), Fraction(0))
+    if not rows:
+        return (Fraction(1), Fraction(0))
+    previous_pivot = (Fraction(1), Fraction(0))
     sign = 1
-    for column in range(len(rows)):
+    for column in range(len(rows) - 1):
         pivot = next((index for index in range(column, len(rows)) if rows[index][column] != _ZERO), None)
         if pivot is None:
             return _ZERO
@@ -387,28 +390,29 @@ def _determinant(matrix) -> tuple[Fraction, Fraction]:
             rows[column], rows[pivot] = rows[pivot], rows[column]
             sign *= -1
         pivot_value = rows[column][column]
-        result = _multiply(result, pivot_value)
         for index in range(column + 1, len(rows)):
-            if rows[index][column] == _ZERO:
-                continue
-            factor = _divide(rows[index][column], pivot_value)
-            rows[index] = [
-                _subtract(value, _multiply(factor, reference))
-                for value, reference in zip(rows[index], rows[column], strict=True)
-            ]
+            eliminated = rows[index][column]
+            for target_column in range(column + 1, len(rows)):
+                numerator = _subtract(
+                    _multiply(pivot_value, rows[index][target_column]),
+                    _multiply(eliminated, rows[column][target_column]),
+                )
+                rows[index][target_column] = _divide(numerator, previous_pivot)
+            rows[index][column] = _ZERO
+        previous_pivot = pivot_value
+    result = rows[-1][-1]
     return (-result[0], -result[1]) if sign < 0 else result
 
 
 def _inner(left, metric, right) -> tuple[Fraction, Fraction]:
-    applied = []
-    for row in metric:
-        total = _ZERO
-        for coefficient, value in zip(row, right, strict=True):
-            total = _add(total, _multiply(coefficient, value))
-        applied.append(total)
     result = _ZERO
-    for value, product in zip(left, applied, strict=True):
-        result = _add(result, _multiply(_conjugate(value), product))
+    for row_index, left_value in enumerate(left):
+        for column_index, right_value in enumerate(right):
+            term = _multiply(
+                _multiply(_conjugate(left_value), metric[row_index][column_index]),
+                right_value,
+            )
+            result = _add(result, term)
     return result
 
 
@@ -416,9 +420,22 @@ def _witness_loss(target, atom, metric, object_id: str) -> Fraction:
     target_norm = _inner(target, metric, target)
     atom_norm = _inner(atom, metric, atom)
     cross = _inner(atom, metric, target)
-    if target_norm[1] != 0 or atom_norm[1] != 0 or atom_norm[0] <= 0:
+    if target_norm[1] != 0 or target_norm[0] < 0 or atom_norm[1] != 0 or atom_norm[0] <= 0:
         _reject_evidence(object_id, "condition metric", "quadratic forms must be positive real values")
-    return target_norm[0] - _absolute_squared(cross) / atom_norm[0]
+    coefficient = _divide(cross, atom_norm)
+    residual = [
+        _subtract(target_value, _multiply(coefficient, atom_value))
+        for target_value, atom_value in zip(target, atom, strict=True)
+    ]
+    residual_norm = _inner(residual, metric, residual)
+    if residual_norm[1] != 0 or residual_norm[0] < 0:
+        raise _error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "Q19: condition witness loss",
+            "explicit residual norm must be nonnegative real",
+        )
+    return residual_norm[0]
 
 
 def _digest(value: object) -> str:

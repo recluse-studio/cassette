@@ -16,7 +16,7 @@ from pathlib import Path
 import re
 from types import MappingProxyType
 
-from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle
+from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle_structure
 from errors import CassetteError
 from pager import CertifiedSchedule, admit_schedule
 from schema.tables import Q77_FIELDS
@@ -1586,7 +1586,7 @@ class CanonicalBroker:
             ]
         ):
             _reject("IDENTITY_MISMATCH", operation_id, "candidate root is not bound to the durable source lock")
-        plan, certificate, evidence, profile, compiled_identity = verify_bundle(
+        plan, certificate, evidence, profile, compiled_identity = verify_bundle_structure(
             cartridge,
             root_digest,
             revision.identity,
