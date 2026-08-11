@@ -26,6 +26,7 @@
             "items": {
               "$ref": "remote_metadata_field.json"
             },
+            "maxItems": 1048576,
             "minItems": 2,
             "type": "array"
           },
@@ -64,6 +65,8 @@
         "title": "Retained metadata conflict",
         "type": "object"
       },
+      "maxItems": 1048576,
+      "minItems": 0,
       "type": "array"
     },
     "context": {

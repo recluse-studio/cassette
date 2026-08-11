@@ -138,6 +138,42 @@ def metadata(value=None, trust="ABSENT", authority="fixture:no-evidence"):
     return item
 
 
+def unbounded_schema_paths(schema: object, path: str = "$") -> list[str]:
+    """Name every executable-data shape that lacks a finite structural bound."""
+    if isinstance(schema, list):
+        return [
+            defect
+            for index, value in enumerate(schema)
+            for defect in unbounded_schema_paths(value, f"{path}/{index}")
+        ]
+    if not isinstance(schema, dict):
+        return []
+    defects = [f"{path}: unconstrained"] if not schema else []
+    kind = schema.get("type")
+    kinds = set(kind) if isinstance(kind, list) else ({kind} if isinstance(kind, str) else set())
+    if "array" in kinds and "maxItems" not in schema:
+        defects.append(f"{path}: array has no maxItems")
+    if "string" in kinds and not ({"maxLength", "enum", "const"} & schema.keys()):
+        defects.append(f"{path}: string has no finite vocabulary or maxLength")
+    lower = {"minimum", "exclusiveMinimum"} & schema.keys()
+    upper = {"maximum", "exclusiveMaximum"} & schema.keys()
+    if {"integer", "number"} & kinds and not (lower and upper):
+        defects.append(f"{path}: number lacks a finite bound")
+    if "object" in kinds:
+        closed = schema.get("additionalProperties") is False or isinstance(
+            schema.get("additionalProperties"), dict
+        )
+        if not closed:
+            defects.append(f"{path}: object is open")
+        if schema.get("patternProperties") and "maxProperties" not in schema:
+            defects.append(f"{path}: patterned object has no maxProperties")
+    return defects + [
+        defect
+        for name, value in schema.items()
+        for defect in unbounded_schema_paths(value, f"{path}/{name}")
+    ]
+
+
 REMOTE_GOLDEN = {name: metadata() for name in REMOTE_FIELDS}
 REMOTE_GOLDEN.update(
     {
@@ -172,12 +208,12 @@ REMOTE_GOLDEN.update(
     }
 )
 
-SPAN = {"page_digest": "blake3:00ff", "offset": 0, "length": 4096, "tensor_offset": 0}
+SPAN = {"page_digest": "blake3:" + "0" * 64, "offset": 0, "length": 4096, "tensor_offset": 0}
 TENSOR_MAP = {
     "semantic_tensor_id": "model.layers.0.weight",
     "shape": [32, 32],
     "dtype": "bf16",
-    "codec": "raw",
+    "codec": "raw-little-endian",
     "plane": 0,
     "spans": [SPAN],
 }
@@ -436,6 +472,26 @@ Q77_FIELD_PROVENANCE = {
     field: {"status": "EXACT", "evidence": DIGESTS[4]}
     for field in EXPECTED_Q77_FIELDS
 }
+ROOT_IDENTITY_MATERIAL = {
+    "source_kind": "huggingface",
+    "locator": "org/model",
+    "immutable_revision": DIGESTS[1],
+    "artifacts": [
+        {"path": "model.safetensors", "size": 4096, "digest": DIGESTS[2]},
+    ],
+    "format_versions": [["safetensors", "0.6.2"]],
+    "tensor_index_digest": DIGESTS[3],
+    "config_digest": DIGESTS[4],
+    "architecture": "fixture-architecture",
+    "operator_set": ["matmul"],
+    "tokenizer_digest": DIGESTS[5],
+    "processor_digest": DIGESTS[6],
+    "template_digest": DIGESTS[7],
+    "precision_scheme": "bf16",
+    "license_digest": DIGESTS[8],
+    "parent_ids": [],
+    "transform_manifest_digest": None,
+}
 GOLDEN = {
     "error": {
         "code": "PAGE_CORRUPT",
@@ -529,15 +585,31 @@ GOLDEN = {
     "operator_dispatch": OPERATOR_DISPATCH,
     "execution_plan": EXECUTION_PLAN,
     "root": {
-        "identity": "I-abc",
-        "parents": ["I-parent"],
-        "provenance": {"source": "huggingface"},
-        "semantic_assets": {"tokenizer": "sha256:05"},
+        "identity": DIGESTS[0],
+        "parents": [],
+        "provenance": {
+            "revision_kind": "source",
+            "source_alias": "fixture-alias",
+            "requested_revision": "main",
+            "identity_material": ROOT_IDENTITY_MATERIAL,
+            "containers": [
+                {
+                    "path": "model.safetensors",
+                    "format": "safetensors",
+                    "metadata": {"format": "pt"},
+                },
+            ],
+        },
+        "semantic_assets": {
+            "processor": DIGESTS[6],
+            "template": DIGESTS[7],
+            "tokenizer": DIGESTS[5],
+        },
         "tensor_maps": [TENSOR_MAP],
         "operators": ["matmul"],
-        "plans": ["plan:c1"],
+        "plans": [{"plan_id": DIGESTS[9], "limits": {"bytes": 4096}}],
         "deltas": [],
-        "integrity_root": "merkle:abc",
+        "integrity_root": DIGESTS[10],
     },
 }
 
@@ -576,12 +648,13 @@ def test_exact_contract_set_is_json_schema_and_round_trips():
 
 
 def test_q31_q50_q57_shapes_are_complete():
-    """Q6/Q9/Q31/Q50/Q57/Q77: each formal record has its exact field boundary."""
+    """Q6/Q9/Q31/Q33/Q50/Q57/Q77: every record is exact and allocation-bounded."""
     assert set(EXPECTED_FIELDS) == EXPECTED_KINDS
     for kind, fields in EXPECTED_FIELDS.items():
         schema = json.loads((REPO / "schema" / f"{kind}.json").read_text(encoding="utf-8"))
         assert set(schema["properties"]) == fields
         assert set(schema["required"]) == fields - EXPECTED_OPTIONAL.get(kind, set())
+        assert unbounded_schema_paths(schema) == [], kind
     root = json.loads((REPO / "schema" / "root.json").read_text())
     assert root["x-cassette-canonicalization"] == "RFC8785"
 
@@ -618,6 +691,21 @@ def test_malformed_f0_instances_are_rejected():
     assert any("requires at least 2" in defect for defect in validate("remote_metadata", bad_conflict))
     bad_span = {**GOLDEN["tensor_map"], "spans": [{**SPAN, "length": 0}]}
     assert any("below 1" in defect for defect in validate("tensor_map", bad_span))
+    unknown_argument = {
+        **GOLDEN["request"],
+        "arguments": {"command": "unchecked"},
+    }
+    assert any("request.arguments.command: unknown field" in defect for defect in validate("request", unknown_argument))
+    malformed_provenance = {**GOLDEN["root"], "provenance": {"source": "huggingface"}}
+    assert any("root.provenance.source: unknown field" in defect for defect in validate("root", malformed_provenance))
+    malformed_assets = {**GOLDEN["root"], "semantic_assets": {"tokenizer": DIGESTS[5]}}
+    assert any("required field missing" in defect for defect in validate("root", malformed_assets))
+    malformed_delta = {**GOLDEN["root"], "deltas": ["opaque-delta"]}
+    assert any("expected object" in defect for defect in validate("root", malformed_delta))
+    malformed_plan = {**GOLDEN["root"], "plans": ["opaque-plan"]}
+    assert any("expected object" in defect for defect in validate("root", malformed_plan))
+    malformed_parent = {**GOLDEN["root"], "parents": ["anything-nonempty"]}
+    assert any("does not match" in defect for defect in validate("root", malformed_parent))
     bad_error = {**GOLDEN["operation"], "error": {"code": "PAGE_CORRUPT"}}
     assert any("required field missing" in defect for defect in validate("operation", bad_error))
     bad_q77_limit = {

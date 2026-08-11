@@ -40,14 +40,19 @@
       "type": "string"
     },
     "detail": {
+      "maxLength": 4096,
       "type": "string"
     },
     "failed_invariant": {
+      "maxLength": 4096,
       "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f\\x7f]+$",
       "type": "string"
     },
     "object_id": {
+      "maxLength": 4096,
       "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f\\x7f]+$",
       "type": "string"
     },
     "retryability": {

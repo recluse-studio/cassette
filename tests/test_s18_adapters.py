@@ -745,7 +745,7 @@ def test_q31_q76_named_adapters_round_trip_exact_traces_and_reject_fabrication()
         lambda: _adapter("codex").to_wire_operation("cancel", training),
     )
     _rejected(
-        "CAPABILITY_MISMATCH",
+        "INVALID_REQUEST",
         lambda: _adapter("codex").to_wire_operation(
             "cancel", {**cancel, "arguments": {"provider_option": True}}
         ),

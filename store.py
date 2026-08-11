@@ -4,8 +4,8 @@
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
 immutable revision digest. Requested aliases remain provenance; they never enter the identity.
 Cassette-owned identities and canonical content use BLAKE3 through this module alone. SafeTensors
-payloads enter bounded pages and segments; tensor maps retain their semantic byte ranges while a
-separate fixed-record index owns physical placement.
+and GGUF payloads enter bounded pages and segments; tensor maps retain their semantic byte ranges
+while a separate fixed-record index owns physical placement.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -77,6 +78,34 @@ _SAFETENSORS_DTYPE_BITS = {
     "I16": 16, "U16": 16, "F16": 16, "BF16": 16,
     "I32": 32, "U32": 32, "F32": 32,
     "I64": 64, "U64": 64, "F64": 64,
+}
+_GGUF_HEADER_BYTES = 100_000_000
+_GGUF_MAX_ITEMS = 1_048_576
+_GGUF_SCALARS = {
+    0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 6: "<f",
+    7: "<?", 10: "<Q", 11: "<q", 12: "<d",
+}
+_GGUF_TENSOR_TYPES = {
+    0: ("F32", 1, 4),
+    1: ("F16", 1, 2),
+    2: ("Q4_0", 32, 18),
+    3: ("Q4_1", 32, 20),
+    6: ("Q5_0", 32, 22),
+    7: ("Q5_1", 32, 24),
+    8: ("Q8_0", 32, 34),
+    9: ("Q8_1", 32, 40),
+    10: ("Q2_K", 256, 84),
+    11: ("Q3_K", 256, 110),
+    12: ("Q4_K", 256, 144),
+    13: ("Q5_K", 256, 176),
+    14: ("Q6_K", 256, 210),
+    15: ("Q8_K", 256, 292),
+    24: ("I8", 1, 1),
+    25: ("I16", 1, 2),
+    26: ("I32", 1, 4),
+    27: ("I64", 1, 8),
+    28: ("F64", 1, 8),
+    30: ("BF16", 1, 2),
 }
 _INDEX_RECORD = struct.Struct(">32s32sQI")
 _IDENTITY_RECORD_FIELDS = frozenset({
@@ -993,22 +1022,27 @@ def _safetensors_header(
     if not isinstance(header, dict):
         _q57_reject(object_id, "SafeTensors header must be an object")
     metadata = header.pop("__metadata__", {})
-    if (not isinstance(metadata, dict)
+    if (not isinstance(metadata, dict) or len(metadata) > 1024
             or any(not isinstance(key, str) or not isinstance(value, str)
+                   or not 0 < len(key) <= 256 or len(value) > 4096
+                   or any(ord(character) < 32 or ord(character) == 127 for character in key)
                    for key, value in metadata.items())):
-        _q57_reject(object_id, "SafeTensors metadata must map strings to strings")
+        _q57_reject(object_id, "SafeTensors metadata exceeds its bounded string map")
 
     data_size = file_size - 8 - header_length
     tensors = []
     for name, spec in header.items():
-        if (not isinstance(name, str) or not name or not isinstance(spec, dict)
+        if (not isinstance(name, str) or not 0 < len(name) <= 4096
+                or any(ord(character) < 32 or ord(character) == 127 for character in name)
+                or not isinstance(spec, dict)
                 or set(spec) != {"dtype", "shape", "data_offsets"}):
             _q57_reject(object_id, f"tensor {name!r} lacks the exact SafeTensors fields")
         dtype, shape, offsets = spec["dtype"], spec["shape"], spec["data_offsets"]
         if dtype not in _SAFETENSORS_DTYPE_BITS:
             _q57_reject(object_id, f"tensor {name!r} has an unknown SafeTensors dtype")
-        if (not isinstance(shape, list)
-                or any(type(dimension) is not int or dimension < 0 for dimension in shape)):
+        if (not isinstance(shape, list) or len(shape) > 64
+                or any(type(dimension) is not int or not 0 <= dimension <= _MAX_UNSIGNED_BYTES
+                       for dimension in shape)):
             _q57_reject(object_id, f"tensor {name!r} has an invalid shape")
         if (not isinstance(offsets, list) or len(offsets) != 2
                 or any(type(offset) is not int for offset in offsets)):
@@ -1018,6 +1052,8 @@ def _safetensors_header(
             _q57_reject(object_id, f"tensor {name!r} points outside the SafeTensors byte buffer")
         elements = 1
         for dimension in shape:
+            if dimension > _MAX_UNSIGNED_BYTES // max(elements, 1):
+                _q57_reject(object_id, f"tensor {name!r} element count overflows")
             elements *= dimension
         bit_length = elements * _SAFETENSORS_DTYPE_BITS[dtype]
         if bit_length % 8 or end - start != bit_length // 8:
@@ -1035,6 +1071,134 @@ def _safetensors_header(
     if cursor != data_size:
         _q57_reject(object_id, "SafeTensors byte buffer is not entirely indexed")
     return 8 + header_length, data_size, metadata, tuple(sorted(tensors))
+
+
+def _gguf_header(
+    handle, object_id: str, artifact_hasher
+) -> tuple[int, int, dict, tuple[tuple, ...]]:
+    """Parse one bounded GGUF v2/v3 header and return exact tensor byte intervals."""
+
+    file_size = os.fstat(handle.fileno()).st_size
+    header_start = handle.tell()
+
+    def take(length: int, description: str) -> bytes:
+        if length < 0 or handle.tell() - header_start + length > _GGUF_HEADER_BYTES:
+            _q57_reject(object_id, "GGUF header exceeds its 100 MB allocation bound")
+        payload = _read_exact(handle, length, object_id, description)
+        artifact_hasher.update(payload)
+        return payload
+
+    def scalar(format_code: str, description: str):
+        return struct.unpack(format_code, take(struct.calcsize(format_code), description))[0]
+
+    def string(
+        description: str, *, empty: bool = False, allow_controls: bool = False
+    ) -> str:
+        length = scalar("<Q", f"{description} length")
+        if length > _GGUF_HEADER_BYTES:
+            _q57_reject(object_id, f"{description} exceeds the GGUF header bound")
+        try:
+            value = take(length, description).decode("utf-8")
+        except UnicodeDecodeError as error:
+            _q57_reject(object_id, f"{description} is not UTF-8: {error}")
+        if (not value and not empty) or (not allow_controls and any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        )):
+            _q57_reject(object_id, f"{description} contains empty or control-bearing text")
+        return value
+
+    def metadata_value(value_type: int, description: str, *, array_item: bool = False):
+        if value_type in _GGUF_SCALARS:
+            value = scalar(_GGUF_SCALARS[value_type], description)
+            if isinstance(value, float) and not math.isfinite(value):
+                _q57_reject(object_id, f"{description} is not finite")
+            return value
+        if value_type == 8:
+            return string(description, empty=True, allow_controls=True)
+        if value_type == 9 and not array_item:
+            item_type = scalar("<I", f"{description} array type")
+            count = scalar("<Q", f"{description} array count")
+            if count > _GGUF_MAX_ITEMS or item_type == 9:
+                _q57_reject(object_id, f"{description} has an unsupported or unbounded array")
+            return [
+                metadata_value(item_type, f"{description}[{index}]", array_item=True)
+                for index in range(count)
+            ]
+        _q57_reject(object_id, f"{description} has unknown GGUF metadata type {value_type}")
+
+    if take(4, "GGUF magic") != b"GGUF":
+        _q57_reject(object_id, "GGUF magic is absent")
+    version = scalar("<I", "GGUF version")
+    if version not in {2, 3}:
+        _q57_reject(object_id, f"GGUF version {version} is unsupported")
+    tensor_count = scalar("<Q", "GGUF tensor count")
+    metadata_count = scalar("<Q", "GGUF metadata count")
+    if not 0 < tensor_count <= _GGUF_MAX_ITEMS or metadata_count > _GGUF_MAX_ITEMS:
+        _q57_reject(object_id, "GGUF tensor or metadata count exceeds its bound")
+
+    metadata = {}
+    for index in range(metadata_count):
+        key = string(f"GGUF metadata key {index}")
+        if key in metadata:
+            _q57_reject(object_id, f"GGUF metadata key {key!r} is duplicated")
+        value_type = scalar("<I", f"GGUF metadata {key!r} type")
+        metadata[key] = metadata_value(value_type, f"GGUF metadata {key!r}")
+
+    tensor_rows = []
+    names = set()
+    for index in range(tensor_count):
+        name = string(f"GGUF tensor name {index}")
+        if name in names:
+            _q57_reject(object_id, f"GGUF tensor name {name!r} is duplicated")
+        names.add(name)
+        dimensions = scalar("<I", f"GGUF tensor {name!r} rank")
+        if dimensions > 64:
+            _q57_reject(object_id, f"GGUF tensor {name!r} exceeds the rank bound")
+        shape = tuple(
+            scalar("<Q", f"GGUF tensor {name!r} dimension {dimension}")
+            for dimension in range(dimensions)
+        )
+        tensor_type = scalar("<I", f"GGUF tensor {name!r} type")
+        if tensor_type not in _GGUF_TENSOR_TYPES:
+            _q57_reject(object_id, f"GGUF tensor {name!r} uses unsupported type {tensor_type}")
+        offset = scalar("<Q", f"GGUF tensor {name!r} offset")
+        dtype, block_elements, block_bytes = _GGUF_TENSOR_TYPES[tensor_type]
+        elements = 1
+        for dimension in shape:
+            if dimension > _MAX_UNSIGNED_BYTES // max(elements, 1):
+                _q57_reject(object_id, f"GGUF tensor {name!r} element count overflows")
+            elements *= dimension
+        if elements and (not shape or shape[0] % block_elements or elements % block_elements):
+            _q57_reject(object_id, f"GGUF tensor {name!r} shape does not align to its block type")
+        length = elements // block_elements * block_bytes if elements else 0
+        tensor_rows.append((name, dtype, shape, offset, offset + length))
+
+    alignment = metadata.get("general.alignment", 32)
+    if (
+        type(alignment) is not int
+        or not 1 <= alignment <= PAGE_BYTES
+        or alignment & (alignment - 1)
+    ):
+        _q57_reject(object_id, "GGUF general.alignment must be a power of two within one page")
+    padding = (-handle.tell()) % alignment
+    if padding and any(take(padding, "GGUF data alignment padding")):
+        _q57_reject(object_id, "GGUF data alignment padding must be zero")
+    data_start = handle.tell()
+    data_size = file_size - data_start
+    if data_size < 0:
+        _q57_reject(object_id, "GGUF header extends beyond the source file")
+
+    cursor = 0
+    for name, _, _, start, end in sorted(tensor_rows, key=lambda row: (row[3], row[4], row[0])):
+        if start % alignment or not 0 <= start <= end <= data_size or start < cursor:
+            _q57_reject(object_id, f"GGUF tensor {name!r} has an overlapping, unaligned, or external range")
+        cursor = end
+    summary = {
+        "alignment": str(alignment),
+        "metadata_digest": digest_bytes(canonical_bytes(metadata)),
+        "version": str(version),
+    }
+    return data_start, data_size, summary, tuple(sorted(tensor_rows))
 
 
 def _tensor_maps(tensors: tuple[tuple, ...], page_digests: list[str]) -> tuple[TensorMap, ...]:
@@ -1373,7 +1537,7 @@ def _material_from_provenance(provenance: object, root_digest: str) -> tuple[Ide
     containers = provenance["containers"]
     if (not isinstance(containers, list)
             or any(not isinstance(item, dict) or set(item) != {"path", "format", "metadata"}
-                   or item["format"] != "safetensors"
+                   or item["format"] not in {"gguf", "safetensors"}
                    or not isinstance(item["metadata"], dict)
                    or any(not isinstance(key, str) or not isinstance(value, str)
                           for key, value in item["metadata"].items())
@@ -1413,6 +1577,19 @@ def _root_integrity(root: dict, locations: tuple[PageLocation, ...]) -> str:
     return _merkle_root(leaves)
 
 
+def _root_page_digests(root: dict) -> set[str]:
+    """Return every base-tensor and ordered-delta page governed by one logical root."""
+    return {
+        span["page_digest"]
+        for tensor_map in root["tensor_maps"]
+        for span in tensor_map["spans"]
+    } | {
+        page_digest
+        for delta in root["deltas"]
+        for page_digest in delta["ordered_page_digests"]
+    }
+
+
 def _verify_root(root: object, root_digest: str, locations: dict[str, PageLocation]) -> None:
     defects = validate("root", root)
     if defects or not isinstance(root, dict) or set(root) != _ROOT_FIELDS:
@@ -1430,11 +1607,25 @@ def _verify_root(root: object, root_digest: str, locations: dict[str, PageLocati
             or root["operators"] != record["operator_set"]
             or root["semantic_assets"] != semantic_assets):
         _q57_reject(root_digest, "root bindings disagree with their Q1 identity material")
-    required = {
-        span["page_digest"]
-        for tensor_map in root["tensor_maps"]
-        for span in tensor_map["spans"]
-    }
+    delta_ids = []
+    for delta in root["deltas"]:
+        body = {name: delta[name] for name in delta if name != "delta_id"}
+        if delta["delta_id"] != digest_bytes(canonical_bytes(body)):
+            _q57_reject(root_digest, "training delta identity does not match its ordered record")
+        delta_ids.append(delta["delta_id"])
+    if len(delta_ids) != len(set(delta_ids)):
+        _q57_reject(root_digest, "root contains duplicate training delta identities")
+    if material.revision_kind == "tuned" and root["deltas"] and (
+        len(root["parents"]) != 1
+        or root["deltas"][-1]["base_identity"] != root["parents"][0]
+        or record["transform_manifest_digest"]
+        != digest_bytes(canonical_bytes(root["deltas"]))
+    ):
+        _q57_reject(
+            root_digest,
+            "tuned root does not bind its immediate parent and complete ordered delta record",
+        )
+    required = _root_page_digests(root)
     if set(locations) != required:
         _q57_reject(root_digest, "physical page index does not match the logical root")
     ordered_locations = tuple(sorted(locations.values(), key=lambda item: item.page_digest))
@@ -1527,6 +1718,7 @@ def _write_cartridge_root(
     tensor_maps: list[dict],
     locations: tuple[PageLocation, ...],
     plans: list[dict] | None = None,
+    deltas: list[dict] | None = None,
     *,
     durable: bool = False,
 ) -> str:
@@ -1548,7 +1740,7 @@ def _write_cartridge_root(
         "tensor_maps": tensor_maps,
         "operators": identity_record["operator_set"],
         "plans": [] if plans is None else plans,
-        "deltas": [],
+        "deltas": [] if deltas is None else deltas,
     }
     root["integrity_root"] = _root_integrity(
         root, tuple(sorted(locations, key=lambda item: item.page_digest))
@@ -1572,20 +1764,25 @@ def _write_cartridge_root(
     return root_digest
 
 
-def import_safetensors(
-    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
+def _import_tensor_containers(
+    source: Mapping[str, str | Path],
+    cartridge: str | Path,
+    material: IdentityTuple,
+    *,
+    container_format: str,
+    parser,
+    codec: str,
 ) -> str:
-    """Import SafeTensors only when their bytes prove the supplied complete Q1 material."""
-
+    """Import one bounded tensor-container family through the single Q57 page authority."""
     identity_record = _identity_record(material)
     identity = digest_bytes(canonical_bytes(identity_record))
     expected_artifacts = {item["path"]: item for item in identity_record["artifacts"]}
     if not isinstance(source, Mapping) or not source:
-        _q57_reject(identity, "canonical artifact paths must map to local SafeTensors files")
+        _q57_reject(identity, f"canonical artifact paths must map to local {container_format} files")
     sources = []
     for artifact_path, local_path in source.items():
         if not isinstance(artifact_path, str) or not artifact_path or artifact_path != artifact_path.strip():
-            _q57_reject(identity, "every SafeTensors source requires one canonical artifact path")
+            _q57_reject(identity, f"every {container_format} source requires one canonical artifact path")
         try:
             sources.append((artifact_path, Path(local_path)))
         except TypeError:
@@ -1594,7 +1791,7 @@ def import_safetensors(
     if {artifact_path for artifact_path, _ in sources} != set(expected_artifacts):
         _reject(
             "artifacts",
-            "SafeTensors source paths differ from the complete Q1 artifact set",
+            f"{container_format} source paths differ from the complete Q1 artifact set",
             identity,
         )
     cartridge = Path(cartridge)
@@ -1606,14 +1803,16 @@ def import_safetensors(
         source_hasher = artifact_hasher(expected_digest, object_id)
         try:
             with path.open("rb") as handle:
-                data_start, data_size, metadata, tensors = _safetensors_header(
-                    handle, object_id, source_hasher
-                )
+                data_start, data_size, metadata, tensors = parser(handle, object_id, source_hasher)
         except OSError as error:
-            _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+            _q57_reject(
+                object_id,
+                f"{container_format} source is unavailable: {error}",
+                "SOURCE_UNAVAILABLE",
+            )
         names = {tensor[0] for tensor in tensors}
         if tensor_names & names:
-            _q57_reject(object_id, "SafeTensors artifacts contain duplicate tensor names")
+            _q57_reject(object_id, f"{container_format} artifacts contain duplicate tensor names")
         tensor_names |= names
         artifacts.append((
             artifact_path, path, data_start, data_size, metadata, tensors,
@@ -1629,14 +1828,21 @@ def import_safetensors(
             try:
                 handle = path.open("rb")
             except OSError as error:
-                _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+                _q57_reject(
+                    object_id,
+                    f"{container_format} source is unavailable: {error}",
+                    "SOURCE_UNAVAILABLE",
+                )
             with handle:
                 handle.seek(data_start)
                 remaining = data_size
                 page_digests = []
                 while remaining:
                     payload = _read_exact(
-                        handle, min(PAGE_BYTES, remaining), object_id, "SafeTensors payload"
+                        handle,
+                        min(PAGE_BYTES, remaining),
+                        object_id,
+                        f"{container_format} payload",
                     )
                     remaining -= len(payload)
                     source_hasher.update(payload)
@@ -1645,7 +1851,10 @@ def import_safetensors(
                     if page_digest not in seen_pages:
                         seen_pages.add(page_digest)
                         yield page_digest, payload
-                tensor_maps.extend(_tensor_maps(tensors, page_digests))
+                for tensor_map in _tensor_maps(tensors, page_digests):
+                    record = tensor_map.record()
+                    record["codec"] = codec
+                    tensor_maps.append(record)
 
     locations = _write_segments(cartridge, unique_pages())
     observed_artifacts = [
@@ -1659,7 +1868,7 @@ def import_safetensors(
     if observed_artifacts != identity_record["artifacts"]:
         _reject(
             "artifacts",
-            "SafeTensors path, size, or digest differs from the supplied Q1 evidence",
+            f"{container_format} path, size, or digest differs from the supplied Q1 evidence",
             identity,
         )
     return _write_cartridge_root(
@@ -1667,13 +1876,41 @@ def import_safetensors(
         material,
         identity_record,
         [
-            {"path": artifact_path, "format": "safetensors", "metadata": metadata}
+            {"path": artifact_path, "format": container_format, "metadata": metadata}
             for artifact_path, _, _, _, metadata, _, _, _ in artifacts
         ],
-        [tensor_map.record() for tensor_map in sorted(
-            tensor_maps, key=lambda tensor_map: tensor_map.semantic_tensor_id
-        )],
+        sorted(tensor_maps, key=lambda tensor_map: tensor_map["semantic_tensor_id"]),
         locations,
+    )
+
+
+def import_safetensors(
+    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
+) -> str:
+    """Import SafeTensors only when their bytes prove the supplied complete Q1 material."""
+
+    return _import_tensor_containers(
+        source,
+        cartridge,
+        material,
+        container_format="safetensors",
+        parser=_safetensors_header,
+        codec="raw-little-endian",
+    )
+
+
+def import_gguf(
+    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
+) -> str:
+    """Import GGUF v2/v3 only when bounded metadata and every tensor range prove Q1."""
+
+    return _import_tensor_containers(
+        source,
+        cartridge,
+        material,
+        container_format="gguf",
+        parser=_gguf_header,
+        codec="gguf-block",
     )
 
 
@@ -1861,8 +2098,87 @@ def derive_root(
             key=lambda item: item.page_digest,
         )),
         canonical_plans,
+        parent["deltas"],
         durable=True,
     )
+
+
+def append_training_delta(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    material: IdentityTuple,
+    kind: str,
+    pages: tuple[bytes, ...],
+    manifest_digest: str,
+) -> str:
+    """Append ordered immutable delta pages and publish one derived logical root."""
+
+    cartridge = Path(cartridge)
+    parent = load_root(cartridge, parent_root_digest)
+    identity_record = _identity_record(material)
+    if (
+        kind not in {"adapter", "precision_correction", "replacement_pages"}
+        or not isinstance(pages, tuple)
+        or not pages
+        or any(not isinstance(page, bytes) or not 0 < len(page) <= PAGE_BYTES for page in pages)
+    ):
+        _q57_reject(parent_root_digest, "training delta pages or kind are malformed", "INVALID_REQUEST")
+    ordered_page_digests = [digest_bytes(page) for page in pages]
+    if len(ordered_page_digests) != len(set(ordered_page_digests)):
+        _q57_reject(parent_root_digest, "one training delta cannot repeat a page identity", "INVALID_REQUEST")
+    _content_hex(manifest_digest, parent_root_digest)
+    body = {
+        "kind": kind,
+        "base_identity": parent["identity"],
+        "ordered_page_digests": ordered_page_digests,
+        "manifest_digest": manifest_digest,
+    }
+    delta = {"delta_id": digest_bytes(canonical_bytes(body)), **body}
+    deltas = [*parent["deltas"], delta]
+    expected_transform = digest_bytes(canonical_bytes(deltas))
+    if (
+        material.revision_kind != "tuned"
+        or identity_record["parent_ids"] != [parent["identity"]]
+        or identity_record["artifacts"]
+        != parent["provenance"]["identity_material"]["artifacts"]
+        or identity_record["transform_manifest_digest"] != expected_transform
+    ):
+        _q57_reject(
+            parent_root_digest,
+            "training delta child identity does not bind its parent, source bytes, and ordered deltas",
+            "IDENTITY_MISMATCH",
+        )
+    current = _read_index(cartridge, parent_root_digest)
+    additions = _write_segments(
+        cartridge,
+        zip(ordered_page_digests, pages, strict=True),
+    )
+    locations = {**current, **{location.page_digest: location for location in additions}}
+    return _write_cartridge_root(
+        cartridge,
+        material,
+        identity_record,
+        parent["provenance"]["containers"],
+        parent["tensor_maps"],
+        tuple(sorted(locations.values(), key=lambda location: location.page_digest)),
+        parent["plans"],
+        deltas,
+        durable=False,
+    )
+
+
+def read_training_delta(
+    cartridge: str | Path, root_digest: str, delta_id: str
+) -> tuple[bytes, ...]:
+    """Resolve one ordered Q57 training delta from its verified immutable page identities."""
+
+    cartridge = Path(cartridge)
+    root = load_root(cartridge, root_digest)
+    matches = [delta for delta in root["deltas"] if delta["delta_id"] == delta_id]
+    if len(matches) != 1:
+        _q57_reject(root_digest, f"training delta {delta_id!r} is absent or duplicated")
+    locations = _read_index(cartridge, root_digest)
+    return tuple(_read_page(cartridge, locations[page]) for page in matches[0]["ordered_page_digests"])
 
 
 def _physical_ranges(descriptor: int, size: int, object_id: str) -> list[tuple[int, int]]:
@@ -2028,11 +2344,7 @@ def repack_segments(
     cartridge = Path(cartridge)
     root = load_root(cartridge, root_digest)
     current = _read_index(cartridge, root_digest)
-    required = {
-        span["page_digest"]
-        for tensor_map in root["tensor_maps"]
-        for span in tensor_map["spans"]
-    }
+    required = _root_page_digests(root)
     order = tuple(ordered_page_digests)
     if len(order) != len(set(order)) or set(order) != required or set(current) != required:
         _q57_reject(root_digest, "repack order must contain every required page exactly once", "INVALID_REQUEST")

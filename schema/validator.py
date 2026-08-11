@@ -17,14 +17,28 @@ def _schemas():
     return _SCHEMAS
 
 
-def _validate(schema, value, path):
+def _validate(schema, value, path, root_schema=None, depth=0):
+    if depth > 64:
+        return [f"{path}: nesting exceeds the 64-level contract bound"]
+    if root_schema is None:
+        root_schema = schema
     if "$ref" in schema:
+        if schema["$ref"].startswith("#/$defs/"):
+            name = schema["$ref"].removeprefix("#/$defs/")
+            target = root_schema.get("$defs", {}).get(name)
+            if target is None:
+                return [f"{path}: unknown local schema reference {schema['$ref']!r}"]
+            return _validate(target, value, path, root_schema, depth + 1)
         target = Path(schema["$ref"]).stem
         if target not in _schemas():
             return [f"{path}: unknown schema reference {schema['$ref']!r}"]
-        return _validate(_schemas()[target], value, path)
+        target_schema = _schemas()[target]
+        return _validate(target_schema, value, path, target_schema, depth + 1)
     if "anyOf" in schema:
-        if any(not _validate(candidate, value, path) for candidate in schema["anyOf"]):
+        if any(
+            not _validate(candidate, value, path, root_schema, depth + 1)
+            for candidate in schema["anyOf"]
+        ):
             return []
         return [f"{path}: value does not match any allowed shape"]
     kind = schema.get("type")
@@ -52,10 +66,14 @@ def _validate(schema, value, path):
             if name not in value
         )
         for name in sorted(set(value) & set(properties)):
-            defects.extend(_validate(properties[name], value[name], f"{path}.{name}"))
+            defects.extend(
+                _validate(properties[name], value[name], f"{path}.{name}", root_schema, depth + 1)
+            )
         for name in sorted(set(value) - set(properties)):
             for shape in matched[name]:
-                defects.extend(_validate(shape, value[name], f"{path}.{name}"))
+                defects.extend(
+                    _validate(shape, value[name], f"{path}.{name}", root_schema, depth + 1)
+                )
         return defects
     if kind == "array":
         if not isinstance(value, list):
@@ -67,7 +85,9 @@ def _validate(schema, value, path):
             defects.append(f"{path}: permits at most {schema['maxItems']} items")
         if "items" in schema:
             for index, item in enumerate(value):
-                defects.extend(_validate(schema["items"], item, f"{path}[{index}]"))
+                defects.extend(
+                    _validate(schema["items"], item, f"{path}[{index}]", root_schema, depth + 1)
+                )
         if schema.get("uniqueItems") and any(
             item == prior for index, item in enumerate(value) for prior in value[:index]
         ):

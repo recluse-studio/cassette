@@ -11,7 +11,9 @@ Checks (AGENTS.md):
   7. Pin law: every dependency in pyproject.toml carries an exact `==` pin.
   8. Governed-source accounting: Git-owned and intentionally untracked source is measured; foreign
      interpreter environments, dependency trees, and ignored caches are not repository code.
-  9. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
+  9. Removal-map law: every authored product or tool file names a real acceptance authority whose
+     row fails when that file is removed; stale and missing entries fail.
+ 10. LOC accounting: logical lines per class {product, tools, tests}; generated code reported
      separately and never counted as authored.
 
 Output is deterministic. Exit 0 when clean, 1 when any violation exists. Usage:
@@ -30,7 +32,7 @@ import tempfile
 import tokenize
 from pathlib import Path
 
-EXCLUDED_DIRS = {".git", ".github", "research", "__pycache__", ".pytest_cache", "outputs"}
+UNTRACKED_CACHE_DIRS = {".git", "__pycache__", ".pytest_cache"}
 GENERATED_DIRS = {"schema"}
 PRODUCT_MODULES = {"errors", "store", "sources", "compiler", "pager", "trainer", "broker"}
 
@@ -54,6 +56,8 @@ PIN_RE = re.compile(r"^[A-Za-z0-9_.\-]+(\[[A-Za-z0-9_,\-]+\])?==[A-Za-z0-9_.\-+!
 TRACKED_ARTIFACT_RE = re.compile(r"(^|/)__pycache__(/|$)|\.py[co]$|(^|/)\.pytest_cache(/|$)")
 # First commit written under AGENTS.md commit law; every later commit must answer the commit test.
 COMMIT_LAW_BASELINE = "bb2fbd0546309b82fa2dbf81e8512dea0a4d3822"
+# The aggregate S00-S19 audit established the citation baseline at this immutable commit.
+COMMIT_AUTHORITY_BASELINE = "246d52cbc0367074fd42e65055420a826c0113ff"
 COMMIT_LAW_FIELDS = (
     ("Failed before", re.compile(r"^Failed before:[ \t]+\S.*$", re.M)),
     ("Reused instead of authored", re.compile(r"^Reused instead of authored:[ \t]+\S.*$", re.M)),
@@ -65,6 +69,8 @@ COMMIT_LAW_REPAIR_RE = re.compile(
 )
 ASSERTION_LIST_KEYS = {"assertions", "portability_assertions", "required_for_every_training_row"}
 AUTHORITY_VALUE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)\b")
+REMOVAL_MAP_BEGIN = "<!-- CASSETTE_REMOVAL_MAP_BEGIN -->"
+REMOVAL_MAP_END = "<!-- CASSETTE_REMOVAL_MAP_END -->"
 
 
 def load_authorities(root: Path) -> set[str]:
@@ -126,10 +132,12 @@ def discover(root: Path) -> list[Path]:
         return [Path(item) for item in result.stdout.split("\0") if item]
 
     def eligible(rel: Path) -> bool:
-        return (
-            rel.suffix == ".py"
-            and not any(part in EXCLUDED_DIRS for part in rel.parts)
-            and (root / rel).is_file()
+        return rel.suffix == ".py" and (root / rel).is_file()
+
+    def foreign_environment(rel: Path) -> bool:
+        return any(
+            (root / parent / "pyvenv.cfg").is_file()
+            for parent in (rel.parent, *rel.parent.parents)
         )
 
     tracked = git_paths("--cached")
@@ -138,18 +146,66 @@ def discover(root: Path) -> list[Path]:
         return [
             path.relative_to(root)
             for path in sorted(root.rglob("*.py"))
-            if not any(part in EXCLUDED_DIRS for part in path.relative_to(root).parts)
+            if not any(part in UNTRACKED_CACHE_DIRS for part in path.relative_to(root).parts)
+            and not foreign_environment(path.relative_to(root))
         ]
 
     owned = {rel for rel in tracked if eligible(rel)}
     for rel in untracked:
-        if not eligible(rel):
+        if not eligible(rel) or any(part in UNTRACKED_CACHE_DIRS for part in rel.parts):
             continue
-        parents = [rel.parent, *rel.parent.parents]
-        if any((root / parent / "pyvenv.cfg").is_file() for parent in parents):
+        if foreign_environment(rel):
             continue
         owned.add(rel)
     return sorted(owned)
+
+
+def check_removal_map(
+    root: Path, files: list[Path], authorities: set[str]
+) -> tuple[str, list[str]]:
+    """Require one AGENTS-owned Q78 entry for every authored product and tool file."""
+    path = root / "AGENTS.md"
+    if not path.is_file():
+        return "failed", ["Q78 removal map is unavailable: AGENTS.md is missing"]
+    source = path.read_text(encoding="utf-8")
+    if source.count(REMOVAL_MAP_BEGIN) != 1 or source.count(REMOVAL_MAP_END) != 1:
+        return "failed", ["Q78 removal map requires exactly one bounded AGENTS.md authority block"]
+    body = source.split(REMOVAL_MAP_BEGIN, 1)[1].split(REMOVAL_MAP_END, 1)[0].strip()
+    if body.startswith("```json") and body.endswith("```"):
+        body = body[len("```json"):-len("```")].strip()
+    try:
+        removal_map = json.loads(body)
+    except json.JSONDecodeError as error:
+        return "failed", [f"Q78 removal map is not canonical JSON: {error}"]
+    if not isinstance(removal_map, dict):
+        return "failed", ["Q78 removal map must be one object keyed by repository path"]
+    required = {
+        rel.as_posix()
+        for rel in files
+        if classify(rel) in {"product", "tools"}
+    }
+    violations = [
+        f"Q78 removal map lacks authored file: {name}"
+        for name in sorted(required - set(removal_map))
+    ]
+    violations.extend(
+        f"Q78 removal map names no authored product or tool file: {name}"
+        for name in sorted(set(removal_map) - required)
+    )
+    for name in sorted(set(removal_map) & required):
+        rows = removal_map[name]
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or any(not isinstance(row, str) or not row for row in rows)
+            or len(rows) != len(set(rows))
+        ):
+            violations.append(f"Q78 removal map entry {name} requires unique nonempty authority IDs")
+            continue
+        unknown = sorted(set(rows) - authorities)
+        if unknown:
+            violations.append(f"Q78 removal map entry {name} names unknown authorities: {unknown}")
+    return "ran", violations
 
 
 def logical_loc(root: Path, rel: Path) -> int:
@@ -265,7 +321,11 @@ def check_tracked_artifacts(root: Path) -> tuple[str, list[str]]:
     return "ran", [f"tracked build artifact (untrack it and keep it ignored): {f}" for f in bad]
 
 
-def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[str, list[str]]:
+def check_commit_law(
+    root: Path,
+    baseline: str = COMMIT_LAW_BASELINE,
+    authority_baseline: str | None = None,
+) -> tuple[str, list[str]]:
     """Require each governed commit's fields or one exact correction in later immutable history."""
     if not (root / ".git").exists():
         return "failed", ["commit-law check could not run (fail-closed): not a git repository"]
@@ -319,7 +379,7 @@ def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[s
                     f"commit {target[:7]} has a duplicate repair for {label} in {repair_sha[:7]}"
                 )
                 continue
-            repairs[key] = repair_sha
+            repairs[key] = (repair_sha, match.group("value"))
     for sha, message in commits.items():
         missing = [label for label, pattern in COMMIT_LAW_FIELDS if not pattern.search(message)]
         missing = [label for label in missing if (sha, label) not in repairs]
@@ -328,6 +388,26 @@ def check_commit_law(root: Path, baseline: str = COMMIT_LAW_BASELINE) -> tuple[s
                 f"commit {sha[:7]} violates the AGENTS.md commit test — missing or empty: "
                 f"{', '.join(missing)}"
             )
+    citation_baseline = (
+        COMMIT_AUTHORITY_BASELINE if baseline == COMMIT_LAW_BASELINE else baseline
+    ) if authority_baseline is None else authority_baseline
+    cited = _git(root, "rev-list", f"{citation_baseline}..HEAD")
+    if cited is None or cited.returncode != 0:
+        reason = "git unavailable or timed out" if cited is None else cited.stderr.strip() or "git rev-list failed"
+        violations.append(f"commit authority-citation check could not run (fail-closed): {reason}")
+    else:
+        authorities = load_authorities(root)
+        for sha in cited.stdout.splitlines():
+            message = commits.get(sha, "")
+            match = re.search(r"^Failed before:[ \t]+(.+)$", message, re.M)
+            repair = repairs.get((sha, "Failed before"))
+            value = match.group(1) if match is not None else repair[1] if repair else None
+            values = set(CITATION_RE.findall(value)) if value is not None else set()
+            if value is not None and not values & authorities:
+                violations.append(
+                    f"commit {sha[:7]} Failed before cites no research question, matrix row, "
+                    "or matrix assertion"
+                )
     return "ran", sorted(violations)
 
 
@@ -434,7 +514,13 @@ def run(root: Path) -> dict:
     artifact_status, artifact_violations = check_tracked_artifacts(root)
     commit_status, commit_violations = check_commit_law(root)
     generated_status, generated_violations = check_generated_integrity(root)
-    violations: list[str] = [*artifact_violations, *commit_violations, *generated_violations]
+    removal_status, removal_violations = check_removal_map(root, files, authorities)
+    violations: list[str] = [
+        *artifact_violations,
+        *commit_violations,
+        *generated_violations,
+        *removal_violations,
+    ]
 
     for rel in files:
         cls = classify(rel)
@@ -471,6 +557,7 @@ def run(root: Path) -> dict:
             "tracked_artifacts": artifact_status,
             "commit_law": commit_status,
             "generated_integrity": generated_status,
+            "removal_map": removal_status,
         },
         "j_partial": {
             "authored_executable_loc": loc,

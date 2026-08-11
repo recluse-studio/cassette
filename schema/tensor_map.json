@@ -5,29 +5,51 @@
   "additionalProperties": false,
   "properties": {
     "codec": {
+      "maxLength": 256,
       "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
       "type": "string"
     },
     "dtype": {
+      "maxLength": 256,
       "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
       "type": "string"
     },
-    "plane": {},
+    "plane": {
+      "anyOf": [
+        {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "semantic_tensor_id": {
+      "maxLength": 4096,
       "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f\\x7f]+$",
       "type": "string"
     },
     "shape": {
       "items": {
+        "maximum": 18446744073709551615,
         "minimum": 0,
         "type": "integer"
       },
+      "maxItems": 64,
+      "minItems": 0,
       "type": "array"
     },
     "spans": {
       "items": {
         "$ref": "tensor_span.json"
       },
+      "maxItems": 1048576,
+      "minItems": 0,
       "type": "array"
     }
   },

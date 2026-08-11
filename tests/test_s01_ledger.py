@@ -2,6 +2,7 @@
 """S01: J reproduces from a clean checkout, and the accounting rejects law-breaking trees (Q29)."""
 
 import json
+import shutil
 import subprocess
 import sys
 import venv
@@ -9,6 +10,7 @@ from pathlib import Path
 
 from tools.ledger import (
     check_commit_law,
+    check_removal_map,
     check_test_citations,
     check_tracked_artifacts,
     load_authorities,
@@ -34,15 +36,57 @@ def init_git(root: Path) -> str:
     git(root, "config", "user.email", "fixture@cassette.invalid")
     git(root, "config", "commit.gpgsign", "false")
     (root / "baseline.txt").write_text("baseline\n")
-    git(root, "add", "baseline.txt")
+    research = root / "research"
+    research.mkdir()
+    (research / "RESEARCH.md").write_text("question_id: Q29\n")
+    git(root, "add", "baseline.txt", "research/RESEARCH.md")
     git(root, "commit", "--quiet", "-m", "fixture baseline")
     return git(root, "rev-parse", "HEAD")
+
+
+def clone_candidate(root: Path) -> None:
+    """Create one clean commit from the live candidate, including its uncommitted governed files."""
+    subprocess.run(["git", "clone", "--quiet", str(REPO), str(root)], check=True, capture_output=True)
+    git(root, "config", "user.name", "Cassette Fixture")
+    git(root, "config", "user.email", "fixture@cassette.invalid")
+    git(root, "config", "commit.gpgsign", "false")
+    result = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        check=True,
+        capture_output=True,
+    )
+    candidate_paths = {Path(item.decode()) for item in result.stdout.split(b"\0") if item}
+    clone_paths = {Path(item) for item in git(root, "ls-files").splitlines() if item}
+    for rel in sorted(clone_paths - candidate_paths):
+        target = root / rel
+        if target.is_file() or target.is_symlink():
+            target.unlink()
+    for rel in sorted(candidate_paths):
+        source = REPO / rel
+        if not source.is_file():
+            continue
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    git(root, "add", "--all")
+    if git(root, "status", "--porcelain"):
+        git(
+            root,
+            "commit",
+            "--quiet",
+            "-m",
+            "Freeze the candidate accounting fixture",
+            "-m",
+            "Failed before: Q29 could inspect only the prior committed tree.\n"
+            "Reused instead of authored: Git's clean commit and index.\n"
+            "Deleted: nothing.",
+        )
 
 
 def test_ledger_reproducible_from_clean_checkout(tmp_path):
     """Q29 acceptance: J excludes foreign environments but includes new governed source."""
     clone = tmp_path / "clone"
-    subprocess.run(["git", "clone", "--quiet", str(REPO), str(clone)], check=True, capture_output=True)
+    clone_candidate(clone)
     first = run_ledger(clone)
     second = run_ledger(clone)
     assert first.returncode == 0, first.stdout
@@ -69,13 +113,26 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
     (clone / "hostile_staged.py").write_text(
         "# hostile_staged.py — staged governed source; depends on (none).\nVALUE = 1\n"
     )
-    git(clone, "add", "hostile_staged.py")
+    hidden_research = clone / "research" / "hostile_governed.py"
+    hidden_research.write_text(
+        "# hostile_governed.py — tracked research source; depends on sources.py.\n"
+        "import mlx\n"
+        "import sources\n"
+    )
+    hidden_workflow = clone / ".github" / "hostile_governed.py"
+    hidden_workflow.parent.mkdir(exist_ok=True)
+    hidden_workflow.write_text(
+        "# hostile_governed.py — tracked workflow source; depends on (none).\nimport mlx\n"
+    )
+    git(clone, "add", "hostile_staged.py", "research/hostile_governed.py", ".github/hostile_governed.py")
     governed = run_ledger(clone)
     assert governed.returncode == 1
     governed_report = json.loads(governed.stdout)
     assert set(governed_report["files_checked"]) - set(report["files_checked"]) == {
+        ".github/hostile_governed.py",
         "hostile_staged.py",
         "hostile_untracked.py",
+        "research/hostile_governed.py",
     }
     assert any(
         "hostile_untracked.py: mlx import outside" in item
@@ -85,6 +142,40 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
         "hostile_untracked.py: illegal import of 'sources'" in item
         for item in governed_report["violations"]
     )
+    assert any(
+        "research/hostile_governed.py: mlx import outside" in item
+        for item in governed_report["violations"]
+    )
+    assert any(
+        ".github/hostile_governed.py: mlx import outside" in item
+        for item in governed_report["violations"]
+    )
+
+
+def test_q78_removal_map_is_exact_and_authority_bound(tmp_path):
+    """Q78 acceptance: each authored product or tool file has one real removal authority."""
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- CASSETTE_REMOVAL_MAP_BEGIN -->\n"
+        "```json\n"
+        '{"errors.py":["Q6"],"tools/ledger.py":["Q29"]}\n'
+        "```\n"
+        "<!-- CASSETTE_REMOVAL_MAP_END -->\n"
+    )
+    files = [Path("errors.py"), Path("tools/ledger.py"), Path("tests/test_fixture.py")]
+    assert check_removal_map(tmp_path, files, {"Q6", "Q29"}) == ("ran", [])
+
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- CASSETTE_REMOVAL_MAP_BEGIN -->\n"
+        '{"errors.py":["Q999"],"stale.py":["Q6"]}\n'
+        "<!-- CASSETTE_REMOVAL_MAP_END -->\n"
+    )
+    status, violations = check_removal_map(tmp_path, files, {"Q6", "Q29"})
+    assert status == "ran"
+    assert violations == [
+        "Q78 removal map lacks authored file: tools/ledger.py",
+        "Q78 removal map names no authored product or tool file: stale.py",
+        "Q78 removal map entry errors.py names unknown authorities: ['Q999']",
+    ]
 
 
 def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):
@@ -247,7 +338,7 @@ def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
         "-m",
         "Compliant fixture",
         "-m",
-        "Failed before: no candidate record existed.\n"
+        "Failed before: Q29 had no candidate record.\n"
         "Reused instead of authored: Git's existing commit object.\n"
         "Deleted: nothing.",
     )
@@ -271,10 +362,10 @@ def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
         "-m",
         "Record published-message correction",
         "-m",
-        "Failed before: the published fixture omitted all three required fields.\n"
+        "Failed before: Q29 published fixture omitted all three required fields.\n"
         "Reused instead of authored: the immutable target commit and Git history.\n"
         "Deleted: nothing.\n\n"
-        f"Commit-law repair {broken_sha} Failed before: no candidate record existed.\n"
+        f"Commit-law repair {broken_sha} Failed before: Q29 had no candidate record.\n"
         f"Commit-law repair {broken_sha} Reused instead of authored: Git's commit object.\n"
         f"Commit-law repair {broken_sha} Deleted: nothing.",
     )
@@ -291,7 +382,7 @@ def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
         "-m",
         "Reject invalid correction records",
         "-m",
-        "Failed before: invalid correction cases lacked executable proof.\n"
+        "Failed before: Q29 invalid correction cases lacked executable proof.\n"
         "Reused instead of authored: the existing fixture repository.\n"
         "Deleted: nothing.\n\n"
         f"Commit-law repair {broken_sha} Deleted: duplicate correction.\n"

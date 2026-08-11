@@ -72,6 +72,22 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
 - tools/ledger enforces all of this mechanically: the import edge set against the allowed graph,
   runtime confinement, header-dependency truth, and the per-file removal map.
 
+  <!-- CASSETTE_REMOVAL_MAP_BEGIN -->
+  ```json
+  {
+    "adapters/__init__.py": ["Q76"],
+    "broker.py": ["Q5"],
+    "compiler.py": ["Q58"],
+    "errors.py": ["Q6"],
+    "pager.py": ["Q19"],
+    "sources.py": ["Q52"],
+    "store.py": ["Q57"],
+    "tools/genschema.py": ["Q33"],
+    "tools/ledger.py": ["Q29"]
+  }
+  ```
+  <!-- CASSETTE_REMOVAL_MAP_END -->
+
 ## Before writing code
 
 0. IMPLEMENTATION.md is the order and state authority: it decides which step is next, records
@@ -146,6 +162,9 @@ not whitespace.
 - tools/ledger recomputes J from a clean checkout: authored LOC, deps with declared subsets,
   processes, branches, binary closure, and file-header dependency verification. Any commit that
   raises a J component names the failing row justifying it.
+- The ledger validates `Failed before` against a real research question, matrix row, or matrix
+  assertion for every commit after the recorded authority-citation baseline. Historical commit
+  prose remains immutable; new J growth cannot enter under an uncited narrative.
 - Q78 removal map: for every original component, record the row that fails when it is deleted.
   A component with no such row is deleted now.
 

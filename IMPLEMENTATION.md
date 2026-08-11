@@ -21,6 +21,8 @@ preference, style, or refactoring appetite.
 2. Make the step's invariants pass with the smallest change (AGENTS.md workflow).
 3. Run done_when: the full test suite plus tools/ledger, not just the step's tests. Green means
    green everywhere — regressions never accumulate silently.
+   Record elapsed time only as diagnostic context unless the governing row declares a latency
+   threshold; test count, skip count, and invariant results are the completion evidence.
 4. Before marking the step DONE, list every acceptance clause named by the step. For each clause,
    record the exact test or probe, the exact input changed or failure injected, the expected
    result, and the observed result. A test name or total passing-test count is not evidence. Any
@@ -136,7 +138,8 @@ steps:
     title: Content pages, segments, TensorMap
     env: any
     files: [store.py]
-    invariants: [Q57 acceptance (SafeTensors import, relocate without logical change, span resolution) on scratch cartridge images]
+    invariants: [Q57 storage acceptance (SafeTensors and bounded GGUF import, relocate without logical change, span resolution, ordered training-delta append) on scratch cartridge images]
+    acceptance_boundary: "S05 owns the container-to-canonical-page representation that does not depend on a trained child: verified SafeTensors and GGUF import, TensorMap resolution, representation-independent repacking, and immutable ordered delta-page append. S22A owns Q57's eligible-export clause together with Q26, after S21 supplies real tuned-child composition and callability; export cannot be proved honestly before those semantics exist."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S04]
@@ -466,6 +469,7 @@ steps:
     files: [sources.py]
     discovered_scope: "tests/test_s11_preflight.py executes Q8/Q50/Q56. store.py exposes the existing Q53 calculation as one pure capacity_requirement so preflight and physical reservation cannot become separate byte authorities. sources.py remains the sole Q78 source, metadata, preflight, and transfer authority despite exceeding 800 physical lines; splitting the decision from its immutable source evidence would create another L2 authority and more plumbing."
     invariants: [Q8/Q50 acceptance (trust states, contradictory fixtures), Q56 acceptance (four outcomes, no silent weakening)]
+    acceptance_boundary: "S11 proves the four preflight decisions from deterministic source-fixture evidence whose immutable bytes Cassette verifies itself. It does not prove the live Hugging Face, Ollama, or Tinker request, authentication, gating, license, manifest, or range wires; L02 owns those live-source checks and must show that no fixture-only route survives."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S09]
@@ -974,7 +978,7 @@ steps:
     files: [compiler.py, broker.py, store.py]
     discovered_scope: "store.py is modified because it remains the sole writer of source roots, content segments, indexes, derived roots, and generation dependencies; it now supplies descriptor-bound SafeTensors adoption, APFS copy-on-write conversion extents, durable derived roots, and Darwin physical-extent measurement. tests/compiler_fixture.py and tests/test_s19_compiler.py are the single small-dense S19 evidence surface, and tests/test_s16_broker.py replaces its retired caller-function seam with the production compiler binding. tests/test_s01_ledger.py replaces compiler.py and trainer.py as disposable hostile fixture names because compiler.py became governed production source in this row and trainer.py remains reserved by the queue. compiler.py remains the sole compiler authority above 800 physical lines because containment, source inventory, Q19 proof emission, Q58 reconciliation, plan construction, and candidate derivation share one publication decision; splitting them would create proof plumbing or duplicate authority. No dependency, process, runtime, model-family branch, generated contract, on-disk object type, or executable numerical runtime is added. S19 proves the declared small-dense boundary; S24 still owns representative 3-8B source discovery, tuple expansion, and complete real-model replay."
     invariants: [Q4 acceptance (peak-extent instrumentation, interruption, resume), Q5 production preparation binding (the canonical broker invokes compiler-owned plan and prepare operations through durable store objects rather than accepting an arbitrary caller-supplied revision producer), Q19/Q40 acceptance (derive immutable condition metrics, atom witnesses, service faces, cover, observation contract, descriptions/residuals, execution-risk and composition certificate from canonical inputs), Q30 source-driven tuple inventory (discover required tensor dtypes, operator signatures, shapes, and parameters from verified model material; expand only generated dispatch data or terminate with UNSUPPORTED_OPERATOR without fallback), Q55 executable-material containment (reject malicious pickle, templates, path traversal, auto-map/custom-code declarations, native libraries, and custom operators before code execution, network access, credential access, or unsafe loading), Q58 acceptance (total source-to-atom/description/residual map, structural failure on omission or detached certificate relation), Q60 resume on small dense model, Q51/Q60 source-consumption boundary (recompute each immutable source object's authoritative whole digest on the same reads used by compilation and reject changed completed extents before candidate-root publication), Q62 publication guard (verify canonical pages, mathematical certificate, and candidate root before generation publication)]
-    acceptance_boundary: "PartialState and its mutable chunk records locate resumable work but do not authorize present bytes. S19 is the first consumer of attacker-controlled model material as executable structure, so it owns Q55 containment before any parser, loader, compiler action, network request, or credential lookup can honor that material. It inventories the model's required Q30 tuples from verified source evidence; an absent tuple is a typed refusal, not a private kernel or silent fallback. Compilation hashes each complete source object while consuming it, compares the result with immutable Q1/Q9 evidence before publication, and emits no root when the extent changed after transfer completion. This is not a separate post-completion transfer reread: the compiler hashes the bytes it must already read. S19 also closes S16's explicit F1 seam: the production broker must dispatch planning and preparation to compiler.py through committed store objects, and no public caller may supply an arbitrary function that authors a candidate revision. After canonical publication, Q62 owns at-rest verification."
+    acceptance_boundary: "PartialState and its mutable chunk records locate resumable work but do not authorize present bytes. S19 is the first consumer of attacker-controlled model material as executable structure, so it owns Q55 containment before any parser, loader, compiler action, network request, credential lookup, or store transform can honor that material. compiler.py contains no dynamic execution or FFI; its store.py dependency binds the platform fclonefileat primitive, but that primitive receives only verified, store-controlled descriptors and no hostile model field can select a library, symbol, path, or call shape. It inventories the model's required Q30 tuples from verified source evidence; an absent tuple is a typed refusal, not a private kernel or silent fallback. Compilation hashes each complete source object while consuming it, compares the result with immutable Q1/Q9 evidence before publication, and emits no root when the extent changed after transfer completion. This is not a separate post-completion transfer reread: the compiler hashes the bytes it must already read. S19 also closes S16's explicit F1 seam: the production broker must dispatch planning and preparation to compiler.py through committed store objects, and no public caller may supply an arbitrary function that authors a candidate revision. After canonical publication, Q62 owns at-rest verification."
     expected_size: large
     done_when: full suite + ledger green
     depends: [S05, S06, S10, S12, S16]
@@ -1023,10 +1027,10 @@ steps:
         observed: "The first committed-tree rerun exposed that S01's hostile-source fixture still used compiler.py as a disposable future filename; b01afb71b0386d59e564f1748d3d87c38048ad03 replaced both future-reserved names. Review then exposed copied certificate arithmetic and an impossible negative loss accepted by pager.py; ee15bd4994bddb5939d116325ec11d81367e9ea8 and 482208a9170e575a8664f6bf714f4e00a77185e7 repaired and protected the independent gate. The final committed remediation tree passed 35/35 in 59.88 seconds. The ledger reported zero violations, 6,918 product LOC, 4,937 test LOC, 498 tool LOC, 95 generated LOC, five exact dependencies, one process, and one Python runtime. No Cassette image remained mounted, and 80 GiB remained free."
 
   - id: S20
-    title: Certified hardware plans and mathematical invalidation graph
+    title: Certified hardware plans
     env: any
     files: [compiler.py]
-    invariants: [Q11/Q59 acceptance (plan switch over one certificate, zero weight payload in plans, exact description/metadata/fresh-traffic budgets), Q27/Q61/Q75 acceptance (exact invalidation closure for condition metrics, atoms, cover, observation, description, residual estimator, composition, precision, and semantic changes)]
+    invariants: [Q11/Q59 acceptance (plan switch over one certificate, zero weight payload in plans, exact description/metadata/fresh-traffic budgets)]
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S19]
@@ -1036,7 +1040,7 @@ steps:
     title: Trainer - paged Tier A and compiled-certificate Tier B
     env: macos
     files: [trainer.py]
-    invariants: [Q21/Q70 Tier-A operations on frozen cartridge pages, Q21/Q70 Tier-B recovery operations over immutable condition/atom/description/estimator/observation/precision calibration records, Q71 acceptance (tensor lifetime trace), Q72 acceptance (paged vs unpaged equivalence), Q73 child commit, Q25 interrupt/resume bit-exact, Q23 placement trace; Tier-B output is a committed training artifact consumed through store and broker, never a trainer-owned certificate]
+    invariants: [Q21/Q70 Tier-A operations on frozen cartridge pages, Q21/Q70 Tier-B recovery operations over immutable condition/atom/description/estimator/observation/precision calibration records, Q22 immutable work branch and exact ordered child composition while parent readers remain pinned, Q23 placement trace, Q24 paged BF16/FP32 delta training over a frozen quantized base with no hidden full master, Q25 interrupt/resume bit-exact, Q71 acceptance (tensor lifetime trace), Q72 acceptance (paged vs unpaged equivalence), Q73 child commit; Tier-B output is a committed training artifact consumed through store and broker, never a trainer-owned certificate]
     expected_size: large
     done_when: full suite + ledger green
     depends: [S15, S06, S20]
@@ -1052,6 +1056,36 @@ steps:
     depends: [S21]
     status: TODO
 
+  - id: S22A
+    title: Post-training interoperability and eligible export
+    env: macos
+    files: [trainer.py, store.py, adapters/__init__.py]
+    invariants: [Q26 acceptance (every tuned child is callable through every declared adapter; stream each representable SafeTensors, adapter, or GGUF form on the cartridge; re-import and pass Q10/Q17; reject any target that loses graph, tokenizer, operator, precision, or ordered-delta semantics), Q57 acceptance remainder (consume S05's verified ordered deltas and export eligible forms without a second parameter authority)]
+    expected_size: medium
+    done_when: full suite + ledger green
+    depends: [S18, S21, S22]
+    status: TODO
+
+  - id: S22B
+    title: Training invalidation and incremental recompilation
+    env: any
+    files: [compiler.py, trainer.py]
+    invariants: [Q27/Q61/Q75 acceptance (mutate each weight, condition-metric, atom, cover, observation, description, residual-estimator, composition, precision, tokenizer, template, context, and operator dependency independently; recompute the exact transitive closure; compare incremental output with a clean full compile; preserve the callable parent)]
+    expected_size: large
+    done_when: full suite + ledger green
+    depends: [S20, S22A]
+    status: TODO
+
+  - id: S22C
+    title: Revision and delta acquisition
+    env: any
+    files: [sources.py, compiler.py, store.py]
+    invariants: [Q54 acceptance (apply valid, wrong-base, corrupt, interrupted, and ancestry-fork source or cartridge deltas; reuse only digest-identical content; publish only the exact verified target; retain the callable base on every refusal or rollback)]
+    expected_size: medium
+    done_when: full suite + ledger green
+    depends: [S10, S22B]
+    status: TODO
+
   - id: S23
     title: Failure-row generator
     env: any
@@ -1059,7 +1093,7 @@ steps:
     invariants: [Q49 acceptance across every concrete operation phase - acquisition, compilation, inference prefill, inference decode, training, export, repair, and removal; matrix failure_rows injections x operations expanded from data; every simulable injection green]
     expected_size: medium
     done_when: full suite + ledger green; non-simulable injections enumerated for PHASE LIVE
-    depends: [S10, S18, S20, S22]
+    depends: [S10, S18, S20, S22C]
     status: TODO
 
   - id: S24
@@ -1079,7 +1113,7 @@ steps:
     invariants: [Q19-certified 3-8B revision built end-to-end; every protected condition covered or causally excluded; exact and fresh-stochastic paths replay under their declared contracts; Q70 Tier-A training completes on the dense fixture; Q70 Tier-B recovery consumes S21's committed calibration artifacts, regenerates every invalidated condition/atom/description/estimator/observation/precision witness, publishes one Q73 child, and matches a clean certificate derivation; Q37 curves emitted over atom count, rank, peak and total description/metadata bytes, peak and total fresh traffic, composed execution error/risk, horizon, quality, and service against recorded storage-class profiles]
     expected_size: large
     done_when: full suite + ledger green; curves committed
-    depends: [S24, S20, S21]
+    depends: [S24, S20, S21, S22B]
     status: TODO
 
   - id: S26
@@ -1093,10 +1127,11 @@ steps:
     status: TODO
 
   - id: S27
-    title: Full accounting and removal map
+    title: Full accounting and removal proof
     env: any
     files: [tools/ledger.py]
-    invariants: [Q29 acceptance (reproduce J from clean checkout), Q78 removal map recorded per file]
+    invariants: [Q29 acceptance (reproduce complete J from a clean checkout), Q78 acceptance (delete each mapped product or tool file in isolation and observe its recorded acceptance authority fail; reject every stale, missing, or nonconsequential map entry)]
+    acceptance_boundary: "S01's aggregate-audit remediation makes the per-file Q78 map incremental and ledger-enforced as each authority enters the tree. S27 does not postpone map authorship; it performs the completed-tree deletion experiment and emits the final J report."
     expected_size: medium
     done_when: full suite + ledger green; J report committed
     depends: [S23, S26]

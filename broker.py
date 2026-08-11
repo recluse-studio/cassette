@@ -1100,14 +1100,6 @@ class CanonicalBroker:
             self._release(lease)
 
     def _grant(self, work: _QueuedRun, kind: str) -> ScheduledLease:
-        if self._leases:
-            _reject(
-                "OVERLOADED",
-                work.operation_id,
-                f"{kind} lease cannot overlap {next(iter(self._leases.values())).kind}",
-                invariant="Q65: EXEC WRITE and SWITCH are mutually exclusive",
-                retryability="retryable",
-            )
         lease_id = digest_bytes(canonical_bytes({
             "operation_id": work.operation_id,
             "kind": kind,

@@ -784,6 +784,8 @@ MAX_IDENTIFIER_BYTES = 256
 MAX_TEXT_BYTES = 4096
 MAX_TABLE_ROWS = 1_048_576
 MAX_U64 = 18_446_744_073_709_551_615
+MAX_PAGE_BYTES = 4_194_304
+MAX_TENSOR_RANK = 64
 MLX_RUNTIME = {
     "name": "mlx",
     "package": "mlx==0.31.0",
@@ -1122,6 +1124,19 @@ def digest() -> dict:
     return text(maximum=71, pattern=r"^(blake3|sha256):[0-9a-f]{64}$")
 
 
+def blake3_digest() -> dict:
+    """Describe one Cassette-owned content identity."""
+    return text(maximum=71, pattern=r"^blake3:[0-9a-f]{64}$")
+
+
+def immutable_revision_digest() -> dict:
+    """Accept one immutable source revision or Cassette content identity."""
+    return text(
+        maximum=71,
+        pattern=r"^((blake3|sha256):[0-9a-f]{64}|git-sha1:[0-9a-f]{40})$",
+    )
+
+
 def integer(*, minimum: int = 0, maximum: int = MAX_U64) -> dict:
     return {"type": "integer", "minimum": minimum, "maximum": maximum}
 
@@ -1191,6 +1206,132 @@ def q77_properties() -> dict[str, dict]:
     }
 
 
+def nullable(shape: dict) -> dict:
+    """Permit one bounded shape or JSON null without weakening either branch."""
+    return {"anyOf": [shape, {"type": "null"}]}
+
+
+def bounded_string_map(*, maximum: int = 1024) -> dict:
+    """Bound one extension-free map whose keys and values remain inert text."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "maxProperties": maximum,
+        "patternProperties": {
+            r"^[^\x00-\x1f\x7f]{1,256}$": text(empty=True, maximum=MAX_TEXT_BYTES),
+        },
+    }
+
+
+ROOT_ARTIFACT = record(
+    "Q1 root artifact evidence",
+    "Q1/Q57",
+    {"path": bounded_text(), "size": integer(), "digest": digest()},
+)
+ROOT_FORMAT_VERSION = bounded_array(bounded_text(), minimum=2, maximum=2)
+ROOT_IDENTITY_MATERIAL = record(
+    "Q1 root identity material",
+    "Q1/Q57",
+    {
+        "source_kind": identifier(),
+        "locator": bounded_text(),
+        "immutable_revision": immutable_revision_digest(),
+        "artifacts": bounded_array(ROOT_ARTIFACT, minimum=1),
+        "format_versions": bounded_array(ROOT_FORMAT_VERSION, minimum=1),
+        "tensor_index_digest": digest(),
+        "config_digest": digest(),
+        "architecture": bounded_text(),
+        "operator_set": {**bounded_array(bounded_text(), minimum=1), "uniqueItems": True},
+        "tokenizer_digest": digest(),
+        "processor_digest": digest(),
+        "template_digest": digest(),
+        "precision_scheme": bounded_text(),
+        "license_digest": digest(),
+        "parent_ids": {**bounded_array(blake3_digest()), "uniqueItems": True},
+        "transform_manifest_digest": nullable(blake3_digest()),
+    },
+)
+ROOT_CONTAINER = record(
+    "Q57 source container evidence",
+    "Q57",
+    {
+        "path": bounded_text(),
+        "format": identifier(enum=["gguf", "safetensors"]),
+        "metadata": bounded_string_map(),
+    },
+)
+ROOT_PROVENANCE = record(
+    "Q57 root provenance",
+    "Q1/Q57",
+    {
+        "revision_kind": identifier(enum=["executable", "exported", "source", "tuned"]),
+        "source_alias": bounded_text(),
+        "requested_revision": nullable(bounded_text()),
+        "identity_material": ROOT_IDENTITY_MATERIAL,
+        "containers": bounded_array(ROOT_CONTAINER, minimum=1),
+    },
+)
+ROOT_SEMANTIC_ASSETS = record(
+    "Q57 semantic asset bindings",
+    "Q57",
+    {"processor": digest(), "template": digest(), "tokenizer": digest()},
+)
+ROOT_DELTA = record(
+    "Q57 ordered training delta",
+    "Q22/Q57",
+    {
+        "delta_id": blake3_digest(),
+        "kind": identifier(enum=["adapter", "precision_correction", "replacement_pages"]),
+        "base_identity": blake3_digest(),
+        "ordered_page_digests": {
+            **bounded_array(blake3_digest(), minimum=1),
+            "uniqueItems": True,
+        },
+        "manifest_digest": blake3_digest(),
+    },
+)
+BOUNDED_JSON_DEFS = {
+    "bounded_json_value": {
+        "anyOf": [
+            {"type": "null"},
+            {"type": "boolean"},
+            integer(),
+            number(minimum=-1e300),
+            text(empty=True, maximum=MAX_TEXT_BYTES),
+            {
+                "type": "array",
+                "maxItems": MAX_TABLE_ROWS,
+                "items": {"$ref": "#/$defs/bounded_json_value"},
+            },
+            {"$ref": "#/$defs/bounded_json_object"},
+        ]
+    },
+    "bounded_json_object": {
+        "type": "object",
+        "additionalProperties": False,
+        "maxProperties": MAX_TABLE_ROWS,
+        "patternProperties": {
+            r"^[^\x00-\x1f\x7f]{1,256}$": {"$ref": "#/$defs/bounded_json_value"},
+        },
+    },
+}
+
+
+def bounded_json_value() -> dict:
+    """Reference one recursively bounded, inert JSON value in the current contract."""
+    return {"$ref": "#/$defs/bounded_json_value"}
+
+
+def bounded_json_object() -> dict:
+    """Reference one recursively bounded, inert JSON object in the current contract."""
+    return {"$ref": "#/$defs/bounded_json_object"}
+
+
+def with_bounded_json(schema: dict) -> dict:
+    """Attach the shared inert-JSON definitions to one generated contract."""
+    return {**schema, "$defs": BOUNDED_JSON_DEFS}
+
+
 Q77_PROVENANCE = record(
     "Q77 field provenance",
     "Q77",
@@ -1220,10 +1361,7 @@ Q31_EXTENSIONS = {
     "additionalProperties": False,
     "maxProperties": 64,
     "patternProperties": {
-        r"^[a-z0-9][a-z0-9._-]{0,127}$": {
-            "type": "object",
-            "maxProperties": 64,
-        }
+        r"^[a-z0-9][a-z0-9._-]{0,127}$": bounded_json_object()
     },
 }
 
@@ -1232,9 +1370,9 @@ REMOTE_FIELD = record(
     "Remote metadata field",
     "Q50",
     {
-        "value": {},
+        "value": bounded_json_value(),
         "trust": text(enum=["ABSENT", "DECLARED", "EVIDENCE_DIGESTED", "PARSED"]),
-        "authority": text(),
+        "authority": bounded_text(),
     },
     optional=("value",),
 )
@@ -1618,59 +1756,69 @@ CONTRACTS: dict[str, dict] = {
         "Q6/Q32",
         {
             "code": text(enum=sorted(errors.CODES)),
-            "object_id": text(),
-            "failed_invariant": text(),
+            "object_id": bounded_text(),
+            "failed_invariant": bounded_text(),
             "retryability": text(enum=sorted(errors.RETRYABILITY)),
-            "detail": text(empty=True),
+            "detail": text(empty=True, maximum=MAX_TEXT_BYTES),
         },
     ),
     "request": record(
         "Control request",
         "Q6",
         {
-            "protocol_version": text(),
-            "operation": text(),
-            "idempotency_key": text(),
-            "target": text(),
-            "arguments": {"type": "object"},
+            "protocol_version": identifier(enum=["1"]),
+            "operation": identifier(),
+            "idempotency_key": identifier(),
+            "target": bounded_text(),
+            "arguments": record(
+                "Bounded control arguments",
+                "Q6",
+                {
+                    "source": ref("source_descriptor"),
+                    "context_ref": bounded_text(),
+                    "negotiation_id": digest(),
+                    "tier": bounded_text(),
+                },
+                optional=("source", "context_ref", "negotiation_id", "tier"),
+            ),
         },
         optional=("target",),
     ),
-    "operation": record(
+    "operation": with_bounded_json(record(
         "Asynchronous operation",
         "Q6",
         {
-            "operation_id": text(),
-            "kind": text(),
+            "operation_id": identifier(),
+            "kind": identifier(),
             "state": text(
                 enum=["CANCELLED", "FAILED", "PAUSED", "PENDING", "RUNNING", "SUCCEEDED"]
             ),
-            "progress": {"type": "number"},
-            "result": {"type": "object"},
+            "progress": number(maximum=1.0),
+            "result": bounded_json_object(),
             "error": ref("error"),
         },
         optional=("result", "error"),
-    ),
-    "capability_profile": record(
+    )),
+    "capability_profile": with_bounded_json(record(
         "Canonical capability profile",
         "Q31",
         {
-            "protocol_version": text(),
-            "model_refs": array(text()),
-            "modalities": array(text()),
-            "context": {"type": "object"},
-            "reasoning": {},
-            "tools": {},
-            "structured_output": {},
-            "streaming": {},
-            "cancellation": {},
-            "training": {},
-            "source": {},
-            "performance_tiers": array({"type": "object"}),
+            "protocol_version": identifier(),
+            "model_refs": {**bounded_array(bounded_text(), minimum=1), "uniqueItems": True},
+            "modalities": {**bounded_array(identifier(), minimum=1), "uniqueItems": True},
+            "context": bounded_json_object(),
+            "reasoning": bounded_json_value(),
+            "tools": bounded_json_object(),
+            "structured_output": bounded_json_object(),
+            "streaming": {"type": "boolean"},
+            "cancellation": {"type": "boolean"},
+            "training": bounded_json_object(),
+            "source": bounded_json_object(),
+            "performance_tiers": bounded_array(bounded_json_object()),
             "extensions": Q31_EXTENSIONS,
         },
         optional=("extensions",),
-    ),
+    )),
     "capability_field_provenance": Q77_PROVENANCE,
     "capability_request": record(
         "Q77 capability request",
@@ -1700,28 +1848,28 @@ CONTRACTS: dict[str, dict] = {
             "negotiation_id": digest(),
         },
     ),
-    "run_request": record(
+    "run_request": with_bounded_json(record(
         "Canonical run request",
         "Q31",
         {
-            "idempotency_key": text(),
-            "model_ref": text(),
-            "input": {},
-            "context_ref": text(),
-            "generation": {"type": "object"},
-            "reasoning": {},
-            "output_schema": {"type": "object"},
-            "tools": array({"type": "object"}),
+            "idempotency_key": identifier(),
+            "model_ref": bounded_text(),
+            "input": bounded_json_value(),
+            "context_ref": bounded_text(),
+            "generation": bounded_json_object(),
+            "reasoning": bounded_json_value(),
+            "output_schema": bounded_json_object(),
+            "tools": bounded_array(bounded_json_object()),
             "extensions": Q31_EXTENSIONS,
         },
         optional=("context_ref", "reasoning", "output_schema", "tools", "extensions"),
-    ),
-    "run_event": record(
+    )),
+    "run_event": with_bounded_json(record(
         "Canonical run event",
         "Q6/Q31",
         {
-            "run_id": text(),
-            "sequence": {"type": "integer", "minimum": 0},
+            "run_id": identifier(),
+            "sequence": integer(),
             "type": text(
                 enum=[
                     "started",
@@ -1735,22 +1883,22 @@ CONTRACTS: dict[str, dict] = {
                     "failed",
                 ]
             ),
-            "payload": {"type": "object"},
+            "payload": bounded_json_object(),
             "extensions": Q31_EXTENSIONS,
         },
         optional=("extensions",),
-    ),
-    "source_descriptor": record(
+    )),
+    "source_descriptor": with_bounded_json(record(
         "Normalized source descriptor",
         "Q9",
         {
             "kind": text(enum=["huggingface", "ollama", "tinker", "extension"]),
-            "locator": text(),
-            "revision": text(),
-            "artifact_selector": {},
-            "credential_ref": text(),
-            "license_acceptance_ref": text(),
-            "expected_identity": text(),
+            "locator": bounded_text(),
+            "revision": bounded_text(),
+            "artifact_selector": bounded_json_object(),
+            "credential_ref": bounded_text(),
+            "license_acceptance_ref": bounded_text(),
+            "expected_identity": digest(),
         },
         optional=(
             "revision",
@@ -1759,20 +1907,20 @@ CONTRACTS: dict[str, dict] = {
             "license_acceptance_ref",
             "expected_identity",
         ),
-    ),
-    "remote_metadata_field": REMOTE_FIELD,
+    )),
+    "remote_metadata_field": with_bounded_json(REMOTE_FIELD),
     "remote_metadata": record(
         "Remote metadata preflight record",
         "Q50",
         {
             **{name: ref("remote_metadata_field") for name in REMOTE_METADATA_FIELDS},
-            "conflicts": array(
+            "conflicts": bounded_array(
                 record(
                     "Retained metadata conflict",
                     "Q50 acceptance_check",
                     {
                         "field": text(enum=REMOTE_METADATA_FIELDS),
-                        "candidates": array(ref("remote_metadata_field"), minimum=2),
+                        "candidates": bounded_array(ref("remote_metadata_field"), minimum=2),
                     },
                 )
             ),
@@ -1782,22 +1930,22 @@ CONTRACTS: dict[str, dict] = {
         "Tensor page span",
         "Q57",
         {
-            "page_digest": text(),
-            "offset": {"type": "integer", "minimum": 0},
-            "length": {"type": "integer", "minimum": 1},
-            "tensor_offset": {"type": "integer", "minimum": 0},
+            "page_digest": blake3_digest(),
+            "offset": integer(maximum=MAX_PAGE_BYTES - 1),
+            "length": integer(minimum=1, maximum=MAX_PAGE_BYTES),
+            "tensor_offset": integer(),
         },
     ),
     "tensor_map": record(
         "Semantic tensor map",
         "Q57",
         {
-            "semantic_tensor_id": text(),
-            "shape": array({"type": "integer", "minimum": 0}),
-            "dtype": text(),
-            "codec": text(),
-            "plane": {},
-            "spans": array(ref("tensor_span")),
+            "semantic_tensor_id": bounded_text(),
+            "shape": bounded_array(integer(), maximum=MAX_TENSOR_RANK),
+            "dtype": identifier(),
+            "codec": identifier(),
+            "plane": nullable(integer()),
+            "spans": bounded_array(ref("tensor_span")),
         },
     ),
     "mathematical_certificate": MATHEMATICAL_CERTIFICATE,
@@ -1808,17 +1956,18 @@ CONTRACTS: dict[str, dict] = {
             "Immutable cartridge root manifest",
             "Q57",
             {
-                "identity": text(),
-                "parents": array(text()),
-                "provenance": {"type": "object"},
-                "semantic_assets": {"type": "object"},
-                "tensor_maps": array(ref("tensor_map")),
-                "operators": array(),
-                "plans": array(),
-                "deltas": array(),
-                "integrity_root": text(),
+                "identity": blake3_digest(),
+                "parents": {**bounded_array(blake3_digest()), "uniqueItems": True},
+                "provenance": ROOT_PROVENANCE,
+                "semantic_assets": ROOT_SEMANTIC_ASSETS,
+                "tensor_maps": bounded_array(ref("tensor_map"), minimum=1),
+                "operators": {**bounded_array(bounded_text(), minimum=1), "uniqueItems": True},
+                "plans": bounded_array({"$ref": "#/$defs/bounded_json_object"}, maximum=64),
+                "deltas": {**bounded_array(ROOT_DELTA), "uniqueItems": True},
+                "integrity_root": blake3_digest(),
             },
         ),
+        "$defs": BOUNDED_JSON_DEFS,
         "x-cassette-canonicalization": "RFC8785",
     },
 }
@@ -1842,14 +1991,28 @@ def _schemas():
     return _SCHEMAS
 
 
-def _validate(schema, value, path):
+def _validate(schema, value, path, root_schema=None, depth=0):
+    if depth > 64:
+        return [f"{{path}}: nesting exceeds the 64-level contract bound"]
+    if root_schema is None:
+        root_schema = schema
     if "$ref" in schema:
+        if schema["$ref"].startswith("#/$defs/"):
+            name = schema["$ref"].removeprefix("#/$defs/")
+            target = root_schema.get("$defs", {{}}).get(name)
+            if target is None:
+                return [f"{{path}}: unknown local schema reference {{schema['$ref']!r}}"]
+            return _validate(target, value, path, root_schema, depth + 1)
         target = Path(schema["$ref"]).stem
         if target not in _schemas():
             return [f"{{path}}: unknown schema reference {{schema['$ref']!r}}"]
-        return _validate(_schemas()[target], value, path)
+        target_schema = _schemas()[target]
+        return _validate(target_schema, value, path, target_schema, depth + 1)
     if "anyOf" in schema:
-        if any(not _validate(candidate, value, path) for candidate in schema["anyOf"]):
+        if any(
+            not _validate(candidate, value, path, root_schema, depth + 1)
+            for candidate in schema["anyOf"]
+        ):
             return []
         return [f"{{path}}: value does not match any allowed shape"]
     kind = schema.get("type")
@@ -1877,10 +2040,14 @@ def _validate(schema, value, path):
             if name not in value
         )
         for name in sorted(set(value) & set(properties)):
-            defects.extend(_validate(properties[name], value[name], f"{{path}}.{{name}}"))
+            defects.extend(
+                _validate(properties[name], value[name], f"{{path}}.{{name}}", root_schema, depth + 1)
+            )
         for name in sorted(set(value) - set(properties)):
             for shape in matched[name]:
-                defects.extend(_validate(shape, value[name], f"{{path}}.{{name}}"))
+                defects.extend(
+                    _validate(shape, value[name], f"{{path}}.{{name}}", root_schema, depth + 1)
+                )
         return defects
     if kind == "array":
         if not isinstance(value, list):
@@ -1892,7 +2059,9 @@ def _validate(schema, value, path):
             defects.append(f"{{path}}: permits at most {{schema['maxItems']}} items")
         if "items" in schema:
             for index, item in enumerate(value):
-                defects.extend(_validate(schema["items"], item, f"{{path}}[{{index}}]"))
+                defects.extend(
+                    _validate(schema["items"], item, f"{{path}}[{{index}}]", root_schema, depth + 1)
+                )
         if schema.get("uniqueItems") and any(
             item == prior for index, item in enumerate(value) for prior in value[:index]
         ):

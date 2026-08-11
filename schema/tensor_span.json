@@ -5,18 +5,23 @@
   "additionalProperties": false,
   "properties": {
     "length": {
+      "maximum": 4194304,
       "minimum": 1,
       "type": "integer"
     },
     "offset": {
+      "maximum": 4194303,
       "minimum": 0,
       "type": "integer"
     },
     "page_digest": {
+      "maxLength": 71,
       "minLength": 1,
+      "pattern": "^blake3:[0-9a-f]{64}$",
       "type": "string"
     },
     "tensor_offset": {
+      "maximum": 18446744073709551615,
       "minimum": 0,
       "type": "integer"
     }
