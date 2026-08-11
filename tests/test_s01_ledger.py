@@ -61,24 +61,30 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
     assert isolated.returncode == 0, isolated.stdout
     assert isolated.stdout == first.stdout
 
-    (clone / "compiler.py").write_text(
-        "# compiler.py — untracked hostile source; depends on sources.py.\n"
+    (clone / "hostile_untracked.py").write_text(
+        "# hostile_untracked.py — untracked hostile source; depends on sources.py.\n"
         "import mlx\n"
         "import sources\n"
     )
-    (clone / "trainer.py").write_text(
-        "# trainer.py — staged governed source; depends on (none).\nVALUE = 1\n"
+    (clone / "hostile_staged.py").write_text(
+        "# hostile_staged.py — staged governed source; depends on (none).\nVALUE = 1\n"
     )
-    git(clone, "add", "trainer.py")
+    git(clone, "add", "hostile_staged.py")
     governed = run_ledger(clone)
     assert governed.returncode == 1
     governed_report = json.loads(governed.stdout)
     assert set(governed_report["files_checked"]) - set(report["files_checked"]) == {
-        "compiler.py",
-        "trainer.py",
+        "hostile_staged.py",
+        "hostile_untracked.py",
     }
-    assert any("compiler.py: mlx import outside" in item for item in governed_report["violations"])
-    assert any("compiler.py: illegal import of 'sources'" in item for item in governed_report["violations"])
+    assert any(
+        "hostile_untracked.py: mlx import outside" in item
+        for item in governed_report["violations"]
+    )
+    assert any(
+        "hostile_untracked.py: illegal import of 'sources'" in item
+        for item in governed_report["violations"]
+    )
 
 
 def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):
