@@ -1,4 +1,4 @@
-# broker.py — canonical operations, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on errors.py, pager.py, schema, sources.py, store.py.
+# broker.py — canonical operations, compilation dispatch, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on compiler.py, errors.py, pager.py, schema, sources.py, store.py.
 """Own the operation log and the single broker admission and dispatch authority."""
 
 from __future__ import annotations
@@ -16,8 +16,9 @@ from pathlib import Path
 import re
 from types import MappingProxyType
 
+from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle
 from errors import CassetteError
-from pager import CertifiedSchedule
+from pager import CertifiedSchedule, admit_schedule
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
@@ -31,6 +32,7 @@ from store import (
     load_root,
     page_locations,
     recover_generation,
+    verify_root_content,
 )
 
 PROTOCOL_VERSION = "1"
@@ -114,16 +116,6 @@ _CHECKPOINT_FIELDS = {
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedRevision:
-    """The preparation owner's present-byte proof and verified canonical-root claim."""
-
-    source_identity: str
-    verified_artifacts: tuple[ArtifactIdentity, ...]
-    plan_digest: str
-    candidate_root: str
-
-
-@dataclass(frozen=True, slots=True)
 class AcquisitionContext:
     """Live authorities required to resume one Q5 preparation from its durable checkpoint."""
 
@@ -131,8 +123,6 @@ class AcquisitionContext:
     reservation: CapacityReservation
     transfers: Mapping[str, tuple[TransferExtent, TransferExtent]]
     cartridge: str | Path
-    plan: Callable[[ResolvedSource, tuple[PartialState, ...]], object]
-    prepare: Callable[[ResolvedSource, tuple[PartialState, ...], str], object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,6 +402,53 @@ def _partials_from(records: object, revision: ResolvedSource, object_id: str) ->
     if [record["path"] for record in records] != sorted(by_path):
         _reject("ROOT_INVALID", object_id, "source verification records are not canonically ordered")
     return tuple(result)
+
+
+def _compiler_source(revision: ResolvedSource, descriptor: Mapping[str, object]) -> dict:
+    """Strip network locations and credential references before compiler dispatch."""
+
+    requested_revision = descriptor.get("revision")
+    if not isinstance(requested_revision, str) or not requested_revision:
+        _reject("INVALID_REQUEST", revision.identity, "source descriptor revision must be nonempty text")
+    return {
+        "source_kind": revision.source_kind,
+        "source_alias": f"{revision.locator}@{requested_revision}",
+        "locator": revision.locator,
+        "requested_revision": requested_revision,
+        "immutable_revision": revision.immutable_revision,
+        "identity": revision.identity,
+        "artifacts": [
+            {"path": item.path, "size": item.size, "digest": item.digest}
+            for item in revision.artifacts
+        ],
+        "license_digest": revision.license_digest,
+    }
+
+
+def _compiler_extents(
+    revision: ResolvedSource,
+    transfers: Mapping[str, tuple[TransferExtent, TransferExtent]],
+    operation_id: str,
+) -> dict:
+    """Expose only pre-opened data extents; transfer checkpoints remain source-owned evidence."""
+
+    if not isinstance(transfers, Mapping) or set(transfers) != {
+        artifact.path for artifact in revision.artifacts
+    }:
+        _reject("INVALID_REQUEST", operation_id, "transfers must name every source artifact exactly once")
+    result = {}
+    for artifact in revision.artifacts:
+        pair = transfers[artifact.path]
+        if not isinstance(pair, tuple) or len(pair) != 2 or not isinstance(pair[0], TransferExtent):
+            _reject("INVALID_REQUEST", operation_id, f"{artifact.path} requires one compiler data extent")
+        extent = pair[0]
+        result[artifact.path] = {
+            "fd": extent.fd,
+            "offset": extent.offset,
+            "length": extent.length,
+            "operation_id": extent.operation_id,
+        }
+    return result
 
 
 class CanonicalBroker:
@@ -1433,7 +1470,12 @@ class CanonicalBroker:
         if phase == "SOURCE_VERIFIED":
             plan_digest = await self._controlled(
                 operation_id,
-                lambda: context.plan(revision, partials),
+                lambda: asyncio.to_thread(
+                    plan_revision,
+                    _compiler_source(revision, descriptor),
+                    _compiler_extents(revision, context.transfers, operation_id),
+                    context.cartridge,
+                ),
                 cancellable=True,
             )
             checkpoint["plan_digest"] = _exact_digest(plan_digest, operation_id, "plan digest")
@@ -1443,7 +1485,13 @@ class CanonicalBroker:
         if phase == "PREPARING":
             prepared = await self._controlled(
                 operation_id,
-                lambda: context.prepare(revision, partials, checkpoint["plan_digest"]),
+                lambda: asyncio.to_thread(
+                    prepare_revision,
+                    _compiler_source(revision, descriptor),
+                    _compiler_extents(revision, context.transfers, operation_id),
+                    context.cartridge,
+                    checkpoint["plan_digest"],
+                ),
                 cancellable=True,
             )
             checkpoint.update(await asyncio.to_thread(
@@ -1453,6 +1501,7 @@ class CanonicalBroker:
                 revision,
                 checkpoint["plan_digest"],
                 prepared,
+                _compiler_extents(revision, context.transfers, operation_id),
             ))
             return self._phase(record, "EXEC_VERIFIED", checkpoint)
         if phase == "EXEC_VERIFIED":
@@ -1487,7 +1536,7 @@ class CanonicalBroker:
             ):
                 _reject("ROOT_INVALID", operation_id, "published generation failed activation verification")
             result = {
-                "model_identity": revision.identity,
+                "model_identity": load_root(context.cartridge, pin.root_digest)["identity"],
                 "generation": pin.generation,
                 "revision_id": pin.child_id,
                 "root_digest": pin.root_digest,
@@ -1508,6 +1557,7 @@ class CanonicalBroker:
         revision: ResolvedSource,
         plan_digest: str,
         prepared: object,
+        source_descriptors: Mapping[str, dict],
     ) -> dict:
         if not isinstance(prepared, PreparedRevision):
             _reject(
@@ -1527,7 +1577,7 @@ class CanonicalBroker:
         root = load_root(cartridge, root_digest)
         identity_material = root.get("provenance", {}).get("identity_material", {})
         if (
-            root.get("identity") != revision.identity
+            root.get("parents") != [revision.identity]
             or identity_material.get("source_kind") != revision.source_kind
             or identity_material.get("locator") != revision.locator
             or identity_material.get("immutable_revision") != revision.immutable_revision
@@ -1536,6 +1586,17 @@ class CanonicalBroker:
             ]
         ):
             _reject("IDENTITY_MISMATCH", operation_id, "candidate root is not bound to the durable source lock")
+        plan, certificate, evidence, profile, compiled_identity = verify_bundle(
+            cartridge,
+            root_digest,
+            revision.identity,
+            plan_digest,
+            {name: record["fd"] for name, record in source_descriptors.items()},
+        )
+        if root["identity"] != compiled_identity:
+            _reject("IDENTITY_MISMATCH", operation_id, "verified bundle and candidate identity disagree")
+        admit_schedule(plan, certificate, evidence, profile)
+        verify_root_content(cartridge, root_digest)
         pages = [location.page_digest for location in page_locations(cartridge, root_digest)]
         return {
             "source_verification": [

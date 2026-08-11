@@ -11,6 +11,7 @@ separate fixed-record index owns physical placement.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import ctypes
 from dataclasses import dataclass, field
 import fcntl
 import hashlib
@@ -18,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import struct
 import tempfile
 import uuid
@@ -116,6 +118,13 @@ _GENERATION_FIELDS = frozenset({
 })
 _TRANSACTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _GENERATION_NAME = re.compile(r"([0-9]{20})\.json")
+_LOG2PHYS = struct.Struct("=Iqq")
+_F_LOG2PHYS_EXT = 65
+_LIBC = ctypes.CDLL(None, use_errno=True)
+_FCLONEFILEAT = getattr(_LIBC, "fclonefileat", None)
+if _FCLONEFILEAT is not None:
+    _FCLONEFILEAT.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32)
+    _FCLONEFILEAT.restype = ctypes.c_int
 
 
 @dataclass(frozen=True)
@@ -965,12 +974,12 @@ def _validate_artifact_hash_state(
 
 
 def _safetensors_header(
-    handle, source: Path, object_id: str, artifact_hasher
+    handle, object_id: str, artifact_hasher
 ) -> tuple[int, int, dict, tuple[tuple, ...]]:
     prefix = _read_exact(handle, 8, object_id, "SafeTensors header length")
     artifact_hasher.update(prefix)
     header_length = int.from_bytes(prefix, "little")
-    file_size = source.stat().st_size
+    file_size = os.fstat(handle.fileno()).st_size
     if not 0 < header_length <= _SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
         _q57_reject(object_id, "SafeTensors header length is outside its file or 100 MB limit")
     encoded = _read_exact(handle, header_length, object_id, "SafeTensors header")
@@ -1050,6 +1059,152 @@ def _file_digest(path: Path) -> str:
     return f"blake3:{digest.hexdigest()}"
 
 
+def _clone_extent(source_fd: int, destination: Path, object_id: str) -> None:
+    """Create one APFS copy-on-write inode; failure forbids a full-copy fallback under Q4."""
+
+    if _FCLONEFILEAT is None:
+        _q57_reject(
+            object_id,
+            "copy-on-write extent adoption requires the macOS fclonefileat primitive",
+            "DURABILITY_UNSUPPORTED",
+        )
+    directory_fd = None
+    try:
+        directory_fd = os.open(destination.parent, os.O_RDONLY)
+        result = _FCLONEFILEAT(source_fd, directory_fd, os.fsencode(destination.name), 0)
+    except OSError as error:
+        _q57_reject(
+            object_id,
+            f"copy-on-write extent adoption failed before clone completion: {error}",
+            "DURABILITY_UNSUPPORTED",
+        )
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
+    if result != 0:
+        error = OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()))
+        _q57_reject(
+            object_id,
+            f"copy-on-write extent adoption is unavailable and a full parameter copy is forbidden: {error}",
+            "DURABILITY_UNSUPPORTED",
+        )
+
+
+def stage_conversion_extent(
+    source_fd: int,
+    cartridge: str | Path,
+    target_size: int,
+    target_digest: str,
+    object_id: str,
+    growth_chunks=(),
+) -> Path:
+    """Resume one COW identity, shrink, or page-bounded grow transform into immutable storage."""
+
+    if (
+        type(source_fd) is not int
+        or type(target_size) is not int
+        or not 0 < target_size <= SEGMENT_BYTES
+        or not isinstance(target_digest, str)
+        or not isinstance(object_id, str)
+        or not object_id
+    ):
+        _q57_reject(str(object_id), "conversion extent arguments are malformed", "INVALID_REQUEST")
+    target_name = _content_hex(target_digest, object_id)
+    try:
+        source_stat = os.fstat(source_fd)
+    except OSError as error:
+        _q57_reject(object_id, f"conversion source descriptor is unavailable: {error}", "SOURCE_UNAVAILABLE")
+    if not stat.S_ISREG(source_stat.st_mode):
+        _q57_reject(object_id, "conversion source descriptor is not a regular file", "INVALID_REQUEST")
+    source_size = source_stat.st_size
+    directory = Path(cartridge) / "segments"
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / target_name
+    pending = destination.with_name(f".{target_name}.pending")
+
+    def exact(path: Path) -> bool:
+        try:
+            return path.stat().st_size == target_size and _file_digest(path) == target_digest
+        except OSError:
+            return False
+
+    if destination.exists():
+        if not exact(destination):
+            _q57_reject(target_digest, "existing conversion segment is corrupt", "PAGE_CORRUPT")
+        try:
+            destination.chmod(0o400)
+        except OSError as error:
+            _q57_reject(
+                target_digest,
+                f"existing conversion segment cannot be made read-only: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+        return destination
+    if pending.exists() and exact(pending):
+        _fullsync_file(pending, object_id)
+        try:
+            pending.chmod(0o400)
+            os.replace(pending, destination)
+        except OSError as error:
+            _q57_reject(object_id, f"resumed conversion extent cannot commit: {error}", "DURABILITY_UNSUPPORTED")
+        _sync_directory(directory, object_id)
+        return destination
+    try:
+        pending.unlink(missing_ok=True)
+        _clone_extent(source_fd, pending, object_id)
+        pending.chmod(0o600)
+        empty = object()
+        if target_size < source_size:
+            try:
+                if next(iter(growth_chunks), empty) is not empty:
+                    _q57_reject(object_id, "identity and shrink transforms cannot carry growth chunks")
+            except TypeError:
+                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
+            os.truncate(pending, target_size)
+        elif target_size > source_size:
+            cursor = source_size
+            try:
+                chunks = iter(growth_chunks)
+            except TypeError:
+                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
+            with pending.open("r+b", buffering=0) as handle:
+                for chunk in chunks:
+                    if not isinstance(chunk, bytes) or not 0 < len(chunk) <= PAGE_BYTES:
+                        _q57_reject(
+                            object_id,
+                            "growth chunks must be nonempty bytes bounded by one canonical page",
+                            "INVALID_REQUEST",
+                        )
+                    if cursor + len(chunk) > target_size:
+                        _q57_reject(object_id, "growth chunks exceed the declared target extent")
+                    handle.seek(cursor)
+                    handle.write(chunk)
+                    cursor += len(chunk)
+            if cursor != target_size:
+                _q57_reject(object_id, "growth chunks do not fill the declared target extent")
+        else:
+            try:
+                if next(iter(growth_chunks), empty) is not empty:
+                    _q57_reject(object_id, "identity and shrink transforms cannot carry growth chunks")
+            except TypeError:
+                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
+        if not exact(pending):
+            _q57_reject(
+                object_id,
+                "conversion readback differs from the declared target digest",
+                "SOURCE_REVISION_CHANGED",
+            )
+        _fullsync_file(pending, object_id)
+        pending.chmod(0o400)
+        os.replace(pending, destination)
+        _sync_directory(directory, object_id)
+    except CassetteError:
+        raise
+    except OSError as error:
+        _q57_reject(object_id, f"conversion extent cannot commit: {error}", "DURABILITY_UNSUPPORTED")
+    return destination
+
+
 def _write_segments(cartridge: Path, pages) -> tuple[PageLocation, ...]:
     directory = cartridge / "segments"
     directory.mkdir(parents=True, exist_ok=True)
@@ -1114,7 +1269,13 @@ def _index_path(cartridge: Path, root_digest: str) -> Path:
     return cartridge / "indexes" / _content_hex(root_digest, root_digest)
 
 
-def _write_index(cartridge: Path, root_digest: str, locations: tuple[PageLocation, ...]) -> None:
+def _write_index(
+    cartridge: Path,
+    root_digest: str,
+    locations: tuple[PageLocation, ...],
+    *,
+    durable: bool = False,
+) -> None:
     by_page = {location.page_digest: location for location in locations}
     if len(by_page) != len(locations):
         _q57_reject(root_digest, "physical page index contains duplicate page identities")
@@ -1129,7 +1290,10 @@ def _write_index(cartridge: Path, root_digest: str, locations: tuple[PageLocatio
     )
     path = _index_path(cartridge, root_digest)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(payload)
+    if durable:
+        _durable_replace(path, payload, f"index:{root_digest}")
+    else:
+        path.write_bytes(payload)
 
 
 def _decode_index(payload: bytes, root_digest: str) -> dict[str, PageLocation]:
@@ -1294,6 +1458,120 @@ def load_root(cartridge: str | Path, root_digest: str) -> dict:
     return root
 
 
+def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
+    """Parse one bounded SafeTensors header without loading or executing repository material."""
+
+    descriptor = None
+    original_offset = None
+    if type(source) is int:
+        object_id = f"source:descriptor:{source}"
+        try:
+            source_stat = os.fstat(source)
+            if not stat.S_ISREG(source_stat.st_mode):
+                _q57_reject(object_id, "SafeTensors inspection requires one regular-file descriptor")
+            original_offset = os.lseek(source, 0, os.SEEK_CUR)
+            descriptor = os.dup(source)
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            handle = os.fdopen(descriptor, "rb", closefd=True)
+            descriptor = None
+        except OSError as error:
+            _q57_reject(object_id, f"SafeTensors descriptor is unavailable: {error}", "SOURCE_UNAVAILABLE")
+    else:
+        try:
+            path = Path(source)
+        except TypeError:
+            _q57_reject("source:unidentified", "SafeTensors inspection requires one local path or descriptor")
+        object_id = f"source:{path.name}"
+        try:
+            handle = path.open("rb")
+        except OSError as error:
+            _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+    hasher = artifact_hasher(expected_digest, object_id)
+    try:
+        with handle:
+            data_start, data_size, metadata, tensors = _safetensors_header(
+                handle, object_id, hasher
+            )
+    except OSError as error:
+        _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if original_offset is not None:
+            try:
+                os.lseek(source, original_offset, os.SEEK_SET)
+            except OSError:
+                pass
+    return {
+        "data_start": data_start,
+        "data_size": data_size,
+        "metadata": metadata,
+        "tensors": [
+            {
+                "semantic_tensor_id": name,
+                "dtype": dtype,
+                "shape": list(shape),
+                "offset": start,
+                "length": end - start,
+            }
+            for name, dtype, shape, start, end in tensors
+        ],
+    }
+
+
+def _write_cartridge_root(
+    cartridge: Path,
+    material: IdentityTuple,
+    identity_record: dict,
+    containers: list[dict],
+    tensor_maps: list[dict],
+    locations: tuple[PageLocation, ...],
+    plans: list[dict] | None = None,
+    *,
+    durable: bool = False,
+) -> str:
+    root = {
+        "identity": model_identity(material),
+        "parents": identity_record["parent_ids"],
+        "provenance": {
+            "revision_kind": material.revision_kind,
+            "source_alias": material.source_alias,
+            "requested_revision": material.requested_revision,
+            "identity_material": identity_record,
+            "containers": containers,
+        },
+        "semantic_assets": {
+            "processor": identity_record["processor_digest"],
+            "template": identity_record["template_digest"],
+            "tokenizer": identity_record["tokenizer_digest"],
+        },
+        "tensor_maps": tensor_maps,
+        "operators": identity_record["operator_set"],
+        "plans": [] if plans is None else plans,
+        "deltas": [],
+    }
+    root["integrity_root"] = _root_integrity(
+        root, tuple(sorted(locations, key=lambda item: item.page_digest))
+    )
+    payload = canonical_bytes(root)
+    root_digest = digest_bytes(payload)
+    _write_index(cartridge, root_digest, locations, durable=durable)
+    path = cartridge / "roots" / _content_hex(root_digest, root_digest)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if durable:
+        if not path.exists() or path.read_bytes() != payload:
+            _durable_replace(path, payload, f"root:{root_digest}")
+        else:
+            path.with_name(f".{path.name}.pending").unlink(missing_ok=True)
+    elif path.exists():
+        if path.read_bytes() != payload:
+            _q57_reject(root_digest, "existing root bytes do not match their name")
+    else:
+        path.write_bytes(payload)
+    load_root(cartridge, root_digest)
+    return root_digest
+
+
 def import_safetensors(
     source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
 ) -> str:
@@ -1329,7 +1607,7 @@ def import_safetensors(
         try:
             with path.open("rb") as handle:
                 data_start, data_size, metadata, tensors = _safetensors_header(
-                    handle, path, object_id, source_hasher
+                    handle, object_id, source_hasher
                 )
         except OSError as error:
             _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
@@ -1384,46 +1662,355 @@ def import_safetensors(
             "SafeTensors path, size, or digest differs from the supplied Q1 evidence",
             identity,
         )
-    root = {
-        "identity": identity,
-        "parents": identity_record["parent_ids"],
-        "provenance": {
-            "revision_kind": material.revision_kind,
-            "source_alias": material.source_alias,
-            "requested_revision": material.requested_revision,
-            "identity_material": identity_record,
-            "containers": [
-                {"path": artifact_path, "format": "safetensors", "metadata": metadata}
-                for artifact_path, _, _, _, metadata, _, _, _ in artifacts
-            ],
-        },
-        "semantic_assets": {
-            "processor": identity_record["processor_digest"],
-            "template": identity_record["template_digest"],
-            "tokenizer": identity_record["tokenizer_digest"],
-        },
-        "tensor_maps": [tensor_map.record() for tensor_map in sorted(
+    return _write_cartridge_root(
+        cartridge,
+        material,
+        identity_record,
+        [
+            {"path": artifact_path, "format": "safetensors", "metadata": metadata}
+            for artifact_path, _, _, _, metadata, _, _, _ in artifacts
+        ],
+        [tensor_map.record() for tensor_map in sorted(
             tensor_maps, key=lambda tensor_map: tensor_map.semantic_tensor_id
         )],
-        "operators": identity_record["operator_set"],
-        "plans": [],
-        "deltas": [],
-    }
-    root["integrity_root"] = _root_integrity(
-        root, tuple(sorted(locations, key=lambda item: item.page_digest))
+        locations,
     )
-    root_payload = canonical_bytes(root)
-    root_digest = digest_bytes(root_payload)
-    _write_index(cartridge, root_digest, locations)
-    root_path = cartridge / "roots" / _content_hex(root_digest, root_digest)
-    root_path.parent.mkdir(parents=True, exist_ok=True)
-    if root_path.exists():
-        if root_path.read_bytes() != root_payload:
-            _q57_reject(root_digest, "existing root bytes do not match their name")
-    else:
-        root_path.write_bytes(root_payload)
-    load_root(cartridge, root_digest)
-    return root_digest
+
+
+def adopt_safetensors(
+    source: Mapping[str, int], cartridge: str | Path, material: IdentityTuple
+) -> str:
+    """Adopt verified SafeTensors extents as immutable pages without a second parameter copy."""
+
+    identity_record = _identity_record(material)
+    identity = model_identity(material)
+    expected = {item["path"]: item for item in identity_record["artifacts"]}
+    if not isinstance(source, Mapping) or set(source) != set(expected):
+        _q57_reject(identity, "adoption requires every canonical SafeTensors artifact exactly once")
+    cartridge = Path(cartridge)
+    segment_directory = cartridge / "segments"
+    segment_directory.mkdir(parents=True, exist_ok=True)
+    tensor_names = set()
+    tensor_maps = []
+    containers = []
+    locations = {}
+    observed = []
+
+    class ContainerHasher:
+        def __init__(self, expected_digest: str, object_id: str):
+            self.source = artifact_hasher(expected_digest, object_id)
+            self.segment = blake3()
+            self.buffer = bytearray()
+            self.pages = []
+            self.offset = 0
+
+        def update(self, payload: bytes) -> None:
+            self.source.update(payload)
+            self.segment.update(payload)
+            self.buffer.extend(payload)
+            while len(self.buffer) >= PAGE_BYTES:
+                page = bytes(self.buffer[:PAGE_BYTES])
+                del self.buffer[:PAGE_BYTES]
+                self.pages.append((digest_bytes(page), self.offset, len(page)))
+                self.offset += len(page)
+
+        def finish(self) -> tuple[tuple[str, int, int], ...]:
+            if self.buffer:
+                page = bytes(self.buffer)
+                self.pages.append((digest_bytes(page), self.offset, len(page)))
+                self.offset += len(page)
+                self.buffer.clear()
+            return tuple(self.pages)
+
+    for artifact_path, descriptor in sorted(source.items()):
+        if not isinstance(artifact_path, str) or type(descriptor) is not int:
+            _q57_reject(identity, "adopted artifacts require canonical paths and open descriptors")
+        object_id = f"source:{artifact_path}"
+        expected_digest = expected[artifact_path]["digest"]
+        hashes = ContainerHasher(expected_digest, object_id)
+        original_offset = None
+        duplicate = None
+        try:
+            descriptor_stat = os.fstat(descriptor)
+            size = descriptor_stat.st_size
+            if not stat.S_ISREG(descriptor_stat.st_mode):
+                _q57_reject(object_id, "adopted source descriptor is not a regular file")
+            if size > SEGMENT_BYTES:
+                _q57_reject(
+                    object_id,
+                    "zero-copy adoption requires each first-release SafeTensors shard to fit one 1 GiB segment",
+                    "MODEL_UNSUPPORTED",
+                )
+            original_offset = os.lseek(descriptor, 0, os.SEEK_CUR)
+            duplicate = os.dup(descriptor)
+            os.lseek(duplicate, 0, os.SEEK_SET)
+            with os.fdopen(duplicate, "rb", closefd=True) as handle:
+                duplicate = None
+                data_start, data_size, metadata, tensors = _safetensors_header(
+                    handle, object_id, hashes
+                )
+                remaining = data_size
+                while remaining:
+                    payload = _read_exact(
+                        handle, min(PAGE_BYTES, remaining), object_id, "SafeTensors payload"
+                    )
+                    hashes.update(payload)
+                    remaining -= len(payload)
+        except OSError as error:
+            _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
+        finally:
+            if duplicate is not None:
+                os.close(duplicate)
+            if original_offset is not None:
+                try:
+                    os.lseek(descriptor, original_offset, os.SEEK_SET)
+                except OSError:
+                    pass
+        page_rows = hashes.finish()
+        source_digest = f"{expected_digest.partition(':')[0]}:{hashes.source.hexdigest()}"
+        observed.append({"path": artifact_path, "size": size, "digest": source_digest})
+        if observed[-1] != expected[artifact_path]:
+            _reject(
+                "artifacts",
+                "adopted SafeTensors bytes differ from the supplied Q1 evidence",
+                identity,
+            )
+        names = {tensor[0] for tensor in tensors}
+        if tensor_names & names:
+            _q57_reject(object_id, "SafeTensors artifacts contain duplicate tensor names")
+        tensor_names |= names
+        segment_id = f"blake3:{hashes.segment.hexdigest()}"
+        stage_conversion_extent(
+            descriptor,
+            cartridge,
+            size,
+            segment_id,
+            object_id,
+        )
+        page_digests = [page_digest for page_digest, _, _ in page_rows]
+        for page_digest, offset, length in page_rows:
+            locations.setdefault(
+                page_digest, PageLocation(page_digest, segment_id, offset, length)
+            )
+        for name, dtype, shape, start, end in tensors:
+            spans = []
+            cursor = data_start + start
+            absolute_end = data_start + end
+            while cursor < absolute_end:
+                page_number, page_offset = divmod(cursor, PAGE_BYTES)
+                length = min(absolute_end - cursor, page_rows[page_number][2] - page_offset)
+                spans.append(TensorSpan(
+                    page_digests[page_number], page_offset, length, cursor - data_start - start
+                ))
+                cursor += length
+            tensor_maps.append(TensorMap(name, shape, dtype, tuple(spans)).record())
+        containers.append({
+            "path": artifact_path,
+            "format": "safetensors",
+            "metadata": metadata,
+        })
+    if observed != identity_record["artifacts"]:
+        _reject("artifacts", "adopted artifact order differs from Q1 evidence", identity)
+    return _write_cartridge_root(
+        cartridge,
+        material,
+        identity_record,
+        containers,
+        sorted(tensor_maps, key=lambda item: item["semantic_tensor_id"]),
+        tuple(sorted(locations.values(), key=lambda item: item.page_digest)),
+        durable=True,
+    )
+
+
+def derive_root(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    material: IdentityTuple,
+    plans: tuple[dict, ...],
+) -> str:
+    """Publish one immutable child manifest while reusing its verified parent's parameter pages."""
+
+    cartridge = Path(cartridge)
+    parent = load_root(cartridge, parent_root_digest)
+    identity_record = _identity_record(material)
+    if (
+        material.revision_kind == "source"
+        or identity_record["parent_ids"] != [parent["identity"]]
+        or identity_record["artifacts"]
+        != parent["provenance"]["identity_material"]["artifacts"]
+    ):
+        _q57_reject(
+            parent_root_digest,
+            "derived root must name its exact parent and preserve the parent's complete source artifacts",
+            "IDENTITY_MISMATCH",
+        )
+    if not isinstance(plans, tuple) or not plans or any(not isinstance(plan, dict) for plan in plans):
+        _q57_reject(parent_root_digest, "derived root requires one or more canonical plan objects")
+    try:
+        canonical_plans = json.loads(canonical_bytes(list(plans)), object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _q57_reject(parent_root_digest, f"derived plans are not canonical JSON: {error}")
+    return _write_cartridge_root(
+        cartridge,
+        material,
+        identity_record,
+        parent["provenance"]["containers"],
+        parent["tensor_maps"],
+        tuple(sorted(
+            _read_index(cartridge, parent_root_digest).values(),
+            key=lambda item: item.page_digest,
+        )),
+        canonical_plans,
+        durable=True,
+    )
+
+
+def _physical_ranges(descriptor: int, size: int, object_id: str) -> list[tuple[int, int]]:
+    """Return Darwin device extents, excluding sparse holes, for exact Q4 accounting."""
+
+    ranges = []
+    offset = 0
+    while offset < size:
+        try:
+            reply = fcntl.fcntl(
+                descriptor,
+                _F_LOG2PHYS_EXT,
+                _LOG2PHYS.pack(0, size - offset, offset),
+            )
+            _, contiguous, device_offset = _LOG2PHYS.unpack(reply)
+        except (OSError, struct.error) as error:
+            _q57_reject(
+                object_id,
+                f"physical extent instrumentation is unavailable: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+        length = min(contiguous, size - offset)
+        if length <= 0:
+            _q57_reject(
+                object_id,
+                "physical extent instrumentation returned no forward progress",
+                "DURABILITY_UNSUPPORTED",
+            )
+        if device_offset >= 0:
+            ranges.append((device_offset, device_offset + length))
+        offset += length
+    return ranges
+
+
+def _range_union_bytes(ranges: list[tuple[int, int]]) -> int:
+    total = 0
+    end = -1
+    for start, stop in sorted(ranges):
+        if start >= end:
+            total += stop - start
+        elif stop > end:
+            total += stop - end
+        end = max(end, stop)
+    return total
+
+
+def measure_extent_footprint(
+    source_descriptors: tuple[int, ...],
+    target_descriptors: tuple[int, ...],
+    object_id: str,
+) -> dict:
+    """Measure exact logical and Darwin physical extents for one Q4 conversion instant."""
+
+    if (
+        not isinstance(source_descriptors, tuple)
+        or not source_descriptors
+        or not isinstance(target_descriptors, tuple)
+        or not target_descriptors
+        or any(type(descriptor) is not int for descriptor in (*source_descriptors, *target_descriptors))
+    ):
+        _q57_reject(object_id, "Q4 measurement requires nonempty descriptor tuples", "INVALID_REQUEST")
+    groups = []
+    device = None
+    for label, descriptors in (
+        ("source", source_descriptors),
+        ("target", target_descriptors),
+    ):
+        logical_bytes = 0
+        ranges = []
+        for descriptor in descriptors:
+            try:
+                observed = os.fstat(descriptor)
+            except OSError as error:
+                _q57_reject(
+                    object_id,
+                    f"Q4 {label} descriptor is unavailable: {error}",
+                    "SOURCE_UNAVAILABLE" if label == "source" else "PAGE_CORRUPT",
+                )
+            if (
+                not stat.S_ISREG(observed.st_mode)
+                or (device is not None and observed.st_dev != device)
+            ):
+                _q57_reject(object_id, f"Q4 {label} extent is not one regular same-device file")
+            device = observed.st_dev
+            logical_bytes += observed.st_size
+            ranges.extend(_physical_ranges(descriptor, observed.st_size, object_id))
+        groups.append((logical_bytes, ranges))
+    source_bytes, source_ranges = groups[0]
+    target_bytes, target_ranges = groups[1]
+    source_allocated = _range_union_bytes(source_ranges)
+    target_allocated = _range_union_bytes(target_ranges)
+    peak_allocated = _range_union_bytes([*source_ranges, *target_ranges])
+    return {
+        "source_extent_bytes": source_bytes,
+        "target_extent_bytes": target_bytes,
+        "source_allocated_bytes": source_allocated,
+        "target_allocated_bytes": target_allocated,
+        "shared_allocated_bytes": source_allocated + target_allocated - peak_allocated,
+        "allocated_peak_bytes": peak_allocated,
+    }
+
+
+def extent_footprint(
+    cartridge: str | Path,
+    root_digest: str,
+    source_descriptors: Mapping[str, int],
+) -> dict:
+    """Measure source, target, shared, and peak physical parameter extents for Q4."""
+
+    cartridge = Path(cartridge)
+    root = load_root(cartridge, root_digest)
+    artifacts = root["provenance"]["identity_material"]["artifacts"]
+    if not isinstance(source_descriptors, Mapping) or set(source_descriptors) != {
+        artifact["path"] for artifact in artifacts
+    }:
+        _q57_reject(root_digest, "Q4 instrumentation requires every source descriptor exactly once")
+    source_fds = []
+    for artifact in artifacts:
+        descriptor = source_descriptors[artifact["path"]]
+        if type(descriptor) is not int:
+            _q57_reject(root_digest, "Q4 source descriptors must be open integers")
+        try:
+            observed = os.fstat(descriptor)
+        except OSError as error:
+            _q57_reject(
+                artifact["path"], f"Q4 source descriptor is unavailable: {error}", "SOURCE_UNAVAILABLE"
+            )
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_size != artifact["size"]
+        ):
+            _q57_reject(artifact["path"], "Q4 source extent shape changed")
+        source_fds.append(descriptor)
+
+    target_fds = []
+    segment_ids = sorted({
+        location.segment_id for location in _read_index(cartridge, root_digest).values()
+    })
+    try:
+        for segment_id in segment_ids:
+            path = cartridge / "segments" / _content_hex(segment_id, segment_id)
+            target_fds.append(os.open(path, os.O_RDONLY))
+        return measure_extent_footprint(tuple(source_fds), tuple(target_fds), root_digest)
+    except OSError as error:
+        _q57_reject(root_digest, f"Q4 target segment is unavailable: {error}", "PAGE_CORRUPT")
+    finally:
+        for descriptor in target_fds:
+            os.close(descriptor)
 
 
 def page_locations(cartridge: str | Path, root_digest: str) -> tuple[PageLocation, ...]:
@@ -1878,6 +2465,12 @@ def _verify_dependency_paths(cartridge: Path, root_digest: str) -> tuple[dict, t
         _read_page(cartridge, location)
     return root, (*segment_paths, _index_path(cartridge, root_digest),
                   cartridge / "roots" / _content_hex(root_digest, root_digest))
+
+
+def verify_root_content(cartridge: str | Path, root_digest: str) -> dict:
+    """Verify every candidate segment, page, index, and root before generation publication."""
+
+    return _verify_dependency_paths(Path(cartridge), root_digest)[0]
 
 
 def _semantic_manifest(root: dict) -> dict:

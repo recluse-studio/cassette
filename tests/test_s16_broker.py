@@ -1,10 +1,9 @@
-# test_s16_broker.py — S16 Q5/Q6/Q52 durable broker fixture; depends on broker.py, errors.py, sources.py, store.py, tests/fixture_server.py.
+# test_s16_broker.py — S16 Q5/Q6/Q52 durable broker fixture; depends on broker.py, errors.py, sources.py, store.py, tests/compiler_fixture.py, tests/fixture_server.py.
 """Attack replay, transition, cancellation, error, event, and source-substitution boundaries."""
 
 import ast
 import asyncio
 from dataclasses import replace
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,19 +13,17 @@ import sys
 
 import pytest
 
-from broker import AcquisitionContext, CanonicalBroker, PHASES, PreparedRevision
+from broker import AcquisitionContext, CanonicalBroker, PHASES
+from compiler_fixture import artifact as compiler_artifact
 from errors import CODES, CassetteError
 import fixture_server as source_fixture
 from fixture_server import source_fixture_server
 from sources import SourceAdapter, TransferExtent, transfer_state_bytes
 from store import (
-    ArtifactIdentity,
     CapacityPhase,
     CapacityReservation,
-    IdentityTuple,
     canonical_bytes,
     digest_bytes,
-    import_safetensors,
     model_identity,
     release_capacity,
     reserve_capacity,
@@ -38,46 +35,6 @@ EXPECTED_PHASES = (
     "EMPTY", "RESOLVED", "RESERVED", "ACQUIRING", "SOURCE_VERIFIED",
     "PLANNED", "PREPARING", "EXEC_VERIFIED", "PUBLISHED", "ACTIVE",
 )
-
-
-def _safetensors(label: str) -> bytes:
-    weights = (label.encode() + b"/parameter/") * 3
-    header = {
-        "__metadata__": {"fixture": "S16"},
-        "weight": {"dtype": "U8", "shape": [len(weights)], "data_offsets": [0, len(weights)]},
-    }
-    encoded = json.dumps(header, separators=(",", ":")).encode()
-    encoded += b" " * (-len(encoded) % 8)
-    return len(encoded).to_bytes(8, "little") + encoded + weights
-
-
-def _sha(payload: bytes) -> str:
-    return "sha256:" + hashlib.sha256(payload).hexdigest()
-
-
-def _material(kind: str, artifact_name: str, payload: bytes) -> IdentityTuple:
-    fixture = source_fixture._FIXTURES[kind]
-    return IdentityTuple(
-        revision_kind="source",
-        source_kind=kind,
-        source_alias=f"{fixture['locator']}@{fixture['alias']}",
-        canonical_locator=fixture["locator"],
-        requested_revision=fixture["alias"],
-        immutable_revision=fixture["revision"],
-        artifacts=(ArtifactIdentity(artifact_name, len(payload), _sha(payload)),),
-        format_versions=(("safetensors", "s16-fixture-v1"),),
-        tensor_index_digest=digest_bytes(f"{kind}:tensor-index".encode()),
-        config_digest=digest_bytes(f"{kind}:config".encode()),
-        architecture="S16BoundaryTransformer",
-        operator_set=("attention", "matmul", "rms_norm"),
-        tokenizer_digest=digest_bytes(f"{kind}:tokenizer".encode()),
-        processor_digest=digest_bytes(f"{kind}:processor".encode()),
-        template_digest=digest_bytes(f"{kind}:template".encode()),
-        precision_scheme="u8-fixture",
-        license_digest=fixture["license"],
-        parent_ids=(),
-        transform_manifest_digest=None,
-    )
 
 
 def _request(kind: str, identity: str, key: str) -> dict:
@@ -113,10 +70,20 @@ def _terminal_events(events: tuple[dict, ...]) -> list[dict]:
 def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(tmp_path, monkeypatch):
     """Q5/Q6/Q52 acceptance: every phase replays, every failure terminates once, and adapters share one path."""
 
-    payloads = {kind: _safetensors(kind) for kind in source_fixture._FIXTURES}
     assert PHASES == EXPECTED_PHASES
-    names = {kind: f"{kind}-model.safetensors" for kind in payloads}
-    materials = {kind: _material(kind, names[kind], payloads[kind]) for kind in payloads}
+    names = {kind: f"{kind}-model.safetensors" for kind in source_fixture._FIXTURES}
+    built = {
+        kind: compiler_artifact(
+            kind,
+            fixture["locator"],
+            fixture["revision"],
+            fixture["license"],
+            names[kind],
+        )
+        for kind, fixture in source_fixture._FIXTURES.items()
+    }
+    payloads = {kind: item[0] for kind, item in built.items()}
+    materials = {kind: item[1] for kind, item in built.items()}
     identities = {kind: model_identity(material) for kind, material in materials.items()}
     for kind, identity in identities.items():
         monkeypatch.setitem(source_fixture._FIXTURES[kind], "identity", identity)
@@ -157,36 +124,12 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
             assert reserved == [reservation.required_bytes]
             location = {"cartridge": cartridge}
 
-            def plan(revision, partials):
-                assert revision.source_kind == kind
-                assert len(partials) == 1
-                return digest_bytes(f"s16:{kind}:plan".encode())
-
-            def prepare(revision, partials, plan_digest):
-                assert partials[0].completed_interval_set == ((0, len(payloads[kind])),)
-                root = import_safetensors(
-                    {names[kind]: location["cartridge"] / "incoming" / names[kind]},
-                    location["cartridge"],
-                    materials[kind],
-                )
-                return PreparedRevision(
-                    revision.identity,
-                    tuple(
-                        ArtifactIdentity(item.path, item.size, item.digest)
-                        for item in revision.artifacts
-                    ),
-                    plan_digest,
-                    root,
-                )
-
             def context():
                 return AcquisitionContext(
                     SourceAdapter(kind, server.base_url, {f"keychain:s16/{kind}": SECRET}.get),
                     reservation,
                     {names[kind]: (data_extent, state_extent)},
                     location["cartridge"],
-                    plan,
-                    prepare,
                 )
 
             snapshots = {}
@@ -305,62 +248,17 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     assert resumed_record["checkpoint"] == paused_checkpoint
                     paused.close()
 
-                partial_only = CanonicalBroker(clone("PREPARING", "partial-only"))
-                bad_context = replace(context(), prepare=lambda _revision, partials, _plan: partials[0])
-                refused = asyncio.run(partial_only.advance_acquisition(request, bad_context))
-                assert refused["state"] == "FAILED"
-                assert refused["error"]["code"] == "CAPABILITY_MISMATCH"
-                assert "PartialState is insufficient" in refused["error"]["detail"]
-                partial_only.close()
-
-                verified_artifacts = materials[kind].artifacts
-                valid_root = operation["result"]["root_digest"]
-                foreign_material = replace(
-                    materials[kind], canonical_locator=materials[kind].canonical_locator + "/foreign"
+                assert tuple(AcquisitionContext.__dataclass_fields__) == (
+                    "adapter", "reservation", "transfers", "cartridge",
                 )
-                foreign_root = import_safetensors(
-                    {names[kind]: location["cartridge"] / "incoming" / names[kind]},
-                    location["cartridge"],
-                    foreign_material,
-                )
-                preparation_attacks = (
-                    (
-                        "changed-artifact",
-                        PreparedRevision(
-                            identities[kind],
-                            (replace(verified_artifacts[0], digest=digest_bytes(b"foreign bytes")),),
-                            digest_bytes(f"s16:{kind}:plan".encode()),
-                            valid_root,
-                        ),
-                    ),
-                    (
-                        "changed-plan",
-                        PreparedRevision(
-                            identities[kind],
-                            verified_artifacts,
-                            digest_bytes(b"foreign plan"),
-                            valid_root,
-                        ),
-                    ),
-                    (
-                        "foreign-root",
-                        PreparedRevision(
-                            identities[kind],
-                            verified_artifacts,
-                            digest_bytes(f"s16:{kind}:plan".encode()),
-                            foreign_root,
-                        ),
-                    ),
-                )
-                for label, attack in preparation_attacks:
-                    attacked = CanonicalBroker(clone("PREPARING", label))
-                    attack_context = replace(
-                        context(), prepare=lambda _revision, _partials, _plan, attack=attack: attack
+                with pytest.raises(TypeError):
+                    AcquisitionContext(
+                        context().adapter,
+                        reservation,
+                        context().transfers,
+                        location["cartridge"],
+                        lambda: "caller-authored preparation",
                     )
-                    attack_result = asyncio.run(attacked.advance_acquisition(request, attack_context))
-                    assert attack_result["state"] == "FAILED"
-                    assert attack_result["error"]["code"] == "IDENTITY_MISMATCH"
-                    attacked.close()
 
                 changed_capacity = CapacityReservation(
                     operation_id,
