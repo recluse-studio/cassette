@@ -1,4 +1,4 @@
-# compiler.py — contained source inspection, zero-copy compilation, total contribution maps, and Q19 certificates (Q4/Q19/Q30/Q40/Q51/Q55/Q58/Q60/Q62); depends on errors.py, schema, store.py.
+# compiler.py — contained compilation, Q19 certificates, and certified hardware plans (Q4/Q11/Q19/Q30/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
 """Compile verified SafeTensors material into one independently checkable executable revision."""
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from store import (
     inspect_safetensors,
     load_root,
     model_identity,
+    page_index_byte_count,
     page_locations,
     read_tensor,
 )
@@ -69,6 +70,42 @@ _BUNDLE_FIELDS = frozenset({
     "operator_inventory", "tensor_inventory", "evidence", "certificate", "profile",
     "contribution_map", "execution_plan", "extent_metrics",
 })
+_HARDWARE_CATALOG_FIELDS = frozenset({
+    "version", "catalog_id", "q19_certificate_digest", "base_execution_plan_id", "plans",
+})
+_HARDWARE_PLAN_FIELDS = frozenset({
+    "plan_version", "plan_id", "plan_name", "profile_predicate",
+    "q19_certificate_digest", "condition_selector", "atom_refs", "description_budget",
+    "metadata_budget", "fresh_sample_or_exact_read_budget", "error_risk_horizon",
+    "page_order", "read_groups", "precision_budget", "kernel_dispatch", "concurrency",
+    "prefetch_policy", "memory_schedule", "expected_metrics", "weight_payload_bytes",
+})
+_HARDWARE_SPEC_FIELDS = frozenset({
+    "plan_name", "profile_predicate", "page_order", "read_groups", "io_queue_depth",
+    "prefetch_policy",
+})
+_PROFILE_SPEC_FIELDS = frozenset({
+    "apple_class", "storage_class", "request_class", "minimum_unified_memory_bytes",
+    "minimum_recommended_working_set_bytes", "minimum_sustained_read_bytes_per_second",
+    "maximum_p99_read_latency_ns", "minimum_storage_capacity_bytes",
+    "requires_writable_storage", "profile_evidence_digest",
+})
+_PROFILE_PREDICATE_FIELDS = _PROFILE_SPEC_FIELDS | {
+    "required_operator_case_ids", "required_apple_features",
+}
+_MEASURED_PROFILE_FIELDS = frozenset({
+    "apple_class", "storage_class", "request_class", "unified_memory_bytes",
+    "recommended_max_working_set_bytes", "sustained_read_bytes_per_second",
+    "p99_read_latency_ns", "storage_capacity_bytes", "operator_case_ids", "apple_features",
+    "writable_storage",
+})
+_READ_GROUP_FIELDS = frozenset({"ordinal", "page_digests", "bytes"})
+_PREFETCH_FIELDS = frozenset({"kind", "lookahead_pages"})
+_HARDWARE_VERSION = "q11-q59-hardware-plans-v1"
+_HARDWARE_PLAN_VERSION = "q11-q59-plan-v1"
+_HARDWARE_INVARIANT = "Q11/Q59: certified metadata-only hardware plans over one executable revision"
+_MAX_READ_GROUP_BYTES = 32 * 1024 * 1024
+_MAX_PLAN_METADATA_BYTES = 4 * 1024**3
 _CASES = {
     row["case_id"]: {
         name: row[name]
@@ -90,6 +127,18 @@ class PreparedRevision:
     verified_artifacts: tuple[ArtifactIdentity, ...]
     plan_digest: str
     candidate_root: str
+
+
+@dataclass(frozen=True, slots=True)
+class HardwarePlanSelection:
+    """One measured-profile selection from a verified metadata-only plan catalog."""
+
+    root_digest: str
+    plan_id: str
+    certificate_id: str
+    measured_profile_digest: str
+    predicted_total_latency_ns: int
+    plan: dict
 
 
 def _reject(
@@ -1183,6 +1232,528 @@ def _execution_plan(
     return plan
 
 
+def _hardware_reject(code: str, object_id: str, detail: str) -> None:
+    raise CassetteError(code, object_id, _HARDWARE_INVARIANT, "terminal", detail)
+
+
+def _hardware_record(
+    value: object, fields: frozenset[str] | set[str], object_id: str, label: str
+) -> dict:
+    if not isinstance(value, dict) or set(value) != fields:
+        observed = sorted(value) if isinstance(value, dict) else type(value).__name__
+        _hardware_reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"{label} requires exactly {sorted(fields)}; received {observed}",
+        )
+    return value
+
+
+def _hardware_items(
+    value: object, object_id: str, label: str, *, empty: bool = False
+) -> list:
+    if not isinstance(value, list) or len(value) > _MAX_ITEMS or (not empty and not value):
+        _hardware_reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"{label} requires a bounded {'possibly empty' if empty else 'nonempty'} list",
+        )
+    return value
+
+
+def _hardware_identifier(value: object, object_id: str, label: str) -> str:
+    if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
+        _hardware_reject("INVALID_REQUEST", object_id, f"{label} is not a canonical identifier")
+    return value
+
+
+def _hardware_digest(value: object, object_id: str, label: str) -> str:
+    if not isinstance(value, str) or _DIGEST.fullmatch(value) is None:
+        _hardware_reject("INVALID_REQUEST", object_id, f"{label} is not one canonical digest")
+    return value
+
+
+def _hardware_u64(value: object, object_id: str, label: str) -> int:
+    if type(value) is not int or not 0 <= value <= _MAX_U64:
+        _hardware_reject("INVALID_REQUEST", object_id, f"{label} is not an unsigned 64-bit integer")
+    return value
+
+
+def _hardware_identifiers(value: object, object_id: str, label: str) -> list[str]:
+    result = [
+        _hardware_identifier(item, object_id, label)
+        for item in _hardware_items(value, object_id, label, empty=True)
+    ]
+    if result != sorted(set(result)):
+        _hardware_reject("INVALID_REQUEST", object_id, f"{label} must be unique and sorted")
+    return result
+
+
+def _hardware_sum(values, object_id: str, label: str) -> int:
+    total = sum(values)
+    if total > _MAX_U64:
+        _hardware_reject("CAPABILITY_MISMATCH", object_id, f"{label} exceeds unsigned 64-bit accounting")
+    return total
+
+
+def _hardware_io_latency(
+    byte_count: int,
+    read_count: int,
+    bandwidth: int,
+    latency_ns: int,
+    queue_depth: int,
+    object_id: str,
+) -> int:
+    if bandwidth == 0 or queue_depth == 0:
+        _hardware_reject("CAPABILITY_MISMATCH", object_id, "hardware plan requires positive bandwidth and queue depth")
+    transfer_ns = (byte_count * 1_000_000_000 + bandwidth - 1) // bandwidth
+    latency_waves = (read_count + queue_depth - 1) // queue_depth
+    return _hardware_sum(
+        (transfer_ns, latency_waves * latency_ns), object_id, "predicted I/O latency"
+    )
+
+
+def _hardware_pages(locations, base_plan: dict, object_id: str) -> tuple[list[dict], int]:
+    pages = sorted(
+        [
+            {
+                "page_digest": _hardware_digest(
+                    location.page_digest, object_id, "page digest"
+                ),
+                "length": _hardware_u64(location.length, object_id, "page length"),
+            }
+            for location in locations
+        ],
+        key=lambda row: row["page_digest"],
+    )
+    if not pages or any(row["length"] == 0 for row in pages):
+        _hardware_reject("ROOT_INVALID", object_id, "hardware plans require nonempty canonical pages")
+    if len({row["page_digest"] for row in pages}) != len(pages):
+        _hardware_reject("ROOT_INVALID", object_id, "hardware page catalog repeats a page identity")
+    if _digest(pages) != base_plan["page_map_digest"]:
+        _hardware_reject("CAPABILITY_MISMATCH", object_id, "hardware pages differ from the compiled page map")
+    return pages, _hardware_sum(
+        (row["length"] for row in pages), object_id, "executable page bytes"
+    )
+
+
+def _profile_predicate(
+    value: object,
+    object_id: str,
+    required_case_ids: list[str],
+    required_apple_features: list[str],
+) -> dict:
+    source = _hardware_record(value, _PROFILE_SPEC_FIELDS, object_id, "profile predicate")
+    result = {
+        "apple_class": _hardware_identifier(source["apple_class"], object_id, "Apple class"),
+        "storage_class": _hardware_identifier(source["storage_class"], object_id, "storage class"),
+        "request_class": _hardware_identifier(source["request_class"], object_id, "request class"),
+        "profile_evidence_digest": _hardware_digest(
+            source["profile_evidence_digest"], object_id, "profile evidence digest"
+        ),
+        **{
+            name: _hardware_u64(source[name], object_id, name)
+            for name in (
+                "minimum_unified_memory_bytes",
+                "minimum_recommended_working_set_bytes",
+                "minimum_sustained_read_bytes_per_second",
+                "maximum_p99_read_latency_ns",
+                "minimum_storage_capacity_bytes",
+            )
+        },
+        "required_operator_case_ids": required_case_ids,
+        "required_apple_features": required_apple_features,
+        "requires_writable_storage": source["requires_writable_storage"],
+    }
+    if type(result["requires_writable_storage"]) is not bool:
+        _hardware_reject("INVALID_REQUEST", object_id, "requires_writable_storage must be boolean")
+    if result["minimum_sustained_read_bytes_per_second"] == 0:
+        _hardware_reject("INVALID_REQUEST", object_id, "minimum sustained read bandwidth must be positive")
+    if result["minimum_recommended_working_set_bytes"] > result["minimum_unified_memory_bytes"]:
+        _hardware_reject("CAPABILITY_MISMATCH", object_id, "recommended working set exceeds unified memory")
+    return result
+
+
+def _fresh_read_budget(certificate: dict, object_id: str) -> tuple[dict, int]:
+    resources = certificate["resources"]
+    conversions = {
+        row["operation_id"]: row
+        for row in certificate["physical_conversion"]["conversion_rows"]
+    }
+    trace = certificate["resource_tables"]["per_trace_step"]
+    try:
+        used = [conversions[row["operation_id"]] for row in trace]
+    except KeyError:
+        _hardware_reject("CAPABILITY_MISMATCH", object_id, "trace names an operation without a physical conversion")
+    physical_bytes = _hardware_sum(
+        (row["bytes"] for row in used), object_id, "fresh physical bytes"
+    )
+    page_reads = _hardware_sum(
+        (row["page_reads"] for row in used), object_id, "fresh physical page reads"
+    )
+    certified_latency = _hardware_sum(
+        (row["latency_ns_peak"] for row in used), object_id, "fresh certified latency"
+    )
+    return {
+        "mode": "EXACT" if resources["fresh_samples_total"] == 0 else "FRESH",
+        "samples_peak": resources["fresh_samples_max"],
+        "samples_total": resources["fresh_samples_total"],
+        "traffic_peak": resources["fresh_traffic_max"],
+        "traffic_total": resources["fresh_traffic_total"],
+        "traffic_unit": resources["fresh_traffic_unit"],
+        "physical_bytes_peak": max(row["bytes"] for row in used),
+        "physical_bytes_total": physical_bytes,
+        "physical_page_reads_peak": max(row["page_reads"] for row in used),
+        "physical_page_reads_total": page_reads,
+        "certified_latency_ns_total": certified_latency,
+    }, max(row["memory_bytes_peak"] for row in used)
+
+
+def _hardware_plan(
+    value: object,
+    base_plan: dict,
+    certificate: dict,
+    locations,
+    index_bytes: int,
+) -> tuple[dict, int]:
+    spec = _hardware_record(value, _HARDWARE_SPEC_FIELDS, certificate["certificate_id"], "hardware plan specification")
+    name = _hardware_identifier(spec["plan_name"], certificate["certificate_id"], "hardware plan name")
+    used_case_ids = sorted({
+        row["operator_case_id"] for row in certificate["execution_contract"]["operations"]
+    })
+    apple_features = sorted(base_plan["dispatch"]["apple_features"])
+    predicate = _profile_predicate(spec["profile_predicate"], name, used_case_ids, apple_features)
+    pages, executable_bytes = _hardware_pages(locations, base_plan, name)
+    by_digest = {row["page_digest"]: row["length"] for row in pages}
+    physical = {location.page_digest: location for location in locations}
+    page_order = [
+        _hardware_digest(item, name, "ordered page digest")
+        for item in _hardware_items(spec["page_order"], name, "page order")
+    ]
+    if len(page_order) != len(set(page_order)) or set(page_order) != set(by_digest):
+        _hardware_reject("CAPABILITY_MISMATCH", name, "page order must reference every compiled page exactly once")
+    group_values = _hardware_items(spec["read_groups"], name, "read groups")
+    groups = []
+    for ordinal, group_value in enumerate(group_values):
+        page_digests = [
+            _hardware_digest(item, name, "read-group page digest")
+            for item in _hardware_items(group_value, name, "read-group pages")
+        ]
+        try:
+            group_bytes = _hardware_sum(
+                (by_digest[page_digest] for page_digest in page_digests), name, "read-group bytes"
+            )
+            group_locations = [physical[page_digest] for page_digest in page_digests]
+        except KeyError:
+            _hardware_reject("CAPABILITY_MISMATCH", name, "read group names a foreign page")
+        if any(
+            current.segment_id != following.segment_id
+            or current.offset + current.length != following.offset
+            for current, following in zip(group_locations, group_locations[1:])
+        ):
+            _hardware_reject("CAPABILITY_MISMATCH", name, "read group is not one contiguous physical range")
+        if group_bytes > _MAX_READ_GROUP_BYTES:
+            _hardware_reject("CAPABILITY_MISMATCH", name, "read group exceeds the 32 MiB coalescing bound")
+        groups.append({"ordinal": ordinal, "page_digests": page_digests, "bytes": group_bytes})
+    if [page for group in groups for page in group["page_digests"]] != page_order:
+        _hardware_reject("CAPABILITY_MISMATCH", name, "read groups must partition the declared page order")
+    queue_depth = _hardware_u64(spec["io_queue_depth"], name, "I/O queue depth")
+    if not 1 <= queue_depth <= 64:
+        _hardware_reject("INVALID_REQUEST", name, "I/O queue depth must lie between 1 and 64")
+    prefetch = _hardware_record(spec["prefetch_policy"], _PREFETCH_FIELDS, name, "prefetch policy")
+    prefetch = {
+        "kind": _hardware_identifier(prefetch["kind"], name, "prefetch kind"),
+        "lookahead_pages": _hardware_u64(prefetch["lookahead_pages"], name, "prefetch lookahead"),
+    }
+    if (
+        prefetch["kind"] not in {"NONE", "ORDERED"}
+        or (prefetch["kind"] == "NONE") != (prefetch["lookahead_pages"] == 0)
+        or prefetch["lookahead_pages"] > len(page_order)
+    ):
+        _hardware_reject("INVALID_REQUEST", name, "prefetch policy and lookahead disagree")
+    resources = certificate["resources"]
+    fresh, fresh_memory_peak = _fresh_read_budget(certificate, name)
+    description = {
+        "peak_bytes": resources["description_bytes_peak"],
+        "total_bytes": resources["description_bytes_total"],
+    }
+    metadata = {
+        "peak_bytes": resources["metadata_bytes_peak"],
+        "total_bytes": resources["metadata_bytes_total"],
+    }
+    prefetch_bytes_peak = max(
+        (
+            _hardware_sum(
+                (by_digest[page] for page in page_order[index:index + prefetch["lookahead_pages"]]),
+                name,
+                "prefetch bytes",
+            )
+            for index in range(len(page_order))
+        ),
+        default=0,
+    ) if prefetch["lookahead_pages"] else 0
+    group_memory = _hardware_sum(
+        (
+            max(group["bytes"] for group in groups),
+            prefetch_bytes_peak,
+            description["peak_bytes"],
+            metadata["peak_bytes"],
+            index_bytes,
+        ),
+        name,
+        "resident group, prefetch, index, description, and metadata bytes",
+    )
+    working_set = max(group_memory, fresh_memory_peak)
+    if predicate["minimum_recommended_working_set_bytes"] < working_set:
+        _hardware_reject("CAPABILITY_MISMATCH", name, "profile predicate cannot hold the certified working set")
+    if predicate["minimum_storage_capacity_bytes"] < executable_bytes:
+        _hardware_reject("CAPABILITY_MISMATCH", name, "profile predicate cannot hold the executable pages")
+    setup_latency = _hardware_io_latency(
+        executable_bytes,
+        len(groups),
+        predicate["minimum_sustained_read_bytes_per_second"],
+        predicate["maximum_p99_read_latency_ns"],
+        queue_depth,
+        name,
+    )
+    fresh_io_latency = _hardware_io_latency(
+        fresh["physical_bytes_total"],
+        fresh["physical_page_reads_total"],
+        predicate["minimum_sustained_read_bytes_per_second"],
+        predicate["maximum_p99_read_latency_ns"],
+        queue_depth,
+        name,
+    )
+    fresh_latency = max(fresh_io_latency, fresh["certified_latency_ns_total"])
+    plan = {
+        "plan_version": _HARDWARE_PLAN_VERSION,
+        "plan_id": _digest("unsealed-hardware-plan"),
+        "plan_name": name,
+        "profile_predicate": predicate,
+        "q19_certificate_digest": certificate["certificate_id"],
+        "condition_selector": certificate["compatibility"]["cover"],
+        "atom_refs": [
+            {"atom_id": atom["atom_id"], "description_digest": _digest(atom["description"])}
+            for atom in certificate["atoms"]
+        ],
+        "description_budget": description,
+        "metadata_budget": metadata,
+        "fresh_sample_or_exact_read_budget": fresh,
+        "error_risk_horizon": {
+            "eta_rep": resources["eta_rep"],
+            "epsilon_exec": resources["epsilon_exec"],
+            "delta_exec_total": resources["delta_exec_total"],
+            "horizon": resources["horizon"],
+        },
+        "page_order": page_order,
+        "read_groups": groups,
+        "precision_budget": {
+            "precision_planes_digest": base_plan["precision_planes_digest"],
+            "page_payload_bytes": executable_bytes,
+        },
+        "kernel_dispatch": {
+            "dispatch_digest": base_plan["dispatch"]["dispatch_digest"],
+            "case_ids": used_case_ids,
+            "apple_features": apple_features,
+        },
+        "concurrency": {"io_queue_depth": queue_depth},
+        "prefetch_policy": prefetch,
+        "memory_schedule": {
+            "page_group_bytes_peak": max(group["bytes"] for group in groups),
+            "prefetch_bytes_peak": prefetch_bytes_peak,
+            "index_bytes": index_bytes,
+            "description_bytes_peak": description["peak_bytes"],
+            "metadata_bytes_peak": metadata["peak_bytes"],
+            "fresh_bytes_peak": fresh["physical_bytes_peak"],
+            "working_set_bytes_peak": working_set,
+        },
+        "expected_metrics": {
+            "page_read_bytes": executable_bytes,
+            "index_bytes": _hardware_u64(index_bytes, name, "page-index bytes"),
+            "read_group_count": len(groups),
+            "fresh_read_bytes_total": fresh["physical_bytes_total"],
+            "fresh_page_reads_total": fresh["physical_page_reads_total"],
+            "predicted_setup_latency_ns": setup_latency,
+            "predicted_fresh_latency_ns": fresh_latency,
+            "predicted_total_latency_ns": _hardware_sum(
+                (setup_latency, fresh_latency), name, "predicted total latency"
+            ),
+        },
+        "weight_payload_bytes": 0,
+    }
+    plan["plan_id"] = _digest({field: plan[field] for field in plan if field != "plan_id"})
+    return plan, executable_bytes
+
+
+def _hardware_spec_from_plan(value: object, object_id: str) -> dict:
+    plan = _hardware_record(value, _HARDWARE_PLAN_FIELDS, object_id, "hardware plan")
+    predicate = _hardware_record(
+        plan["profile_predicate"], _PROFILE_PREDICATE_FIELDS, object_id, "stored profile predicate"
+    )
+    groups = [
+        _hardware_record(group, _READ_GROUP_FIELDS, object_id, "stored read group")["page_digests"]
+        for group in _hardware_items(plan["read_groups"], object_id, "stored read groups")
+    ]
+    concurrency = _hardware_record(
+        plan["concurrency"], {"io_queue_depth"}, object_id, "stored concurrency"
+    )
+    return {
+        "plan_name": plan["plan_name"],
+        "profile_predicate": {name: predicate[name] for name in _PROFILE_SPEC_FIELDS},
+        "page_order": plan["page_order"],
+        "read_groups": groups,
+        "io_queue_depth": concurrency["io_queue_depth"],
+        "prefetch_policy": plan["prefetch_policy"],
+    }
+
+
+def _hardware_catalog(
+    base_bundle: dict,
+    locations,
+    index_bytes: int,
+    specifications: object,
+) -> dict:
+    certificate = base_bundle["certificate"]
+    base_plan = base_bundle["execution_plan"]
+    plans_and_sizes = [
+        _hardware_plan(spec, base_plan, certificate, locations, index_bytes)
+        for spec in _hardware_items(specifications, certificate["certificate_id"], "hardware plans")
+    ]
+    plans = sorted((item[0] for item in plans_and_sizes), key=lambda plan: plan["plan_name"])
+    if len({plan["plan_name"] for plan in plans}) != len(plans):
+        _hardware_reject("INVALID_REQUEST", certificate["certificate_id"], "hardware plan names must be unique")
+    executable_bytes = plans_and_sizes[0][1]
+    if any(size != executable_bytes for _, size in plans_and_sizes):
+        _hardware_reject("CAPABILITY_MISMATCH", certificate["certificate_id"], "hardware plans disagree on executable capacity")
+    catalog = {
+        "version": _HARDWARE_VERSION,
+        "catalog_id": _digest("unsealed-hardware-catalog"),
+        "q19_certificate_digest": certificate["certificate_id"],
+        "base_execution_plan_id": base_plan["plan_id"],
+        "plans": plans,
+    }
+    catalog["catalog_id"] = _digest({field: catalog[field] for field in catalog if field != "catalog_id"})
+    cap = min(executable_bytes // 100, _MAX_PLAN_METADATA_BYTES)
+    plan_metadata_bytes = _hardware_sum(
+        (len(canonical_bytes(plan)) for plan in plans),
+        certificate["certificate_id"],
+        "hardware plan metadata bytes",
+    )
+    plans_and_index_bytes = _hardware_sum(
+        (len(canonical_bytes([base_bundle, catalog])), index_bytes),
+        certificate["certificate_id"],
+        "plans and index bytes",
+    )
+    if plan_metadata_bytes > cap or plans_and_index_bytes > cap:
+        _hardware_reject(
+            "CAPACITY_EXCEEDED",
+            certificate["certificate_id"],
+            f"plan metadata or plans-plus-index exceed the {cap}-byte executable-revision allowance",
+        )
+    return catalog
+
+
+def _verified_hardware_catalog(
+    value: object,
+    base_bundle: dict,
+    locations,
+    index_bytes: int,
+    object_id: str,
+) -> dict:
+    catalog = _hardware_record(value, _HARDWARE_CATALOG_FIELDS, object_id, "hardware plan catalog")
+    plans = _hardware_items(catalog["plans"], object_id, "stored hardware plans")
+    expected = _hardware_catalog(
+        base_bundle,
+        locations,
+        index_bytes,
+        [_hardware_spec_from_plan(plan, object_id) for plan in plans],
+    )
+    if catalog != expected:
+        _hardware_reject(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "hardware plan catalog is detached from its certificate, pages, or exact budgets",
+        )
+    return catalog
+
+
+def _measured_hardware_profile(value: object) -> dict:
+    profile = _hardware_record(value, _MEASURED_PROFILE_FIELDS, "hardware:select", "measured hardware profile")
+    result = {
+        "apple_class": _hardware_identifier(profile["apple_class"], "hardware:select", "Apple class"),
+        "storage_class": _hardware_identifier(profile["storage_class"], "hardware:select", "storage class"),
+        "request_class": _hardware_identifier(profile["request_class"], "hardware:select", "request class"),
+        **{
+            name: _hardware_u64(profile[name], "hardware:select", name)
+            for name in (
+                "unified_memory_bytes",
+                "recommended_max_working_set_bytes",
+                "sustained_read_bytes_per_second",
+                "p99_read_latency_ns",
+                "storage_capacity_bytes",
+            )
+        },
+        "operator_case_ids": _hardware_identifiers(
+            profile["operator_case_ids"], "hardware:select", "operator case IDs"
+        ),
+        "apple_features": _hardware_identifiers(
+            profile["apple_features"], "hardware:select", "Apple features"
+        ),
+        "writable_storage": profile["writable_storage"],
+    }
+    if type(result["writable_storage"]) is not bool:
+        _hardware_reject("INVALID_REQUEST", "hardware:select", "writable_storage must be boolean")
+    if result["sustained_read_bytes_per_second"] == 0:
+        _hardware_reject("INVALID_REQUEST", "hardware:select", "measured read bandwidth must be positive")
+    if result["recommended_max_working_set_bytes"] > result["unified_memory_bytes"]:
+        _hardware_reject("INVALID_REQUEST", "hardware:select", "recommended working set exceeds unified memory")
+    return result
+
+
+def _profile_matches(plan: dict, profile: dict) -> bool:
+    predicate = plan["profile_predicate"]
+    return (
+        profile["apple_class"] == predicate["apple_class"]
+        and profile["storage_class"] == predicate["storage_class"]
+        and profile["request_class"] == predicate["request_class"]
+        and profile["unified_memory_bytes"] >= predicate["minimum_unified_memory_bytes"]
+        and profile["recommended_max_working_set_bytes"] >= predicate["minimum_recommended_working_set_bytes"]
+        and profile["sustained_read_bytes_per_second"] >= predicate["minimum_sustained_read_bytes_per_second"]
+        and profile["p99_read_latency_ns"] <= predicate["maximum_p99_read_latency_ns"]
+        and profile["storage_capacity_bytes"] >= predicate["minimum_storage_capacity_bytes"]
+        and set(profile["operator_case_ids"]) >= set(predicate["required_operator_case_ids"])
+        and set(profile["apple_features"]) >= set(predicate["required_apple_features"])
+        and (not predicate["requires_writable_storage"] or profile["writable_storage"])
+    )
+
+
+def _measured_plan_latency(plan: dict, profile: dict) -> int:
+    metrics = plan["expected_metrics"]
+    queue_depth = plan["concurrency"]["io_queue_depth"]
+    setup = _hardware_io_latency(
+        metrics["page_read_bytes"],
+        metrics["read_group_count"],
+        profile["sustained_read_bytes_per_second"],
+        profile["p99_read_latency_ns"],
+        queue_depth,
+        plan["plan_id"],
+    )
+    fresh = plan["fresh_sample_or_exact_read_budget"]
+    fresh_io = _hardware_io_latency(
+        fresh["physical_bytes_total"],
+        fresh["physical_page_reads_total"],
+        profile["sustained_read_bytes_per_second"],
+        profile["p99_read_latency_ns"],
+        queue_depth,
+        plan["plan_id"],
+    )
+    return _hardware_sum(
+        (setup, max(fresh_io, fresh["certified_latency_ns_total"])),
+        plan["plan_id"],
+        "measured-profile predicted total latency",
+    )
+
+
 def _extent_metrics(source_root: dict, proof: dict, target_extent_bytes: int) -> dict:
     source_bytes = sum(
         item["size"]
@@ -1369,8 +1940,8 @@ def _verify_bundle_structure(
     _exact_digest(source_identity, root_digest, "source identity")
     _exact_digest(plan_digest, root_digest, "preparation plan digest")
     root = load_root(cartridge, root_digest)
-    if len(root["plans"]) != 1:
-        _reject("ROOT_INVALID", root_digest, "compiled root requires exactly one preparation bundle")
+    if len(root["plans"]) not in {1, 2}:
+        _reject("ROOT_INVALID", root_digest, "compiled root requires one preparation bundle and at most one hardware catalog")
     bundle = _record(root["plans"][0], _BUNDLE_FIELDS, root_digest, "preparation bundle")
     if len(canonical_bytes(bundle)) > _MAX_RECORD_BYTES:
         _reject("ROOT_INVALID", root_digest, "compiled proof bundle exceeds its bounded authority")
@@ -1447,7 +2018,120 @@ def _verify_bundle_structure(
     material = root["provenance"]["identity_material"]
     if material["transform_manifest_digest"] != _digest(bundle):
         _reject("IDENTITY_MISMATCH", root_digest, "compiled identity does not bind the complete preparation bundle")
+    if len(root["plans"]) == 2:
+        _verified_hardware_catalog(
+            root["plans"][1],
+            bundle,
+            page_locations(cartridge, root_digest),
+            page_index_byte_count(cartridge, root_digest),
+            root_digest,
+        )
     return plan, certificate, bundle["evidence"], bundle["profile"], root["identity"]
+
+
+def _compiled_identity_material(root: dict) -> IdentityTuple:
+    provenance = root["provenance"]
+    record = provenance["identity_material"]
+    return IdentityTuple(
+        revision_kind=provenance["revision_kind"],
+        source_kind=record["source_kind"],
+        source_alias=provenance["source_alias"],
+        canonical_locator=record["locator"],
+        requested_revision=provenance["requested_revision"],
+        immutable_revision=record["immutable_revision"],
+        artifacts=tuple(ArtifactIdentity(**artifact) for artifact in record["artifacts"]),
+        format_versions=tuple(tuple(item) for item in record["format_versions"]),
+        tensor_index_digest=record["tensor_index_digest"],
+        config_digest=record["config_digest"],
+        architecture=record["architecture"],
+        operator_set=tuple(record["operator_set"]),
+        tokenizer_digest=record["tokenizer_digest"],
+        processor_digest=record["processor_digest"],
+        template_digest=record["template_digest"],
+        precision_scheme=record["precision_scheme"],
+        license_digest=record["license_digest"],
+        parent_ids=tuple(record["parent_ids"]),
+        transform_manifest_digest=record["transform_manifest_digest"],
+    )
+
+
+def _prepare_hardware_plans(
+    cartridge: str | Path,
+    compiled_root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+    specifications: object,
+) -> str:
+    _verify_bundle_structure(
+        cartridge, compiled_root_digest, source_identity, preparation_plan_digest
+    )
+    root = load_root(cartridge, compiled_root_digest)
+    bundle = root["plans"][0]
+    locations = page_locations(cartridge, compiled_root_digest)
+    catalog = _hardware_catalog(
+        bundle,
+        locations,
+        page_index_byte_count(cartridge, compiled_root_digest),
+        specifications,
+    )
+    candidate = derive_root(
+        cartridge,
+        compiled_root_digest,
+        _compiled_identity_material(root),
+        (bundle, catalog),
+    )
+    _verify_bundle_structure(
+        cartridge, candidate, source_identity, preparation_plan_digest
+    )
+    return candidate
+
+
+def _verify_hardware_plans(
+    cartridge: str | Path,
+    root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+) -> tuple[dict, ...]:
+    _verify_bundle_structure(
+        cartridge, root_digest, source_identity, preparation_plan_digest
+    )
+    root = load_root(cartridge, root_digest)
+    if len(root["plans"]) != 2:
+        _hardware_reject("CAPABILITY_MISMATCH", root_digest, "compiled root has no certified hardware plans")
+    return tuple(root["plans"][1]["plans"])
+
+
+def _select_hardware_plan(
+    cartridge: str | Path,
+    root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+    measured_profile: object,
+) -> HardwarePlanSelection:
+    plans = _verify_hardware_plans(
+        cartridge, root_digest, source_identity, preparation_plan_digest
+    )
+    profile = _measured_hardware_profile(measured_profile)
+    candidates = [
+        (_measured_plan_latency(plan, profile), plan["plan_id"], plan)
+        for plan in plans
+        if _profile_matches(plan, profile)
+    ]
+    if not candidates:
+        _hardware_reject(
+            "CAPABILITY_MISMATCH",
+            root_digest,
+            "no certified plan satisfies the measured class; recompile for this hardware envelope",
+        )
+    predicted, _, selected = min(candidates, key=lambda item: (item[0], item[1]))
+    return HardwarePlanSelection(
+        root_digest=root_digest,
+        plan_id=selected["plan_id"],
+        certificate_id=selected["q19_certificate_digest"],
+        measured_profile_digest=_digest(profile),
+        predicted_total_latency_ns=predicted,
+        plan=selected,
+    )
 
 
 def _boundary(label: str, source: object, function, *arguments):
@@ -1527,4 +2211,65 @@ def verify_bundle_structure(
         source_identity,
         plan_digest,
         source_descriptors,
+    )
+
+
+def prepare_hardware_plans(
+    cartridge: str | Path,
+    compiled_root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+    specifications: object,
+) -> str:
+    """Attach replaceable hardware metadata without changing executable identity or page capacity."""
+
+    return _boundary(
+        "hardware-plan-prepare",
+        {"identity": source_identity},
+        _prepare_hardware_plans,
+        cartridge,
+        compiled_root_digest,
+        source_identity,
+        preparation_plan_digest,
+        specifications,
+    )
+
+
+def verify_hardware_plans(
+    cartridge: str | Path,
+    root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+) -> tuple[dict, ...]:
+    """Return hardware plans only after recomputing their page, certificate, and budget bindings."""
+
+    return _boundary(
+        "hardware-plan-verify",
+        {"identity": source_identity},
+        _verify_hardware_plans,
+        cartridge,
+        root_digest,
+        source_identity,
+        preparation_plan_digest,
+    )
+
+
+def select_hardware_plan(
+    cartridge: str | Path,
+    root_digest: str,
+    source_identity: str,
+    preparation_plan_digest: str,
+    measured_profile: object,
+) -> HardwarePlanSelection:
+    """Choose the lowest predicted-latency certified plan that contains the measured profile."""
+
+    return _boundary(
+        "hardware-plan-select",
+        {"identity": source_identity},
+        _select_hardware_plan,
+        cartridge,
+        root_digest,
+        source_identity,
+        preparation_plan_digest,
+        measured_profile,
     )

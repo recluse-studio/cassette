@@ -2065,20 +2065,30 @@ def derive_root(
     material: IdentityTuple,
     plans: tuple[dict, ...],
 ) -> str:
-    """Publish one immutable child manifest while reusing its verified parent's parameter pages."""
+    """Publish one child revision or same-identity plan manifest over verified existing pages."""
 
     cartridge = Path(cartridge)
     parent = load_root(cartridge, parent_root_digest)
     identity_record = _identity_record(material)
+    same_identity_plan = (
+        material.revision_kind == parent["provenance"]["revision_kind"]
+        and material.source_alias == parent["provenance"]["source_alias"]
+        and material.requested_revision == parent["provenance"]["requested_revision"]
+        and identity_record == parent["provenance"]["identity_material"]
+        and model_identity(material) == parent["identity"]
+    )
+    child_revision = (
+        identity_record["parent_ids"] == [parent["identity"]]
+        and identity_record["artifacts"]
+        == parent["provenance"]["identity_material"]["artifacts"]
+    )
     if (
         material.revision_kind == "source"
-        or identity_record["parent_ids"] != [parent["identity"]]
-        or identity_record["artifacts"]
-        != parent["provenance"]["identity_material"]["artifacts"]
+        or not (same_identity_plan or child_revision)
     ):
         _q57_reject(
             parent_root_digest,
-            "derived root must name its exact parent and preserve the parent's complete source artifacts",
+            "derived root must preserve one exact identity or name one exact artifact-preserving parent",
             "IDENTITY_MISMATCH",
         )
     if not isinstance(plans, tuple) or not plans or any(not isinstance(plan, dict) for plan in plans):
@@ -2334,6 +2344,13 @@ def page_locations(cartridge: str | Path, root_digest: str) -> tuple[PageLocatio
 
     load_root(cartridge, root_digest)
     return tuple(_read_index(Path(cartridge), root_digest).values())
+
+
+def page_index_byte_count(cartridge: str | Path, root_digest: str) -> int:
+    """Return the verified fixed-record index length without exposing its private encoding."""
+
+    load_root(cartridge, root_digest)
+    return len(_read_index(Path(cartridge), root_digest)) * _INDEX_RECORD.size
 
 
 def repack_segments(
