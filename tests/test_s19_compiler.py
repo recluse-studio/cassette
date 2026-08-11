@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import copy
 from fractions import Fraction
+import inspect
 from itertools import combinations, permutations
 import os
 from pathlib import Path
@@ -193,6 +194,20 @@ def _oracle_rank(matrix):
     return 0
 
 
+def _algorithm_shape(function):
+    tree = ast.parse(inspect.getsource(function))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.name = "_"
+            node.returns = None
+        elif isinstance(node, ast.arg):
+            node.arg = "_"
+            node.annotation = None
+        elif isinstance(node, ast.Name):
+            node.id = "_"
+    return ast.dump(tree, include_attributes=False)
+
+
 def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication(tmp_path):
     """Q4/Q5/Q19/Q30/Q40/Q51/Q55/Q58/Q60/Q62 acceptance: hostile bytes cannot outrun complete proof."""
 
@@ -262,6 +277,10 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
     # Q19: compiler derivation and pager admission use different elimination, determinant,
     # contraction, and loss procedures. Literal answers and a combinatorial minors oracle judge
     # both authorities without deriving the expected result through either production path.
+    for helper_name in ("_multiply", "_divide", "_rank", "_determinant", "_inner", "_witness_loss"):
+        assert _algorithm_shape(getattr(compiler, helper_name)) != _algorithm_shape(
+            getattr(pager, helper_name)
+        )
     arithmetic_cases = (
         [[_exact(0), _exact(0), _exact(0)], [_exact(0), _exact(0), _exact(0)]],
         [[_exact(1), _exact(2), _exact(3)], [_exact(2), _exact(4), _exact(6)]],
