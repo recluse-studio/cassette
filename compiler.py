@@ -1,4 +1,4 @@
-# compiler.py — contained compilation, Q19 certificates, and certified hardware plans (Q4/Q11/Q19/Q30/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
+# compiler.py — contained compilation, Q19 certificates, and certified hardware plans (Q4/Q11/Q19/Q30/Q33/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
 """Compile verified SafeTensors material into one independently checkable executable revision."""
 
 from __future__ import annotations
@@ -16,7 +16,13 @@ import struct
 from typing import Mapping
 
 from errors import CassetteError
-from schema.tables import DISPATCH_ROWS, OPERATOR_DISPATCH, Q40_MODES
+from schema.tables import (
+    DISPATCH_ROWS,
+    HARDWARE_PLAN_CATALOG_VERSION,
+    HARDWARE_PLAN_VERSION,
+    OPERATOR_DISPATCH,
+    Q40_MODES,
+)
 from schema.validator import validate
 from store import (
     ArtifactIdentity,
@@ -101,9 +107,7 @@ _MEASURED_PROFILE_FIELDS = frozenset({
 })
 _READ_GROUP_FIELDS = frozenset({"ordinal", "page_digests", "bytes"})
 _PREFETCH_FIELDS = frozenset({"kind", "lookahead_pages"})
-_HARDWARE_VERSION = "q11-q59-hardware-plans-v1"
-_HARDWARE_PLAN_VERSION = "q11-q59-plan-v1"
-_HARDWARE_INVARIANT = "Q11/Q59: certified metadata-only hardware plans over one executable revision"
+_HARDWARE_INVARIANT = "Q11/Q33/Q59: certified metadata-only hardware plans over one executable revision"
 _MAX_READ_GROUP_BYTES = 32 * 1024 * 1024
 _MAX_PLAN_METADATA_BYTES = 4 * 1024**3
 _CASES = {
@@ -1526,7 +1530,7 @@ def _hardware_plan(
     )
     fresh_latency = max(fresh_io_latency, fresh["certified_latency_ns_total"])
     plan = {
-        "plan_version": _HARDWARE_PLAN_VERSION,
+        "plan_version": HARDWARE_PLAN_VERSION,
         "plan_id": _digest("unsealed-hardware-plan"),
         "plan_name": name,
         "profile_predicate": predicate,
@@ -1582,6 +1586,9 @@ def _hardware_plan(
         "weight_payload_bytes": 0,
     }
     plan["plan_id"] = _digest({field: plan[field] for field in plan if field != "plan_id"})
+    defects = validate("hardware_plan", plan)
+    if defects:
+        _hardware_reject("INVALID_REQUEST", name, "; ".join(defects[:8]))
     return plan, executable_bytes
 
 
@@ -1626,13 +1633,18 @@ def _hardware_catalog(
     if any(size != executable_bytes for _, size in plans_and_sizes):
         _hardware_reject("CAPABILITY_MISMATCH", certificate["certificate_id"], "hardware plans disagree on executable capacity")
     catalog = {
-        "version": _HARDWARE_VERSION,
+        "version": HARDWARE_PLAN_CATALOG_VERSION,
         "catalog_id": _digest("unsealed-hardware-catalog"),
         "q19_certificate_digest": certificate["certificate_id"],
         "base_execution_plan_id": base_plan["plan_id"],
         "plans": plans,
     }
     catalog["catalog_id"] = _digest({field: catalog[field] for field in catalog if field != "catalog_id"})
+    defects = validate("hardware_plan_catalog", catalog)
+    if defects:
+        _hardware_reject(
+            "INVALID_REQUEST", certificate["certificate_id"], "; ".join(defects[:8])
+        )
     cap = min(executable_bytes // 100, _MAX_PLAN_METADATA_BYTES)
     plan_metadata_bytes = _hardware_sum(
         (len(canonical_bytes(plan)) for plan in plans),
@@ -1660,6 +1672,9 @@ def _verified_hardware_catalog(
     index_bytes: int,
     object_id: str,
 ) -> dict:
+    defects = validate("hardware_plan_catalog", value)
+    if defects:
+        _hardware_reject("ROOT_INVALID", object_id, "; ".join(defects[:8]))
     catalog = _hardware_record(value, _HARDWARE_CATALOG_FIELDS, object_id, "hardware plan catalog")
     plans = _hardware_items(catalog["plans"], object_id, "stored hardware plans")
     expected = _hardware_catalog(

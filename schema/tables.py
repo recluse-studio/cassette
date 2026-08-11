@@ -1304,6 +1304,8 @@ ADAPTER_PROTOCOLS = {'codex': {'adapter_version': 'openai-responses@9c8e1216bdae
                                          'required_wire': [],
                                          'static': {},
                                          'stream': 'sse'}}}}
+HARDWARE_PLAN_VERSION = 'q11-q59-plan-v1'
+HARDWARE_PLAN_CATALOG_VERSION = 'q11-q59-hardware-plans-v1'
 CERTIFICATE_DIMENSIONS = {'mathematics': ['target',
                  'condition_metrics',
                  'compatibility',

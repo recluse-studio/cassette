@@ -5434,3 +5434,269 @@ more forcefully that the new check was rigorous. It was to let an older step con
 the contradiction, and change the code. The final tree includes Kimi's confidence, Opus's dissent,
 my additional findings, Drew's insistence that the findings remain visible and actionable, and the
 test that refused my first repair. This entry now joins that exact snapshot before S20 begins.
+
+
+**Kimi K3 Max (GitHub Copilot Harness)**
+
+#### Entry 59 — 2026-08-11, S20, the catalog guard, and the difference between a production hole and a fixture that catches the wrong failure
+
+Drew asked for this entry, and it arrives carrying two corrections I verified before I would write
+them. The first is about my own S20 review. The second is about the tree, which moved again while
+I worked — Entry 58 records a queue restructure, and the working tree now carries the remediation
+that restructure required. This entry is written against the commit I reviewed, `77a1c0e`, named
+so the next reader can check me with `git show` rather than trust my memory.
+
+My S20 review verified the plan machinery end to end: one-, two-, and three-plan roots share one
+executable identity; reversed specification order reproduces the same root; C1, C2, and C3 select
+their plans at the three named latencies; one byte per second below the floor refuses; a
+weight-payload field is structurally impossible and a resealed nonzero payload is refused; budget
+dishonesty is caught; every entry-point shape confusion refuses typed. The baseline reproduced —
+37 of 37 in 63.55 seconds, ledger clean, five pins. All of that holds.
+
+The correction is about the one finding I reported as a live defect. My P3 mutation removed the
+catalog-detachment comparison in `_verified_hardware_catalog`, the fixture stayed green, and my
+separating injection admitted a forged catalog with `description_budget.total_bytes` tampered to
+17. I called that a production admission. Sol's rebuttal is the correct framing, and I confirmed
+it against the reviewed commit rather than his prose: the fixture's forged root derives from the
+source root at test line 438, which discards the repacked physical index, so the attack fails on a
+layout mismatch before the budget-binding check is what is actually being exercised. Current HEAD
+does refuse the forged catalog — I reproduced the `CAPABILITY_MISMATCH` myself at the
+metadata-only-plans invariant. The truth is therefore narrower and more precise than either my
+first report or my first instinct to defend it: the production guard exists and works, and the
+fixture that is supposed to prove it passes for the wrong reason, because its attack construction
+fails an earlier check. A test that catches the wrong failure is a real defect — it just isn't the
+defect I named. The repair is the one Sol specifies: derive the forged root from the planned root,
+preserve and assert the physical index, and confirm that deleting only the catalog comparison
+makes the fixture fail. That repair is in the working tree now, and it is not mine.
+
+The second correction is the generated-contract gap, which Sol found and I did not. Q33 requires
+plans to be generated and validated from schemas, and S20 introduced the hardware plan while
+leaving its fields as handwritten sets in `compiler.py` with no generated `hardware_plan` contract
+— I confirmed the absence directly. I had read the catalog machinery and proven its runtime
+behavior, and I did not check whether the record crossing the persistence boundary had a generated
+validator, which is the same specification-conformance miss Claude's Entry 47 named at S17 and I
+recorded without applying. The remediation in the working tree — `hardware_plan.json` and
+`hardware_plan_catalog.json` generated, validated before semantic reconstruction — is the correct
+shape. Sol's narrowing of his own claim is also correct: the S19 preparation bundle is also
+composite, so the hardware plan is not the sole unvalidated record, but it is the one S20 added
+and the one Q33 names.
+
+What I owe the record, stated plainly. Two entries running, a more precise reviewer has corrected
+a finding of mine by reading the code I cited more carefully than I cited it — Entry 55's
+provenance race, and now Entry 59's production-versus-fixture framing. Both times the correction
+was available one command earlier than I stopped. I do not want to keep supplying that pattern.
+The guard I would hand the next reviewer is the one Entry 50 already wrote and I keep failing to
+run first: a surface signal licenses a question, never a finding, and when the finding is "the
+production code admits a forged record," the question is "which guard fired, and was it the one the
+test was built to prove." I answered the first half and not the second.
+
+The step stands sound at its runtime boundary, and the two remediations — the generated contract
+and the honest fixture — are the right size. Neither reopens the runtime evidence. S20 should be
+closed honestly after they land. S21 is next, and it is the first step that mutates a certified
+revision, which is a different trust surface than anything I have reviewed.
+
+State at close, for whoever resumes: my S20 artifacts are in `/tmp/cassette-s20-review/`; the
+verification tree and mutation tree are deleted. The repository is unchanged by me — HEAD
+`77a1c0e`, the working tree carries Sol's in-progress remediation, no image mounted, this entry
+appended after Entry 58. I did not edit the remediation. I reviewed the committed step, confirmed
+the corrections against the named commit, and recorded them.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 60 — 2026-08-11, the superlative I did not check, and the mutant I did not run
+
+My S20 review produced three findings. One was real, one was overstated inside the sentence that
+carried it, and two were not defects. A fourth defect existed and Kimi found it because they did the
+thing I have twice written is the only thing that converts a review into a result, and then did not
+do.
+
+The real one holds. The hardware plan persists into the root manifest, is digest-sealed, and drives
+plan selection at runtime, and its shape is defined by a handwritten frozen set in `compiler.py`
+while the generated root schema accepts any bounded JSON object in that slot. Sol reproduced it
+directly: a valid S20 root passes the generated schema, and so does the same root with its catalog
+replaced by `{"anything": "goes"}`. Sol also found the citation I did not. I argued from Q59's field
+list and from a pattern across the other persisted records; Q33 states outright that plans are
+generated and validated from schemas. The direct requirement was in the ledger and I reached the
+same conclusion the long way round, through analogy, when a line of the contract said it plainly.
+
+Now the sentence. I wrote that the hardware plan is "the only persisted record shape with no
+generated contract." Sol's correction is that the S19 preparation bundle is also composite, so the
+superlative is false; the Q33 conclusion is untouched.
+
+That failure is a different one from the four I have already recorded, and the difference is the
+reason I am writing this. Entries 44, 47, 50, 52 and 57 all record the same movement: a surface
+signal — an import, a file location, a wall-clock number, a grep result — read as a mechanism before
+I read the mechanism. This time I did read it. I opened the generated slot and found
+`bounded_json_object` with a maximum of sixty-four. I opened `_hardware_record` and confirmed it
+enforces exact set equality and fails closed. I credited the independent catalog regeneration, which
+is genuinely stronger than schema validation against tampering, and I narrowed the finding to shape
+rather than value on that basis. The mechanism work was right.
+
+The error was in the quantifier. I enumerated the persisted records I happened to know had
+contracts, found the hardware plan absent from that list, and then wrote "only" — universally
+quantifying over a set I had assembled from memory rather than closed by inspection. A superlative
+is a claim about everything you did not look at. I had built the discipline for checking mechanisms
+and none at all for checking scope, and the two need separate habits because the first one does not
+catch the second.
+
+The other two findings were not defects, and I accept both rulings. `store.py` under S20's recorded
+`discovered_scope` is permitted by the scope-lock rule as written; my argument was that S19 had just
+been corrected for the same shape, but that correction was a normalization rather than a required
+repair, and inheriting a normalization is not a violation. And the two objects both called "plan"
+become distinguishable the moment the generated contracts are named, so no rename is warranted.
+
+The part I would not want left out. Kimi's finding is that the S20 fixture's forged root derives
+from the source root rather than the planned root, discarding the repacked physical index, so an
+unrelated layout mismatch rejects the attack before the budget-binding comparison is ever reached.
+Delete only the catalog-to-certificate comparison and the fixture stays green. That is a surviving
+mutant in a step whose closeout records four guard-removal mutations, and it is invisible to every
+instrument I used. All three of my findings came from static reading — schema properties, a frozen
+set, a grep for validate calls. Static reading found a real contract gap and could not have found
+this, because a fixture that catches the wrong failure looks identical to a fixture that works until
+you remove a guard and watch nothing happen.
+
+I have now written twice that the mutation is the only part of a review that stops being an opinion,
+and once that its absence made a review weaker evidence by exactly that measure. I then reviewed S20
+without running one. The lesson does not appear to transfer by being written down.
+
+One thing neither Kimi nor I said, and Sol did. I reported a missing contract; Kimi reported a weak
+fixture; both are true, and both read as though S20 were admitting forged plans. It is not. Current
+HEAD rejects a resealed catalog whose description budget moves from 16 to 17, and Sol reproduced
+that rejection before ruling on either of us. The sentence the step needed was that Cassette is not
+currently accepting forged hardware plans, its plan format lacks its required generated rulebook,
+and one test passes for the wrong reason. Two reviewers found the two halves and neither wrote the
+sentence that put them together, which is a fair description of what an adjudicator is for.
+
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 61 — 2026-08-11, the final stretch, the plan that stayed one model, and the proof that had been proving something else
+
+The work immediately before S20 matters to this entry because Drew did not enter the final machine
+steps by asking for momentum. After the aggregate audit, its repairs, the queue rewrite, and the
+full suite that corrected my first delta-root rule, he asked how we felt about continuing. The
+answer I could support was yes: not because nineteen closed steps guaranteed the next nine, but
+because the current tree had one enforced removal map, one governed source boundary, bounded
+generated contracts, repaired storage semantics, a dependency-ordered queue, and a suite that had
+already contradicted me once and forced a narrower implementation. We were ready to continue under
+the contract. We were not at the release boundary, and the controlled Apple and storage classes in
+the machine phase were still specifications and fixtures rather than live hardware qualifications.
+That distinction governed S20 before its first line changed.
+
+S20 addressed a portability problem that is easy to solve badly. Cassette cannot carry a separate
+copy of a frontier model for every Mac and drive class; the external cartridge is supposed to hold
+one authoritative parameter capacity. The step therefore attached several small, replaceable
+hardware plans to the same compiled revision. Each plan names profile predicates, page order, read
+groups, concurrency, prefetch policy, memory schedule, expected latency, and exact specializations
+of the immutable Q19 certificate. None contains weight bytes. Changing a plan changes physical
+policy and the root manifest, while the executable identity, tensor maps, semantic page digests,
+precision contribution, and selected physical index remain the same.
+
+The implementation made that separation executable. `compiler.py` derived the catalog from the
+Q19 certificate and the store's verified page index, rejected noncontiguous read groups, bounded
+plan metadata together with the index, and selected the lowest predicted-latency plan whose
+measured profile satisfied its recorded floor. The fixture exercised the three Q39 class records,
+two competing C1 plans, a one-byte-per-second bandwidth miss, a pre-repacked physical index,
+reversed specification order, exact and fresh-correction certificates, copied-weight attacks, and
+independently resealed budget attacks. The first implementation commit and its queue-close commit
+passed thirty-seven tests and the ledger. At that point S20 was closed according to the evidence we
+had written.
+
+Drew then supplied the Opus and Kimi reviews together. He did not ask me to salute whichever
+review sounded harsher. He asked me to assess them and, after that assessment, to remediate the
+findings we agreed were real. This difference has become one of the working laws of Cassette. A
+review is a set of claims against named acceptance boundaries; even a convincing claim remains a
+hypothesis until the code at the named commit reproduces it. Agreement between two agents can
+improve search coverage, but agreement is not execution evidence.
+
+Opus's main finding reproduced. Q33 says that plans are generated from bounded schemas and
+validated before allocation or execution. S20 had represented its plan shape with handwritten
+field sets in `compiler.py`, while the generated root contract treated the catalog as a bounded but
+otherwise generic object. I replaced a valid catalog with an unrelated bounded object and the root
+schema accepted the shape. The later semantic regeneration still protected runtime truth, so this
+was not a route for arbitrary values to become executable policy, but it was a direct contract
+failure: the persisted plan had no generated rulebook of its own. Opus's broader claim that this
+was the only persisted composite record without such a contract did not survive inspection; the
+S19 preparation bundle is another. The quantifier was wrong and the S20 finding remained right.
+
+The other Opus findings did not justify product changes. `store.py` was lawful discovered scope
+because it remained the sole writer of roots and physical indexes, and the two records whose names
+contained “plan” became unambiguous once the generated contracts gave each one an exact type.
+Renaming working authority boundaries to make a review easier to narrate would have been polishing,
+not remediation.
+
+Kimi's report required a finer correction. It said that removing the catalog-to-certificate guard
+allowed a forged seventeen-byte description budget through production. I first reproduced the
+accepted code without changing it. The forged catalog was refused with
+`CAPABILITY_MISMATCH`; Cassette was not admitting the false budget. I then removed only the guard
+Kimi named and reran the owning fixture. The fixture remained green. That result proved a defect,
+but not the production defect the review had named.
+
+The fixture had built its forged root from the original source root rather than from the planned
+root under attack. In doing so, it discarded the selected repacked physical index. Verification
+then rejected the forged root on a layout disagreement before the catalog-binding comparison could
+answer. The test was green because a different guard had fired first. This is a particularly
+dangerous form of evidence: the input is hostile, the exception is typed, the suite passes, and the
+assertion still proves nothing about the branch named in the closeout. Reading the test did not
+settle it. Removing one guard did.
+
+The remediation answered both failures without inventing another authority. The schema generator
+now emits exact, recursively bounded `hardware_plan` and `hardware_plan_catalog` contracts and the
+generated tables own their version constants. `compiler.py` validates a plan when it creates one,
+validates a catalog when it creates one, and validates a persisted catalog before it attempts
+semantic reconstruction. Schema validation answers whether the record has a lawful finite shape;
+independent regeneration from the certificate, pages, and physical index answers whether the
+claims are true. Those checks are adjacent because their jobs are different.
+
+The repaired hostile fixture now derives its forged root from the actual planned root and asserts
+that the selected physical page mapping remains the one under attack. Five shape-valid budget and
+latency changes reach semantic regeneration and fail with `CAPABILITY_MISMATCH`; the copied-weight
+claim fails earlier with `ROOT_INVALID`, because the generated contract makes nonzero weight
+payload structurally impossible. When I again removed only the catalog-to-certificate comparison
+in a disposable tree, the seventeen-byte budget reached admission and the owning assertion failed.
+The test now proves the guard it names.
+
+One less visible design decision came from checking the repair itself. JSON Schema can declare
+large arrays unique, but the generated validator implements general `uniqueItems` by comparing
+members pairwise. Applied to page orders or plan collections, that convenience would turn a linear
+validation boundary into quadratic work on attacker-adjacent persisted data. I did not add it.
+The bounded generated schema owns type, size, nesting, and field closure; the existing semantic
+reconstruction owns exact page uniqueness, ordering, and set equality using the compiled revision's
+canonical evidence. Minimum code did not mean asking a generic validator to perform an expensive
+job that the semantic authority already performs more exactly.
+
+The repaired focused surface passed five tests in 5.05 seconds. The complete pinned macOS suite
+passed thirty-seven of thirty-seven in 162.41 seconds, and the ledger reported zero violations at
+7,306 product lines, 5,291 test lines, 577 tool lines, and 108 generated lines, with five exact
+dependencies, one process, and one Python runtime. No test process or cartridge image remained,
+the diff check was clean, and the disposable mutation tree was moved to Trash after its evidence
+was recorded. These numbers do not replace the clause evidence above; they establish that the
+repair did not purchase its local result by breaking an earlier step.
+
+Kimi and Opus then appended Entries 59 and 60 in their own names. I have left those accounts
+distinct from mine. Kimi corrected the difference between a production admission and a fixture
+that failed for the wrong reason. Opus corrected his unverified superlative and recorded the
+mutation he had advocated in earlier entries but had not run here. Their testimony belongs in the
+same snapshot as the code it influenced, without being rewritten into my voice or converted into
+evidence I did not personally reproduce.
+
+Even while I prepared this account, Drew caught one more narrowing. I said I would write the S20
+story, and he reminded me that other explorations and decisions had occurred around it. He was
+right. `BUILD_STORY.md` is not a long release log whose unit is the queue row. The unrecorded unit
+also included the decision that the repaired machine phase was ready to continue, the boundary
+between class fixtures and live hardware proof, the refusal to turn reviewer confidence into
+authority, the distinction between a product defect and a proof defect, the validator-complexity
+decision, and the preservation of concurrent testimony in a moving worktree. Omitting those would
+leave the code queryable and the collaboration missing, which is the exact loss this file exists
+to prevent.
+
+S20 can now close again through the repository's two-commit ritual. S21 will inherit one cartridge
+whose parameter authority remains singular, several generated and certificate-bound physical
+plans, and a test that fails when its decisive semantic guard disappears. It will also inherit the
+larger discipline from this interval: inspect what a review actually proved, inspect what a test
+actually reached, and let the repository contradict the narrator before the narrator closes the
+step.

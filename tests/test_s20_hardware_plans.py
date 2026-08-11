@@ -1,4 +1,4 @@
-# test_s20_hardware_plans.py — Q11/Q59 portable-plan acceptance over one immutable executable capacity; depends on compiler.py, errors.py, store.py, tests/compiler_fixture.py, tests/test_s13_pager.py.
+# test_s20_hardware_plans.py — Q11/Q33/Q59 portable-plan acceptance over one immutable executable capacity; depends on compiler.py, errors.py, schema/validator.py, store.py, tests/compiler_fixture.py, tests/test_s13_pager.py.
 """Prove plan replacement and selection without copied weights or mutable certificate budgets."""
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import compiler
 from compiler import prepare_hardware_plans, select_hardware_plan, verify_hardware_plans
 from compiler_fixture import manifest
 from errors import CassetteError
+from schema.validator import validate
 from store import (
     ArtifactIdentity,
     IdentityTuple,
@@ -262,8 +263,8 @@ def _measured(spec: dict, certificate: dict) -> dict:
     }
 
 
-def test_q11_q59_certified_hardware_plans_switch_without_weight_duplication(tmp_path):
-    """Q11/Q59 acceptance: add, delete, and select exact-budget plans over unchanged pages."""
+def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(tmp_path):
+    """Q11/Q33/Q59: switch bounded exact-budget plans over unchanged pages."""
 
     cartridge, compiled_root, source_identity, plan_digest, certificate = _compiled_fixture(tmp_path)
     compiled = load_root(cartridge, compiled_root)
@@ -310,6 +311,7 @@ def test_q11_q59_certified_hardware_plans_switch_without_weight_duplication(tmp_
         "c1-air-32", "c2-max-128", "c3-ultra-512"
     ]
     for plan in plans:
+        assert validate("hardware_plan", plan) == []
         assert plan["q19_certificate_digest"] == certificate["certificate_id"]
         assert plan["weight_payload_bytes"] == 0
         assert plan["description_budget"] == {"peak_bytes": 16, "total_bytes": 16}
@@ -359,6 +361,7 @@ def test_q11_q59_certified_hardware_plans_switch_without_weight_duplication(tmp_
         "certified_latency_ns_total": 3000,
     }
     planned_root = load_root(cartridge, all_plan_root)
+    assert validate("hardware_plan_catalog", planned_root["plans"][1]) == []
     allowance = sum(location.length for location in mapping) // 100
     assert sum(len(canonical_bytes(plan)) for plan in plans) <= allowance
     assert len(canonical_bytes(planned_root["plans"])) + page_index_byte_count(
@@ -437,13 +440,15 @@ def test_q11_q59_certified_hardware_plans_switch_without_weight_duplication(tmp_
         _seal(attacked, "catalog_id")
         forged = derive_root(
             cartridge,
-            planned_root["plans"][0]["source_root"],
+            all_plan_root,
             compiler._compiled_identity_material(planned_root),
             (planned_root["plans"][0], attacked),
         )
+        assert page_locations(cartridge, forged) == mapping
         with pytest.raises(CassetteError) as detached:
             verify_hardware_plans(cartridge, forged, source_identity, plan_digest)
-        assert detached.value.code == "CAPABILITY_MISMATCH", (field, member)
+        expected_code = "ROOT_INVALID" if member == "weight_payload_bytes" else "CAPABILITY_MISMATCH"
+        assert detached.value.code == expected_code, (field, member)
 
     excessive = []
     for index in range(128):

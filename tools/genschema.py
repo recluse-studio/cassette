@@ -74,6 +74,8 @@ Q77_PROVENANCE_STATUSES = [
     "UNSUPPORTED",
 ]
 Q76_FIELD_STATUSES = ["BEST_EFFORT", "EXACT", "PROVIDER_MANAGED", "UNSUPPORTED"]
+HARDWARE_PLAN_VERSION = "q11-q59-plan-v1"
+HARDWARE_PLAN_CATALOG_VERSION = "q11-q59-hardware-plans-v1"
 
 
 def adapter_field(
@@ -1719,6 +1721,159 @@ EXECUTION_PLAN = record(
     },
 )
 
+HARDWARE_PROFILE_PREDICATE = record(
+    "Certified hardware profile predicate",
+    "Q11/Q33/Q59",
+    {
+        "apple_class": identifier(),
+        "storage_class": identifier(),
+        "request_class": identifier(),
+        "minimum_unified_memory_bytes": integer(),
+        "minimum_recommended_working_set_bytes": integer(),
+        "minimum_sustained_read_bytes_per_second": integer(minimum=1),
+        "maximum_p99_read_latency_ns": integer(),
+        "minimum_storage_capacity_bytes": integer(),
+        "requires_writable_storage": {"type": "boolean"},
+        "profile_evidence_digest": digest(),
+        "required_operator_case_ids": bounded_array(identifier(), minimum=1),
+        "required_apple_features": bounded_array(identifier(), minimum=1),
+    },
+)
+HARDWARE_BYTE_BUDGET = record(
+    "Hardware-plan byte budget",
+    "Q33/Q59",
+    {"peak_bytes": integer(), "total_bytes": integer()},
+)
+HARDWARE_FRESH_READ_BUDGET = record(
+    "Hardware-plan exact or fresh-read budget",
+    "Q19/Q33/Q59",
+    {
+        "mode": bounded_text(enum=["EXACT", "FRESH"]),
+        "samples_peak": integer(),
+        "samples_total": integer(),
+        "traffic_peak": integer(),
+        "traffic_total": integer(),
+        "traffic_unit": bounded_text(enum=["BYTES", "SCALARS"]),
+        "physical_bytes_peak": integer(),
+        "physical_bytes_total": integer(),
+        "physical_page_reads_peak": integer(),
+        "physical_page_reads_total": integer(),
+        "certified_latency_ns_total": integer(),
+    },
+)
+HARDWARE_PLAN = record(
+    "Certified hardware execution plan",
+    "Q11/Q33/Q59",
+    {
+        "plan_version": bounded_text(enum=[HARDWARE_PLAN_VERSION]),
+        "plan_id": digest(),
+        "plan_name": identifier(),
+        "profile_predicate": HARDWARE_PROFILE_PREDICATE,
+        "q19_certificate_digest": digest(),
+        "condition_selector": bounded_array(COVER_ENTRY, minimum=1),
+        "atom_refs": bounded_array(
+            record(
+                "Hardware-plan atom reference",
+                "Q19/Q33/Q59",
+                {"atom_id": identifier(), "description_digest": digest()},
+            ),
+            minimum=1,
+        ),
+        "description_budget": HARDWARE_BYTE_BUDGET,
+        "metadata_budget": HARDWARE_BYTE_BUDGET,
+        "fresh_sample_or_exact_read_budget": HARDWARE_FRESH_READ_BUDGET,
+        "error_risk_horizon": record(
+            "Hardware-plan mathematical error, risk, and horizon",
+            "Q19/Q33/Q59",
+            {
+                "eta_rep": number(),
+                "epsilon_exec": number(),
+                "delta_exec_total": number(maximum=1.0),
+                "horizon": integer(minimum=1),
+            },
+        ),
+        "page_order": bounded_array(blake3_digest(), minimum=1),
+        "read_groups": bounded_array(
+            record(
+                "Contiguous physical read group",
+                "Q11/Q33/Q59",
+                {
+                    "ordinal": integer(),
+                    "page_digests": bounded_array(blake3_digest(), minimum=1),
+                    "bytes": integer(minimum=1),
+                },
+            ),
+            minimum=1,
+        ),
+        "precision_budget": record(
+            "Hardware-plan precision reference",
+            "Q33/Q59",
+            {"precision_planes_digest": digest(), "page_payload_bytes": integer(minimum=1)},
+        ),
+        "kernel_dispatch": record(
+            "Hardware-plan generated-kernel dispatch reference",
+            "Q30/Q33/Q59",
+            {
+                "dispatch_digest": digest(),
+                "case_ids": bounded_array(identifier(), minimum=1),
+                "apple_features": bounded_array(identifier(), minimum=1),
+            },
+        ),
+        "concurrency": record(
+            "Hardware-plan I/O concurrency",
+            "Q11/Q33/Q59",
+            {"io_queue_depth": integer(minimum=1, maximum=64)},
+        ),
+        "prefetch_policy": record(
+            "Hardware-plan prefetch policy",
+            "Q11/Q33/Q59",
+            {
+                "kind": bounded_text(enum=["NONE", "ORDERED"]),
+                "lookahead_pages": integer(),
+            },
+        ),
+        "memory_schedule": record(
+            "Hardware-plan memory schedule",
+            "Q19/Q33/Q59",
+            {
+                "page_group_bytes_peak": integer(minimum=1),
+                "prefetch_bytes_peak": integer(),
+                "index_bytes": integer(minimum=1),
+                "description_bytes_peak": integer(),
+                "metadata_bytes_peak": integer(),
+                "fresh_bytes_peak": integer(),
+                "working_set_bytes_peak": integer(minimum=1),
+            },
+        ),
+        "expected_metrics": record(
+            "Hardware-plan expected physical metrics",
+            "Q11/Q33/Q59",
+            {
+                "page_read_bytes": integer(minimum=1),
+                "index_bytes": integer(minimum=1),
+                "read_group_count": integer(minimum=1),
+                "fresh_read_bytes_total": integer(),
+                "fresh_page_reads_total": integer(),
+                "predicted_setup_latency_ns": integer(),
+                "predicted_fresh_latency_ns": integer(),
+                "predicted_total_latency_ns": integer(),
+            },
+        ),
+        "weight_payload_bytes": integer(maximum=0),
+    },
+)
+HARDWARE_PLAN_CATALOG = record(
+    "Certified hardware-plan catalog",
+    "Q11/Q33/Q59",
+    {
+        "version": bounded_text(enum=[HARDWARE_PLAN_CATALOG_VERSION]),
+        "catalog_id": digest(),
+        "q19_certificate_digest": digest(),
+        "base_execution_plan_id": digest(),
+        "plans": bounded_array(ref("hardware_plan"), minimum=1),
+    },
+)
+
 
 def implemented_certificate_dimensions() -> dict[str, list[str]]:
     """Describe the certificate fields implemented by the generated schemas."""
@@ -1951,6 +2106,8 @@ CONTRACTS: dict[str, dict] = {
     "mathematical_certificate": MATHEMATICAL_CERTIFICATE,
     "operator_dispatch": OPERATOR_DISPATCH,
     "execution_plan": EXECUTION_PLAN,
+    "hardware_plan": HARDWARE_PLAN,
+    "hardware_plan_catalog": HARDWARE_PLAN_CATALOG,
     "root": {
         **record(
             "Immutable cartridge root manifest",
@@ -2129,6 +2286,8 @@ def emit(outdir: Path) -> dict[str, str]:
         f"Q76_FIELD_STATUSES = {pprint.pformat(Q76_FIELD_STATUSES, sort_dicts=True, width=100)}\n"
         f"ADAPTER_EVENT_FORMATS = {pprint.pformat(ADAPTER_EVENT_FORMATS, sort_dicts=True, width=100)}\n"
         f"ADAPTER_PROTOCOLS = {pprint.pformat(ADAPTER_PROTOCOLS, sort_dicts=True, width=100)}\n"
+        f"HARDWARE_PLAN_VERSION = {HARDWARE_PLAN_VERSION!r}\n"
+        f"HARDWARE_PLAN_CATALOG_VERSION = {HARDWARE_PLAN_CATALOG_VERSION!r}\n"
         f"CERTIFICATE_DIMENSIONS = {pprint.pformat(certificate_dimensions, sort_dicts=True, width=100)}\n"
     )
     put("tables.py", tables)

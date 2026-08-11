@@ -1,4 +1,4 @@
-# test_s03_schema.py — F0 fixtures for the S03 Q6/Q9/Q31/Q50/Q57/Q77 contracts; depends on tools/genschema.py, schema/tables.py, schema/validator.py, tools/ledger.py.
+# test_s03_schema.py — F0 fixtures for the Q6/Q9/Q31/Q33/Q50/Q57/Q77 contracts; depends on tools/genschema.py, schema/tables.py, schema/validator.py, tools/ledger.py.
 """S03 proves the generated contracts, serialization round-trip, and hand-edit rejection."""
 
 import hashlib
@@ -28,6 +28,8 @@ EXPECTED_KINDS = {
     "capability_profile",
     "error",
     "execution_plan",
+    "hardware_plan",
+    "hardware_plan_catalog",
     "mathematical_certificate",
     "negotiated_capability",
     "operation",
@@ -114,6 +116,17 @@ EXPECTED_FIELDS = {
         "layout_digest", "precision_planes_digest", "semantic_manifest_digest",
         "invalidation_graph_digest", "dispatch", "resource_limits", "artifact_refs",
         "weight_payload_bytes",
+    },
+    "hardware_plan": {
+        "plan_version", "plan_id", "plan_name", "profile_predicate",
+        "q19_certificate_digest", "condition_selector", "atom_refs",
+        "description_budget", "metadata_budget", "fresh_sample_or_exact_read_budget",
+        "error_risk_horizon", "page_order", "read_groups", "precision_budget",
+        "kernel_dispatch", "concurrency", "prefetch_policy", "memory_schedule",
+        "expected_metrics", "weight_payload_bytes",
+    },
+    "hardware_plan_catalog": {
+        "version", "catalog_id", "q19_certificate_digest", "base_execution_plan_id", "plans",
     },
 }
 EXPECTED_OPTIONAL = {
@@ -447,6 +460,89 @@ EXECUTION_PLAN = {
     "artifact_refs": [DIGESTS[1]],
     "weight_payload_bytes": 0,
 }
+HARDWARE_PLAN = {
+    "plan_version": "q11-q59-plan-v1",
+    "plan_id": DIGESTS[10],
+    "plan_name": "fixture-hardware-plan",
+    "profile_predicate": {
+        "apple_class": "c1_air_32",
+        "storage_class": "s1_usb4_nvme_2tb",
+        "request_class": "INFERENCE",
+        "minimum_unified_memory_bytes": 32 * 1024**3,
+        "minimum_recommended_working_set_bytes": 16 * 1024**3,
+        "minimum_sustained_read_bytes_per_second": 500_000_000,
+        "maximum_p99_read_latency_ns": 2_000_000,
+        "minimum_storage_capacity_bytes": 2_000_000_000_000,
+        "requires_writable_storage": False,
+        "profile_evidence_digest": DIGESTS[11],
+        "required_operator_case_ids": ["mlx.matmul.f32.2x3_3x2"],
+        "required_apple_features": ["apple_silicon", "metal"],
+    },
+    "q19_certificate_digest": DIGESTS[0],
+    "condition_selector": [
+        {"condition_id": "condition.a", "atom_id": "atom.ab"},
+        {"condition_id": "condition.b", "atom_id": "atom.ab"},
+    ],
+    "atom_refs": [{"atom_id": "atom.ab", "description_digest": DIGESTS[12]}],
+    "description_budget": {"peak_bytes": 4096, "total_bytes": 4096},
+    "metadata_budget": {"peak_bytes": 1024, "total_bytes": 1024},
+    "fresh_sample_or_exact_read_budget": {
+        "mode": "EXACT",
+        "samples_peak": 0,
+        "samples_total": 0,
+        "traffic_peak": 0,
+        "traffic_total": 0,
+        "traffic_unit": "BYTES",
+        "physical_bytes_peak": 0,
+        "physical_bytes_total": 0,
+        "physical_page_reads_peak": 0,
+        "physical_page_reads_total": 0,
+        "certified_latency_ns_total": 0,
+    },
+    "error_risk_horizon": {
+        "eta_rep": 0.125,
+        "epsilon_exec": 0.01,
+        "delta_exec_total": 0.001,
+        "horizon": 1,
+    },
+    "page_order": [DIGESTS[1]],
+    "read_groups": [{"ordinal": 0, "page_digests": [DIGESTS[1]], "bytes": 4096}],
+    "precision_budget": {"precision_planes_digest": DIGESTS[6], "page_payload_bytes": 4096},
+    "kernel_dispatch": {
+        "dispatch_digest": OPERATOR_DISPATCH["dispatch_digest"],
+        "case_ids": ["mlx.matmul.f32.2x3_3x2"],
+        "apple_features": ["apple_silicon", "metal"],
+    },
+    "concurrency": {"io_queue_depth": 1},
+    "prefetch_policy": {"kind": "NONE", "lookahead_pages": 0},
+    "memory_schedule": {
+        "page_group_bytes_peak": 4096,
+        "prefetch_bytes_peak": 0,
+        "index_bytes": 76,
+        "description_bytes_peak": 4096,
+        "metadata_bytes_peak": 1024,
+        "fresh_bytes_peak": 0,
+        "working_set_bytes_peak": 9292,
+    },
+    "expected_metrics": {
+        "page_read_bytes": 4096,
+        "index_bytes": 76,
+        "read_group_count": 1,
+        "fresh_read_bytes_total": 0,
+        "fresh_page_reads_total": 0,
+        "predicted_setup_latency_ns": 2_008_192,
+        "predicted_fresh_latency_ns": 0,
+        "predicted_total_latency_ns": 2_008_192,
+    },
+    "weight_payload_bytes": 0,
+}
+HARDWARE_PLAN_CATALOG = {
+    "version": "q11-q59-hardware-plans-v1",
+    "catalog_id": DIGESTS[13],
+    "q19_certificate_digest": DIGESTS[0],
+    "base_execution_plan_id": DIGESTS[9],
+    "plans": [HARDWARE_PLAN],
+}
 Q77_CAPABILITY = {
     "cassette_protocol": "1",
     "adapter_version": "fixture-v1",
@@ -584,6 +680,8 @@ GOLDEN = {
     "mathematical_certificate": MATHEMATICAL_CERTIFICATE,
     "operator_dispatch": OPERATOR_DISPATCH,
     "execution_plan": EXECUTION_PLAN,
+    "hardware_plan": HARDWARE_PLAN,
+    "hardware_plan_catalog": HARDWARE_PLAN_CATALOG,
     "root": {
         "identity": DIGESTS[0],
         "parents": [],
@@ -632,7 +730,7 @@ def run_generator(root: Path) -> subprocess.CompletedProcess:
 
 
 def test_exact_contract_set_is_json_schema_and_round_trips():
-    """Q6/Q9/Q31/Q50/Q57/Q77: each record is generated, exact, and round-trippable."""
+    """Q6/Q9/Q31/Q33/Q50/Q57/Q77: each record is generated, exact, and round-trippable."""
     assert tuple(Q77_FIELDS) == EXPECTED_Q77_FIELDS
     assert set(GOLDEN) == EXPECTED_KINDS
     assert {path.stem for path in (REPO / "schema").glob("*.json") if path.name != "MANIFEST.json"} == EXPECTED_KINDS
@@ -647,7 +745,7 @@ def test_exact_contract_set_is_json_schema_and_round_trips():
         assert validate(kind, decoded) == [], f"{kind} round-trip rejected"
 
 
-def test_q31_q50_q57_shapes_are_complete():
+def test_q31_q33_q50_q57_shapes_are_complete():
     """Q6/Q9/Q31/Q33/Q50/Q57/Q77: every record is exact and allocation-bounded."""
     assert set(EXPECTED_FIELDS) == EXPECTED_KINDS
     for kind, fields in EXPECTED_FIELDS.items():
@@ -660,7 +758,7 @@ def test_q31_q50_q57_shapes_are_complete():
 
 
 def test_malformed_f0_instances_are_rejected():
-    """Q6/Q9/Q31/Q50/Q57/Q77: F0 rejects omissions, type errors, unknowns, and bad bounds."""
+    """Q6/Q9/Q31/Q33/Q50/Q57/Q77: F0 rejects omissions, types, unknowns, and bounds."""
     missing = dict(GOLDEN["error"])
     del missing["code"]
     assert any("required field missing" in defect for defect in validate("error", missing))
@@ -704,6 +802,28 @@ def test_malformed_f0_instances_are_rejected():
     assert any("expected object" in defect for defect in validate("root", malformed_delta))
     malformed_plan = {**GOLDEN["root"], "plans": ["opaque-plan"]}
     assert any("expected object" in defect for defect in validate("root", malformed_plan))
+    missing_hardware_field = json.loads(json.dumps(GOLDEN["hardware_plan"]))
+    del missing_hardware_field["metadata_budget"]
+    assert any(
+        "hardware_plan.metadata_budget: required field missing" in defect
+        for defect in validate("hardware_plan", missing_hardware_field)
+    )
+    copied_hardware_weight = {
+        **GOLDEN["hardware_plan"],
+        "weight_payload_bytes": 1,
+    }
+    assert any(
+        "hardware_plan.weight_payload_bytes: value is above 0" in defect
+        for defect in validate("hardware_plan", copied_hardware_weight)
+    )
+    malformed_hardware_catalog = {
+        **GOLDEN["hardware_plan_catalog"],
+        "plans": ["opaque-plan"],
+    }
+    assert any(
+        "hardware_plan_catalog.plans[0]: expected object" in defect
+        for defect in validate("hardware_plan_catalog", malformed_hardware_catalog)
+    )
     malformed_parent = {**GOLDEN["root"], "parents": ["anything-nonempty"]}
     assert any("does not match" in defect for defect in validate("root", malformed_parent))
     bad_error = {**GOLDEN["operation"], "error": {"code": "PAGE_CORRUPT"}}
