@@ -1467,9 +1467,68 @@ def _sampling(values: Sequence[object], parameters: dict) -> object:
     return mx.random.categorical(values[0], key=values[1], **parameters)
 
 
-def _autograd(values: Sequence[object], _: dict) -> object:
+def _autograd_sum(values: Sequence[object], _: dict) -> object:
     mx, _ = _mlx_runtime()
     return mx.grad(mx.sum)(values[0])
+
+
+def _lora_effective(value, base, parameters: dict):
+    mx, _ = _mlx_runtime()
+    factor_a = value[0:1, :]
+    factor_b = value[1, :2].reshape((2, 1))
+    return mx.add(
+        base,
+        mx.multiply(parameters["adapter_scale"], mx.matmul(factor_b, factor_a)),
+    )
+
+
+def _autograd_mse(values: Sequence[object], parameters: dict) -> object:
+    mx, _ = _mlx_runtime()
+    state, base, inputs, target = values
+
+    def loss(value):
+        residual = mx.subtract(
+            mx.matmul(_lora_effective(value, base, parameters), inputs), target
+        )
+        return mx.mean(mx.multiply(residual, residual))
+    return mx.value_and_grad(loss)(state)[1]
+
+
+def _autograd_dpo(values: Sequence[object], parameters: dict) -> object:
+    mx, _ = _mlx_runtime()
+    state, base, inputs, target = values
+
+    def loss(value):
+        scores = mx.matmul(_lora_effective(value, base, parameters), inputs)
+        margin = mx.subtract(
+            mx.subtract(mx.sum(scores[:, 0]), mx.sum(scores[:, 1])), target[0]
+        )
+        return mx.logaddexp(mx.array(0.0, dtype=mx.float32), mx.negative(margin))
+    return mx.value_and_grad(loss)(state)[1]
+
+
+def _autograd_calibration(values: Sequence[object], _: dict) -> object:
+    mx, _ = _mlx_runtime()
+    state, base, inputs, target, calibration = values
+
+    def loss(value):
+        prediction = mx.add(mx.mean(mx.matmul(base, inputs)), value[0])
+        expected = mx.add(mx.mean(target), calibration[0])
+        residual = mx.subtract(prediction, expected)
+        return mx.multiply(residual, residual)
+    return mx.value_and_grad(loss)(state)[1]
+
+
+_AUTOGRAD_EXECUTORS = {
+    "calibration_mean_squared_error": _autograd_calibration,
+    "sum": _autograd_sum,
+    "mean_squared_error": _autograd_mse,
+    "pairwise_logistic": _autograd_dpo,
+}
+
+
+def _autograd(values: Sequence[object], parameters: dict) -> object:
+    return _AUTOGRAD_EXECUTORS[parameters.get("loss", "sum")](values, parameters)
 
 
 def _optimizer(values: Sequence[object], parameters: dict) -> object:

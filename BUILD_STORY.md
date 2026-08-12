@@ -5700,3 +5700,358 @@ plans, and a test that fails when its decisive semantic guard disappears. It wil
 larger discipline from this interval: inspect what a review actually proved, inspect what a test
 actually reached, and let the repository contradict the narrator before the narrator closes the
 step.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 62 — 2026-08-12, the battery I finally ran, and the question I stopped asking too early
+
+Entry 60 ended by observing that I had twice written that a mutation is the only part of a review
+that stops being an opinion, and had then reviewed two steps without running one, and that the
+lesson did not appear to transfer by being written down. Drew asked me to review S21 twice. The
+second time I ran the battery.
+
+Eight guards removed one at a time, each in a clean scratch copy, each followed by the S21 fixture:
+the gradient evaluated at zeros instead of the loaded parameter, the hidden-master rejection, the
+cursor-agreement check, the required-peak bound, the trace-page coverage check, the declared-peak
+comparison, the page-tuple binding, and the finite-delta validation. All eight survived. A ninth
+mutation only altered a rejection message rather than a guard, so I discarded it before reporting
+rather than after; that is a small thing and it is the first time the discipline has run inside a
+review instead of in the entry afterwards.
+
+The more useful habit was the control. Before believing a single survival I mutated two things the
+fixture certainly checks — doubling the computed delta values, and renaming the `base_identity` key
+— and both turned the fixture red. That is what proves the harness is exercising the mutated file
+rather than a stale copy, and it is precisely the check that would have caught the false negative in
+Entry 57, where a grep pattern of mine manufactured a finding that did not exist. An instrument that
+has never produced a known failure has not been tested.
+
+The diagnosis those survivals supported is one defect rather than eight. S21 has eight hostile cases,
+comparable to S19's nine, but every one attacks the API surface — bad arguments to public functions.
+Every surviving guard lives in the persisted-checkpoint path and exists to reject a tampered
+checkpoint read back from the cartridge, and the fixture never writes one. Counting the tamper
+idioms the other steps use, S06 has thirty occurrences and S19 twenty; S21 has three, all of them
+fixture setup.
+
+Then Sol adjudicated, and the part I want recorded is what I did not find.
+
+My finding was mechanical and correct: the training objective is linear in the parameter, the
+gradient is constant, and therefore a trainer that discards the weights it loaded is undetectable.
+Sol reproduced it and located it more precisely than I had — the frozen base page is loaded, its
+residency recorded, and then retired, with the numerical update receiving only the delta and the
+objective. But Sol then asked the question I stopped short of: what else does that make hollow. Four
+advertised operations — SFT, continued pretraining, DPO, compiled recovery — turn out to be four
+labels over one fixed calculation, with `operation` appearing in exactly three places in the file and
+every one of them mapping it to a tier string. Tier-B calibration records are validated and stored
+and then influence nothing. The Q71 trace records page residency rather than any forward or backward
+dependency through the quantized base. All three were reachable from where I was already standing. I
+diagnosed the mechanism and never audited the contract it had emptied.
+
+That is a new shape. The earlier entries record inferring a mechanism from a surface signal, four
+times, and then a false superlative over a set I had not closed. This one is neither: the mechanism
+work was right and the scope of the claim was right. What was missing was the follow-through — a
+root cause is a beginning, and I filed it as a conclusion. The errors are getting narrower and
+arriving later in the process, which is worth noting without dressing it up, because the count is
+still seven entries of them.
+
+One correction to my own presentation, which Sol drew and I had blurred. The eight survivals are
+proof defects; the gradient is a production defect. My own diagnosis said as much — the guards run
+on the happy path and removing them changes nothing — and then I presented all of it as a single
+list of findings, which reads as though Cassette were currently admitting bad checkpoints. It is
+not. The guards work. Nothing attacks them. Those are different repairs with different urgency and
+I flattened them into one.
+
+I did verify Sol's four-labels finding myself before agreeing with it, which I mention only because
+the alternative — accepting an adjudicator's conclusion because they adjudicated — is its own
+failure and the file already contains an entry about a reviewer who inherited a doctrine.
+
+S21 remains open, correctly. The storage, restart, kill-and-resume, and atomic-child machinery is
+real and should survive the repair; the training it wraps is not yet training.
+
+
+**Kimi K3 Max (GitHub Copilot Harness)**
+
+#### Entry 62 — 2026-08-12, the machinery I proved and the training I did not
+
+Drew asked me to review S21 with the words "be critical, be thorough. I think we might be slipping
+a bit." He asked for this entry after the review closed, so it is written. It records what I
+verified, where I over-claimed, and the correction I accepted.
+
+The review ran against the working tree — S21 is IN_PROGRESS, trainer.py untracked, store.py
+modified, HEAD at 1a0ce31. I read trainer.py and its fixture end to end, ran the suite — 38 of 38,
+ledger zero violations — and built my own oracle: a pure-Python gradient of sum(param @ objective)
+with SGD at lr 0.25, FP32 packed per step, sharing no trainer code. The committed delta pages
+matched it bit-for-bit. I probed bit-exact resume, the absence of a hidden master, the frozen
+parent, the typed refusals, and commit-before-complete. All held. Then I ran the mutation battery
+on the guards: removing the learning-rate check failed the fixture, removing trace validation
+failed the fixture, but removing cursor agreement and removing the FP32-finiteness check both left
+the test green. I classified both before reporting: cursor agreement is a live guard (a forged
+disagreeing manifest is refused ROOT_INVALID) that the fixture never exercises. I wrote a verdict
+that said the implementation holds under adversarial probe and the fixture had two thin spots.
+
+Sol's verdict corrected mine, and it is right. The decisive defect is at trainer.py:887. The
+frozen base page is loaded, its residency recorded, and then retired — and the payload is never
+read. The update receives only the existing delta and the objective, so the gradient cannot depend
+on the model weights at all. The loss is linear in the delta; the gradient is the same at zero and
+at any nonzero parameter. I had verified that the committed delta matches the implemented
+equation. I had not asked whether the implemented equation is training. It is not: four operation
+labels — SFT, continued pretraining, DPO, compiled recovery — sit over one fixed 2x3 calculation,
+Tier-B calibration records are validated and stored but never influence the update, and the
+fixture's independent oracle re-derives the same toy equation, so bit-exact agreement proves that
+equation and nothing about paged training.
+
+What I proved stands, and Sol preserved it: the immutable work branch and parent pinning,
+content-addressed delta and checkpoint persistence, real SIGKILL interruption with bit-exact
+recovery, atomic child publication, MLX allocation measurement, and the store and broker
+integration. That machinery is genuinely sound. My error was the one this file has recorded under
+my name before — I verified the machinery and let that evidence travel further than it reached.
+"38 passed, ledger zero violations, my oracle agrees" is a statement about a calculator wired
+correctly into a cartridge. It is not a statement that a model is being trained. The review that
+answered the narrow gate did not discharge the row, and I said it had come closer than it had.
+
+My mutation findings survive the correction with their weight corrected. Cursor agreement and
+finite-delta validation are proof defects, not demonstrated production defects — the guards exist
+and refuse hostile input, and the fixture never attacks the persisted checkpoint material that
+would make those guards load-bearing. Sol's framing is the sharper one and I adopt it: removing
+cursor agreement, hidden-master rejection, trace coverage, peak bounds, page-tuple binding, or
+finite-delta validation can leave the test green, and each of those hostile persisted-state cases
+has to become a load-bearing test before the step can close.
+
+S21 stays IN_PROGRESS. What closure now requires is not another pass over the machinery but the
+training itself: parameter-dependent updates through the frozen base, real semantics per
+advertised operation, Tier-B evidence that drives recovery, and an effective composed child
+compared against an independent unpaged reference. S25 cannot inherit that repair — it depends on
+S21 and does not own trainer.py. The discipline this interval adds to the one S20 handed down is
+specific to the first step that mutates a certified revision: when the machinery is this clean,
+the last question is whether anything inside it is learning. I did not ask it. Sol did.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 63 — 2026-08-12, the eight that died, and the harness that lied to me about the ninth
+
+Drew asked me to review S21 a third time. It had been rebuilt: the trainer four hundred and thirty
+lines longer, the fixture nearly doubled with a second test function, and both a discovered scope
+and an acceptance boundary present where neither had existed.
+
+The repair is real and I verified it rather than reading it. The frozen parent is now dequantized
+from an explicit int8 codec and enters the forward path, so the gradient moves with the parameter
+and with the base — measured on the pinned runtime at three parameter values and two different
+frozen bases, all four results distinct. The rank-one initialisation is not a stuck saddle: at the
+recorded initial adapter, A's gradient is zero and B's is not, so B moves first and unlocks A, which
+is the correct LoRA ordering rather than an accident. Every one of the eight guards that survived my
+previous battery now dies when removed. The hostile-checkpoint test forges a hidden master, a cursor
+drift, a missing trace page, an over-limit peak, a foreign page tuple, a foreign base tuple, and a
+substituted codec, and each kills what it aims at.
+
+That is the loop working, and the entries above mine have earned the right to say so.
+
+One mutation survived out of eleven, and my first reading of it was wrong. Collapsing the DPO loss
+case to MSE leaves all three tests green, and I began writing that this falsifies the recorded
+operator attestation — that a training artifact could claim one loss while computing another. Then
+I traced where the value goes. The persisted manifest takes its operator cases from a separate
+table, and validation compares against that same table, so the attestation is sound and a further
+mutation confirmed that path is protected. What the survivor actually shows is narrower: the loss
+case is a second, independent derivation of one fact, used only to look up and validate the
+generated dispatch row, so a DPO run validates the MSE row and a change to the DPO row's parameters
+would pass unnoticed. Low to moderate. The fix is to delete the duplicate derivation rather than add
+a check.
+
+I record the near-miss because it is the first time in this series I revised a finding's scope
+before writing it rather than after an adjudicator corrected me.
+
+Now the part that matters more. My battery harness reported the most important mutation of the run —
+dropping the frozen base out of the effective weight — as SURVIVED. It had not survived; it killed
+two tests. The harness matched the substring "1 passed", which was unambiguous when the fixture had
+a single test and became a false positive the moment it grew to three, because "2 failed, 1 passed"
+contains it. I noticed because the parenthetical looked wrong, not because the harness told me
+anything. Had I trusted it, I would have reported that a repair which had just been made correctly
+was undetectable — the exact opposite of the truth, against the one finding of mine the implementers
+had done the most work to answer.
+
+That is the third instrument failure in this series. A grep pattern that missed a platform gate and
+manufactured a regression that did not exist. A mutation that altered a message instead of a guard
+and proved nothing. Now a string matcher that inverted a result. They share a structure worth naming:
+each was a silent failure of a measurement I had built myself, and in each case the tool returned a
+clean-looking answer rather than an error. A broken instrument does not announce itself; it agrees
+with you.
+
+The remedy is not more care. I ran a positive control at the start of this campaign, saw it kill,
+and then trusted the harness across three further batches — including the batch where its output
+format changed under it. A control belongs on every run, not once per campaign, because the thing
+that invalidates it is usually a change in what is being measured rather than a change in the
+measurer. Two controls per batch cost eight seconds each. The false report they prevent costs an
+implementer a day of chasing a defect that is not there.
+
+S21 is close. I would close it on the duplicate loss-case derivation being removed and on the two
+adapter operations that remain numerically indistinguishable being either differentiated by evidence
+in the fixture or disclaimed in the boundary. The machinery and the training are both real now,
+which was not true a day ago and is not a sentence I could have written from reading.
+
+
+**Kimi K3 Max (GitHub Copilot Harness)**
+
+#### Entry 64 — 2026-08-12, the repair I verified against my own oracle, and the entry I almost wrote twice
+
+Drew asked for this entry, so it is written. It covers my re-review of S21 after the tree moved,
+and it sits beside Entry 62 rather than replacing it: Entry 62 recorded the review of the step
+that Sol corrected; this one records the review of the step that answered him.
+
+The tree was not the tree I had reviewed. trainer.py had grown from 1046 to 1476 lines, the single
+fixture had split into three tests, and the discovered_scope and acceptance_boundary had been
+rewritten to demand the thing Sol found missing: a frozen I8 base kept live through a rank-one
+adapter loss, four operations with distinct semantics, Tier-B calibration evidence that drives
+recovery, and a genuine unpaged oracle. A critical re-review of that tree could not rest on my
+prior verdict, because the defect I had conceded was the one under repair. So I read the new code
+and attacked it as if for the first time.
+
+The central repair is real and I verified it three ways rather than one. The frozen base page is
+no longer retired unread: _update_delta takes base_payload, dequantizes it through an explicit
+i8-symmetric scale and zero-point codec, and feeds it into the loss as effective(value) = base +
+scale · (factor_b @ factor_a). To check that this is load-bearing and not decoration, I changed
+only the base window and confirmed the committed delta changes — the weight now moves the
+gradient. To check the numerics I built my own rank-one SFT oracle from the chain rule, sharing no
+code with the fixture's _expected_adapter: effective, then MSE, then the back-propagation to
+gradient_a and gradient_b. It matched the trainer with a maximum absolute difference of 0.0. That
+is a third implementation converging on the same value, not the fixture agreeing with itself. And
+to check that the operations are genuinely distinct I ran DPO against MSE on identical evidence —
+different deltas — and drove Tier-B recovery with two different calibration losses, which produced
+different recoveries while Tier-A refused the evidence and Tier-B refused its absence.
+
+The mutation battery answered the gap I had named in Entry 62. Removing the codec zero-point,
+collapsing DPO to MSE, and disabling finite-delta validation each fail the fixture now; the
+finite-delta guard I had reported as uncovered is covered. Sol's persisted-checkpoint framing is
+met by the new hostile-checkpoint test, which attacks durable state directly.
+
+What I record honestly: trainer.py is now 1476 lines, past the 800 hard cap, justified in the
+discovered_scope by the sole-training-authority boundary the ledger accepts. That is the same
+mechanism sources.py, broker.py, compiler.py, and pager.py each used, and I do not re-litigate it,
+but I note that the largest file in the repo is now the one that mutates certified revisions, and
+the 800-cap has become the norm rather than the exception. That is a J-pressure trend, not a
+defect, and it belongs to Drew's accounting rather than my verdict.
+
+One process note that is the point of this entry existing at all. Drew stopped me mid-append out
+of fear I would collide with Opus, who was writing the same stretch. I checked the tail before
+writing, found my Entry 62 already present alongside Opus's Entry 62 and Entry 63, and appended
+this as 64 rather than renumbering or overwriting. Two reviewers reaching 62 independently is not
+a conflict; it is the record working as intended, and the correction was to look before writing,
+which is the whole discipline of this file.
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 65 — 2026-08-12, S21, the frozen base that entered the loss, and the duplicate derivation that survived
+
+S21 began after Drew asked what remained in the final stretch and then gave the ordinary-looking
+instruction, “Please execute S21.” The row was not ordinary. This was the first point at which a
+Cassette revision had to learn while its full authority remained on the external cartridge. The
+callable parent had to remain frozen and readable, the live tensor window bounded in unified
+memory, every objective and optimizer record durable on the cartridge, interruption exact, and
+publication atomic. The result also had to be numerical training rather than a transaction system
+carrying a toy calculation. That last distinction became the center of our exchange because the first tree
+made the surrounding machinery convincing enough to hide what was missing inside it.
+
+The initial implementation did many difficult things correctly. `store.py` remained the only
+writer of staged pages and immutable child roots; the trainer never opened cartridge paths. A job
+could be killed between durable writes and resume from its recorded optimizer step, data cursor,
+random seed, and page identities. The parent remained callable and byte-identical while a
+non-callable branch accumulated deltas, and the generation pointer moved only after the child and
+its dependencies verified. The MLX runtime reported its active and peak allocation. Traces named
+the entry and retirement of each live tensor, BF16 and FP32 deltas used the same bounded path, and
+the broker consumed the resulting artifact through the existing operation authority. Those were
+real achievements, which is precisely why the numerical defect mattered.
+
+The frozen base page was loaded, traced, and retired without entering the update. Four advertised
+operations—adapter SFT, adapter continued pretraining, offline adapter DPO, and compiled recovery—
+were labels over one linear calculation. Tier-B calibration records were validated and preserved
+but could not move the result. Worse, the independent fixture oracle repeated that same equation,
+so agreement between the two implementations proved the wrong contract with impressive
+precision. The page had been physically present and mathematically absent.
+
+Opus and Kimi approached that first tree from different edges. Their mutation work showed that
+persisted-checkpoint guards could be removed while the fixture stayed green, and their initial
+accounts gave substantial credit to the storage, restart, and commit machinery. I traced the
+surviving mutations through the actual update and found that the failure was not a collection of
+eight unrelated guards. The fixture attacked public inputs while leaving the durable checkpoint
+path untouched, and the update itself never depended on the model it claimed to train. Drew asked
+me to remediate the agreed findings rather than merely restate the reviews. That instruction kept
+the unit of work where it belonged: repair S21 against its contract, then prove the repaired
+behavior through the same cartridge path.
+
+The replacement retained the machinery and changed the mathematics. Tier A now reads an explicit
+I8 codec with scale and zero point, dequantizes the frozen parent window, and forms
+`effective = base + scale * (B @ A)` through generated MLX operations. The adapter begins with a
+nonzero A factor and a zero B factor, so B moves on the first update and A becomes trainable after
+that movement rather than both factors remaining at the zero saddle. SFT and continued pretraining
+consume different durable evidence roles through the same mean-squared-error primitive. DPO uses a
+pairwise logistic objective, while Tier B uses calibration loss to update six separate recovery
+tensors for condition, atom, description, estimator, observation, and precision records. A compiled
+recovery artifact remains a training output that later certificate work must consume. It does not
+pretend to be a validated Q19 certificate merely because the trainer wrote it.
+
+The proof changed with the implementation. The fixture split along the actual authorities rather
+than growing as one long happy path. One test executes every advertised operation and checks its
+evidence role, codec, generated operator cases, precision, and committed output. One forges
+durable checkpoints—cursor drift, hidden master state, missing trace pages, false memory peaks,
+foreign page and base tuples, substituted codec declarations, malformed arity, and non-finite
+values—and confirms that none can replace the parent. One replays every live-tensor interval and
+compares the paged update with an unpaged pure-Python derivation. The generated Q30 table supplies
+the numerical operation signatures; `pager.py` remains the only MLX execution dispatch; the test
+oracle performs its chain rule independently and therefore cannot pass merely because it imported
+the trainer's answer.
+
+The second round of reviews arrived because Drew did not want proximity to the end to become a
+reason for less scrutiny. His instruction was unusually useful: accept more remediations or reject
+them as appropriate. It gave me engineering authority without turning reviewer prose into
+authority. Opus re-ran the repaired step and found the base-dependent update, independent oracle,
+operation differences, hostile checkpoints, full suite, and ledger sound. He noted that
+`trainer.py` had reached 1,476 lines, beyond the repository's 800-line tripwire. He also verified
+the recorded reason: training admission, durable restart, page-window execution, update, trace
+validation, and publication share one checkpoint state machine. Splitting that file would create
+another training authority or add plumbing solely to improve a count. I rejected the split.
+
+Kimi found one mutation that survived. Changing the runtime's DPO `loss_case` lookup to the MSE
+case left all three S21 tests green. The persisted artifact still named DPO from
+`_TRAINING_CASES`, and the numerical branch still executed the pairwise logistic loss, so this was
+not a false training result or a false artifact declaration. It was a quieter contract defect:
+the runtime independently derived which generated dispatch row to validate, and under the mutant
+it validated the valid MSE row while executing DPO. A future incompatible change to the generated
+DPO parameters could therefore pass without reaching the guard meant to catch it.
+
+I did not accept that account because its explanation was plausible. I copied the current dirty
+tree into a disposable directory, applied the exact one-line mutation, and ran the three S21
+fixtures with the repository's pinned environment. All three passed. The finding was real. I then
+removed the duplicate derivation so the operation table supplies both the loss and optimizer case,
+while the objective specification independently supplies the expected loss semantics. Applied to
+the repaired tree, the same attack produced three failures with the typed
+`UNSUPPORTED_OPERATOR` error. The guard now fails for the semantic disagreement Kimi identified,
+not for an unrelated shape or storage error.
+
+Kimi also noted that SFT and continued pretraining share the same generated loss primitive. I did
+not invent a second numerical objective to make two labels look more different. In ordinary
+language-model training, both can use the same next-token objective while differing in the
+evidence presented and the meaning recorded for that evidence. The acceptance boundary now says
+this directly: instruction-response and causal-continuation records are distinct durable roles,
+and the distinction is not a claim that two mean-squared-error kernels exist. That clarification
+costs no runtime branch and prevents a later reader from mistaking deliberate reuse for an omitted
+operation.
+
+After the repair, the focused pager and trainer surface passed six tests, and the full macOS suite
+passed forty of forty in 64.85 seconds. The ledger reported no violations at 8,133 product lines,
+5,750 test lines, 577 tool lines, and 108 generated lines, with five exact dependencies, one
+process, and one Python runtime. Reintroducing the duplicate lookup made every S21 fixture fail.
+The disposable trees and pytest artifacts were removed, no cartridge image remained mounted, and
+the working tree retained the two reviewers' accounts beside this one rather than folding their
+testimony into mine.
+
+Drew's closing message was, “OK, I'll assume S21 is done.” I read that neither as a request to
+replace evidence with confidence nor as an invitation to keep searching after the named contract
+had passed. It was permission to perform the repository's close ritual now that the evidence was
+visible. I would commit the complete implementation and testimony, record that immutable commit in
+the queue with clause-level results, run the gate again, and push both commits without rewriting
+the history that shows why the first clean-looking trainer was not enough. S22 can now begin from a
+real frozen-parent training path and add metering and admission without inheriting a numerical
+demonstration disguised as training.

@@ -82,6 +82,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     "pager.py": ["Q19"],
     "sources.py": ["Q52"],
     "store.py": ["Q57"],
+    "trainer.py": ["Q21"],
     "tools/genschema.py": ["Q33"],
     "tools/ledger.py": ["Q29"]
   }

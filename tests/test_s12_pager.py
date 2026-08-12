@@ -31,7 +31,7 @@ from tools.ledger import run as run_ledger
 
 REPO = Path(__file__).resolve().parent.parent
 RUNTIME_COMMIT = "365d6f29b47686a9f5401f6a9ec5825fee162d69"
-DISPATCH_DIGEST = "sha256:fba00edac946e57c7f1195e4e840b2cfba7552ea9811848318fb56ba58090457"
+DISPATCH_DIGEST = "sha256:11cc11f8f7adb6ce93b48a503ed4aaaa531166101d2eb57cbc59ebb45677d8e4"
 CASE_IDS = [
     "mlx.matmul.f32.2x3_3x2",
     "mlx.matmul.f32.2x4_4x4",
@@ -48,7 +48,11 @@ CASE_IDS = [
     "mlx.embedding.f32_u32.4x4_2",
     "mlx.categorical.f32_u32.2x3_2",
     "mlx.autograd_sum.f32.2x3",
+    "mlx.autograd_lora_mse.f32.rank1.2x3_3x2",
+    "mlx.autograd_lora_dpo.f32.rank1.2x3_3x2",
+    "mlx.autograd_calibration_mse.f32.1_2x3_3x2_2x2_1",
     "mlx.sgd.f32.3",
+    "mlx.sgd.f32.1",
 ]
 MODES = [
     "BYTE_IDENTICAL_LAYOUT",
@@ -535,10 +539,45 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
         ),
         CASE_IDS[15]: (
             [
+                mx.array([[0.25, -0.5, 0.75], [0, 0, 0]], dtype=mx.float32),
+                mx.array([[-2, -1, 0], [1, 2, 3]], dtype=mx.float32),
+                mx.array([[1, 0], [0, 1], [1, -1]], dtype=mx.float32),
+                mx.array([[0.5, -0.25], [1, 0]], dtype=mx.float32),
+            ],
+            [[0.0, 0.0, 0.0], [-0.78125, 2.125, 0.0]],
+        ),
+        CASE_IDS[16]: (
+            [
+                mx.array([[0.25, -0.5, 0.75], [0, 0, 0]], dtype=mx.float32),
+                mx.array([[-2, -1, 0], [1, 2, 3]], dtype=mx.float32),
+                mx.array([[1, 0], [0, 1], [1, -1]], dtype=mx.float32),
+                mx.array([0.2], dtype=mx.float32),
+            ],
+            [[0.0, 0.0, 0.0], [-0.049232885241508484, -0.049232885241508484, 0.0]],
+        ),
+        CASE_IDS[17]: (
+            [
+                mx.array([0.1], dtype=mx.float32),
+                mx.array([[-2, -1, 0], [1, 2, 3]], dtype=mx.float32),
+                mx.array([[1, 0], [0, 1], [1, -1]], dtype=mx.float32),
+                mx.array([[0.5, -0.25], [1, 0]], dtype=mx.float32),
+                mx.array([0.2], dtype=mx.float32),
+            ],
+            [-0.824999988079071],
+        ),
+        CASE_IDS[18]: (
+            [
                 mx.array([1.0, 2.0, 3.0], dtype=mx.float32),
                 mx.array([0.5, -0.5, 0.25], dtype=mx.float32),
             ],
             [0.875, 2.125, 2.9375],
+        ),
+        CASE_IDS[19]: (
+            [
+                mx.array([1.0], dtype=mx.float32),
+                mx.array([0.5], dtype=mx.float32),
+            ],
+            [0.875],
         ),
     }
 
@@ -717,7 +756,9 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
     pager_tree = ast.parse((REPO / "pager.py").read_text(encoding="utf-8"))
     executor_names = {
         pager._EXECUTORS[row["operator"]].__name__ for row in rows.values()
-    }
+    } | {
+        function.__name__ for function in pager._AUTOGRAD_EXECUTORS.values()
+    } | {pager._lora_effective.__name__}
     executor_functions = [
         node
         for node in pager_tree.body

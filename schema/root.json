@@ -71,6 +71,7 @@
           "kind": {
             "enum": [
               "adapter",
+              "certificate_recovery",
               "precision_correction",
               "replacement_pages"
             ],

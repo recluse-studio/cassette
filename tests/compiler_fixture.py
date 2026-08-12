@@ -181,15 +181,18 @@ def artifact(
     *,
     label: str | None = None,
     mutate_manifest=None,
+    tensor: tuple[str, tuple[int, ...], bytes] | None = None,
 ) -> tuple[bytes, IdentityTuple, dict]:
     document = manifest(source_kind if label is None else label)
     if mutate_manifest is not None:
         mutate_manifest(document)
     metadata = canonical_bytes(document).decode()
-    weights = struct.pack("<4f", 1.0, 0.0, 0.0, 1.0)
+    dtype, shape, weights = tensor or (
+        "F32", (2, 2), struct.pack("<4f", 1.0, 0.0, 0.0, 1.0)
+    )
     header = {
         "__metadata__": {"cassette.compiler.v1": metadata},
-        "weight": {"dtype": "F32", "shape": [2, 2], "data_offsets": [0, len(weights)]},
+        "weight": {"dtype": dtype, "shape": list(shape), "data_offsets": [0, len(weights)]},
     }
     encoded = canonical_bytes(header)
     encoded += b" " * (-len(encoded) % 8)
@@ -198,8 +201,8 @@ def artifact(
         {
             "artifact_path": artifact_path,
             "semantic_tensor_id": "weight",
-            "dtype": "F32",
-            "shape": [2, 2],
+            "dtype": dtype,
+            "shape": list(shape),
             "offset": 0,
             "length": len(weights),
         }

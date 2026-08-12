@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 import ctypes
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import fcntl
 import hashlib
 import json
@@ -2113,29 +2113,23 @@ def derive_root(
     )
 
 
-def append_training_delta(
-    cartridge: str | Path,
+def _training_delta_records(
+    parent: dict,
     parent_root_digest: str,
-    material: IdentityTuple,
     kind: str,
-    pages: tuple[bytes, ...],
+    ordered_page_digests: list[str],
     manifest_digest: str,
-) -> str:
-    """Append ordered immutable delta pages and publish one derived logical root."""
-
-    cartridge = Path(cartridge)
-    parent = load_root(cartridge, parent_root_digest)
-    identity_record = _identity_record(material)
-    if (
-        kind not in {"adapter", "precision_correction", "replacement_pages"}
-        or not isinstance(pages, tuple)
-        or not pages
-        or any(not isinstance(page, bytes) or not 0 < len(page) <= PAGE_BYTES for page in pages)
-    ):
-        _q57_reject(parent_root_digest, "training delta pages or kind are malformed", "INVALID_REQUEST")
-    ordered_page_digests = [digest_bytes(page) for page in pages]
-    if len(ordered_page_digests) != len(set(ordered_page_digests)):
-        _q57_reject(parent_root_digest, "one training delta cannot repeat a page identity", "INVALID_REQUEST")
+) -> tuple[dict, list[dict], str]:
+    if kind not in {"adapter", "certificate_recovery", "precision_correction", "replacement_pages"}:
+        _q57_reject(parent_root_digest, "training delta kind is malformed", "INVALID_REQUEST")
+    if not ordered_page_digests or len(ordered_page_digests) != len(set(ordered_page_digests)):
+        _q57_reject(
+            parent_root_digest,
+            "one training delta requires unique ordered page identities",
+            "INVALID_REQUEST",
+        )
+    for page_digest in ordered_page_digests:
+        _content_hex(page_digest, parent_root_digest)
     _content_hex(manifest_digest, parent_root_digest)
     body = {
         "kind": kind,
@@ -2146,6 +2140,21 @@ def append_training_delta(
     delta = {"delta_id": digest_bytes(canonical_bytes(body)), **body}
     deltas = [*parent["deltas"], delta]
     expected_transform = digest_bytes(canonical_bytes(deltas))
+    return delta, deltas, expected_transform
+
+
+def _write_training_delta_root(
+    cartridge: Path,
+    parent_root_digest: str,
+    parent: dict,
+    material: IdentityTuple,
+    additions: tuple[PageLocation, ...],
+    deltas: list[dict],
+    expected_transform: str,
+    *,
+    durable: bool,
+) -> str:
+    identity_record = _identity_record(material)
     if (
         material.revision_kind != "tuned"
         or identity_record["parent_ids"] != [parent["identity"]]
@@ -2159,10 +2168,15 @@ def append_training_delta(
             "IDENTITY_MISMATCH",
         )
     current = _read_index(cartridge, parent_root_digest)
-    additions = _write_segments(
-        cartridge,
-        zip(ordered_page_digests, pages, strict=True),
-    )
+    if (
+        not isinstance(additions, tuple)
+        or not additions
+        or any(not isinstance(location, PageLocation) for location in additions)
+        or len({location.page_digest for location in additions}) != len(additions)
+    ):
+        _q57_reject(parent_root_digest, "staged training page locations are malformed", "INVALID_REQUEST")
+    for location in additions:
+        _read_page(cartridge, location)
     locations = {**current, **{location.page_digest: location for location in additions}}
     return _write_cartridge_root(
         cartridge,
@@ -2173,7 +2187,89 @@ def append_training_delta(
         tuple(sorted(locations.values(), key=lambda location: location.page_digest)),
         parent["plans"],
         deltas,
+        durable=durable,
+    )
+
+
+def append_training_delta(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    material: IdentityTuple,
+    kind: str,
+    pages: tuple[bytes, ...],
+    manifest_digest: str,
+) -> str:
+    """Append ordered immutable delta pages and publish one derived logical root."""
+
+    cartridge = Path(cartridge)
+    parent = load_root(cartridge, parent_root_digest)
+    if (
+        not isinstance(pages, tuple)
+        or not pages
+        or any(not isinstance(page, bytes) or not 0 < len(page) <= PAGE_BYTES for page in pages)
+    ):
+        _q57_reject(parent_root_digest, "training delta pages are malformed", "INVALID_REQUEST")
+    ordered_page_digests = [digest_bytes(page) for page in pages]
+    _, deltas, expected_transform = _training_delta_records(
+        parent, parent_root_digest, kind, ordered_page_digests, manifest_digest
+    )
+    additions = _write_segments(
+        cartridge,
+        zip(ordered_page_digests, pages, strict=True),
+    )
+    return _write_training_delta_root(
+        cartridge,
+        parent_root_digest,
+        parent,
+        material,
+        additions,
+        deltas,
+        expected_transform,
         durable=False,
+    )
+
+
+def append_staged_training_delta(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    kind: str,
+    pages: tuple[PageLocation, ...],
+    manifest_digest: str,
+) -> str:
+    """Bind durable staged pages into one non-callable direct child of the frozen parent."""
+
+    cartridge = Path(cartridge)
+    parent = load_root(cartridge, parent_root_digest)
+    if (
+        not isinstance(pages, tuple)
+        or not pages
+        or any(not isinstance(location, PageLocation) for location in pages)
+    ):
+        _q57_reject(
+            parent_root_digest,
+            "staged training pages require one nonempty PageLocation tuple",
+            "INVALID_REQUEST",
+        )
+    ordered_page_digests = [location.page_digest for location in pages]
+    _, deltas, expected_transform = _training_delta_records(
+        parent, parent_root_digest, kind, ordered_page_digests, manifest_digest
+    )
+    material, _ = _material_from_provenance(parent["provenance"], parent_root_digest)
+    child_material = replace(
+        material,
+        revision_kind="tuned",
+        parent_ids=(parent["identity"],),
+        transform_manifest_digest=expected_transform,
+    )
+    return _write_training_delta_root(
+        cartridge,
+        parent_root_digest,
+        parent,
+        child_material,
+        pages,
+        deltas,
+        expected_transform,
+        durable=True,
     )
 
 
@@ -2344,6 +2440,61 @@ def page_locations(cartridge: str | Path, root_digest: str) -> tuple[PageLocatio
 
     load_root(cartridge, root_digest)
     return tuple(_read_index(Path(cartridge), root_digest).values())
+
+
+def stage_training_pages(cartridge: str | Path, pages) -> tuple[PageLocation, ...]:
+    """Durably stage unique Q23 training pages without making them callable."""
+
+    if isinstance(pages, (bytes, bytearray, memoryview)):
+        _q57_reject("training-pages", "training pages require an iterable of byte pages", "INVALID_REQUEST")
+    try:
+        iterator = iter(pages)
+    except TypeError:
+        _q57_reject("training-pages", "training pages require an iterable", "INVALID_REQUEST")
+    seen = set()
+
+    def unique_pages():
+        for payload in iterator:
+            if not isinstance(payload, bytes) or not 0 < len(payload) <= PAGE_BYTES:
+                _q57_reject(
+                    "training-pages",
+                    "each staged training page must contain at most 4 MiB",
+                    "INVALID_REQUEST",
+                )
+            page_digest = digest_bytes(payload)
+            if page_digest not in seen:
+                seen.add(page_digest)
+                yield page_digest, payload
+
+    cartridge = Path(cartridge)
+    locations = _write_segments(cartridge, unique_pages())
+    if not locations:
+        _q57_reject("training-pages", "at least one training page is required", "INVALID_REQUEST")
+    segments = cartridge / "segments"
+    for segment_id in sorted({location.segment_id for location in locations}):
+        _fullsync_file(segments / _content_hex(segment_id, segment_id), f"training-page:{segment_id}")
+    _sync_directory(segments, "training-pages")
+    for location in locations:
+        _read_page(cartridge, location)
+    return locations
+
+
+def read_training_page(
+    cartridge: str | Path, root_digest: str, page_digest: str
+) -> bytes:
+    """Read one Q23 training page only through a verified root and physical index."""
+
+    cartridge = Path(cartridge)
+    _content_hex(page_digest, root_digest)
+    load_root(cartridge, root_digest)
+    locations = _read_index(cartridge, root_digest)
+    if page_digest not in locations:
+        _q57_reject(
+            page_digest,
+            "training page is absent from the verified root",
+            "PAGE_CORRUPT",
+        )
+    return _read_page(cartridge, locations[page_digest])
 
 
 def page_index_byte_count(cartridge: str | Path, root_digest: str) -> int:
