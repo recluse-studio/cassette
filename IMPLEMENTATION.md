@@ -1141,9 +1141,40 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S21]
-    status: IN_PROGRESS 2026-08-12
+    status: DONE 2026-08-13 — step commit b4f0cac34da265d5f049248eba2cdffc2556e060; complete arm64 macOS suite 42/42 in 173.03 seconds; ledger clean at 8,511 product LOC, 5,960 test LOC, 577 tool LOC, 108 generated LOC, five exact dependencies, one process, and one Python runtime
     acceptance_boundary: "S22 implements generic preflight, reservation, and per-checkpoint metering against recorded storage-class evidence, then executes Q28/Q74 with simulated cache-exhausted profiles on every platform. It does not claim a physical drive measurement: L01 qualifies real assembled storage paths, and L04 executes the accepted training rows against those profiles."
     discovered_scope: "tests/test_s22_trainer.py is the single env:any Q28/Q74 fixture; tests/test_s21_trainer.py routes the existing MLX training paths through the now-mandatory admission and observation contract. trainer.py remains the sole training authority above 800 physical lines because request derivation, resource admission, durable metering, checkpoint execution, and publication share one state machine. S22 reuses store.py's Q53 reservation and release authority and adds no writer, dependency, process, runtime, generated contract, numerical kernel, model-family branch, or protocol."
+    closeout:
+      - clause: "Q28 derives one exact write, duration, memory, and capacity estimate before reservation"
+        test_or_probe: "tests/test_s22_trainer.py::test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope"
+        input: "Independently sum dataset, candidate, optimizer, master, and journal bytes; apply the measured 3/2 write-amplification ratio; admit exactly at both endurance ceilings; add one byte to an odd logical projection; reserve against the complete Q53 phase maximum plus operating-system safety."
+        expected: "Reproduce every estimate field, round physical writes upward, admit equality, and reserve one exact extent only after every resource check passes."
+        observed: "The fixture derived 1,984 MiB of logical writes and 2,976 MiB at p95, admitted equality at 80 percent lifetime endurance and 20 percent of remaining endurance, rounded the odd projection upward, and made one reservation for the exact phase requirement plus 8 GiB safety."
+      - clause: "Q28/Q74 refuse every independent preflight resource contradiction before reservation or cartridge mutation"
+        test_or_probe: "tests/test_s22_trainer.py::test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary"
+        input: "Inject low or zero allocatable space, absent endurance or health evidence, a 32,767-byte candidate below the 32,768-byte raw update floor, lifetime writes one byte beyond declared endurance, isolated lifetime and remaining-endurance overruns, checked-sum overflow, malformed identity, excess memory, insufficient storage, thermal saturation, impossible duration, missing measurements, and absent required power."
+        expected: "Return the canonical typed refusal for the first broken condition, call no allocator, and preserve an unmutated cartridge boundary."
+        observed: "Every injection returned CAPACITY_EXCEEDED, ENDURANCE_EXCEEDED, INVALID_REQUEST, MEMORY_BUDGET_EXCEEDED, CAPABILITY_MISMATCH, THERMAL_LIMIT, or OPERATION_CANCELLED as declared, with zero reservation calls. The exhausted-device case named its specific preflight diagnosis instead of passing through a later generic endurance refusal."
+      - clause: "The durable Q28 meter accounts for its own manifest and both live and reloaded counters remain beneath one admission"
+        test_or_probe: "the real scratch-cartridge checkpoint, live counter attacks, and independently forged durable manifests in tests/test_s22_trainer.py"
+        input: "Create one admitted SFT work root, sum every newly written objective, delta, and state page independently, add the final canonical manifest length, and compare that total with the stored logical meter. Then exceed logical writes or reads by one byte first through assess_training_observation and separately inside a reloaded manifest."
+        expected: "Reach an exact self-consistent meter fixed point; reject live telemetry and persisted evidence independently when either exceeds the admitted complete-job estimate."
+        observed: "The durable logical counter equalled the independently read material pages plus the canonical manifest byte length. Both live attacks returned ENDURANCE_EXCEEDED at the observation boundary, and both durable attacks returned ENDURANCE_EXCEEDED at manifest validation. The two enforcement sites remain because they guard distinct trust boundaries."
+      - clause: "Q74 cumulative observations cannot move backward and each recoverable or terminal runtime boundary remains typed"
+        test_or_probe: "the four one-field decrement sequences and runtime injection table in tests/test_s22_trainer.py"
+        input: "Advance one accepted observation, then decrease logical writes, reads, physical writes, or elapsed time independently while every other field increases. Separately inject thermal throttle or stop, write throttle or stop, slow storage, p95 drift, completion drift, power loss, skipped checkpoints, forged admission evidence, and a released reservation."
+        expected: "Reject every decreasing or detached record, distinguish retryable from terminal limits, and permit no write after release or before the next exact checkpoint."
+        observed: "Each isolated decrement returned INVALID_REQUEST for the monotonicity invariant. Runtime limits returned their declared code and retryability, power loss remained recoverable, forged or released admission failed, and skipped checkpoint two was refused."
+      - clause: "Every S22 admission and meter guard is load-bearing under hostile removal"
+        test_or_probe: "twelve disposable-tree mutations against tests/test_s22_trainer.py, including one assertion-derived control"
+        input: "Drop one projection term as the control, then independently bypass manifest fixed-point convergence, each of four monotonic counters, live estimate enforcement, durable estimate enforcement, the raw update floor, exhausted endurance, the 80-percent lifetime ceiling, and the one-fifth remaining-endurance ceiling."
+        expected: "The control and every targeted guard removal fail an owning S22 assertion without collection, syntax, import, or platform failure."
+        observed: "All twelve mutations were killed. The first exhausted-endurance mutation initially survived because a later guard returned the same error code; requiring the exact early diagnosis killed the repaired mutation and proved guard order rather than generic failure. Every disposable tree was deleted after its result."
+      - clause: "S22 done_when"
+        test_or_probe: "complete pinned CPython 3.13 arm64 macOS suite, tools/ledger.py, diff checking, mutation cleanup, mount inspection, process inspection, and system-volume inspection"
+        input: "Execute every reachable invariant after the complete S22 proof, then inspect accounting, generated integrity, remaining test environments, mounted cartridge images, and free space."
+        expected: "Pass the full suite and ledger with no skip, generated drift, dependency, process, runtime, numerical kernel, model branch, duplicate authority, surviving disposable tree, mounted image, or low-space condition."
+        observed: "The step tree passed 42/42 tests in 173.03 seconds. The ledger reported zero violations at 8,511 product LOC, 5,960 test LOC, 577 tool LOC, and 108 generated LOC, with five exact pins, one process, and one Python runtime. No mutation tree remained, and the system data volume retained 80 GiB free."
 
   - id: S22A
     title: Post-training interoperability and eligible export

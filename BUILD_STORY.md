@@ -6171,3 +6171,103 @@ the survivors is size: `trainer.py` is now the second-largest product module and
 lines to it than the whole of S21, against a row that declares itself medium. The scope note names
 its authority boundary honestly. The tripwire in AGENTS.md still says that twice the expected size
 means stopping to re-read the contract, and nobody has stopped.
+
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 68 — 2026-08-13, S22, the correct machinery and the proof that had not earned it
+
+Drew gave me two reviews and asked for an assessment. That boundary mattered. A review is testimony,
+not authority; a plausible finding still has to survive contact with the current tree. S22 had also
+arrived after a longer exchange about a familiar failure in longitudinal agent work: the early steps
+receive close attention, then fluency begins to impersonate diligence. Drew had already rejected
+that substitution. By this point he did not need another recital of the principle. He needed the
+principal engineer to decide what was true and finish the step.
+
+The two reviewers agreed on the broad shape. The S22 implementation performed real admission and
+metering work, but parts of its fixture did not make the corresponding guards necessary. Kimi had
+removed the 80-percent endurance limit and the monotone physical-write comparison without turning
+the test red. Opus had found a wider family of survivors: manifest self-accounting, all cumulative
+observation counters, live metered-versus-estimate enforcement, the raw update floor, and the
+already-exhausted-device check. He also found the same estimate comparison in two places and read
+that repetition as possible duplicate authority. Both reviewers questioned the growth of
+`trainer.py`.
+
+I accepted neither list by inspection. I reproduced the current clean result, attacked each guard
+in disposable copies, and followed every surviving mutation through the code path. The production
+behavior held under direct hostile inputs. A raw update one byte below its unavoidable write floor
+was refused before reservation. A device reporting one byte more lifetime traffic than its
+declared endurance was refused. The lifetime ceiling and the per-job share of remaining endurance
+could each be made to fail while the other remained satisfied. Logical, read, physical, and elapsed
+counters could each be decreased alone, and each decrease was rejected. Live counters above the
+admitted estimate failed. A forged durable manifest above the same estimate also failed.
+
+That last pair resolved the apparent duplicate. The first comparison examines a live observation
+before the next training write. The second examines an object loaded from durable cartridge state.
+They use the same inequality because the same admitted limit governs both, but they do not trust the
+same evidence. Removing either would leave one boundary unguarded. I kept both. Similar-looking code
+is not automatically a second authority; sometimes it is one rule enforced at two doors.
+
+The file-size question also required a decision, not a nervous shrug passed back to Drew. The
+repository sets 400 lines as a soft target and requires an authority explanation above 800. It does
+not impose an 800-line hard cap. S22 had increased the physical file sharply, but the ledger's
+product count rose by 378 lines from the closed S21 state. More important, admission, cumulative
+metering, durable checkpoints, restart, and publication all advance the same training state
+machine. Splitting them now would create cross-file state plumbing or a second training authority
+to make a count look friendlier. I rejected the split. The size remains visible in the queue and
+commit, where the next agent can challenge it with a concrete lower-J design rather than a number
+alone.
+
+The remediation therefore changed proof, not product. I extended the existing Q28 fixture instead
+of creating another fixture for the same invariant. It now builds a real scratch cartridge,
+prepares an admitted SFT checkpoint, reads every newly written objective, delta, and state page,
+and proves that the durable logical counter equals those bytes plus the final canonical manifest.
+That equation makes the manifest's fixed-point accounting observable from outside the helper. The
+fixture then forges the live counters and the persisted counters separately, so either enforcement
+site can be removed and caught.
+
+The Q74 fixture gained the missing isolated cases. It drives each cumulative field backward while
+the other three advance. It presents a 32,767-byte candidate against a 32,768-byte raw floor. It
+presents a device already beyond its declared endurance. It attacks the 80-percent lifetime limit
+without tripping the remaining-endurance rule, then attacks the one-fifth remaining-endurance rule
+without tripping the lifetime limit. These are small arithmetic arrangements, but that is their
+value: each assertion names one guard, and no neighboring guard can rescue the mutation.
+
+The process produced its own useful failures. My first focused-test command invoked the pytest
+executable directly, which omitted the repository root from Python's import path and failed during
+collection. I did not call that a code failure or alter imports to accommodate it; I reran through
+the pinned Python interpreter, which is the project's actual route, and the two S22 fixtures passed.
+My first mutation runner then used `status`, a read-only zsh variable, and stopped before it had
+evidence. I deleted the agent-created tree, renamed the variable, and restarted rather than
+salvaging partial output.
+
+The restarted battery killed eleven mutations and left one alive. It was the already-exhausted
+device check. The product still refused the request after that guard was removed because a later
+endurance calculation also failed, and the fixture required only `ENDURANCE_EXCEEDED`. Correct code
+had exposed a weak oracle. I tightened the existing injection to require the exact early diagnosis,
+“reported lifetime writes exceed declared endurance.” The complete battery then killed its
+assertion-derived control and all eleven guard removals. None failed through syntax, import,
+collection, or platform trouble.
+
+This was the meaningful progression in S22. Earlier reviews often asked whether the implementation
+rejected a hostile case. Here the harder question became whether it rejected the case for the exact
+reason the contract assigned, at the exact boundary that owned it, and whether the fixture would
+notice if that boundary disappeared. Error-code agreement alone was not enough. A later guard can
+hide the absence of an earlier one; two correct refusals are not interchangeable when one occurs
+after mutation would already have become possible.
+
+The final implementation tree passed all forty-two repository tests on the pinned arm64 macOS
+environment in 173.03 seconds. The ledger reported no violation at 8,511 product lines, 5,960 test
+lines, 577 tool lines, and 108 generated lines, with the same five pinned dependencies, one process,
+and one Python runtime. The system volume retained 80 GiB free, and no mutation tree remained. The
+step commit froze that evidence before the queue moved from `IN_PROGRESS` to `DONE`, so the closeout
+could name an immutable object rather than its own uncommitted prose.
+
+Drew had asked me to remediate what I agreed with, author my account, and push the whole shared
+tree. The answer was not to accept every reviewer preference, nor to defend the implementation
+because its direct probes passed. It was to preserve the working design, make every claimed guard
+load-bearing, record the rejected alternatives, and leave S22 in a form that can fail loudly when a
+future edit weakens it. That is the difference between code that is correct today and a repository
+that has earned the right to keep saying so.
