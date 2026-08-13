@@ -1,5 +1,5 @@
-# trainer.py — paged immutable delta training and compiled recovery artifacts (Q21-Q25/Q70-Q73); depends on errors.py, schema, store.py.
-"""Train bounded BF16 or FP32 adapters or certificate-recovery tensors and publish one child."""
+# trainer.py — admitted paged training, write metering, and immutable child publication (Q21-Q28/Q70-Q74); depends on errors.py, schema, store.py.
+"""Admit and meter bounded BF16 or FP32 training, then publish one immutable child."""
 
 from __future__ import annotations
 
@@ -15,9 +15,12 @@ from errors import CassetteError
 from schema.tables import DISPATCH_ROWS, MLX_RUNTIME
 from store import (
     PAGE_BYTES,
+    CapacityPhase,
+    CapacityReservation,
     PageLocation,
     TransactionContext,
     append_staged_training_delta,
+    capacity_requirement,
     canonical_bytes,
     commit_generation,
     digest_bytes,
@@ -25,6 +28,7 @@ from store import (
     page_locations,
     pin_generation,
     read_training_page,
+    reserve_capacity,
     stage_training_pages,
 )
 
@@ -72,6 +76,10 @@ _MAX_PARAMETERS = 256
 _MAX_STEPS = 4096
 _MAX_UPDATES = 32768
 _MAX_SAFE_INTEGER = 2**53 - 1
+_PPM = 1_000_000
+_GIB = 1024**3
+_RESOURCE_VERSION = "cassette-training-resource-v1"
+_RESOURCE_INVARIANT = "Q28/Q74: measured training writes and complete resource admission"
 _MANIFEST_FIELDS = frozenset({
     "format", "job_id", "tier", "operation", "parent_root", "parent_identity",
     "parent_certificate_digest", "base_precision", "delta_precision", "operator_cases",
@@ -79,7 +87,39 @@ _MANIFEST_FIELDS = frozenset({
     "step", "total_steps", "optimizer_step", "data_cursor", "random_seed", "rng_counter",
     "window_limit_bytes", "declared_peak_bytes", "base_pages", "delta_pages",
     "objective_pages", "calibration_pages", "state_pages", "trace_pages", "master_pages",
+    "admission", "meter",
 })
+_WORKLOAD_FIELDS = frozenset({
+    "request_digest", "committed_bytes", "rollback_bytes", "dataset_bytes",
+    "candidate_bytes", "optimizer_bytes", "master_bytes", "journal_bytes",
+    "read_bytes", "memory_peak_bytes", "optimizer_steps", "trainable_parameters",
+    "weight_bytes_per_parameter", "checkpoint_interval",
+})
+_PROFILE_FIELDS = frozenset({
+    "profile_evidence_digest", "device_bytes", "physical_memory_bytes",
+    "recommended_max_working_set_bytes", "executor_memory_bytes", "other_memory_bytes",
+    "sustained_read_bytes_per_second", "sustained_write_bytes_per_second",
+    "minimum_sustained_read_bytes_per_second", "minimum_sustained_write_bytes_per_second",
+    "write_amplification_p95_numerator", "write_amplification_p95_denominator",
+    "declared_endurance_bytes", "lifetime_written_bytes", "predicted_thermal_duty_ppm",
+    "maximum_thermal_duty_ppm", "maximum_write_duty_ppm", "external_power",
+    "job_limit_seconds", "compute_nanoseconds_per_update_p95",
+})
+_ESTIMATE_FIELDS = frozenset({
+    "S_required", "M_peak", "read_bytes", "logical_write_bytes", "physical_write_p95",
+    "duration_p95", "checkpoint_interval", "power_required", "thermal_duty",
+    "write_duty", "safety_bytes",
+})
+_ADMISSION_FIELDS = frozenset({
+    "format", "workload", "profile", "profile_digest", "allocatable_verified_free",
+    "estimate",
+})
+_OBSERVATION_FIELDS = frozenset({
+    "checkpoint", "logical_write_bytes", "read_bytes", "physical_write_bytes", "elapsed_nanoseconds",
+    "sustained_read_bytes_per_second", "sustained_write_bytes_per_second",
+    "thermal_duty_ppm", "write_duty_ppm", "external_power",
+})
+_METER_FIELDS = frozenset({"logical_write_bytes", "read_bytes", "observations"})
 _MLX = None
 
 
@@ -124,8 +164,137 @@ class TrainingResult:
         }
 
 
-def _reject(code: str, object_id: str, detail: str, invariant: str = "Q21-Q25/Q70-Q73: paged immutable training") -> None:
-    raise CassetteError(code, str(object_id), invariant, "terminal", detail)
+@dataclass(frozen=True, slots=True)
+class TrainingWorkload:
+    """The trainer-derived byte and step ledger that one admission must cover."""
+
+    request_digest: str
+    committed_bytes: int
+    rollback_bytes: int
+    dataset_bytes: int
+    candidate_bytes: int
+    optimizer_bytes: int
+    master_bytes: int
+    journal_bytes: int
+    read_bytes: int
+    memory_peak_bytes: int
+    optimizer_steps: int
+    trainable_parameters: int
+    weight_bytes_per_parameter: int
+    checkpoint_interval: int = 1
+
+    def record(self) -> dict:
+        """Return the bounded durable workload record."""
+
+        return {field: getattr(self, field) for field in _WORKLOAD_FIELDS}
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingResourceProfile:
+    """One measured Apple and cartridge class record used for Q74 admission."""
+
+    profile_evidence_digest: str
+    device_bytes: int
+    physical_memory_bytes: int
+    recommended_max_working_set_bytes: int
+    executor_memory_bytes: int
+    other_memory_bytes: int
+    sustained_read_bytes_per_second: int
+    sustained_write_bytes_per_second: int
+    minimum_sustained_read_bytes_per_second: int
+    minimum_sustained_write_bytes_per_second: int
+    write_amplification_p95_numerator: int
+    write_amplification_p95_denominator: int
+    declared_endurance_bytes: int | None
+    lifetime_written_bytes: int | None
+    predicted_thermal_duty_ppm: int
+    maximum_thermal_duty_ppm: int
+    maximum_write_duty_ppm: int
+    external_power: bool
+    job_limit_seconds: int
+    compute_nanoseconds_per_update_p95: int
+
+    def record(self) -> dict:
+        """Return the exact measured profile material without an inferred hardware label."""
+
+        return {field: getattr(self, field) for field in _PROFILE_FIELDS}
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingEstimate:
+    """The complete Q74 JobEstimate plus its endurance and duty boundaries."""
+
+    S_required: int
+    M_peak: int
+    read_bytes: int
+    logical_write_bytes: int
+    physical_write_p95: int
+    duration_p95: int
+    checkpoint_interval: int
+    power_required: bool
+    thermal_duty: int
+    write_duty: int
+    safety_bytes: int
+
+    def record(self) -> dict:
+        """Return the machine-readable estimate with the Q74 field names intact."""
+
+        return {field: getattr(self, field) for field in _ESTIMATE_FIELDS}
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingAdmission:
+    """One active Q53 reservation bound to one workload and measured profile."""
+
+    workload: TrainingWorkload
+    profile: TrainingResourceProfile
+    profile_digest: str
+    allocatable_verified_free: int
+    estimate: TrainingEstimate
+    reservation: CapacityReservation
+
+    def record(self) -> dict:
+        """Persist the admission evidence; the live reservation remains with the operation owner."""
+
+        return {
+            "format": _RESOURCE_VERSION,
+            "workload": self.workload.record(),
+            "profile": self.profile.record(),
+            "profile_digest": self.profile_digest,
+            "allocatable_verified_free": self.allocatable_verified_free,
+            "estimate": self.estimate.record(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingObservation:
+    """Cumulative host and device telemetry sampled at one durable training boundary."""
+
+    checkpoint: int
+    logical_write_bytes: int
+    read_bytes: int
+    physical_write_bytes: int
+    elapsed_nanoseconds: int
+    sustained_read_bytes_per_second: int
+    sustained_write_bytes_per_second: int
+    thermal_duty_ppm: int
+    write_duty_ppm: int
+    external_power: bool
+
+    def record(self) -> dict:
+        """Return the bounded observation written with the next checkpoint."""
+
+        return {field: getattr(self, field) for field in _OBSERVATION_FIELDS}
+
+
+def _reject(
+    code: str,
+    object_id: str,
+    detail: str,
+    invariant: str = "Q21-Q25/Q70-Q73: paged immutable training",
+    retryability: str = "terminal",
+) -> None:
+    raise CassetteError(code, str(object_id), invariant, retryability, detail)
 
 
 def _record(value: object, fields: frozenset[str] | set[str], object_id: str, label: str) -> dict:
@@ -162,6 +331,633 @@ def _counter(value: object, object_id: str, label: str, *, positive: bool = Fals
     if type(value) is not int or not floor <= value <= _MAX_SAFE_INTEGER:
         _reject("ROOT_INVALID", object_id, f"{label} must be an exact bounded integer")
     return value
+
+
+def _resource_counter(value: object, object_id: str, label: str, *, positive: bool = False) -> int:
+    floor = 1 if positive else 0
+    if type(value) is not int or not floor <= value <= _MAX_SAFE_INTEGER:
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"{label} must be an exact bounded integer",
+            _RESOURCE_INVARIANT,
+        )
+    return value
+
+
+def _resource_digest(value: object, object_id: str, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 71
+        or not value.startswith("blake3:")
+        or not set(value[7:]) <= _HEX
+    ):
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"{label} must be one lowercase BLAKE3 digest",
+            _RESOURCE_INVARIANT,
+        )
+    return value
+
+
+def _resource_sum(values, object_id: str, label: str) -> int:
+    total = 0
+    for value in values:
+        item = _resource_counter(value, object_id, label)
+        if item > _MAX_SAFE_INTEGER - total:
+            _reject(
+                "CAPACITY_EXCEEDED",
+                object_id,
+                f"{label} exceeds the bounded byte domain",
+                _RESOURCE_INVARIANT,
+            )
+        total += item
+    return total
+
+
+def _ceil_ratio(value: int, numerator: int, denominator: int, object_id: str, label: str) -> int:
+    product = value * numerator
+    result = product // denominator + bool(product % denominator)
+    if result > _MAX_SAFE_INTEGER:
+        _reject(
+            "CAPACITY_EXCEEDED",
+            object_id,
+            f"{label} exceeds the bounded byte domain",
+            _RESOURCE_INVARIANT,
+        )
+    return result
+
+
+def _validate_workload(workload: object, object_id: str) -> TrainingWorkload:
+    if not isinstance(workload, TrainingWorkload):
+        _reject("INVALID_REQUEST", object_id, "TrainingWorkload is required", _RESOURCE_INVARIANT)
+    _resource_digest(workload.request_digest, object_id, "training request digest")
+    for field in _WORKLOAD_FIELDS - {"request_digest"}:
+        _resource_counter(
+            getattr(workload, field),
+            object_id,
+            field,
+            positive=field in {
+                "committed_bytes", "rollback_bytes", "candidate_bytes", "journal_bytes",
+                "read_bytes", "memory_peak_bytes", "optimizer_steps", "trainable_parameters",
+                "weight_bytes_per_parameter", "checkpoint_interval",
+            },
+        )
+    raw_update_floor = (
+        workload.optimizer_steps
+        * workload.trainable_parameters
+        * workload.weight_bytes_per_parameter
+    )
+    if raw_update_floor > workload.candidate_bytes:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            f"candidate writes {workload.candidate_bytes} fall below the Q28 raw update floor {raw_update_floor}",
+            _RESOURCE_INVARIANT,
+        )
+    if workload.checkpoint_interval > workload.optimizer_steps:
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "checkpoint interval exceeds the optimizer horizon",
+            _RESOURCE_INVARIANT,
+        )
+    return workload
+
+
+def _validate_profile(profile: object, object_id: str) -> TrainingResourceProfile:
+    if not isinstance(profile, TrainingResourceProfile):
+        _reject(
+            "INVALID_REQUEST", object_id, "TrainingResourceProfile is required", _RESOURCE_INVARIANT
+        )
+    _resource_digest(profile.profile_evidence_digest, object_id, "profile evidence digest")
+    for field in _PROFILE_FIELDS - {
+        "profile_evidence_digest",
+        "declared_endurance_bytes",
+        "lifetime_written_bytes",
+        "external_power",
+    }:
+        _resource_counter(
+            getattr(profile, field),
+            object_id,
+            field,
+            positive=field in {
+                "device_bytes", "physical_memory_bytes", "recommended_max_working_set_bytes",
+                "sustained_read_bytes_per_second", "sustained_write_bytes_per_second",
+                "minimum_sustained_read_bytes_per_second", "minimum_sustained_write_bytes_per_second",
+                "write_amplification_p95_numerator", "write_amplification_p95_denominator",
+                "predicted_thermal_duty_ppm",
+                "maximum_thermal_duty_ppm", "maximum_write_duty_ppm", "job_limit_seconds",
+                "compute_nanoseconds_per_update_p95",
+            },
+        )
+    if profile.declared_endurance_bytes is not None:
+        _resource_counter(
+            profile.declared_endurance_bytes,
+            object_id,
+            "declared_endurance_bytes",
+            positive=True,
+        )
+    if profile.lifetime_written_bytes is not None:
+        _resource_counter(
+            profile.lifetime_written_bytes,
+            object_id,
+            "lifetime_written_bytes",
+        )
+    if type(profile.external_power) is not bool:
+        _reject("INVALID_REQUEST", object_id, "external_power must be boolean", _RESOURCE_INVARIANT)
+    if (
+        profile.recommended_max_working_set_bytes > profile.physical_memory_bytes
+        or profile.executor_memory_bytes + profile.other_memory_bytes > _MAX_SAFE_INTEGER
+    ):
+        _reject(
+            "MEMORY_BUDGET_EXCEEDED",
+            object_id,
+            "measured memory fields exceed the physical or bounded memory domain",
+            _RESOURCE_INVARIANT,
+        )
+    if (
+        profile.predicted_thermal_duty_ppm > _PPM
+        or not profile.maximum_thermal_duty_ppm <= _PPM
+        or not profile.maximum_write_duty_ppm <= _PPM
+    ):
+        _reject(
+            "THERMAL_LIMIT",
+            object_id,
+            "thermal and write duty values must remain within one million parts",
+            _RESOURCE_INVARIANT,
+        )
+    return profile
+
+
+def _training_phase(workload: TrainingWorkload) -> CapacityPhase:
+    return CapacityPhase(
+        committed=workload.committed_bytes,
+        candidate=workload.candidate_bytes,
+        rollback=workload.rollback_bytes,
+        optimizer=workload.optimizer_bytes,
+        master=workload.master_bytes,
+        dataset=workload.dataset_bytes,
+        journal=workload.journal_bytes,
+    )
+
+
+def _estimate_training(
+    workload: TrainingWorkload,
+    profile: TrainingResourceProfile,
+    object_id: str,
+) -> TrainingEstimate:
+    workload = _validate_workload(workload, object_id)
+    profile = _validate_profile(profile, object_id)
+    if profile.declared_endurance_bytes is None or profile.lifetime_written_bytes is None:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            "mutable training requires declared endurance and lifetime-write telemetry",
+            _RESOURCE_INVARIANT,
+        )
+    endurance = profile.declared_endurance_bytes
+    lifetime_written = profile.lifetime_written_bytes
+    if lifetime_written > endurance:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            "reported lifetime writes exceed declared endurance",
+            _RESOURCE_INVARIANT,
+        )
+    if (
+        profile.sustained_read_bytes_per_second < profile.minimum_sustained_read_bytes_per_second
+        or profile.sustained_write_bytes_per_second < profile.minimum_sustained_write_bytes_per_second
+    ):
+        _reject(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "measured sustained storage falls below the admitted Q42 floor",
+            _RESOURCE_INVARIANT,
+        )
+    reserve = max(_GIB * 4, (profile.physical_memory_bytes + 3) // 4)
+    if reserve >= profile.physical_memory_bytes:
+        _reject(
+            "MEMORY_BUDGET_EXCEEDED",
+            object_id,
+            "the Q47 operating-system reserve consumes measured physical memory",
+            _RESOURCE_INVARIANT,
+        )
+    ceiling = min(
+        profile.physical_memory_bytes - reserve,
+        profile.recommended_max_working_set_bytes * 9 // 10,
+    )
+    occupied = profile.executor_memory_bytes + profile.other_memory_bytes
+    available = max(0, ceiling - occupied)
+    if workload.memory_peak_bytes > available:
+        _reject(
+            "MEMORY_BUDGET_EXCEEDED",
+            object_id,
+            f"training peak {workload.memory_peak_bytes} exceeds the Q47 budget {available}",
+            _RESOURCE_INVARIANT,
+        )
+    logical = _resource_sum(
+        (
+            workload.dataset_bytes,
+            workload.candidate_bytes,
+            workload.optimizer_bytes,
+            workload.master_bytes,
+            workload.journal_bytes,
+        ),
+        object_id,
+        "logical-write projection",
+    )
+    physical = _ceil_ratio(
+        logical,
+        profile.write_amplification_p95_numerator,
+        profile.write_amplification_p95_denominator,
+        object_id,
+        "physical-write projection",
+    )
+    remaining = endurance - lifetime_written
+    if (
+        lifetime_written + physical > endurance * 4 // 5
+        or physical > remaining // 5
+    ):
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            f"projected {physical} physical bytes exceed the Q28 lifetime or per-job endurance budget",
+            _RESOURCE_INVARIANT,
+        )
+    requirement = capacity_requirement(
+        f"training-{workload.request_digest[7:]}",
+        device_bytes=profile.device_bytes,
+        phases=(_training_phase(workload),),
+    )
+    read_ns = _ceil_ratio(
+        workload.read_bytes,
+        1_000_000_000,
+        profile.sustained_read_bytes_per_second,
+        object_id,
+        "read-duration projection",
+    )
+    write_ns = _ceil_ratio(
+        physical,
+        1_000_000_000,
+        profile.sustained_write_bytes_per_second,
+        object_id,
+        "write-duration projection",
+    )
+    compute_ns = workload.optimizer_steps * profile.compute_nanoseconds_per_update_p95
+    if compute_ns > _MAX_SAFE_INTEGER:
+        _reject(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            "compute-duration projection exceeds the bounded time domain",
+            _RESOURCE_INVARIANT,
+        )
+    total_ns = _resource_sum((read_ns, write_ns, compute_ns), object_id, "duration projection")
+    duration = max(1, total_ns // 1_000_000_000 + bool(total_ns % 1_000_000_000))
+    write_duty = _ceil_ratio(
+        physical,
+        _PPM,
+        duration * profile.sustained_write_bytes_per_second,
+        object_id,
+        "write-duty projection",
+    )
+    if profile.predicted_thermal_duty_ppm >= profile.maximum_thermal_duty_ppm:
+        _reject(
+            "THERMAL_LIMIT",
+            object_id,
+            "predicted training duty reaches the qualified Q48 thermal knee",
+            _RESOURCE_INVARIANT,
+        )
+    if write_duty >= profile.maximum_write_duty_ppm:
+        _reject(
+            "THERMAL_LIMIT",
+            object_id,
+            "projected writes reach the qualified sustained write-duty knee",
+            _RESOURCE_INVARIANT,
+        )
+    if duration > profile.job_limit_seconds:
+        _reject(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            f"duration p95 {duration}s exceeds the declared {profile.job_limit_seconds}s job limit",
+            _RESOURCE_INVARIANT,
+        )
+    power_required = duration > 30 * 60
+    if power_required and not profile.external_power:
+        _reject(
+            "OPERATION_CANCELLED",
+            object_id,
+            "jobs longer than 30 minutes require external power before admission",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    return TrainingEstimate(
+        requirement.required_bytes,
+        workload.memory_peak_bytes,
+        workload.read_bytes,
+        logical,
+        physical,
+        duration,
+        workload.checkpoint_interval,
+        power_required,
+        profile.predicted_thermal_duty_ppm,
+        write_duty,
+        requirement.safety_bytes,
+    )
+
+
+def admit_training(
+    workload: TrainingWorkload,
+    profile: TrainingResourceProfile,
+    *,
+    allocatable_verified_free: int,
+    reserve_extent,
+    release_extent,
+) -> TrainingAdmission:
+    """Reserve every Q74 resource before one training byte can mutate the cartridge."""
+
+    object_id = "training:admission"
+    estimate = _estimate_training(workload, profile, object_id)
+    free = _resource_counter(
+        allocatable_verified_free,
+        object_id,
+        "allocatable_verified_free",
+    )
+    reservation = reserve_capacity(
+        f"training-{workload.request_digest[7:]}",
+        device_bytes=profile.device_bytes,
+        allocatable_verified_free=free,
+        phases=(_training_phase(workload),),
+        reserve_extent=reserve_extent,
+        release_extent=release_extent,
+    )
+    profile_digest = digest_bytes(canonical_bytes(profile.record()))
+    return TrainingAdmission(workload, profile, profile_digest, free, estimate, reservation)
+
+
+def _active_admission(
+    value: object,
+    object_id: str,
+) -> tuple[dict, TrainingWorkload]:
+    if (
+        not isinstance(value, TrainingAdmission)
+        or not isinstance(value.workload, TrainingWorkload)
+        or not isinstance(value.profile, TrainingResourceProfile)
+        or not isinstance(value.estimate, TrainingEstimate)
+        or not isinstance(value.reservation, CapacityReservation)
+        or not value.reservation.active
+    ):
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "one active complete TrainingAdmission is required",
+            _RESOURCE_INVARIANT,
+        )
+    record = value.record()
+    workload, profile, estimate = _admission_from_record(record, object_id)
+    reservation = value.reservation
+    if (
+        reservation.operation_id != f"training-{workload.request_digest[7:]}"
+        or reservation.device_bytes != profile.device_bytes
+        or reservation.safety_bytes != estimate.safety_bytes
+        or reservation.phase_totals != (_training_phase(workload).total,)
+        or reservation.repair_bytes != 0
+        or reservation.required_bytes != estimate.S_required
+        or not callable(reservation._release_extent)
+    ):
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "the live capacity reservation does not match its training estimate",
+            _RESOURCE_INVARIANT,
+        )
+    return record, workload
+
+
+def _workload_from_record(value: object, object_id: str) -> TrainingWorkload:
+    row = _record(value, _WORKLOAD_FIELDS, object_id, "training workload")
+    try:
+        workload = TrainingWorkload(**row)
+    except TypeError as error:
+        _reject("ROOT_INVALID", object_id, f"training workload is malformed: {error}")
+    return _validate_workload(workload, object_id)
+
+
+def _profile_from_record(value: object, object_id: str) -> TrainingResourceProfile:
+    row = _record(value, _PROFILE_FIELDS, object_id, "training resource profile")
+    try:
+        profile = TrainingResourceProfile(**row)
+    except TypeError as error:
+        _reject("ROOT_INVALID", object_id, f"training resource profile is malformed: {error}")
+    return _validate_profile(profile, object_id)
+
+
+def _admission_from_record(value: object, object_id: str) -> tuple[TrainingWorkload, TrainingResourceProfile, TrainingEstimate]:
+    row = _record(value, _ADMISSION_FIELDS, object_id, "training admission")
+    if row["format"] != _RESOURCE_VERSION:
+        _reject("ROOT_INVALID", object_id, "training admission version is unsupported")
+    workload = _workload_from_record(row["workload"], object_id)
+    profile = _profile_from_record(row["profile"], object_id)
+    profile_digest = _digest(row["profile_digest"], object_id, "training profile digest")
+    if profile_digest != digest_bytes(canonical_bytes(profile.record())):
+        _reject("ROOT_INVALID", object_id, "training profile digest does not bind the measured fields")
+    free = _counter(row["allocatable_verified_free"], object_id, "allocatable verified free", positive=True)
+    estimate = _estimate_training(workload, profile, f"operation:{workload.request_digest[:32]}")
+    expected = estimate.record()
+    observed = _record(row["estimate"], _ESTIMATE_FIELDS, object_id, "training estimate")
+    if observed != expected or free < estimate.S_required:
+        _reject("ROOT_INVALID", object_id, "training estimate or capacity admission was resealed inconsistently")
+    return workload, profile, estimate
+
+
+def _observation_record(value: object, object_id: str) -> TrainingObservation:
+    if isinstance(value, TrainingObservation):
+        observation = value
+    else:
+        row = _record(value, _OBSERVATION_FIELDS, object_id, "training observation")
+        try:
+            observation = TrainingObservation(**row)
+        except TypeError as error:
+            _reject("ROOT_INVALID", object_id, f"training observation is malformed: {error}")
+    for field in _OBSERVATION_FIELDS - {"external_power"}:
+        _counter(getattr(observation, field), object_id, f"observation {field}")
+    if type(observation.external_power) is not bool:
+        _reject("ROOT_INVALID", object_id, "observed external power must be boolean")
+    if observation.thermal_duty_ppm > _PPM or observation.write_duty_ppm > _PPM:
+        _reject("ROOT_INVALID", object_id, "observed duty values exceed one million parts")
+    return observation
+
+
+def _assess_training_observation(
+    admission: dict,
+    logical_write_bytes: int,
+    read_bytes: int,
+    prior: object,
+    observation: TrainingObservation,
+    expected_checkpoint: int,
+    object_id: str,
+) -> dict:
+    workload, profile, estimate = _admission_from_record(admission, object_id)
+    logical = _counter(logical_write_bytes, object_id, "metered logical writes")
+    reads = _counter(read_bytes, object_id, "metered reads")
+    observed = _observation_record(observation, object_id)
+    if observed.checkpoint != expected_checkpoint:
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"observation checkpoint {observed.checkpoint} does not match durable step {expected_checkpoint}",
+            _RESOURCE_INVARIANT,
+        )
+    if observed.checkpoint > workload.optimizer_steps:
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "observation checkpoint exceeds the admitted optimizer horizon",
+            _RESOURCE_INVARIANT,
+        )
+    if observed.logical_write_bytes != logical or observed.read_bytes != reads:
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "observation byte counters do not match the trainer-owned durable meter",
+            _RESOURCE_INVARIANT,
+        )
+    previous = None if prior is None else _observation_record(prior, object_id)
+    if previous is not None and (
+        observed.checkpoint <= previous.checkpoint
+        or observed.logical_write_bytes < previous.logical_write_bytes
+        or observed.read_bytes < previous.read_bytes
+        or observed.physical_write_bytes < previous.physical_write_bytes
+        or observed.elapsed_nanoseconds < previous.elapsed_nanoseconds
+    ):
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "training observations must advance monotonically from the prior durable boundary",
+            _RESOURCE_INVARIANT,
+        )
+    if logical > estimate.logical_write_bytes or reads > estimate.read_bytes:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            "metered logical writes or reads exceed the complete admitted estimate",
+            _RESOURCE_INVARIANT,
+        )
+    projected_so_far = _ceil_ratio(
+        logical,
+        profile.write_amplification_p95_numerator,
+        profile.write_amplification_p95_denominator,
+        object_id,
+        "checkpoint physical-write projection",
+    )
+    if observed.physical_write_bytes > projected_so_far:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            f"metered physical writes {observed.physical_write_bytes} exceed p95 projection {projected_so_far}",
+            _RESOURCE_INVARIANT,
+        )
+    if estimate.power_required and not observed.external_power:
+        _reject(
+            "OPERATION_CANCELLED",
+            object_id,
+            "external power was lost at a durable training boundary",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    if (
+        observed.sustained_read_bytes_per_second < profile.minimum_sustained_read_bytes_per_second
+        or observed.sustained_write_bytes_per_second < profile.minimum_sustained_write_bytes_per_second
+    ):
+        _reject(
+            "OVERLOADED",
+            object_id,
+            "observed sustained storage fell below the admitted Q42 floor",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    thermal_throttle = (profile.maximum_thermal_duty_ppm * 9 + 9) // 10
+    write_throttle = (profile.maximum_write_duty_ppm * 9 + 9) // 10
+    if observed.thermal_duty_ppm >= profile.maximum_thermal_duty_ppm:
+        _reject(
+            "THERMAL_LIMIT",
+            object_id,
+            "observed thermal duty reached the hard envelope at a durable boundary",
+            _RESOURCE_INVARIANT,
+        )
+    if observed.write_duty_ppm >= profile.maximum_write_duty_ppm:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            object_id,
+            "observed write duty reached the hard envelope at a durable boundary",
+            _RESOURCE_INVARIANT,
+        )
+    if observed.thermal_duty_ppm >= thermal_throttle:
+        _reject(
+            "THERMAL_LIMIT",
+            object_id,
+            "observed thermal duty reached the 90 percent throttle boundary",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    if observed.write_duty_ppm >= write_throttle:
+        _reject(
+            "OVERLOADED",
+            object_id,
+            "observed write duty reached the 90 percent throttle boundary",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    elapsed_seconds = observed.elapsed_nanoseconds // 1_000_000_000 + bool(
+        observed.elapsed_nanoseconds % 1_000_000_000
+    )
+    remaining_duration = _ceil_ratio(
+        estimate.duration_p95,
+        estimate.logical_write_bytes - logical,
+        estimate.logical_write_bytes,
+        object_id,
+        "remaining-duration projection",
+    )
+    if elapsed_seconds + remaining_duration > profile.job_limit_seconds:
+        _reject(
+            "OVERLOADED",
+            object_id,
+            "revised completion estimate exceeds the declared job limit",
+            _RESOURCE_INVARIANT,
+            "retryable",
+        )
+    return observed.record()
+
+
+def assess_training_observation(
+    admission: TrainingAdmission,
+    *,
+    logical_write_bytes: int,
+    read_bytes: int,
+    prior: TrainingObservation | None,
+    observation: TrainingObservation,
+) -> TrainingObservation:
+    """Apply Q28/Q74 to one simulated or live cumulative checkpoint observation."""
+
+    admission_record, workload = _active_admission(admission, "training:admission")
+    if prior is None:
+        prior_record = None
+        expected_checkpoint = 0
+    else:
+        normalized_prior = _observation_record(prior, "training:observation")
+        prior_record = normalized_prior.record()
+        expected_checkpoint = normalized_prior.checkpoint + 1
+    result = _assess_training_observation(
+        admission_record,
+        logical_write_bytes,
+        read_bytes,
+        prior_record,
+        observation,
+        expected_checkpoint,
+        workload.request_digest,
+    )
+    return TrainingObservation(**result)
 
 
 def _base_codec(precision: object, object_id: str) -> dict:
@@ -702,6 +1498,52 @@ def _manifest_shape(manifest: object, object_id: str) -> dict:
         _digest(digest, object_id, "trace page digest")
     if value["master_pages"] != [] or len(delta) * total > _MAX_UPDATES:
         _reject("TRAINING_UNSUPPORTED", object_id, "hidden masters or an unbounded update schedule are forbidden")
+    workload, _, estimate = _admission_from_record(value["admission"], object_id)
+    if (
+        workload.request_digest != value["job_id"]
+        or workload.memory_peak_bytes != limit
+        or workload.optimizer_steps != total
+    ):
+        _reject("ROOT_INVALID", object_id, "training admission names another request or horizon")
+    meter = _record(value["meter"], _METER_FIELDS, object_id, "training meter")
+    logical = _counter(meter["logical_write_bytes"], object_id, "metered logical writes")
+    reads = _counter(meter["read_bytes"], object_id, "metered reads")
+    if logical > estimate.logical_write_bytes or reads > estimate.read_bytes:
+        _reject("ENDURANCE_EXCEEDED", object_id, "durable meter exceeds the admitted job estimate")
+    observations = meter["observations"]
+    if not isinstance(observations, list) or len(observations) > total + 1:
+        _reject("ROOT_INVALID", object_id, "training observations must be one bounded list")
+    normalized_observations = [
+        _observation_record(observation, object_id) for observation in observations
+    ]
+    expected_count = step if step < total else {total, total + 1}
+    if (
+        (isinstance(expected_count, int) and len(normalized_observations) != expected_count)
+        or (isinstance(expected_count, set) and len(normalized_observations) not in expected_count)
+        or [observation.checkpoint for observation in normalized_observations]
+        != list(range(len(normalized_observations)))
+        or any(
+            later.physical_write_bytes < earlier.physical_write_bytes
+            or later.elapsed_nanoseconds < earlier.elapsed_nanoseconds
+            for earlier, later in zip(normalized_observations, normalized_observations[1:])
+        )
+    ):
+        _reject("ROOT_INVALID", object_id, "training observations do not cover each durable boundary exactly once")
+    for index, observed in enumerate(normalized_observations):
+        _assess_training_observation(
+            value["admission"],
+            observed.logical_write_bytes,
+            observed.read_bytes,
+            None if index == 0 else normalized_observations[index - 1].record(),
+            observed,
+            index,
+            object_id,
+        )
+    if normalized_observations and (
+        normalized_observations[-1].logical_write_bytes > logical
+        or normalized_observations[-1].read_bytes > reads
+    ):
+        _reject("ROOT_INVALID", object_id, "observation counters exceed the durable trainer meter")
     return value
 
 
@@ -945,6 +1787,11 @@ def _load_manifest(
         ]
         if manifest["declared_peak_bytes"] != max(peaks, default=0):
             _reject("ROOT_INVALID", work_root, "manifest peak does not match its lifetime traces")
+        if (
+            manifest["step"] == manifest["total_steps"]
+            and len(manifest["meter"]["observations"]) != manifest["total_steps"] + 1
+        ):
+            _reject("ROOT_INVALID", work_root, "complete training lacks its final metered boundary")
     return manifest
 
 
@@ -952,8 +1799,35 @@ def _write_checkpoint(
     cartridge,
     manifest: dict,
     available_locations: tuple[PageLocation, ...],
+    new_logical_bytes: int,
 ) -> TrainingCheckpoint:
-    payload = canonical_bytes(manifest)
+    new_bytes = _counter(new_logical_bytes, manifest["job_id"], "new logical writes")
+    prior = _counter(
+        manifest["meter"]["logical_write_bytes"],
+        manifest["job_id"],
+        "prior logical writes",
+    )
+    total = _resource_sum((prior, new_bytes), manifest["job_id"], "logical writes")
+    for _ in range(8):
+        manifest["meter"]["logical_write_bytes"] = total
+        payload = canonical_bytes(manifest)
+        updated = _resource_sum(
+            (prior, new_bytes, len(payload)), manifest["job_id"], "logical writes"
+        )
+        if updated == total:
+            break
+        total = updated
+    else:
+        _reject("ROOT_INVALID", manifest["job_id"], "manifest write metering did not converge")
+    _, _, estimate = _admission_from_record(manifest["admission"], manifest["job_id"])
+    if total > estimate.logical_write_bytes:
+        _reject(
+            "ENDURANCE_EXCEEDED",
+            manifest["job_id"],
+            f"logical writes {total} exceed admitted {estimate.logical_write_bytes}",
+            _RESOURCE_INVARIANT,
+        )
+    _manifest_shape(manifest, manifest["job_id"])
     if len(payload) > PAGE_BYTES:
         _reject("CAPACITY_EXCEEDED", manifest["job_id"], "training manifest exceeds one content page")
     manifest_digest = digest_bytes(payload)
@@ -974,7 +1848,7 @@ def _write_checkpoint(
     return checkpoint
 
 
-def prepare_training(
+def _training_material(
     cartridge,
     parent_root: str,
     operation: str,
@@ -985,8 +1859,8 @@ def prepare_training(
     window_limit_bytes: int,
     calibration_records: tuple[dict, ...] = (),
     delta_precision: str = "FP32",
-) -> TrainingCheckpoint:
-    """Create one durable non-callable work branch over a frozen callable parent."""
+) -> dict:
+    """Validate one training request and derive every page without writing it."""
 
     object_id = f"training:{operation}"
     if not isinstance(operation, str) or operation not in {*_TIER_A, _TIER_B}:
@@ -1047,7 +1921,8 @@ def prepare_training(
         or len({item["page_digest"] for item in normalized_parameters}) != len(normalized_parameters)
     ):
         _reject("INVALID_REQUEST", object_id, "parameter ids and frozen base pages must be unique")
-    parent_pages = {location.page_digest for location in page_locations(cartridge, parent_root)}
+    parent_locations = page_locations(cartridge, parent_root)
+    parent_pages = {location.page_digest for location in parent_locations}
     if any(item["page_digest"] not in parent_pages for item in normalized_parameters):
         _reject("PAGE_CORRUPT", object_id, "a frozen base page is absent from the callable parent")
     if tier == "B" and len(normalized_parameters) != 1:
@@ -1069,8 +1944,6 @@ def prepare_training(
         canonical_bytes({"format": _VERSION, "role": "calibration", "record": row})
         for row in calibrations
     )
-    durable_inputs = stage_training_pages(cartridge, (*objective_payloads, *calibration_payloads))
-    input_locations = {location.page_digest: location for location in durable_inputs}
     objective_rows = [
         {"step": step, "page_digest": digest_bytes(payload)}
         for step, payload in enumerate(objective_payloads)
@@ -1115,50 +1988,201 @@ def prepare_training(
         for parameter_id, payload in zip(delta_ids, delta_payloads, strict=True)
     ]
     state_payloads = _state_pages(job_id, 0, delta_rows, _TRAINING_CASES[operation][1])
-    generated = stage_training_pages(cartridge, (*delta_payloads, *state_payloads))
-    generated_locations = {location.page_digest: location for location in generated}
     state_rows = {
         name: digest_bytes(payload)
         for name, payload in zip(("optimizer", "rng", "journal"), state_payloads, strict=True)
     }
-    manifest = {
-        "format": _VERSION,
-        "job_id": job_id,
+    return {
+        "parent": parent,
+        "parent_locations": parent_locations,
+        "parent_root": parent_root,
         "tier": tier,
         "operation": operation,
-        "parent_root": parent_root,
-        "parent_identity": parent["identity"],
-        "parent_certificate_digest": certificate_digest,
         "base_precision": base_precision,
         "delta_precision": delta_precision,
-        "operator_cases": list(_TRAINING_CASES[operation]),
-        "adapter_rank": 1 if tier == "A" else None,
-        "adapter_scale": "1" if tier == "A" else None,
-        "step": 0,
+        "certificate_digest": certificate_digest,
+        "normalized_parameters": normalized_parameters,
+        "objective_payloads": objective_payloads,
+        "calibration_payloads": calibration_payloads,
+        "objective_rows": objective_rows,
+        "calibration_rows": calibration_rows,
+        "delta_payloads": delta_payloads,
+        "delta_rows": delta_rows,
+        "state_payloads": state_payloads,
+        "state_rows": state_rows,
+        "job_id": job_id,
+        "seed": seed,
+        "limit": limit,
         "total_steps": len(objectives),
+    }
+
+
+def _workload(material: dict) -> TrainingWorkload:
+    steps = material["total_steps"]
+    delta_bytes = sum(map(len, material["delta_payloads"]))
+    dataset_bytes = sum(map(len, (*material["objective_payloads"], *material["calibration_payloads"])))
+    terminal_states = _state_pages(
+        material["job_id"],
+        steps,
+        material["delta_rows"],
+        _TRAINING_CASES[material["operation"]][1],
+    )
+    checkpoint_count = steps + 1
+    optimizer_bytes = len(terminal_states[0]) * checkpoint_count
+    journal_bytes = (
+        (len(terminal_states[1]) + len(terminal_states[2])) * checkpoint_count
+        + PAGE_BYTES * steps
+        + PAGE_BYTES * (steps + 2)
+    )
+    locations = {location.page_digest: location for location in material["parent_locations"]}
+    if material["tier"] == "A":
+        base_read_per_step = sum(
+            locations[row["page_digest"]].length for row in material["normalized_parameters"]
+        )
+    else:
+        base_read_per_step = (
+            locations[material["normalized_parameters"][0]["page_digest"]].length
+            * len(material["delta_rows"])
+        )
+    read_bytes = (
+        sum(map(len, material["objective_payloads"]))
+        + steps * sum(map(len, material["calibration_payloads"]))
+        + steps * (base_read_per_step + delta_bytes)
+    )
+    scalar_count = len(material["delta_rows"]) * (6 if material["tier"] == "A" else 1)
+    return TrainingWorkload(
+        material["job_id"],
+        sum(location.length for location in material["parent_locations"]),
+        sum(location.length for location in material["parent_locations"]),
+        dataset_bytes,
+        delta_bytes * checkpoint_count,
+        optimizer_bytes,
+        0,
+        journal_bytes,
+        read_bytes,
+        material["limit"],
+        steps,
+        scalar_count,
+        4 if material["delta_precision"] == "FP32" else 2,
+    )
+
+
+def training_workload(
+    cartridge,
+    parent_root: str,
+    operation: str,
+    parameters: tuple[tuple[str, str], ...],
+    objectives: tuple[tuple[float, ...], ...],
+    *,
+    random_seed: int,
+    window_limit_bytes: int,
+    calibration_records: tuple[dict, ...] = (),
+    delta_precision: str = "FP32",
+) -> TrainingWorkload:
+    """Derive the immutable Q28 workload without staging or mutating a cartridge byte."""
+
+    return _workload(_training_material(
+        cartridge,
+        parent_root,
+        operation,
+        parameters,
+        objectives,
+        random_seed=random_seed,
+        window_limit_bytes=window_limit_bytes,
+        calibration_records=calibration_records,
+        delta_precision=delta_precision,
+    ))
+
+
+def prepare_training(
+    cartridge,
+    parent_root: str,
+    operation: str,
+    parameters: tuple[tuple[str, str], ...],
+    objectives: tuple[tuple[float, ...], ...],
+    *,
+    random_seed: int,
+    window_limit_bytes: int,
+    admission: TrainingAdmission | None = None,
+    calibration_records: tuple[dict, ...] = (),
+    delta_precision: str = "FP32",
+) -> TrainingCheckpoint:
+    """Create one durable work branch only after complete Q28/Q74 admission."""
+
+    admission_record, admitted_workload = _active_admission(
+        admission,
+        "training:admission",
+    )
+    material = _training_material(
+        cartridge,
+        parent_root,
+        operation,
+        parameters,
+        objectives,
+        random_seed=random_seed,
+        window_limit_bytes=window_limit_bytes,
+        calibration_records=calibration_records,
+        delta_precision=delta_precision,
+    )
+    workload = _workload(material)
+    if admitted_workload != workload:
+        _reject(
+            "INVALID_REQUEST",
+            workload.request_digest,
+            "one active admission for this exact training workload is required before mutation",
+            _RESOURCE_INVARIANT,
+        )
+    input_payloads = (*material["objective_payloads"], *material["calibration_payloads"])
+    durable_inputs = stage_training_pages(cartridge, input_payloads)
+    input_locations = {location.page_digest: location for location in durable_inputs}
+    generated_payloads = (*material["delta_payloads"], *material["state_payloads"])
+    generated = stage_training_pages(cartridge, generated_payloads)
+    generated_locations = {location.page_digest: location for location in generated}
+    manifest = {
+        "format": _VERSION,
+        "job_id": material["job_id"],
+        "tier": material["tier"],
+        "operation": material["operation"],
+        "parent_root": material["parent_root"],
+        "parent_identity": material["parent"]["identity"],
+        "parent_certificate_digest": material["certificate_digest"],
+        "base_precision": material["base_precision"],
+        "delta_precision": material["delta_precision"],
+        "operator_cases": list(_TRAINING_CASES[material["operation"]]),
+        "adapter_rank": 1 if material["tier"] == "A" else None,
+        "adapter_scale": "1" if material["tier"] == "A" else None,
+        "step": 0,
+        "total_steps": material["total_steps"],
         "optimizer_step": 0,
         "data_cursor": 0,
-        "random_seed": seed,
+        "random_seed": material["seed"],
         "rng_counter": 0,
-        "window_limit_bytes": limit,
+        "window_limit_bytes": material["limit"],
         "declared_peak_bytes": 0,
-        "base_pages": normalized_parameters,
-        "delta_pages": delta_rows,
-        "objective_pages": objective_rows,
-        "calibration_pages": calibration_rows,
-        "state_pages": state_rows,
+        "base_pages": material["normalized_parameters"],
+        "delta_pages": material["delta_rows"],
+        "objective_pages": material["objective_rows"],
+        "calibration_pages": material["calibration_rows"],
+        "state_pages": material["state_rows"],
         "trace_pages": [],
         "master_pages": [],
+        "admission": admission_record,
+        "meter": {"logical_write_bytes": 0, "read_bytes": 0, "observations": []},
     }
-    _manifest_shape(manifest, job_id)
+    _manifest_shape(manifest, material["job_id"])
     return _write_checkpoint(
         cartridge,
         manifest,
         tuple({**input_locations, **generated_locations}.values()),
+        sum(map(len, (*input_payloads, *generated_payloads))),
     )
 
 
-def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheckpoint:
+def advance_training(
+    cartridge,
+    checkpoint: TrainingCheckpoint,
+    observation: TrainingObservation | None = None,
+) -> TrainingCheckpoint:
     """Execute one deterministic global step and durably retire every live tensor window."""
 
     if not isinstance(checkpoint, TrainingCheckpoint):
@@ -1171,6 +2195,23 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
     )
     if manifest["step"] == manifest["total_steps"]:
         _reject("INVALID_REQUEST", manifest["job_id"], "training is complete; commit the child")
+    if not isinstance(observation, TrainingObservation):
+        _reject(
+            "INVALID_REQUEST",
+            manifest["job_id"],
+            "one cumulative TrainingObservation is required before the next write",
+            _RESOURCE_INVARIANT,
+        )
+    observations = manifest["meter"]["observations"]
+    observation_record = _assess_training_observation(
+        manifest["admission"],
+        manifest["meter"]["logical_write_bytes"],
+        manifest["meter"]["read_bytes"],
+        observations[-1] if observations else None,
+        observation,
+        manifest["step"],
+        manifest["job_id"],
+    )
     active = pin_generation(cartridge)
     if active is None or active.root_digest != manifest["parent_root"]:
         _reject("IDEMPOTENCY_CONFLICT", manifest["job_id"], "callable parent changed during training")
@@ -1227,6 +2268,11 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
             for delta in manifest["delta_pages"]
         ]
     fixed_live_bytes = len(objective_payload) + sum(len(payload) for _, payload in calibration_payloads)
+    step_read_bytes = fixed_live_bytes + sum(
+        parent_locations[base["page_digest"]].length
+        + location_map[delta["page_digest"]].length
+        for base, delta, _ in update_rows
+    )
     required_peak = max(
         fixed_live_bytes
         + parent_locations[base["page_digest"]].length
@@ -1252,6 +2298,7 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
     peak = 0
     output_rows = []
     mlx_windows = []
+    output_payload_bytes = 0
 
     def event(action: str, tensor_id: str, size: int, location: str, page_digest: str | None) -> None:
         nonlocal peak
@@ -1281,6 +2328,7 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
         event("LOAD", f"calibration:{row['kind']}", len(payload), "UM", row["page_digest"])
 
     def outputs():
+        nonlocal output_payload_bytes
         for base, delta, calibration_loss in update_rows:
             parameter_id = delta["parameter_id"]
             base_payload = _base_payload(cartridge, manifest["parent_root"], base)
@@ -1323,6 +2371,7 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
                 "float32" if manifest["delta_precision"] == "FP32" else "bfloat16",
             )
             output_digest = digest_bytes(output_payload)
+            output_payload_bytes += len(output_payload)
             event("PRODUCE", f"child:{parameter_id}", len(output_payload), "UM", output_digest)
             output_rows.append({"parameter_id": parameter_id, "page_digest": output_digest})
             yield output_payload
@@ -1380,6 +2429,11 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
         "delta_pages": output_rows,
         "state_pages": state_rows,
         "trace_pages": [*manifest["trace_pages"], trace_digest],
+        "meter": {
+            "logical_write_bytes": manifest["meter"]["logical_write_bytes"],
+            "read_bytes": manifest["meter"]["read_bytes"] + step_read_bytes,
+            "observations": [*observations, observation_record],
+        },
     }
     _manifest_shape(next_manifest, manifest["job_id"])
     retained = [
@@ -1394,13 +2448,19 @@ def advance_training(cartridge, checkpoint: TrainingCheckpoint) -> TrainingCheck
     available = tuple(
         location_map[page_digest] for page_digest in retained
     ) + tuple(new_locations.values())
-    return _write_checkpoint(cartridge, next_manifest, available)
+    return _write_checkpoint(
+        cartridge,
+        next_manifest,
+        available,
+        output_payload_bytes + len(trace_payload) + sum(map(len, state_payloads)),
+    )
 
 
 def commit_training(
     cartridge,
     checkpoint: TrainingCheckpoint,
     transaction_id: str,
+    observation: TrainingObservation | None = None,
 ) -> TrainingResult:
     """Commit one completed training artifact through the sole Q73 generation authority."""
 
@@ -1411,10 +2471,46 @@ def commit_training(
         checkpoint.work_root,
         checkpoint.manifest_digest,
         expected_checkpoint=checkpoint,
-        deep=True,
     )
     if manifest["step"] != manifest["total_steps"]:
         _reject("INVALID_REQUEST", manifest["job_id"], "incomplete training cannot become callable")
+    if not isinstance(observation, TrainingObservation):
+        _reject(
+            "INVALID_REQUEST",
+            manifest["job_id"],
+            "one final TrainingObservation is required before child publication",
+            _RESOURCE_INVARIANT,
+        )
+    observations = manifest["meter"]["observations"]
+    observation_record = _assess_training_observation(
+        manifest["admission"],
+        manifest["meter"]["logical_write_bytes"],
+        manifest["meter"]["read_bytes"],
+        observations[-1] if observations else None,
+        observation,
+        manifest["step"],
+        manifest["job_id"],
+    )
+    final_manifest = {
+        **manifest,
+        "meter": {
+            **manifest["meter"],
+            "observations": [*observations, observation_record],
+        },
+    }
+    checkpoint = _write_checkpoint(
+        cartridge,
+        final_manifest,
+        page_locations(cartridge, checkpoint.work_root),
+        0,
+    )
+    manifest = _load_manifest(
+        cartridge,
+        checkpoint.work_root,
+        checkpoint.manifest_digest,
+        expected_checkpoint=checkpoint,
+        deep=True,
+    )
     rng_state = read_training_page(
         cartridge, checkpoint.work_root, manifest["state_pages"]["rng"]
     )

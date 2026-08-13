@@ -6055,3 +6055,119 @@ the queue with clause-level results, run the gate again, and push both commits w
 the history that shows why the first clean-looking trainer was not enough. S22 can now begin from a
 real frozen-parent training path and add metering and admission without inheriting a numerical
 demonstration disguised as training.
+
+
+**Kimi K3 Max (GitHub Copilot Harness)**
+
+#### Entry 66 — 2026-08-13, the guards the fixture names but never pulls, and the file that outgrew its own law
+
+Drew asked for this entry, so it is written. It records my review of S22, run critically against
+the working tree while the step sat IN_PROGRESS — trainer.py grown again to 2570 lines, the S22
+fixture untracked, HEAD still at 1a0ce31. I wrote the scope note before the code, listed the
+attack surface, and then read.
+
+The machinery S22 builds is the strongest part of the step, and I want the record to say so before
+the finding. Generic preflight, reservation, and per-checkpoint metering with no physical-drive
+claim — correctly deferred to L01 and L04. The admission core in _estimate_training is fully typed
+across declared-versus-lifetime endurance, write amplification p95, the Q47 operating-system
+reserve, thermal duty knees, duration p95, and external power. admit_training reuses store.py's
+Q53 reserve_capacity rather than growing a second reservation authority. assess_training_observation
+enforces monotone checkpoints, metered-versus-projected endurance drift, and thermal and write
+throttles with a typed retryable-versus-terminal distinction. The fixture is the most adversarial
+in the repo: an exact Q28 envelope-equality proof, fourteen preflight injections, seven runtime
+throttle and stop cases, forged-admission and reseal detection. Suite 42 passed, ledger zero
+violations.
+
+I probed the seams the fixture might not reach. Exact-fit reservation reserves; one byte short
+refuses CAPACITY_EXCEEDED. One byte over the p95 projection refuses ENDURANCE_EXCEEDED even inside
+the endurance budget. A physical-write drop across checkpoints refuses INVALID_REQUEST. Admission
+is mandatory — prepare_training with admission=None is refused, not default-admitted. Every named
+invariant held.
+
+Then the mutation battery, and the finding that made me stop. Removing the p95 metering-drift
+check fails the fixture — that guard is load-bearing. But two Q28/Q74 guards survive mutation.
+Weakening the endurance envelope from eighty to a hundred percent leaves the test green. Removing
+the monotone physical-write guard leaves the test green. I classified both before reporting, the
+discipline S21 taught me: they are not dead code. The eighty-percent envelope correctly refuses at
+eighty-one; the monotone guard correctly refuses a real two-checkpoint drop. They are live guards
+the fixture never exercises — the same proof-defect class Sol named in S21 and I confirmed there,
+now recurring in S22. The fixture proves the envelope at exactly eighty percent and one past, and
+never drives the sequence where physical writes actually fall. A guard a mutation can remove
+without a failing test is a gap, and there are two.
+
+The second finding is not a defect but a trend, and it belongs in the ledger's voice rather than
+a reviewer's preference. trainer.py is 2570 lines, three times the eight-hundred hard cap, grown
+by 1130 lines in one step. The discovered_scope names the sole-training-authority boundary and the
+ledger accepts it, as it accepted S21's identical justification. But metering and admission are a
+genuinely separable state machine, and the sibling law AGENTS.md enforces everywhere else might
+argue they belong apart. The justification is becoming reflexive — the cap is now a formality the
+step records rather than a constraint the step obeys. That is Drew's accounting call under J, not
+a correctness defect, and I named it rather than litigated it.
+
+What this entry preserves is the recurrence. S21 and S22 both shipped live guards their fixtures
+named but never pulled. The machinery is real in both. The gap is the same shape in both: proof
+that stops one step short of the guard it claims. If there is a discipline the next reviewer should
+inherit, it is that the mutation battery is not the optional coda to a review — it is the review,
+because it is the only instrument that asks whether the proof reaches as far as the guard does.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 67 — 2026-08-13, the control that survived, and what that taught me about controls
+
+Entry 63 ended with a rule: a control belongs on every batch, not once per campaign. Drew asked me
+to review S22 critically, and the rule fired on the first batch. It did not fire the way I expected.
+
+I began by hunting the defect I had found in S15 and again in S21 — a proof configured so the
+property under test cannot vary. For S22 that would be Q28's projected writes and metered writes
+turning out to be the same number computed twice. It is not there. `_write_checkpoint` accumulates
+from call sites that pass the summed lengths of the payloads actually written, then iterates to a
+fixed point that includes the serialized size of the manifest doing the recording, so the meter
+accounts for the cost of its own bookkeeping. The projection has a genuine independent oracle: the
+fixture derives every field with literal arithmetic and asserts exact equality, and dropping one
+term from the projection kills it. Three steps running I had found that circularity, and the fourth
+time it was absent. That is worth recording as a negative result, because a reviewer who only
+reports what he finds teaches the next one to expect the wrong things.
+
+Then the control. I disabled the endurance comparison that rejects a metered write total above the
+admitted estimate, expecting it to die, and it survived. My first instinct was that the harness had
+broken again — the third instrument failure in a week makes that the cheap explanation. It had not.
+The mutation was sound and the guard genuinely is not reached.
+
+The error was in what I had chosen as a control. I picked a guard I believed was covered, which is
+not the same thing as a mutation whose death I am certain of. A control has to be derived from what
+the fixture asserts, not from what the code guards, because the entire question under investigation
+is whether those two sets coincide. Using a guard as a control assumes the answer. I discarded the
+batch, took the control instead from the test's own literal oracle — drop a term from the
+projection, watch the equality assertion fail — and re-ran everything.
+
+That distinction is finer than the rule in Entry 63 and it is the part I would hand on. Every batch
+needs a control; the control must come from the assertions, not the implementation.
+
+With a valid control the picture came out clean. Five guards survive removal: the fixed point that
+keeps the meter from under-counting its own manifest, the monotonicity of observations across
+checkpoints, the metered-versus-estimate boundary, the Q28 raw update floor, and the check for a
+device whose lifetime writes already exceed its declared endurance. Four others die properly. The
+survivors cluster: two are the terminal endurance comparisons, one is the floor that stops a
+projection understating unavoidable writes, and two protect the integrity of the meter itself —
+which is the failure mode that would make every other endurance guard read as satisfied.
+
+I also found a duplicated comparison, and I found it only because a mutation did nothing. The same
+metered-versus-estimate test appears identically in two places; I had changed the first, the fixture
+did not notice, and chasing why surfaced the second. That is a use for mutation testing I had not
+appreciated — it locates duplicate authority by making one copy inert and observing that nothing
+changes.
+
+One more thing I got right by checking rather than by writing. My first framing was that the
+endurance path was unexercised. It is not: the fixture asserts that error code seven times against
+eight guard sites, and four of the five I tested die. The true finding is narrower and names the
+specific sites. That is twice in succession now that a draft has been corrected before publication
+rather than after adjudication, which is a smaller claim than improvement but a real one.
+
+The step itself is in better shape than S21 was at the same stage. The acceptance boundary and the
+discovered scope were written before I arrived rather than after I asked. What I would raise beside
+the survivors is size: `trainer.py` is now the second-largest product module and S22 added more
+lines to it than the whole of S21, against a row that declares itself medium. The scope note names
+its authority boundary honestly. The tripwire in AGENTS.md still says that twice the expected size
+means stopping to re-read the contract, and nobody has stopped.

@@ -1141,7 +1141,9 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S21]
-    status: TODO
+    status: IN_PROGRESS 2026-08-12
+    acceptance_boundary: "S22 implements generic preflight, reservation, and per-checkpoint metering against recorded storage-class evidence, then executes Q28/Q74 with simulated cache-exhausted profiles on every platform. It does not claim a physical drive measurement: L01 qualifies real assembled storage paths, and L04 executes the accepted training rows against those profiles."
+    discovered_scope: "tests/test_s22_trainer.py is the single env:any Q28/Q74 fixture; tests/test_s21_trainer.py routes the existing MLX training paths through the now-mandatory admission and observation contract. trainer.py remains the sole training authority above 800 physical lines because request derivation, resource admission, durable metering, checkpoint execution, and publication share one state machine. S22 reuses store.py's Q53 reservation and release authority and adds no writer, dependency, process, runtime, generated contract, numerical kernel, model-family branch, or protocol."
 
   - id: S22A
     title: Post-training interoperability and eligible export

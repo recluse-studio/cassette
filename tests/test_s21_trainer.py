@@ -44,10 +44,14 @@ from test_s17_broker import _profile, _request, _schedule
 import trainer as trainer_module
 from trainer import (
     TrainingCheckpoint,
-    advance_training,
-    commit_training,
+    TrainingObservation,
+    TrainingResourceProfile,
+    admit_training,
+    advance_training as _advance_training,
+    commit_training as _commit_training,
     load_training_artifact,
-    prepare_training,
+    prepare_training as _prepare_training,
+    training_workload,
 )
 
 
@@ -68,6 +72,133 @@ CONTINUATION_BATCH = (
 )
 PREFERENCE_BATCH = (1.0, -1.0, 0.5, 0.25, -0.5, 1.0, 0.2)
 RECOVERY_BATCH = (1.0, 0.5, -0.5, 1.0, 0.25, -1.0, 0.0, 0.5, -0.25, 1.0)
+
+
+def _training_profile(label: str) -> TrainingResourceProfile:
+    return TrainingResourceProfile(
+        profile_evidence_digest=digest_bytes(f"{label}:measured-resource-profile".encode()),
+        device_bytes=200 * 1024**3,
+        physical_memory_bytes=32 * 1024**3,
+        recommended_max_working_set_bytes=24 * 1024**3,
+        executor_memory_bytes=1024**3,
+        other_memory_bytes=1024**3,
+        sustained_read_bytes_per_second=1_000_000_000,
+        sustained_write_bytes_per_second=500_000_000,
+        minimum_sustained_read_bytes_per_second=100_000_000,
+        minimum_sustained_write_bytes_per_second=50_000_000,
+        write_amplification_p95_numerator=3,
+        write_amplification_p95_denominator=2,
+        declared_endurance_bytes=5_000_000_000_000_000,
+        lifetime_written_bytes=0,
+        predicted_thermal_duty_ppm=100_000,
+        maximum_thermal_duty_ppm=900_000,
+        maximum_write_duty_ppm=900_000,
+        external_power=True,
+        job_limit_seconds=86_400,
+        compute_nanoseconds_per_update_p95=1_000_000,
+    )
+
+
+def _admission(cartridge, parent_root, operation, parameters, objectives, **options):
+    workload = training_workload(
+        cartridge,
+        parent_root,
+        operation,
+        parameters,
+        objectives,
+        **options,
+    )
+    return admit_training(
+        workload,
+        _training_profile(workload.request_digest),
+        allocatable_verified_free=100 * 1024**3,
+        reserve_extent=lambda _length: True,
+        release_extent=lambda _length: True,
+    )
+
+
+def prepare_training(
+    cartridge,
+    parent_root,
+    operation,
+    parameters,
+    objectives,
+    *,
+    random_seed,
+    window_limit_bytes,
+    calibration_records=(),
+    delta_precision="FP32",
+):
+    """Give every S21 path the same admitted S22 resource envelope."""
+
+    admission = _admission(
+        cartridge,
+        parent_root,
+        operation,
+        parameters,
+        objectives,
+        random_seed=random_seed,
+        window_limit_bytes=window_limit_bytes,
+        calibration_records=calibration_records,
+        delta_precision=delta_precision,
+    )
+    return _prepare_training(
+        cartridge,
+        parent_root,
+        operation,
+        parameters,
+        objectives,
+        random_seed=random_seed,
+        window_limit_bytes=window_limit_bytes,
+        admission=admission,
+        calibration_records=calibration_records,
+        delta_precision=delta_precision,
+    )
+
+
+def _observation(cartridge: Path, checkpoint: TrainingCheckpoint) -> TrainingObservation:
+    manifest = json.loads(read_training_page(
+        cartridge, checkpoint.work_root, checkpoint.manifest_digest
+    ))
+    profile = manifest["admission"]["profile"]
+    estimate = manifest["admission"]["estimate"]
+    meter = manifest["meter"]
+    logical = meter["logical_write_bytes"]
+    numerator = profile["write_amplification_p95_numerator"]
+    denominator = profile["write_amplification_p95_denominator"]
+    physical = (logical * numerator + denominator - 1) // denominator
+    elapsed = max(
+        1,
+        estimate["duration_p95"]
+        * 500_000_000
+        * logical
+        // estimate["logical_write_bytes"],
+    )
+    return TrainingObservation(
+        checkpoint.step,
+        logical,
+        meter["read_bytes"],
+        physical,
+        elapsed,
+        profile["sustained_read_bytes_per_second"],
+        profile["sustained_write_bytes_per_second"],
+        profile["predicted_thermal_duty_ppm"],
+        estimate["write_duty"],
+        profile["external_power"],
+    )
+
+
+def advance_training(cartridge, checkpoint):
+    return _advance_training(cartridge, checkpoint, _observation(cartridge, checkpoint))
+
+
+def commit_training(cartridge, checkpoint, transaction_id):
+    return _commit_training(
+        cartridge,
+        checkpoint,
+        transaction_id,
+        _observation(cartridge, checkpoint),
+    )
 
 
 def _write_safetensors(path: Path, tensor_id: str, payload: bytes) -> None:
@@ -572,7 +703,7 @@ def _train(
 
 
 def test_q21_q24_q70_all_advertised_operations_use_their_declared_training_evidence(tmp_path):
-    """Q21/Q24/Q70 acceptance: every Tier-A operation and Tier-B recovery changes a frozen quantized base through its own evidence."""
+    """Q21/Q24/Q28/Q70/Q74: every operation changes its frozen base inside one admitted and metered envelope."""
 
     source, parent_root, parameters = _quantized_parent(tmp_path / "tier-a-source")
     outputs = {}
@@ -610,6 +741,25 @@ def test_q21_q24_q70_all_advertised_operations_use_their_declared_training_evide
         assert artifact["operator_cases"] == [objective_cases[operation], "mlx.sgd.f32.3"]
         assert artifact["master_pages"] == []
         assert artifact["base_precision"] == "i8-symmetric;scale=1;zero_point=0"
+        admission = artifact["admission"]
+        estimate = admission["estimate"]
+        meter = artifact["meter"]
+        profile = admission["profile"]
+        observations = meter["observations"]
+        assert admission["profile_digest"] == digest_bytes(canonical_bytes(profile))
+        assert meter["logical_write_bytes"] <= estimate["logical_write_bytes"]
+        assert meter["read_bytes"] <= estimate["read_bytes"]
+        assert [row["checkpoint"] for row in observations] == list(
+            range(artifact["total_steps"] + 1)
+        )
+        assert observations[-1]["logical_write_bytes"] <= meter["logical_write_bytes"]
+        assert observations[-1]["read_bytes"] <= meter["read_bytes"]
+        assert observations[-1]["physical_write_bytes"] <= (
+            observations[-1]["logical_write_bytes"]
+            * profile["write_amplification_p95_numerator"]
+            + profile["write_amplification_p95_denominator"]
+            - 1
+        ) // profile["write_amplification_p95_denominator"]
         assert {tuple(row["codec"].items()) for row in artifact["base_pages"]} == {
             (("name", "i8-symmetric"), ("scale", "1"), ("zero_point", 0))
         }
@@ -686,6 +836,41 @@ def test_q21_q24_q70_all_advertised_operations_use_their_declared_training_evide
     assert caught.value.code == "TRAINING_UNSUPPORTED"
 
     before_refusal = {
+        str(path.relative_to(source)): digest_bytes(path.read_bytes())
+        for path in source.rglob("*") if path.is_file()
+    }
+    valid_options = {"random_seed": 1, "window_limit_bytes": 32 * 1024}
+    with pytest.raises(CassetteError) as no_admission:
+        _prepare_training(
+            source,
+            parent_root,
+            "ADAPTER_SFT",
+            parameters,
+            (SFT_BATCHES[0],),
+            **valid_options,
+        )
+    assert no_admission.value.code == "INVALID_REQUEST"
+    foreign_admission = _admission(
+        source,
+        parent_root,
+        "ADAPTER_SFT",
+        parameters,
+        (SFT_BATCHES[0],),
+        random_seed=2,
+        window_limit_bytes=32 * 1024,
+    )
+    with pytest.raises(CassetteError) as mismatched_admission:
+        _prepare_training(
+            source,
+            parent_root,
+            "ADAPTER_SFT",
+            parameters,
+            (SFT_BATCHES[0],),
+            admission=foreign_admission,
+            **valid_options,
+        )
+    assert mismatched_admission.value.code == "INVALID_REQUEST"
+    assert before_refusal == {
         str(path.relative_to(source)): digest_bytes(path.read_bytes())
         for path in source.rglob("*") if path.is_file()
     }
