@@ -1187,7 +1187,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green; non-simulable injections enumerated for PHASE LIVE
     depends: [S10, S18, S20, S22]
-    status: IN_PROGRESS 2026-08-13
+    status: DONE 2026-08-14 — step commit 94daccaaa71ce2f1257b201c385581afd80cd7a8; complete arm64 macOS suite 170/170 in 75.21 seconds; ledger clean at 8,514 product LOC, 6,347 test LOC, 577 tool LOC, 108 generated LOC, five exact dependencies, one process, and one Python runtime
     closeout:
       - clause: "The failure_rows authority generates one complete, unique operation-by-injection product"
         test_or_probe: "tests/test_s23_failure_rows.py::test_q49_failure_rows_expand_from_matrix_and_preserve_every_operation"
