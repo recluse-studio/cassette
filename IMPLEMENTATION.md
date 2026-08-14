@@ -58,13 +58,14 @@ steps BLOCKED on the same root cause; or an action that is destructive or irreve
 this repository. Everything else is decided from the ledger, recorded in the step's notes, and
 the work continues.
 
-**Phase boundary.** PHASE MACHINE contains every step buildable and verifiable by agents alone:
-scratch cartridges are APFS disk images, sources are deterministic fixture servers, storage
-profiles are simulated from recorded class data, and small real models are downloaded by the
-agent where a step says so. No PHASE MACHINE step asks the principal to test, plug in, or
-observe anything. PHASE LIVE is one campaign, run with the principal present, against real
-drives, real transfers, and the real matrix. It begins only when every PHASE MACHINE step is
-DONE or BLOCKED-with-report.
+**Phase boundary.** PHASE MACHINE contains S00 through S28 and uses only deterministic generated or
+checked-in model fixtures, loopback source fixtures, scratch cartridge images, and simulated
+recorded storage classes. It performs no live model download, touches no physical external drive,
+inspects no attached storage or local model cache, and asks the principal for no physical action.
+S28 closes this machine and emits the runbook. PHASE LIVE begins only afterward, with the principal
+present, and owns the first live source request, selected real-model download, physical-drive use,
+and real matrix execution. No audit, research obligation, or dependency correction may move those
+inputs earlier.
 
 **Environments.** env: any — runs anywhere Python runs. env: macos — requires Apple Silicon
 (MLX/Metal, F_FULLFSYNC). env: macos+hardware — PHASE LIVE only. An agent on the wrong platform
@@ -139,7 +140,7 @@ steps:
     env: any
     files: [store.py]
     invariants: [Q57 storage acceptance (SafeTensors and bounded GGUF import, relocate without logical change, span resolution, ordered training-delta append) on scratch cartridge images]
-    acceptance_boundary: "S05 owns the container-to-canonical-page representation that does not depend on a trained child: verified SafeTensors and GGUF import, TensorMap resolution, representation-independent repacking, and immutable ordered delta-page append. S22A owns Q57's eligible-export clause together with Q26, after S21 supplies real tuned-child composition and callability; export cannot be proved honestly before those semantics exist."
+    acceptance_boundary: "S05 owns the container-to-canonical-page representation that does not depend on a trained child: verified SafeTensors and GGUF import, TensorMap resolution, representation-independent repacking, and immutable ordered delta-page append. S24 owns Q57's eligible-export clause together with Q26, after S21 supplies real tuned-child composition and callability; export cannot be proved honestly before those semantics exist."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S04]
@@ -801,7 +802,7 @@ steps:
     files: [broker.py]
     discovered_scope: "tests/test_s16_broker.py is the single F1 fixture for Q5/Q6/Q52, and AGENTS.md records broker.py as the sole writer of canonical operation logs, broker ownership, and ordered operation events. broker.py remains the one Q78 broker authority above 800 physical lines because durable record validation, Q5 phase ownership, Q6 idempotency/cancellation/events, and Q52 source orchestration all mutate one operation record; splitting them would create a second operation-log authority or cross-file state plumbing."
     invariants: [Q5 acceptance (interrupt every transition, idempotent replay), Q6 acceptance (double issue, cancel every phase, typed failures, monotonic events), Q52 acceptance (the production acquisition state machine is unchanged across every source adapter)]
-    acceptance_boundary: "SOURCE_VERIFIED records that Q51 completed successfully; it does not make the source bytes callable or prove their present contents. The broker may advance toward PUBLISHED only after the owning preparation operation returns current-byte verification and a verified canonical root. The broker never reads source extents or treats PartialState as that verification. S16 proves this production state machine with deterministic source fixtures and explicit F1 plan/prepare seams because compiler.py does not exist yet; it does not claim live source wires or a production compiler binding. L02 owns the live Hugging Face, Ollama, and Tinker wires. S19 must replace the F1 seams with the canonical broker-to-compiler binding, and S24 must replay that complete path on the real 3-8B model."
+    acceptance_boundary: "SOURCE_VERIFIED records that Q51 completed successfully; it does not make the source bytes callable or prove their present contents. The broker may advance toward PUBLISHED only after the owning preparation operation returns current-byte verification and a verified canonical root. The broker never reads source extents or treats PartialState as that verification. S16 proves this production state machine with deterministic source fixtures and explicit F1 plan/prepare seams because compiler.py does not exist yet; it does not claim live source wires or a production compiler binding. L02 owns the live Hugging Face, Ollama, and Tinker wires. S19 must replace the F1 seams with the canonical broker-to-compiler binding, S24 must replay that complete path on deterministic generated fixture material, and L03 must replay it on the first real model after S28."
     expected_size: large
     done_when: full suite + ledger green
     depends: [S03, S07, S10]
@@ -857,8 +858,8 @@ steps:
       - clause: "S16 states its F1 boundary and assigns the real compiler integration without closing it early"
         test_or_probe: "the corrected S16, S19, and S24 rows in IMPLEMENTATION.md"
         input: "Reconcile the fixture-supplied plan and prepare callables, deterministic source servers, absent compiler.py, and later real-model campaign against the implementation queue."
-        expected: "Keep the production Q5 state machine in S16, state that F1 uses explicit plan/prepare seams and fixture wires, assign canonical broker-to-compiler binding to S19, and require S24 to replay the complete path on its real 3-8B model."
-        observed: "S16 now names the F1 and live-wire limits. S19 depends on S16, may modify broker.py, and must remove arbitrary caller-supplied revision production. S24 now requires a real-model broker-to-compiler replay. L02 retains live source-wire ownership."
+        expected: "Keep the production Q5 state machine in S16, state that F1 uses explicit plan/prepare seams and fixture wires, assign canonical broker-to-compiler binding to S19, require S24 to replay the complete path on deterministic generated fixture material, and defer the first real-model replay to L03 after S28."
+        observed: "S16 now names the F1 and live-wire limits. S19 depends on S16, may modify broker.py, and must remove arbitrary caller-supplied revision production. S24 requires a deterministic generated-fixture broker-to-compiler replay. L02 retains live source-wire ownership, and L03 retains the first real-model replay after S28."
       - clause: "The S16 remediation guards are independently load-bearing and the complete repository gate passes"
         test_or_probe: "eight disposable one-at-a-time mutations, the complete pinned CPython 3.13 macOS suite, tools/ledger.py, mount/process inspection, and temporary-path inspection"
         input: "Remove the execute pause gate, acquisition pause gate, canonical owner lock, closed-owner gate, generic-record grammar, terminal-state/event guard, public pause projection, or public cancel projection separately; then execute the accepted tree from the pinned environment."
@@ -871,7 +872,7 @@ steps:
     files: [broker.py, pager.py, tools/genschema.py, schema/ (generated Q77 contracts)]
     discovered_scope: "tests/test_s17_broker.py remains the single executable Q47/Q65/Q77 broker fixture. pager.py exposes the cache_bytes term already admitted by Q47; broker.py consumes that term without recomputing the memory formula and derives every page length through store.py from one verified root index. tools/genschema.py emits the request, callable-profile, negotiated-result, and field-table authorities for Q77. No dependency, process, runtime, on-disk object type, adapter, numerical kernel, or model-specific branch is introduced. broker.py remains the one Q78 broker authority above 800 physical lines because negotiation, queue admission, leases, activation, cache identity, cancellation, and canonical operation events meet at one run-admission boundary; splitting them would create a second scheduler or operation authority."
     invariants: [Q47/Q65 cache-byte acceptance (verified page lengths, exact boundary, active-plan prefetch budget), Q65 acceptance (competing clients, switches, no stale cache), Q77 acceptance (generated exact pre-admission accept/reject)]
-    acceptance_boundary: "S17 proves the broker scheduler, generated Q77 boundary, and byte-denominated cache-admission ledger against a real scratch cartridge root containing canonical full and tail pages. The fixture supplies the immutable CertifiedSchedule because compiler.py does not exist yet, and the broker tracks admitted page identities and lengths rather than loading MLX buffers itself. S19 owns the production compiler-to-broker binding of a recomputed schedule, root, and page catalog; S21 owns a trainer-produced committed boundary; S24 executes those bindings with pager residency on the real 3-8B model. These absent-producer integrations remain open and named; S17 does not claim them."
+    acceptance_boundary: "S17 proves the broker scheduler, generated Q77 boundary, and byte-denominated cache-admission ledger against a real scratch cartridge root containing canonical full and tail pages. The fixture supplies the immutable CertifiedSchedule because compiler.py does not exist yet, and the broker tracks admitted page identities and lengths rather than loading MLX buffers itself. S19 owns the production compiler-to-broker binding of a recomputed schedule, root, and page catalog; S21 owns a trainer-produced committed boundary; S24 executes those bindings with pager residency on deterministic generated fixture material; L03 executes them on real models after S28. These absent-producer integrations remain open and named; S17 does not claim them."
     expected_size: medium
     done_when: full suite + ledger green
     depends: [S16]
@@ -976,7 +977,7 @@ steps:
     title: Streaming compiler, contribution map, and mathematical certificate
     env: macos
     files: [compiler.py, broker.py, store.py]
-    discovered_scope: "store.py is modified because it remains the sole writer of source roots, content segments, indexes, derived roots, and generation dependencies; it now supplies descriptor-bound SafeTensors adoption, APFS copy-on-write conversion extents, durable derived roots, and Darwin physical-extent measurement. tests/compiler_fixture.py and tests/test_s19_compiler.py are the single small-dense S19 evidence surface, and tests/test_s16_broker.py replaces its retired caller-function seam with the production compiler binding. tests/test_s01_ledger.py replaces compiler.py and trainer.py as disposable hostile fixture names because compiler.py became governed production source in this row and trainer.py remains reserved by the queue. compiler.py remains the sole compiler authority above 800 physical lines because containment, source inventory, Q19 proof emission, Q58 reconciliation, plan construction, and candidate derivation share one publication decision; splitting them would create proof plumbing or duplicate authority. No dependency, process, runtime, model-family branch, generated contract, on-disk object type, or executable numerical runtime is added. S19 proves the declared small-dense boundary; S24 still owns representative 3-8B source discovery, tuple expansion, and complete real-model replay."
+    discovered_scope: "store.py is modified because it remains the sole writer of source roots, content segments, indexes, derived roots, and generation dependencies; it now supplies descriptor-bound SafeTensors adoption, APFS copy-on-write conversion extents, durable derived roots, and Darwin physical-extent measurement. tests/compiler_fixture.py and tests/test_s19_compiler.py are the single small-dense S19 evidence surface, and tests/test_s16_broker.py replaces its retired caller-function seam with the production compiler binding. tests/test_s01_ledger.py replaces compiler.py and trainer.py as disposable hostile fixture names because compiler.py became governed production source in this row and trainer.py remains reserved by the queue. compiler.py remains the sole compiler authority above 800 physical lines because containment, source inventory, Q19 proof emission, Q58 reconciliation, plan construction, and candidate derivation share one publication decision; splitting them would create proof plumbing or duplicate authority. No dependency, process, runtime, model-family branch, generated contract, on-disk object type, or executable numerical runtime is added. S19 proves the declared small-dense boundary; S24 owns deterministic fixture-source discovery, tuple expansion, and complete machine replay, while L03 owns representative real-model execution after S28."
     invariants: [Q4 acceptance (peak-extent instrumentation, interruption, resume), Q5 production preparation binding (the canonical broker invokes compiler-owned plan and prepare operations through durable store objects rather than accepting an arbitrary caller-supplied revision producer), Q19/Q40 acceptance (derive immutable condition metrics, atom witnesses, service faces, cover, observation contract, descriptions/residuals, execution-risk and composition certificate from canonical inputs), Q30 source-driven tuple inventory (discover required tensor dtypes, operator signatures, shapes, and parameters from verified model material; expand only generated dispatch data or terminate with UNSUPPORTED_OPERATOR without fallback), Q55 executable-material containment (reject malicious pickle, templates, path traversal, auto-map/custom-code declarations, native libraries, and custom operators before code execution, network access, credential access, or unsafe loading), Q58 acceptance (total source-to-atom/description/residual map, structural failure on omission or detached certificate relation), Q60 resume on small dense model, Q51/Q60 source-consumption boundary (recompute each immutable source object's authoritative whole digest on the same reads used by compilation and reject changed completed extents before candidate-root publication), Q62 publication guard (verify canonical pages, mathematical certificate, and candidate root before generation publication)]
     acceptance_boundary: "PartialState and its mutable chunk records locate resumable work but do not authorize present bytes. S19 is the first consumer of attacker-controlled model material as executable structure, so it owns Q55 containment before any parser, loader, compiler action, network request, credential lookup, or store transform can honor that material. compiler.py contains no dynamic execution or FFI; its store.py dependency binds the platform fclonefileat primitive, but that primitive receives only verified, store-controlled descriptors and no hostile model field can select a library, symbol, path, or call shape. It inventories the model's required Q30 tuples from verified source evidence; an absent tuple is a typed refusal, not a private kernel or silent fallback. Compilation hashes each complete source object while consuming it, compares the result with immutable Q1/Q9 evidence before publication, and emits no root when the extent changed after transfer completion. This is not a separate post-completion transfer reread: the compiler hashes the bytes it must already read. S19 also closes S16's explicit F1 seam: the production broker must dispatch planning and preparation to compiler.py through committed store objects, and no public caller may supply an arbitrary function that authors a candidate revision. After canonical publication, Q62 owns at-rest verification."
     expected_size: large
@@ -1085,7 +1086,7 @@ steps:
     depends: [S15, S06, S20]
     status: DONE 2026-08-12 — step commit 32e241fa4174cfc905c7f7e68d9e97fb0f257217; complete arm64 macOS suite 40/40 in 65.34 seconds; ledger clean at 8,133 product LOC, 5,750 test LOC, 577 tool LOC, 108 generated LOC, five exact dependencies, one process, and one Python runtime
     discovered_scope: "store.py changes because it remains the sole writer of staged training pages, immutable work roots, certificate-recovery deltas, and generation transactions; no trainer opens cartridge paths. tools/genschema.py and schema/tables.py add data-only Q30 rank-one-adapter and scalar-certificate-recovery autograd signatures, pager.py dispatches those signatures only through existing MLX primitives, and tests/test_s12_pager.py executes them against literal independent gradients while rejecting authored arithmetic in every reachable executor. tests/test_s21_trainer.py is split into the Q21/Q24/Q70 operation fixture, the Q22/Q25/Q73 hostile durable-checkpoint fixture, and the Q23/Q71/Q72 lifetime-and-oracle fixture. tests/compiler_fixture.py admits one optional tensor tuple so the existing compiler path can produce an I8 certified parent without a second compiler fixture. AGENTS.md records trainer.py in the Q78 removal map. trainer.py remains the sole training authority above 800 physical lines because operation admission, durable restart state, page-window execution, adapter or certificate-recovery updates, trace validation, and child publication share one checkpoint state machine; splitting them would create trainer plumbing or a second training authority. No dependency, process, runtime, authored numerical kernel, model-family branch, protocol, or on-disk writer is added."
-    acceptance_boundary: "S21 executes two real F1 primitives. Tier A dequantizes one explicitly recorded I8 codec, keeps the frozen parent tensor live through a rank-one MLX adapter loss, and updates BF16 or FP32 adapter state through supervised, continuation, or pairwise-preference evidence. SFT and continued pretraining intentionally share the generated mean-squared-error primitive; their contract distinction is the durable instruction-response or causal-continuation evidence role, not a second numerical loss. Tier B keeps the same parent tensor live while six distinct condition, atom, description, estimator, observation, and precision records each update their own committed recovery tensor; it does not disguise those outputs as adapter pages or claim that the recovered artifact is itself a validated Q19 certificate. Independent unpaged oracles reproduce both child forms. S25 owns scale-out over the representative 3-8B graph and its Q70 training budget; it may widen generated data shapes, but it may not replace this frozen-parent, durable-state, operation-semantics, or hostile-checkpoint contract."
+    acceptance_boundary: "S21 executes two real F1 primitives. Tier A dequantizes one explicitly recorded I8 codec, keeps the frozen parent tensor live through a rank-one MLX adapter loss, and updates BF16 or FP32 adapter state through supervised, continuation, or pairwise-preference evidence. SFT and continued pretraining intentionally share the generated mean-squared-error primitive; their contract distinction is the durable instruction-response or causal-continuation evidence role, not a second numerical loss. Tier B keeps the same parent tensor live while six distinct condition, atom, description, estimator, observation, and precision records each update their own committed recovery tensor; it does not disguise those outputs as adapter pages or claim that the recovered artifact is itself a validated Q19 certificate. Independent unpaged oracles reproduce both child forms. S25 owns deterministic fixture-scale integration and its Q70 accounting; L03 owns representative real-model scale-out after S28. Neither may replace this frozen-parent, durable-state, operation-semantics, or hostile-checkpoint contract."
     closeout:
       - clause: "Q21/Q24/Q70 Tier-A SFT, continued pretraining, and DPO update BF16 or FP32 adapters over a frozen quantized parent"
         test_or_probe: "tests/test_s21_trainer.py::test_q21_q24_q70_all_advertised_operations_use_their_declared_training_evidence"
@@ -1176,74 +1177,75 @@ steps:
         expected: "Pass the full suite and ledger with no skip, generated drift, dependency, process, runtime, numerical kernel, model branch, duplicate authority, surviving disposable tree, mounted image, or low-space condition."
         observed: "The step tree passed 42/42 tests in 173.03 seconds. The ledger reported zero violations at 8,511 product LOC, 5,960 test LOC, 577 tool LOC, and 108 generated LOC, with five exact pins, one process, and one Python runtime. No mutation tree remained, and the system data volume retained 80 GiB free."
 
-  - id: S22A
-    title: Post-training interoperability and eligible export
-    env: macos
-    files: [trainer.py, store.py, adapters/__init__.py]
-    invariants: [Q26 acceptance (every tuned child is callable through every declared adapter; stream each representable SafeTensors, adapter, or GGUF form on the cartridge; re-import and pass Q10/Q17; reject any target that loses graph, tokenizer, operator, precision, or ordered-delta semantics), Q57 acceptance remainder (consume S05's verified ordered deltas and export eligible forms without a second parameter authority)]
-    expected_size: medium
-    done_when: full suite + ledger green
-    depends: [S18, S21, S22]
-    status: TODO
-
-  - id: S22B
-    title: Training invalidation and incremental recompilation
-    env: any
-    files: [compiler.py, trainer.py]
-    invariants: [Q27/Q61/Q75 acceptance (mutate each weight, condition-metric, atom, cover, observation, description, residual-estimator, composition, precision, tokenizer, template, context, and operator dependency independently; recompute the exact transitive closure; compare incremental output with a clean full compile; preserve the callable parent)]
-    expected_size: large
-    done_when: full suite + ledger green
-    depends: [S20, S22A]
-    status: TODO
-
-  - id: S22C
-    title: Revision and delta acquisition
-    env: any
-    files: [sources.py, compiler.py, store.py]
-    invariants: [Q54 acceptance (apply valid, wrong-base, corrupt, interrupted, and ancestry-fork source or cartridge deltas; reuse only digest-identical content; publish only the exact verified target; retain the callable base on every refusal or rollback)]
-    expected_size: medium
-    done_when: full suite + ledger green
-    depends: [S10, S22B]
-    status: TODO
-
   - id: S23
     title: Failure-row generator
     env: any
-    files: [tests/ (generated harness)]
+    files: [sources.py, tests/test_s23_failure_rows.py]
     invariants: [Q49 acceptance across every concrete operation phase - acquisition, compilation, inference prefill, inference decode, training, export, repair, and removal; matrix failure_rows injections x operations expanded from data; every simulable injection green]
+    acceptance_boundary: "S23 expands the exact 8-operation by 16-injection matrix from research/ACCEPTANCE_MATRIX.yaml and executes its machine-observable behavior through the shared lifecycle, capacity, integrity, source, trainer-validation, and broker authorities. It uses one generated deterministic model fixture on a scratch cartridge and loopback source evidence only. Physical USB-C detach and reattach, a copied replacement on actual media, host sleep with active external I/O, bus reset, port migration, an actual read-only external remount, live-source revision drift, and real-drive exhaustion remain L04 manifestations after S28; they are not inputs to this step."
+    discovered_scope: "tests/test_s23_failure_rows.py is one matrix-generated Q49/failure_rows fixture: it parses the bounded matrix authority without a YAML dependency, independently fixes its expected 8 operations, 16 injections, and 6 assertions, and executes all 128 products through existing component authorities. The first real run exposed one sources.py classification defect: pwrite ENOSPC, EDQUOT, and EFBIG were reported as CARTRIDGE_DISCONNECTED. sources.py now returns CAPACITY_EXCEEDED for those capacity causes and retains CARTRIDGE_DISCONNECTED for unavailable-handle causes. No model-specific branch, numerical kernel, dependency, process, runtime, writer, protocol, or physical-hardware input was added."
     expected_size: medium
     done_when: full suite + ledger green; non-simulable injections enumerated for PHASE LIVE
-    depends: [S10, S18, S20, S22C]
-    status: TODO
+    depends: [S10, S18, S20, S22]
+    status: IN_PROGRESS 2026-08-13
+    closeout:
+      - clause: "The failure_rows authority generates one complete, unique operation-by-injection product"
+        test_or_probe: "tests/test_s23_failure_rows.py::test_q49_failure_rows_expand_from_matrix_and_preserve_every_operation"
+        input: "Read failure_rows directly from research/ACCEPTANCE_MATRIX.yaml, compare its bounded fields with an independent literal contract, and expand operations by injections with itertools.product."
+        expected: "Retain required=true, the exact eight operations, sixteen injections, six assertions, and 128 unique executable rows; no handwritten subset or silent unknown injection may pass collection."
+        observed: "The fixture generated and executed 128/128 rows. Its independent contract fixed all eight operation names, all sixteen injection names, all six assertion names, and the exact product count."
+      - clause: "Q49 invalidates every old operation access and restores only a completely revalidated identity"
+        test_or_probe: "the seven lifecycle injections across every generated operation row in tests/test_s23_failure_rows.py"
+        input: "Begin acquisition, compilation, prefill, decode, training, export, repair, and removal access; inject disconnect, verified cloned replacement under the same logical identity, wrong-identity reconnect, sleep/wake, bus reset, port migration, and a read-only remount through the filesystem-profile boundary."
+        expected: "Refuse every stale access with CARTRIDGE_DISCONNECTED; admit a different filesystem UUID only through explicit replacement of the exact four-part logical root; refuse an ordinary wrong-filesystem reconnect; admit reads but reject every write-class operation on read-only media."
+        observed: "All 56 lifecycle rows passed. Every invalidated handle died before path resolution, all eight operations admitted an exact copied cartridge only through explicit replacement, ordinary wrong identity returned CARTRIDGE_IDENTITY_MISMATCH, and acquisition, compilation, training, export, repair, and removal returned CARTRIDGE_READ_ONLY under the read-only profile."
+      - clause: "Every remaining machine-simulable failure row preserves exact content and emits its declared typed result"
+        test_or_probe: "the process-death, capacity, corruption, source-revision, gradient, and cancellation injections in tests/test_s23_failure_rows.py plus the directly coupled S10 transfer fixture"
+        input: "Terminate a real broker subprocess after its durable started, running, and successful-terminal records for every operation; refuse capacity before allocation; write one partial byte and raise ENOSPC; corrupt one page, index, or root; change the loopback source validator inside transfer_artifact; decode a NaN gradient page; and cancel every operation while its worker is live."
+        expected: "Recover one exact operation record, return OPERATION_CANCELLED, CAPACITY_EXCEEDED, PAGE_CORRUPT, ROOT_INVALID, SOURCE_REVISION_CHANGED, or GRADIENT_INVALID at the owning boundary, preserve the canonical root byte-for-byte, publish no partial generation or token, and create no internal model file."
+        observed: "Every generated row met all six matrix assertions. The first ENOSPC run returned CARTRIDGE_DISCONNECTED and failed; after the cause-specific sources.py repair, the S10-plus-S23 gate passed 129/129 and the generated fixture passed 128/128."
+      - clause: "Only physical manifestations remain for PHASE LIVE"
+        test_or_probe: "S23 acceptance boundary reconciled with L04 remaining failure_rows"
+        input: "Separate machine-observable state and byte behavior from events that require a selected physical cartridge or live source."
+        expected: "Retain after S28 the actual USB-C detach and same/wrong-volume reattach rows, host sleep with active external I/O, USB bus reset, physical port migration, actual external read-only remount, live-source revision drift, and real-drive exhaustion after reservation."
+        observed: "Those physical and live-source manifestations remain assigned to L04. No whole matrix injection was skipped in S23, and no physical event was claimed from a scratch directory, profile boundary, or loopback server."
+      - clause: "S23 done_when"
+        test_or_probe: "complete pinned CPython 3.13 arm64 macOS suite, tools/ledger.py, git diff checking, process inspection, mount inspection, temporary-fixture cleanup, and system-volume inspection"
+        input: "Run every reachable repository invariant after the matrix and capacity classification repair, then inspect structural accounting and residual environments."
+        expected: "Pass the full suite and ledger without skip, generated drift, dependency, process, runtime, numerical-kernel, model-branch, duplicate-authority, surviving test process, mounted Cassette image, retained S23 temporary tree, or low-space condition."
+        observed: "170/170 tests passed in 78.16 seconds. The ledger reported zero violations at 8,514 product LOC, 6,347 test LOC, 577 tool LOC, and 108 generated LOC, with five exact dependencies, one process, and one Python runtime. No test process or Cassette image remained, every S23 pytest tree created by the gate was deleted, and the system data volume retained 80 GiB free."
 
   - id: S24
-    title: F4 protected-condition, metric, and teacher capture
+    title: Machine interoperability, delta acquisition, and protected fixture capture
     env: macos
-    files: [compiler.py, tools/ (analysis, generated)]
-    invariants: [Q40 immutable teacher trace capture on a permissively licensed 3-8B dense model (agent downloads via sources.py), Q18 protected condition/test-law construction including rare and off-support cases, Q19 condition-metric and compatibility-certificate input generation, Q30 representative-model expansion (execute and re-golden every source-discovered operator/dtype/shape tuple through generated dispatch against the real 3-8B model; unsupported tuples terminate without fallback), Q51-to-Q58 integration (change one completed source byte after S10 returns and require S19 to reject it against the immutable whole-object digest before trace or root emission; preserve the clean path without a separate transfer reread), Q5 broker-to-compiler replay (the real model enters through CanonicalBroker and reaches the compiler-owned plan/prepare path without the S16 fixture seam)]
-    expected_size: medium
-    done_when: full suite + ledger green; trace corpus committed by digest
-    depends: [S19, S10]
+    files: [sources.py, store.py, compiler.py, trainer.py, adapters/__init__.py, tools/ (analysis, generated)]
+    invariants: [Q26 acceptance (every tuned fixture child is callable through every declared adapter; stream each representable SafeTensors, adapter, or GGUF form on the scratch cartridge; re-import and pass Q10/Q17; reject any target that loses graph, tokenizer, operator, precision, or ordered-delta semantics), Q57 acceptance remainder (consume S05's verified ordered deltas and export eligible forms without a second parameter authority), Q54 acceptance (apply valid, wrong-base, corrupt, interrupted, and ancestry-fork fixture deltas; reuse only digest-identical content; publish only the exact verified target; retain the callable base on every refusal or rollback), Q40 immutable teacher trace capture from a deterministic generated dense fixture, Q18 protected condition/test-law construction including rare and off-support fixture cases, Q19 condition-metric and compatibility-certificate input generation, Q30 fixture-discovered operator/dtype/shape expansion through generated dispatch, Q51-to-Q58 fixture integration, Q5 broker-to-compiler replay without the S16 fixture seam]
+    acceptance_boundary: "S24 completes every machine-side source, export, update, and interoperability operation against generated or checked-in deterministic fixture material on scratch cartridges. It makes no live source request, downloads no model, touches no physical external drive, and makes no F4 quality or scale claim. L02 owns the first live acquisition and L03 owns the real 3-8B and 20-120B gates after S28."
+    expected_size: large
+    done_when: full suite + ledger green; fixture trace corpus committed by digest
+    depends: [S10, S18, S19, S21, S22, S23]
     status: TODO
 
   - id: S25
-    title: F4 certified compile and resource-frontier replay
+    title: Machine invalidation, certified compile, and resource-frontier replay
     env: macos
     files: [compiler.py, tools/ (simulator, generated)]
-    invariants: [Q19-certified 3-8B revision built end-to-end; every protected condition covered or causally excluded; exact and fresh-stochastic paths replay under their declared contracts; Q70 Tier-A training completes on the dense fixture; Q70 Tier-B recovery consumes S21's committed calibration artifacts, regenerates every invalidated condition/atom/description/estimator/observation/precision witness, publishes one Q73 child, and matches a clean certificate derivation; Q37 curves emitted over atom count, rank, peak and total description/metadata bytes, peak and total fresh traffic, composed execution error/risk, horizon, quality, and service against recorded storage-class profiles]
+    invariants: [Q27/Q61/Q75 acceptance (mutate each fixture weight, condition metric, atom, cover, observation, description, residual estimator, composition, precision, tokenizer, template, context, and operator dependency independently; recompute the exact transitive closure; compare incremental output with a clean full compile; preserve the callable parent), one Q19-certified deterministic fixture revision built end-to-end; every protected fixture condition covered or causally excluded; exact and fresh-stochastic paths replay under their declared contracts; Q70 Tier-A fixture training completes; Q70 Tier-B recovery consumes S21's committed calibration artifacts, regenerates every invalidated witness, publishes one Q73 child, and matches a clean certificate derivation; Q37 mathematical-resource curves emitted against simulated recorded storage-class profiles]
+    acceptance_boundary: "S25 proves machine algorithms, dependency closure, and resource accounting on deterministic fixture material only. It does not download or evaluate a real model and does not claim F4 or F5 promotion. L03 executes those gates after S28."
     expected_size: large
     done_when: full suite + ledger green; curves committed
-    depends: [S24, S20, S21, S22B]
+    depends: [S20, S21, S24]
     status: TODO
 
   - id: S26
-    title: F4 GATE evaluation
+    title: PHASE MACHINE integration gate
     env: macos
     files: []
-    invariants: [Q36 F4 GATE - train_dense_fixture_tier_a and train_dense_fixture_tier_b both PASS, complete independently recomputed Q19 certificate over the frozen protected set, touched_bytes<=0.25*native_active, declared execution risk passes, and paired lower95CI(Qc/Q_teacher)>=0.95 within the predeclared training budget]
+    invariants: [Q36 promotion readiness without promotion claim - every F0-F3 fixture invariant plus S24/S25 machine integration, Tier-A fixture training, Tier-B fixture recovery, independently recomputed Q19 certificate, invalidation closure, export/re-import, delta application, generated failure rows, and simulated resource accounting PASS; emit the exact real-model and hardware rows deferred to PHASE LIVE]
+    acceptance_boundary: "S26 proves that the machine is internally complete and ready for live falsification. It cannot emit F4 PASS, F5 PASS, frontier capability, physical-drive performance, or hosted-comparison claims because no real model, live source, or physical drive enters before S28."
     expected_size: medium
-    done_when: gate outcome recorded PASS or Q38-FALSIFIED with report; either outcome completes the step
-    depends: [S25, S21]
+    done_when: machine gate outcome and deferred-live row manifest recorded; full suite + ledger green
+    depends: [S25]
     status: TODO
 
   - id: S27
@@ -1280,13 +1282,13 @@ steps:
   - id: L02
     title: Live acquisition to cartridge
     env: macos+hardware
-    invariants: [matrix source_rows - actual Hugging Face, Ollama, and Tinker request/authentication/manifest/range wires from pinned revisions, ranged resume, digest pass, no fixture-only route, no internal model file]
+    invariants: [first live model acquisition after S28; matrix source_rows - actual Hugging Face, Ollama, and Tinker request/authentication/manifest/range wires from pinned revisions; acquire the selected permissively licensed 3-8B F4 model directly to the qualified external cartridge; ranged resume, digest pass, no fixture-only route, no internal model file]
     depends: [L01]
     status: TODO
   - id: L03
-    title: F5 at 20-120B and F5 GATE
+    title: Real-model F4 at 3-8B and F5 at 20-120B
     env: macos+hardware
-    invariants: [Q36 F5 GATE - train_sparse_fixture_tier_a and train_sparse_fixture_tier_b both PASS, Q19 predicates and peak/total resources at scale, Tier-B recovery regenerated every invalidated witness, Q37 predicted frontier point vs E-011 budget; PASS or Q38-FALSIFIED recorded]
+    invariants: [Q36 F4 GATE on the acquired permissively licensed 3-8B dense model, followed only after PASS by Q36 F5 GATE on a 20-120B sparse model; both gates execute their Q19 predicates, Tier-A training, Tier-B recovery, quality bounds, touched-byte bounds, and peak/total resource certificates on qualified external cartridges; each emits PASS or Q38-FALSIFIED]
     depends: [L02]
     status: TODO
   - id: L04

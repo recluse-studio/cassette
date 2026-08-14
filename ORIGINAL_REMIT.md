@@ -120,6 +120,22 @@ Minimum code does not mean a partial result. It does not permit the work to omit
 external-drive operation, inference, training where compatible, agent interoperability, quality, or
 performance merely because those parts require code.
 
+## Build phase boundary
+
+No work before the S28 machine closeout may download a model from a live model service, use or
+inspect a physical external drive, inspect attached storage or local model caches, or ask me to
+connect, select, or observe hardware. S00 through S28 use only deterministic generated or checked-in
+model fixtures, loopback source fixtures, scratch cartridge images, and simulated recorded device
+classes. A fixture proves the machine behavior assigned to it; it is never presented as the final
+product or as live hardware evidence.
+
+S28 closes the agent-buildable machine and emits the live campaign runbook. Only the PHASE LIVE
+campaign after S28 may acquire the selected real model from a live source, write it to a real
+external drive, qualify that drive, and execute the real model, performance, training, protocol,
+and completion matrix with me present. This boundary is non-negotiable. A research obligation,
+audit finding, or dependency correction may not move live inputs or physical participation into an
+earlier step.
+
 ## Completion boundary
 
 Assume the result is a fully working Cassette, not a research paper, a proven hypothesis, a small

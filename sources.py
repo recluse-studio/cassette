@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import errno
 import fcntl
 from http.client import IncompleteRead
 from ipaddress import ip_address
@@ -1295,6 +1296,12 @@ def _pwrite_all(extent: TransferExtent, offset: int, payload: bytes, object_id: 
         try:
             count = os.pwrite(extent.fd, payload[written:], extent.offset + offset + written)
         except OSError as error:
+            if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
+                _transfer_fail(
+                    "CAPACITY_EXCEEDED",
+                    object_id,
+                    f"cartridge write exceeded its reserved extent: {error}",
+                )
             _transfer_fail("CARTRIDGE_DISCONNECTED", object_id, f"cartridge write failed: {error}", "retryable")
         if count <= 0:
             _transfer_fail("DURABILITY_UNSUPPORTED", object_id, "cartridge write made no progress")
