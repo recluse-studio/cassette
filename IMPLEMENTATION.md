@@ -1188,7 +1188,7 @@ steps:
     done_when: full suite + ledger green; concrete operation-entrypoint obligations assigned to S24 and S26; non-simulable physical manifestations enumerated for PHASE LIVE
     depends: [S10, S18, S20, S22]
     historical_status: DONE 2026-08-14 — step commit 94daccaaa71ce2f1257b201c385581afd80cd7a8 and close commit 8af6635aa9ecb4b1323b3cc46ae6c95efb2fadd8; later hostile review proved that 128 parameterized cases had been misreported as 128 concrete operation executions and that no_uncommitted_token inspected payload key names instead of a commit frontier
-    status: IN_PROGRESS 2026-08-14 — reopened by the failed concrete-operation and no_uncommitted_token claims; shared proof repaired in the working tree, pending done_when and immutable repair closeout
+    status: DONE 2026-08-14 — repair step commit 7e7ca861b161105bbdb0bb03a9c453e009223eea; the complete arm64 macOS suite passed 170/170 in 81.36 seconds; the ledger remained clean at 8,514 product LOC, 6,365 test LOC, 577 tool LOC, and 108 generated LOC; the durable-frontier mutant failed its owning row and the stale-refusal mutant failed all 56 lifecycle rows; S24 owns fixture export and exact revision removal, and S26 owns the complete concrete-operation matrix
     closeout:
       - clause: "The failure_rows authority generates one complete, unique operation-by-injection coordinate set"
         test_or_probe: "tests/test_s23_failure_rows.py::test_q49_failure_rows_generate_complete_matrix_and_execute_shared_authorities"
