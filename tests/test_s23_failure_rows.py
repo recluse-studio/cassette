@@ -1,5 +1,5 @@
-# test_s23_failure_rows.py — matrix-generated Q49 failure rows for every machine operation; depends on broker.py, errors.py, sources.py, store.py, trainer.py, tests/fixture_server.py.
-"""Expand the acceptance matrix, inject each machine failure, and preserve one exact root."""
+# test_s23_failure_rows.py — Q49 failure-row generation and shared-authority preflight; depends on broker.py, errors.py, sources.py, store.py, trainer.py, tests/fixture_server.py.
+"""Generate every matrix coordinate and test the shared authorities available before S26."""
 
 from __future__ import annotations
 
@@ -116,7 +116,8 @@ class _Outcome:
     observed_error: str | None
     stale_attempted: bool = False
     stale_refused: bool = False
-    events: tuple[dict, ...] = ()
+    visible_events: tuple[dict, ...] = ()
+    committed_events: tuple[dict, ...] = ()
 
 
 def _failure_matrix() -> _Matrix:
@@ -258,6 +259,18 @@ def _stale_code(lifecycle: CartridgeLifecycle, access) -> str:
     return _captured(lambda: lifecycle.resolve(access))
 
 
+def _durable_events(operation_log: Path, operation_id: str) -> tuple[dict, ...]:
+    """Read one committed event frontier without using the broker's read path."""
+
+    payload = (operation_log / f"{operation_id}.json").read_bytes()
+    envelope = json.loads(payload)
+    assert set(envelope) == {"digest", "record"}
+    assert canonical_bytes(envelope) == payload
+    record = envelope["record"]
+    assert envelope["digest"] == digest_bytes(canonical_bytes(record))
+    return tuple(record["events"])
+
+
 def _finish_revalidated(
     lifecycle: CartridgeLifecycle,
     operation: str,
@@ -387,7 +400,8 @@ if result["state"] != "SUCCEEDED":
 os._exit(75)
 """
     environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-    all_events = []
+    all_visible_events = []
+    all_committed_events = []
     observed = None
     for boundary, returncode, state in (
         ("issued", 73, "PENDING"),
@@ -437,10 +451,16 @@ os._exit(75)
                 assert cancelled["state"] == "CANCELLED"
                 observed = cancelled["error"]["code"]
                 events = broker.events(operation_id)
-            all_events.extend(events)
+            all_visible_events.extend(events)
+            all_committed_events.extend(_durable_events(log, operation_id))
         finally:
             broker.close()
-    return _Outcome("OPERATION_CANCELLED", observed, events=tuple(all_events))
+    return _Outcome(
+        "OPERATION_CANCELLED",
+        observed,
+        visible_events=tuple(all_visible_events),
+        committed_events=tuple(all_committed_events),
+    )
 
 
 def _capacity_before_outcome(operation: str, injection: str) -> _Outcome:
@@ -614,7 +634,13 @@ def _cancellation_outcome(operation: str, injection: str, cartridge: _Cartridge)
     try:
         result, events = asyncio.run(run())
         assert result["state"] == "CANCELLED"
-        return _Outcome("OPERATION_CANCELLED", result["error"]["code"], events=events)
+        operation_id = broker.operation_id(request)
+        return _Outcome(
+            "OPERATION_CANCELLED",
+            result["error"]["code"],
+            visible_events=events,
+            committed_events=_durable_events(log, operation_id),
+        )
     finally:
         broker.close()
 
@@ -672,9 +698,7 @@ def _no_stale_handle_use(_cartridge: _Cartridge, outcome: _Outcome) -> None:
 
 
 def _no_uncommitted_token(_cartridge: _Cartridge, outcome: _Outcome) -> None:
-    for event in outcome.events:
-        encoded = canonical_bytes(event["payload"])
-        assert not any(name in encoded for name in (b'"token"', b'"text"', b'"content"'))
+    assert outcome.visible_events == outcome.committed_events
 
 
 def _no_internal_model_file(cartridge: _Cartridge, _outcome: _Outcome) -> None:
@@ -707,13 +731,13 @@ ASSERTION_EXECUTORS = {
     GENERATED_ROWS,
     ids=lambda value: value,
 )
-def test_q49_failure_rows_expand_from_matrix_and_preserve_every_operation(
+def test_q49_failure_rows_generate_complete_matrix_and_execute_shared_authorities(
     operation,
     injection,
     cartridge,
     monkeypatch,
 ):
-    """Q49/failure_rows: every declared operation and injection executes from matrix data."""
+    """Q49/failure_rows: generate every coordinate and execute its shared-authority preflight."""
 
     assert MATRIX == _Matrix(
         True,
@@ -727,3 +751,24 @@ def test_q49_failure_rows_expand_from_matrix_and_preserve_every_operation(
     outcome = _inject(operation, injection, cartridge, monkeypatch)
     for assertion in MATRIX.assertions:
         ASSERTION_EXECUTORS[assertion](cartridge, outcome)
+    if operation == "acquisition" and injection == "process_death_at_every_durable_boundary":
+        hostile_events = list(outcome.visible_events)
+        output_index = next(
+            index for index, event in enumerate(hostile_events)
+            if event["type"] == "output_delta"
+        )
+        output_event = hostile_events[output_index]
+        hostile_events[output_index] = {
+            **output_event,
+            "payload": {**output_event["payload"], "output": "uncommitted-token"},
+        }
+        hostile = _Outcome(
+            outcome.expected_error,
+            outcome.observed_error,
+            outcome.stale_attempted,
+            outcome.stale_refused,
+            tuple(hostile_events),
+            outcome.committed_events,
+        )
+        with pytest.raises(AssertionError):
+            _no_uncommitted_token(cartridge, hostile)
