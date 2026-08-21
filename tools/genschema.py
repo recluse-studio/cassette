@@ -801,6 +801,17 @@ Q40_MODES = [
     "NATIVE_PREDICTIVE_PREFETCH",
     "COMPILED_CERTIFIED",
 ]
+EXPORT_TARGETS = {
+    "adapter-safetensors-v1": {"mode": "adapter", "operators": []},
+    "gguf-v3": {
+        "mode": "full",
+        "operators": [
+            "activation", "add", "attention", "embedding", "matmul", "norm",
+            "quantized_matmul", "rope", "sampling",
+        ],
+    },
+    "safetensors-v1": {"mode": "full", "operators": []},
+}
 DISPATCH_ROWS = [
     {
         "case_id": "mlx.matmul.f32.2x3_3x2",
@@ -1072,6 +1083,33 @@ DISPATCH_ROWS = [
         "absolute_tolerance": 1e-6,
         "relative_tolerance": 1e-6,
     },
+    {
+        "case_id": "mlx.matmul.f32.3x2_2x2",
+        "operator": "matmul",
+        "runtime_symbols": ["mlx.core.matmul"],
+        "input_dtypes": ["float32", "float32"],
+        "input_shapes": [[3, 2], [2, 2]],
+        "output_dtype": "float32",
+        "output_shape": [3, 2],
+        "parameters": {},
+        "absolute_tolerance": 1e-6,
+        "relative_tolerance": 1e-6,
+    },
+    {
+        "case_id": "mlx.adapter_merge.i8_f32.rank1.2x3",
+        "operator": "adapter_merge",
+        "runtime_symbols": [
+            "mlx.core.astype", "mlx.core.subtract", "mlx.core.multiply",
+            "mlx.core.matmul", "mlx.core.add",
+        ],
+        "input_dtypes": ["int8", "float32", "float32", "int8"],
+        "input_shapes": [[2, 3], [2, 3], [1], [1]],
+        "output_dtype": "float32",
+        "output_shape": [2, 3],
+        "parameters": {"adapter_rank": 1, "adapter_scale": 1.0},
+        "absolute_tolerance": 1e-6,
+        "relative_tolerance": 1e-6,
+    },
 ]
 DISPATCH_DIGEST = "sha256:" + hashlib.sha256(
     json.dumps(
@@ -1332,7 +1370,7 @@ ROOT_PROVENANCE = record(
     "Q57 root provenance",
     "Q1/Q57",
     {
-        "revision_kind": identifier(enum=["executable", "exported", "source", "tuned"]),
+        "revision_kind": identifier(enum=["executable", "exported", "source", "tuned", "updated"]),
         "source_alias": bounded_text(),
         "requested_revision": nullable(bounded_text()),
         "identity_material": ROOT_IDENTITY_MATERIAL,
@@ -2001,8 +2039,16 @@ CONTRACTS: dict[str, dict] = {
                     "context_ref": bounded_text(),
                     "negotiation_id": digest(),
                     "tier": bounded_text(),
+                    "delta_digest": blake3_digest(),
+                    "reachability_digest": blake3_digest(),
+                    "target_schema": bounded_text(
+                        enum=["adapter-safetensors-v1", "gguf-v3", "safetensors-v1"]
+                    ),
                 },
-                optional=("source", "context_ref", "negotiation_id", "tier"),
+                optional=(
+                    "source", "context_ref", "negotiation_id", "tier", "delta_digest",
+                    "reachability_digest", "target_schema",
+                ),
             ),
         },
         optional=("target",),
@@ -2350,6 +2396,7 @@ def emit(outdir: Path) -> dict[str, str]:
         f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
+        f"EXPORT_TARGETS = {pprint.pformat(EXPORT_TARGETS, sort_dicts=True, width=100)}\n"
         f"Q77_FIELDS = {pprint.pformat(Q77_FIELDS, sort_dicts=True, width=100)}\n"
         f"Q76_FIELD_STATUSES = {pprint.pformat(Q76_FIELD_STATUSES, sort_dicts=True, width=100)}\n"
         f"ADAPTER_EVENT_FORMATS = {pprint.pformat(ADAPTER_EVENT_FORMATS, sort_dicts=True, width=100)}\n"

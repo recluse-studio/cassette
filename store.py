@@ -1,4 +1,4 @@
-# store.py — identity, content, lifecycle, capacity, integrity, repair, transactions, and generations (Q1/Q25/Q32/Q49/Q53/Q57/Q60/Q62/Q73); depends on errors.py, schema.
+# store.py — identity, content, export, update, removal, lifecycle, and durable generations (Q1/Q6/Q25/Q26/Q32/Q49/Q53/Q54/Q57/Q60/Q62/Q73); depends on errors.py, schema.
 """Own model identity, content, cartridge lifecycle, repair, and callable generations.
 
 Source adapters may accept mutable aliases, but they must return a canonical locator and a typed
@@ -30,11 +30,12 @@ import rfc8785
 import resumablesha256
 
 from errors import CassetteError
+from schema.tables import EXPORT_TARGETS
 from schema.validator import validate
 
 _DIGEST_HEX_LENGTHS = {"blake3": 64, "sha256": 64, "git-sha1": 40}
 _HEX = frozenset("0123456789abcdef")
-_REVISION_KINDS = frozenset({"source", "executable", "tuned", "exported"})
+_REVISION_KINDS = frozenset({"source", "executable", "tuned", "updated", "exported"})
 _MAX_JSON_INTEGER = 2**53 - 1
 _MAX_UNSIGNED_BYTES = 2**64 - 1
 _CAPACITY_FIELDS = (
@@ -72,6 +73,7 @@ _CARTRIDGE_IDENTITY_NAME = "cartridge.json"
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 _SAFETENSORS_HEADER_BYTES = 100_000_000
+_EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
     "BOOL": 8, "U8": 8, "I8": 8, "F8_E5M2": 8, "F8_E4M3": 8, "F8_E8M0": 8,
@@ -1154,7 +1156,7 @@ def _gguf_header(
         dimensions = scalar("<I", f"GGUF tensor {name!r} rank")
         if dimensions > 64:
             _q57_reject(object_id, f"GGUF tensor {name!r} exceeds the rank bound")
-        shape = tuple(
+        wire_shape = tuple(
             scalar("<Q", f"GGUF tensor {name!r} dimension {dimension}")
             for dimension in range(dimensions)
         )
@@ -1164,14 +1166,18 @@ def _gguf_header(
         offset = scalar("<Q", f"GGUF tensor {name!r} offset")
         dtype, block_elements, block_bytes = _GGUF_TENSOR_TYPES[tensor_type]
         elements = 1
-        for dimension in shape:
+        for dimension in wire_shape:
             if dimension > _MAX_UNSIGNED_BYTES // max(elements, 1):
                 _q57_reject(object_id, f"GGUF tensor {name!r} element count overflows")
             elements *= dimension
-        if elements and (not shape or shape[0] % block_elements or elements % block_elements):
+        if elements and (
+            not wire_shape
+            or wire_shape[0] % block_elements
+            or elements % block_elements
+        ):
             _q57_reject(object_id, f"GGUF tensor {name!r} shape does not align to its block type")
         length = elements // block_elements * block_bytes if elements else 0
-        tensor_rows.append((name, dtype, shape, offset, offset + length))
+        tensor_rows.append((name, dtype, tuple(reversed(wire_shape)), offset, offset + length))
 
     alignment = metadata.get("general.alignment", 32)
     if (
@@ -1198,6 +1204,9 @@ def _gguf_header(
         "metadata_digest": digest_bytes(canonical_bytes(metadata)),
         "version": str(version),
     }
+    export_sidecar = metadata.get("cassette.export.v1")
+    if isinstance(export_sidecar, str):
+        summary["cassette.export.v1"] = export_sidecar
     return data_start, data_size, summary, tuple(sorted(tensor_rows))
 
 
@@ -2547,6 +2556,1806 @@ def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str
     return bytes(output)
 
 
+_EXPORT_PLAN_FIELDS = frozenset({
+    "version", "source_root", "source_identity", "target_schema", "mode",
+    "semantic_binding", "delta_id", "adapter_rank", "adapter_scale",
+})
+_MANIFEST_EXPORT_PLAN_FIELDS = _EXPORT_PLAN_FIELDS | {"plan_id", "artifact_size"}
+_SEALED_EXPORT_PLAN_FIELDS = _MANIFEST_EXPORT_PLAN_FIELDS | {"reservation_bytes"}
+_EXPORT_TARGETS = frozenset(EXPORT_TARGETS)
+_EXPORT_MANIFEST_FIELDS = frozenset({
+    "export_id", "plan", "artifact", "artifact_role", "parameter_authority",
+    "semantic_manifest", "artifact_semantics", "exported_revision", "source_revision",
+})
+_EXPORT_SEMANTIC_FIELDS = frozenset({
+    "version", "source_identity", "graph", "semantic_assets", "precision",
+    "tensor_contracts", "ordered_deltas",
+})
+_EXPORT_ARTIFACT_SEMANTIC_FIELDS = frozenset({
+    "version", "source_identity", "graph", "semantic_assets", "precision",
+    "tensor_contracts", "ordered_deltas",
+})
+_GGUF_EXPORT_TYPES = {
+    dtype: type_id for type_id, (dtype, _, _) in _GGUF_TENSOR_TYPES.items()
+}
+_MERGED_EXPORT_PRECISION = "float32-merged-adapter-v1"
+
+
+def _export_semantic_manifest(
+    cartridge: Path, root_digest: str, root: dict
+) -> dict:
+    """Bind logical tensor values without exposing physical page placement."""
+
+    material = root["provenance"]["identity_material"]
+    return {
+        "version": "q10-export-semantics-v1",
+        "source_identity": root["identity"],
+        "graph": {
+            "architecture": material["architecture"],
+            "operators": root["operators"],
+            "plans": root["plans"],
+        },
+        "semantic_assets": root["semantic_assets"],
+        "precision": material["precision_scheme"],
+        "tensor_contracts": [
+            {
+                "semantic_tensor_id": tensor["semantic_tensor_id"],
+                "dtype": tensor["dtype"],
+                "shape": tensor["shape"],
+                "value_digest": _tensor_value_digest(cartridge, root_digest, tensor),
+            }
+            for tensor in root["tensor_maps"]
+        ],
+        "ordered_deltas": root["deltas"],
+    }
+
+
+def _tensor_value_digest(cartridge: Path, root_digest: str, tensor: dict) -> str:
+    """Digest one logical tensor through page-bounded reads."""
+
+    hasher = blake3()
+    for payload in _tensor_chunks(cartridge, root_digest, tensor):
+        hasher.update(payload)
+    return f"blake3:{hasher.hexdigest()}"
+
+
+def export_semantic_manifest(
+    cartridge: str | Path, root_digest: str
+) -> dict:
+    """Return the portable Q10/Q26 sidecar only from one verified immutable root."""
+
+    cartridge = Path(cartridge)
+    return _export_semantic_manifest(
+        cartridge, root_digest, load_root(cartridge, root_digest)
+    )
+
+
+def export_semantic_binding(cartridge: str | Path, root_digest: str) -> str:
+    """Digest every graph, semantic asset, precision, tensor, and ordered-delta input."""
+
+    cartridge = Path(cartridge)
+    return digest_bytes(canonical_bytes(
+        export_semantic_manifest(cartridge, root_digest)
+    ))
+
+
+def _adapter_export_material(
+    cartridge: str | Path, root_digest: str
+) -> tuple[dict, dict, dict]:
+    """Load the protected adapter fields shared by portable and merged export."""
+
+    cartridge = Path(cartridge)
+    root = load_root(cartridge, root_digest)
+    if not root["deltas"] or root["deltas"][-1]["kind"] != "adapter":
+        _q57_reject(root_digest, "adapter export requires one terminal adapter delta", "MODEL_UNSUPPORTED")
+    delta = root["deltas"][-1]
+    try:
+        payload = read_training_page(cartridge, root_digest, delta["manifest_digest"])
+        manifest = json.loads(payload, object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _q57_reject(root_digest, f"adapter manifest is malformed: {error}")
+    if canonical_bytes(manifest) != payload or not isinstance(manifest, dict):
+        _q57_reject(root_digest, "adapter manifest is not exact canonical content")
+    rank = manifest.get("adapter_rank")
+    scale = manifest.get("adapter_scale")
+    base_rows = manifest.get("base_pages")
+    delta_rows = manifest.get("delta_pages")
+    if (
+        manifest.get("format") != "cassette-training-v1"
+        or manifest.get("tier") != "A"
+        or manifest.get("parent_root") is None
+        or manifest.get("parent_identity") != delta["base_identity"]
+        or type(rank) is not int
+        or rank <= 0
+        or not isinstance(scale, str)
+        or not isinstance(base_rows, list)
+        or not isinstance(delta_rows, list)
+        or not base_rows
+        or len(base_rows) != len(delta_rows)
+        or len(base_rows) > 256
+    ):
+        _q57_reject(root_digest, "adapter export cannot preserve an absent rank or scale", "MODEL_UNSUPPORTED")
+    parent = load_root(cartridge, manifest["parent_root"])
+    if (
+        root["parents"] != [parent["identity"]]
+        or parent["identity"] != delta["base_identity"]
+        or delta["manifest_digest"] not in delta["ordered_page_digests"]
+        or any(
+            not isinstance(row, dict)
+            or set(row) != {"parameter_id", "page_digest"}
+            or row["page_digest"] not in delta["ordered_page_digests"]
+            for row in delta_rows
+        )
+    ):
+        _q57_reject(root_digest, "adapter export is detached from its direct parent or ordered pages")
+    return root, delta, manifest
+
+
+def adapter_export_fields(cartridge: str | Path, root_digest: str) -> tuple[str, int, str]:
+    """Return the verified ordered adapter identity, rank, and scale required by Q26."""
+
+    _, delta, manifest = _adapter_export_material(cartridge, root_digest)
+    rank = manifest["adapter_rank"]
+    scale = manifest["adapter_scale"]
+    return delta["delta_id"], rank, scale
+
+
+def _merged_tensor_specs(cartridge: Path, root_digest: str, root: dict) -> dict[str, dict]:
+    """Describe the exact bounded tensors eligible for generated adapter merging."""
+
+    observed_root, _, manifest = _adapter_export_material(cartridge, root_digest)
+    parent = load_root(cartridge, manifest["parent_root"])
+    if (
+        observed_root != root
+        or len(root["deltas"]) != 1
+        or parent["deltas"]
+        or manifest["adapter_rank"] != 1
+        or manifest["adapter_scale"] != "1"
+        or manifest.get("delta_precision") not in {"BF16", "FP32"}
+    ):
+        _q57_reject(
+            root_digest,
+            "merged export requires one direct rank-one adapter over an undeltaed parent",
+            "MODEL_UNSUPPORTED",
+        )
+    tensor_maps = {
+        tensor["semantic_tensor_id"]: tensor for tensor in root["tensor_maps"]
+    }
+    specs = {}
+    for base, delta in zip(manifest["base_pages"], manifest["delta_pages"], strict=True):
+        if (
+            not isinstance(base, dict)
+            or set(base) != {
+                "parameter_id", "tensor_id", "page_digest", "tensor_digest", "dtype",
+                "shape", "offset", "length", "codec",
+            }
+            or base["parameter_id"] != delta["parameter_id"]
+            or base["dtype"] != "I8"
+            or base["shape"] != [2, 3]
+            or base["length"] != 6
+            or base["tensor_id"] in specs
+        ):
+            _q57_reject(root_digest, "adapter merge tuple is malformed or duplicated")
+        tensor = tensor_maps.get(base["tensor_id"])
+        if (
+            tensor is None
+            or tensor["dtype"] != "I8"
+            or tensor["shape"] != [2, 3]
+            or tensor["spans"] != [{
+                "page_digest": base["page_digest"],
+                "offset": base["offset"],
+                "length": 6,
+                "tensor_offset": 0,
+            }]
+        ):
+            _q57_reject(root_digest, "adapter merge tuple differs from its source tensor")
+        specs[base["tensor_id"]] = {
+            "semantic_tensor_id": base["tensor_id"],
+            "dtype": "F32",
+            "shape": [2, 3],
+            "length": 24,
+        }
+    return specs
+
+
+def _tensor_chunks(cartridge: Path, root_digest: str, tensor: dict):
+    """Yield one tensor through verified canonical page spans without assembling it."""
+
+    locations = _read_index(cartridge, root_digest)
+    cursor = 0
+    for span in tensor["spans"]:
+        if span["tensor_offset"] != cursor or span["page_digest"] not in locations:
+            _q57_reject(root_digest, f"tensor {tensor['semantic_tensor_id']!r} has a discontinuous span map")
+        page = _read_page(cartridge, locations[span["page_digest"]])
+        end = span["offset"] + span["length"]
+        if end > len(page):
+            _q57_reject(root_digest, f"tensor {tensor['semantic_tensor_id']!r} exceeds its content page")
+        payload = page[span["offset"]:end]
+        cursor += len(payload)
+        yield payload
+
+
+def _export_sidecar(plan: dict) -> str:
+    return canonical_bytes({
+        "plan_id": plan["plan_id"],
+        "semantic_binding": plan["semantic_binding"],
+        "source_identity": plan["source_identity"],
+        "target_schema": plan["target_schema"],
+    }).decode()
+
+
+def _full_export_rows(cartridge: Path, root: dict, plan: dict) -> list[tuple]:
+    merged = (
+        _merged_tensor_specs(cartridge, plan["source_root"], root)
+        if plan["mode"] == "merged"
+        else {}
+    )
+    rows = []
+    for tensor in sorted(root["tensor_maps"], key=lambda row: row["semantic_tensor_id"]):
+        tensor_id = tensor["semantic_tensor_id"]
+        if tensor_id in merged:
+            spec = merged[tensor_id]
+            rows.append(("merged", tensor_id, spec["dtype"], spec["shape"], spec["length"]))
+        else:
+            rows.append((
+                "tensor",
+                tensor,
+                tensor["dtype"],
+                tensor["shape"],
+                sum(span["length"] for span in tensor["spans"]),
+            ))
+    if set(merged) != {
+        value if kind == "merged" else value["semantic_tensor_id"]
+        for kind, value, _, _, _ in rows
+        if kind == "merged"
+    }:
+        _q57_reject(plan["source_root"], "merged export omitted one trained tensor")
+    return rows
+
+
+def _artifact_contract_template(cartridge: Path, root: dict, plan: dict) -> list[dict]:
+    source = {
+        row["semantic_tensor_id"]: row
+        for row in _export_semantic_manifest(cartridge, plan["source_root"], root)["tensor_contracts"]
+    }
+    contracts = []
+    for kind, value, dtype, shape, _ in _full_export_rows(cartridge, root, plan):
+        tensor_id = value if kind == "merged" else value["semantic_tensor_id"]
+        contracts.append({
+            "semantic_tensor_id": tensor_id,
+            "dtype": dtype,
+            "shape": shape,
+            "value_digest": (
+                "blake3:" + "0" * 64
+                if kind == "merged"
+                else source[tensor_id]["value_digest"]
+            ),
+        })
+    return contracts
+
+
+def _artifact_semantics(root: dict, plan: dict, tensor_contracts: list[dict]) -> dict | None:
+    if plan["mode"] == "adapter":
+        return None
+    source_record = root["provenance"]["identity_material"]
+    return {
+        "version": "q10-export-artifact-semantics-v1",
+        "source_identity": root["identity"],
+        "graph": {
+            "architecture": source_record["architecture"],
+            "operators": root["operators"],
+            "plans": [],
+        },
+        "semantic_assets": root["semantic_assets"],
+        "precision": (
+            _MERGED_EXPORT_PRECISION
+            if plan["mode"] == "merged"
+            else source_record["precision_scheme"]
+        ),
+        "tensor_contracts": tensor_contracts,
+        "ordered_deltas": [],
+    }
+
+
+def _safetensors_export_layout(
+    cartridge: Path,
+    root: dict,
+    plan: dict,
+    locations: dict[str, PageLocation],
+) -> dict:
+    metadata = {
+        "cassette.export.v1": _export_sidecar(plan),
+    }
+    header: dict[str, object] = {"__metadata__": metadata}
+    rows = []
+    cursor = 0
+    if plan["mode"] in {"full", "merged"}:
+        for kind, value, dtype, shape, length in _full_export_rows(cartridge, root, plan):
+            tensor_id = value if kind == "merged" else value["semantic_tensor_id"]
+            header[tensor_id] = {
+                "dtype": dtype,
+                "shape": shape,
+                "data_offsets": [cursor, cursor + length],
+            }
+            rows.append((kind, value, cursor, length))
+            cursor += length
+    else:
+        delta = root["deltas"][-1]
+        for ordinal, page_digest in enumerate(delta["ordered_page_digests"]):
+            location = locations[page_digest]
+            name = f"delta.{ordinal:08d}"
+            header[name] = {
+                "dtype": "U8",
+                "shape": [location.length],
+                "data_offsets": [cursor, cursor + location.length],
+            }
+            rows.append(("page", page_digest, cursor, location.length))
+            cursor += location.length
+    encoded = canonical_bytes(header)
+    encoded += b" " * (-len(encoded) % 8)
+    prefix = len(encoded).to_bytes(8, "little") + encoded
+    return {"prefix": prefix, "rows": rows, "artifact_size": len(prefix) + cursor}
+
+
+def _gguf_string(value: str) -> bytes:
+    payload = value.encode("utf-8")
+    return struct.pack("<Q", len(payload)) + payload
+
+
+def _gguf_export_layout(cartridge: Path, root: dict, plan: dict) -> dict:
+    tensors = _full_export_rows(cartridge, root, plan)
+    metadata = (
+        ("cassette.export.v1", 8, _gguf_string(_export_sidecar(plan))),
+        ("general.alignment", 4, struct.pack("<I", 32)),
+    )
+    offsets = []
+    cursor = 0
+    for kind, value, dtype, shape, length in tensors:
+        cursor += (-cursor) % 32
+        offsets.append((kind, value, dtype, shape, cursor, length))
+        cursor += length
+    header = bytearray(b"GGUF" + struct.pack("<IQQ", 3, len(tensors), len(metadata)))
+    for key, kind, value in metadata:
+        header.extend(_gguf_string(key))
+        header.extend(struct.pack("<I", kind))
+        header.extend(value)
+    for kind, value, dtype, shape, offset, _ in offsets:
+        tensor_id = value if kind == "merged" else value["semantic_tensor_id"]
+        header.extend(_gguf_string(tensor_id))
+        header.extend(struct.pack("<I", len(shape)))
+        for dimension in reversed(shape):
+            header.extend(struct.pack("<Q", dimension))
+        header.extend(struct.pack("<IQ", _GGUF_EXPORT_TYPES[dtype], offset))
+    header.extend(b"\0" * (-len(header) % 32))
+    return {
+        "prefix": bytes(header),
+        "rows": [
+            (kind, value, offset, length)
+            for kind, value, _, _, offset, length in offsets
+        ],
+        "artifact_size": len(header) + cursor,
+    }
+
+
+def export_shape(cartridge: str | Path, plan_body: Mapping[str, object]) -> dict:
+    """Seal one compiler-approved export plan and compute its exact streamed byte demand."""
+
+    if not isinstance(plan_body, Mapping) or set(plan_body) != _EXPORT_PLAN_FIELDS:
+        _q57_reject("export:plan", "export plan has an incorrect field set", "INVALID_REQUEST")
+    try:
+        body = json.loads(
+            canonical_bytes(dict(plan_body)), object_pairs_hook=_unique_object
+        )
+    except (OverflowError, TypeError, ValueError) as error:
+        _q57_reject(
+            "export:plan", f"export plan is not bounded canonical JSON: {error}", "INVALID_REQUEST"
+        )
+    if body["version"] != "q26-export-v1" or body["target_schema"] not in _EXPORT_TARGETS:
+        _q57_reject("export:plan", "export plan version or target schema is unsupported", "INVALID_REQUEST")
+    root = load_root(cartridge, body["source_root"])
+    if body["source_identity"] != root["identity"]:
+        _q57_reject(body["source_root"], "export plan names another source identity", "IDENTITY_MISMATCH")
+    if body["semantic_binding"] != export_semantic_binding(cartridge, body["source_root"]):
+        _q57_reject(body["source_root"], "export plan drops or changes a bound model semantic", "IDENTITY_MISMATCH")
+    full = body["mode"] in {"full", "merged"}
+    adapter = body["mode"] == "adapter"
+    if not (full or adapter) or adapter != (body["target_schema"] == "adapter-safetensors-v1"):
+        _q57_reject(body["source_root"], "export mode disagrees with its target schema", "INVALID_REQUEST")
+    if body["mode"] == "full" and (
+        body["delta_id"] is not None
+        or body["adapter_rank"] is not None
+        or body["adapter_scale"] is not None
+    ):
+        _q57_reject(body["source_root"], "full export carries adapter-only fields", "INVALID_REQUEST")
+    if body["mode"] in {"adapter", "merged"} and (
+        (body["delta_id"], body["adapter_rank"], body["adapter_scale"])
+        != adapter_export_fields(cartridge, body["source_root"])
+    ):
+        _q57_reject(body["source_root"], "adapter export or merge is detached from its ordered delta", "IDENTITY_MISMATCH")
+    tensor_rows = _full_export_rows(Path(cartridge), root, body) if full else []
+    if body["target_schema"] == "safetensors-v1" and any(
+        dtype not in _SAFETENSORS_DTYPE_BITS for _, _, dtype, _, _ in tensor_rows
+    ):
+        _q57_reject(body["source_root"], "SafeTensors target cannot represent one or more dtypes", "MODEL_UNSUPPORTED")
+    if body["target_schema"] == "gguf-v3" and any(
+        dtype not in _GGUF_EXPORT_TYPES for _, _, dtype, _, _ in tensor_rows
+    ):
+        _q57_reject(body["source_root"], "GGUF target cannot represent one or more dtypes", "MODEL_UNSUPPORTED")
+    if body["target_schema"] == "gguf-v3":
+        for kind, value, dtype, shape, length in tensor_rows:
+            tensor_id = value if kind == "merged" else value["semantic_tensor_id"]
+            _, block_elements, block_bytes = _GGUF_TENSOR_TYPES[
+                _GGUF_EXPORT_TYPES[dtype]
+            ]
+            elements = math.prod(shape)
+            if (
+                not shape
+                or shape[-1] % block_elements
+                or elements % block_elements
+                or elements // block_elements * block_bytes != length
+            ):
+                _q57_reject(
+                    body["source_root"],
+                    f"GGUF target cannot encode tensor {tensor_id!r} exactly",
+                    "MODEL_UNSUPPORTED",
+                )
+    plan = {**body, "plan_id": digest_bytes(canonical_bytes(body))}
+    locations = _read_index(Path(cartridge), body["source_root"])
+    layout = (
+        _gguf_export_layout(Path(cartridge), root, plan)
+        if body["target_schema"] == "gguf-v3"
+        else _safetensors_export_layout(Path(cartridge), root, plan, locations)
+    )
+    sealed = {**plan, "artifact_size": layout["artifact_size"]}
+    suffix = ".gguf" if body["target_schema"] == "gguf-v3" else ".safetensors"
+    placeholder = {
+        "path": "0" * 64 + suffix,
+        "size": layout["artifact_size"],
+        "digest": "sha256:" + "0" * 64,
+    }
+    provisional = {**sealed, "reservation_bytes": 0}
+    provisional_semantics = _artifact_semantics(
+        root,
+        provisional,
+        _artifact_contract_template(Path(cartridge), root, provisional)
+        if provisional["mode"] != "adapter"
+        else [],
+    )
+    manifest_bytes = len(canonical_bytes(
+        _export_manifest(
+            Path(cartridge), root, provisional, placeholder, provisional_semantics
+        )
+    ))
+    if manifest_bytes > _EXPORT_MANIFEST_BYTES:
+        _q57_reject(
+            body["source_root"],
+            "portable export manifest exceeds its 100 MB interpretation bound",
+            "MODEL_UNSUPPORTED",
+        )
+    return {
+        **sealed,
+        "reservation_bytes": _capacity_sum(
+            (layout["artifact_size"], manifest_bytes), body["source_root"]
+        ),
+    }
+
+
+def _export_plan(cartridge: Path, value: object) -> tuple[dict, dict, dict]:
+    if not isinstance(value, dict) or set(value) != _SEALED_EXPORT_PLAN_FIELDS:
+        _q57_reject("export:plan", "sealed export plan has an incorrect field set", "INVALID_REQUEST")
+    expected = export_shape(cartridge, {name: value[name] for name in _EXPORT_PLAN_FIELDS})
+    if value != expected:
+        _q57_reject(value.get("plan_id", "export:plan"), "sealed export plan changed after admission", "IDENTITY_MISMATCH")
+    root = load_root(cartridge, value["source_root"])
+    locations = _read_index(cartridge, value["source_root"])
+    layout = (
+        _gguf_export_layout(cartridge, root, value)
+        if value["target_schema"] == "gguf-v3"
+        else _safetensors_export_layout(cartridge, root, value, locations)
+    )
+    return value, root, layout
+
+
+def _export_chunks(
+    cartridge: Path,
+    root_digest: str,
+    layout: dict,
+    merged_tensors: Mapping[str, bytes] | None,
+):
+    expected_merged = {
+        value for kind, value, _, _ in layout["rows"] if kind == "merged"
+    }
+    if (
+        (not expected_merged and merged_tensors is not None)
+        or (expected_merged and (
+            not isinstance(merged_tensors, Mapping)
+            or set(merged_tensors) != expected_merged
+        ))
+    ):
+        _q57_reject(root_digest, "merged export tensor set differs from its sealed layout", "INVALID_REQUEST")
+    yield layout["prefix"]
+    cursor = 0
+    locations = _read_index(cartridge, root_digest)
+    for kind, value, offset, length in layout["rows"]:
+        gap = offset - cursor
+        while gap:
+            part = min(gap, PAGE_BYTES)
+            yield b"\0" * part
+            gap -= part
+        if kind == "tensor":
+            chunks = _tensor_chunks(cartridge, root_digest, value)
+        elif kind == "merged":
+            payload = merged_tensors[value]
+            if not isinstance(payload, bytes):
+                _q57_reject(root_digest, "merged export tensor is not immutable bytes", "INVALID_REQUEST")
+            chunks = (payload,)
+        else:
+            chunks = (_read_page(cartridge, locations[value]),)
+        observed = 0
+        for payload in chunks:
+            observed += len(payload)
+            yield payload
+        if observed != length:
+            _q57_reject(root_digest, "exported row length changed during streaming", "PAGE_CORRUPT")
+        cursor = offset + length
+
+
+def _sha256_path(path: Path, object_id: str) -> tuple[int, str]:
+    """Hash one artifact through bounded reads and return its exact byte count."""
+
+    size = 0
+    hasher = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            while payload := handle.read(PAGE_BYTES):
+                size += len(payload)
+                hasher.update(payload)
+    except (OSError, ValueError) as error:
+        _q57_reject(object_id, f"artifact read failed: {error}", "SOURCE_UNAVAILABLE")
+    return size, f"sha256:{hasher.hexdigest()}"
+
+
+def _export_artifact_contracts(
+    path: Path, artifact_digest: str, target_schema: str, object_id: str
+) -> list[dict]:
+    """Read back every exported tensor and bind its logical value independently of layout."""
+
+    parser = _gguf_header if target_schema == "gguf-v3" else _safetensors_header
+    source_hasher = artifact_hasher(artifact_digest, object_id)
+    try:
+        with path.open("rb") as handle:
+            data_start, _, _, tensors = parser(handle, object_id, source_hasher)
+            contracts = []
+            for name, dtype, shape, start, end in sorted(tensors):
+                handle.seek(data_start + start)
+                remaining = end - start
+                value_hasher = blake3()
+                while remaining:
+                    payload = _read_exact(
+                        handle,
+                        min(PAGE_BYTES, remaining),
+                        object_id,
+                        f"exported tensor {name}",
+                    )
+                    value_hasher.update(payload)
+                    remaining -= len(payload)
+                contracts.append({
+                    "semantic_tensor_id": name,
+                    "dtype": dtype,
+                    "shape": list(shape),
+                    "value_digest": f"blake3:{value_hasher.hexdigest()}",
+                })
+    except OSError as error:
+        _q57_reject(object_id, f"export artifact readback failed: {error}", "SOURCE_UNAVAILABLE")
+    return contracts
+
+
+def _verify_export_artifact_contracts(
+    cartridge: Path,
+    root: dict,
+    plan: dict,
+    contracts: list[dict],
+) -> None:
+    expected = _artifact_contract_template(cartridge, root, plan)
+    merged_ids = {
+        value
+        for kind, value, _, _, _ in _full_export_rows(cartridge, root, plan)
+        if kind == "merged"
+    }
+    if len(contracts) != len(expected):
+        _q57_reject(plan["source_root"], "export artifact changed the tensor catalog")
+    for observed, declared in zip(contracts, expected, strict=True):
+        if (
+            {name: observed[name] for name in ("semantic_tensor_id", "dtype", "shape")}
+            != {name: declared[name] for name in ("semantic_tensor_id", "dtype", "shape")}
+            or (
+                observed["semantic_tensor_id"] not in merged_ids
+                and observed["value_digest"] != declared["value_digest"]
+            )
+        ):
+            _q57_reject(plan["source_root"], "export artifact changed one declared tensor semantic")
+
+
+def _stream_export_file(
+    cartridge: Path,
+    operation_id: str,
+    root_digest: str,
+    plan: dict,
+    layout: dict,
+    merged_tensors: Mapping[str, bytes] | None,
+) -> tuple[Path, int, str]:
+    directory = cartridge / "exports" / "artifacts"
+    directory.mkdir(parents=True, exist_ok=True)
+    pending = directory / f".{operation_id}.pending"
+    hasher = hashlib.sha256()
+    size = 0
+
+    def discard_pending() -> None:
+        try:
+            pending.unlink(missing_ok=True)
+        except OSError as error:
+            _q57_reject(
+                operation_id,
+                f"failed export cannot discard its pending extent: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+
+    try:
+        with pending.open("wb") as handle:
+            for payload in _export_chunks(
+                cartridge, root_digest, layout, merged_tensors
+            ):
+                handle.write(payload)
+                hasher.update(payload)
+                size += len(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+            command = getattr(fcntl, "F_FULLFSYNC", None)
+            if command is not None:
+                fcntl.fcntl(handle.fileno(), command)
+    except CassetteError:
+        discard_pending()
+        raise
+    except OSError as error:
+        discard_pending()
+        _q57_reject(operation_id, f"export stream failed: {error}", "DURABILITY_UNSUPPORTED")
+    if size != plan["artifact_size"]:
+        discard_pending()
+        _q57_reject(operation_id, "export stream did not fill its admitted extent")
+    digest = f"sha256:{hasher.hexdigest()}"
+    readback = hashlib.sha256()
+    try:
+        with pending.open("rb") as handle:
+            while payload := handle.read(PAGE_BYTES):
+                readback.update(payload)
+    except OSError as error:
+        discard_pending()
+        _q57_reject(operation_id, f"export readback failed: {error}", "DURABILITY_UNSUPPORTED")
+    if f"sha256:{readback.hexdigest()}" != digest:
+        discard_pending()
+        _q57_reject(operation_id, "export readback digest changed", "SOURCE_REVISION_CHANGED")
+    suffix = ".gguf" if plan["target_schema"] == "gguf-v3" else ".safetensors"
+    destination = directory / f"{digest.partition(':')[2]}{suffix}"
+    if destination.exists():
+        existing_size, existing_digest = _sha256_path(destination, digest)
+        if existing_size != size or existing_digest != digest:
+            discard_pending()
+            _q57_reject(digest, "existing export artifact bytes changed", "SOURCE_REVISION_CHANGED")
+        discard_pending()
+    else:
+        try:
+            os.replace(pending, destination)
+        except OSError as error:
+            discard_pending()
+            _q57_reject(
+                operation_id,
+                f"export artifact publication failed: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+        _sync_directory(directory, operation_id)
+    return destination, size, digest
+
+
+def _tuple_from_record(provenance: Mapping[str, object]) -> IdentityTuple:
+    record = provenance["identity_material"]
+    return IdentityTuple(
+        revision_kind=provenance["revision_kind"],
+        source_kind=record["source_kind"],
+        source_alias=provenance["source_alias"],
+        canonical_locator=record["locator"],
+        requested_revision=provenance["requested_revision"],
+        immutable_revision=record["immutable_revision"],
+        artifacts=tuple(ArtifactIdentity(**artifact) for artifact in record["artifacts"]),
+        format_versions=tuple(tuple(item) for item in record["format_versions"]),
+        tensor_index_digest=record["tensor_index_digest"],
+        config_digest=record["config_digest"],
+        architecture=record["architecture"],
+        operator_set=tuple(record["operator_set"]),
+        tokenizer_digest=record["tokenizer_digest"],
+        processor_digest=record["processor_digest"],
+        template_digest=record["template_digest"],
+        precision_scheme=record["precision_scheme"],
+        license_digest=record["license_digest"],
+        parent_ids=tuple(record["parent_ids"]),
+        transform_manifest_digest=record["transform_manifest_digest"],
+    )
+
+
+def _export_manifest(
+    cartridge: Path,
+    root: dict,
+    plan: dict,
+    artifact_record: dict,
+    artifact_semantics: dict | None,
+) -> dict:
+    """Build one self-contained derivative manifest from fixed-width artifact evidence."""
+
+    source_material, source_record = _material_from_provenance(
+        root["provenance"], plan["source_root"]
+    )
+    semantic_manifest = _export_semantic_manifest(
+        cartridge, plan["source_root"], root
+    )
+    if digest_bytes(canonical_bytes(semantic_manifest)) != plan["semantic_binding"]:
+        _q57_reject(plan["source_root"], "export semantic sidecar changed after admission")
+    format_name, format_version = (
+        ("gguf", "3") if plan["target_schema"] == "gguf-v3" else ("safetensors", "1")
+    )
+    exported_material = IdentityTuple(
+        revision_kind="exported",
+        source_kind="cassette",
+        source_alias=f"export:{root['identity']}",
+        canonical_locator=f"cassette-export:{plan['plan_id']}",
+        requested_revision=plan["source_root"],
+        immutable_revision=artifact_record["digest"],
+        artifacts=(ArtifactIdentity(**artifact_record),),
+        format_versions=((format_name, format_version),),
+        tensor_index_digest=digest_bytes(canonical_bytes(
+            artifact_semantics["tensor_contracts"]
+            if artifact_semantics is not None
+            else root["deltas"][-1]
+        )),
+        config_digest=source_record["config_digest"],
+        architecture=source_record["architecture"],
+        operator_set=tuple(root["operators"]),
+        tokenizer_digest=root["semantic_assets"]["tokenizer"],
+        processor_digest=root["semantic_assets"]["processor"],
+        template_digest=root["semantic_assets"]["template"],
+        precision_scheme=(
+            artifact_semantics["precision"]
+            if artifact_semantics is not None
+            else source_record["precision_scheme"]
+        ),
+        license_digest=source_record["license_digest"],
+        parent_ids=(root["identity"],),
+        transform_manifest_digest=plan["plan_id"],
+    )
+    manifest_plan = {name: plan[name] for name in _MANIFEST_EXPORT_PLAN_FIELDS}
+    export_id = digest_bytes(canonical_bytes({
+        "revision": plan["source_root"],
+        "target_schema": plan["target_schema"],
+        "export_transform": plan["plan_id"],
+        "artifact_digests": [artifact_record],
+    }))
+    return {
+        "export_id": export_id,
+        "plan": manifest_plan,
+        "artifact": artifact_record,
+        "artifact_role": "DERIVATIVE_NOT_PARAMETER_AUTHORITY",
+        "parameter_authority": {
+            "kind": "cartridge_root", "root_digest": plan["source_root"]
+        },
+        "semantic_manifest": semantic_manifest,
+        "artifact_semantics": artifact_semantics,
+        "exported_revision": {
+            "revision_kind": exported_material.revision_kind,
+            "source_alias": exported_material.source_alias,
+            "requested_revision": exported_material.requested_revision,
+            "identity_material": _identity_record(exported_material),
+        },
+        "source_revision": {
+            "revision_kind": source_material.revision_kind,
+            "source_alias": source_material.source_alias,
+            "requested_revision": source_material.requested_revision,
+            "identity_material": source_record,
+        },
+    }
+
+
+def export_revision(
+    cartridge: str | Path,
+    operation_id: str,
+    plan: dict,
+    reservation: CapacityReservation,
+    merged_tensors: Mapping[str, bytes] | None = None,
+) -> dict:
+    """Stream one derivative artifact on the cartridge while retaining one root authority."""
+
+    cartridge = Path(cartridge)
+    plan, root, layout = _export_plan(cartridge, plan)
+    active = _active_reservation(reservation, operation_id)
+    if (
+        active.operation_id != operation_id
+        or max(active.phase_totals) != plan["reservation_bytes"]
+    ):
+        _q57_reject(
+            operation_id,
+            "export reservation differs from its exact artifact-plus-manifest demand",
+            "CAPACITY_EXCEEDED",
+        )
+    artifact, size, artifact_digest = _stream_export_file(
+        cartridge,
+        operation_id,
+        plan["source_root"],
+        plan,
+        layout,
+        merged_tensors,
+    )
+    artifact_record = {"path": artifact.name, "size": size, "digest": artifact_digest}
+    contracts = (
+        _export_artifact_contracts(
+            artifact, artifact_digest, plan["target_schema"], operation_id
+        )
+        if plan["mode"] != "adapter"
+        else []
+    )
+    if plan["mode"] != "adapter":
+        _verify_export_artifact_contracts(cartridge, root, plan, contracts)
+    manifest = _export_manifest(
+        cartridge,
+        root,
+        plan,
+        artifact_record,
+        _artifact_semantics(root, plan, contracts),
+    )
+    export_id = manifest["export_id"]
+    manifest_payload = canonical_bytes(manifest)
+    if size + len(manifest_payload) != plan["reservation_bytes"]:
+        _q57_reject(operation_id, "export manifest size changed after capacity admission")
+    manifests = cartridge / "exports" / "manifests"
+    manifests.mkdir(parents=True, exist_ok=True)
+    path = manifests / _content_hex(export_id, export_id)
+    _durable_replace(path, manifest_payload, f"export:{export_id}")
+    return {
+        "export_id": export_id,
+        "artifact_digest": artifact_digest,
+        "artifact_size": size,
+        "manifest_size": len(manifest_payload),
+        "target_schema": plan["target_schema"],
+        "manifest_path": str(path.relative_to(cartridge)),
+        "artifact_path": str(artifact.relative_to(cartridge)),
+    }
+
+
+def _load_export(cartridge: Path, export_id: str) -> dict:
+    path = cartridge / "exports" / "manifests" / _content_hex(export_id, export_id)
+    try:
+        with path.open("rb") as handle:
+            payload = handle.read(_EXPORT_MANIFEST_BYTES + 1)
+        if len(payload) > _EXPORT_MANIFEST_BYTES:
+            _q57_reject(export_id, "export manifest exceeds its 100 MB bound")
+        manifest = json.loads(payload, object_pairs_hook=_unique_object)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _q57_reject(export_id, f"export manifest is unavailable or malformed: {error}")
+    if (
+        canonical_bytes(manifest) != payload
+        or not isinstance(manifest, dict)
+        or set(manifest) != _EXPORT_MANIFEST_FIELDS
+        or manifest.get("export_id") != export_id
+    ):
+        _q57_reject(export_id, "export manifest is not exact canonical content")
+    plan = manifest["plan"]
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != _MANIFEST_EXPORT_PLAN_FIELDS
+        or type(plan["artifact_size"]) is not int
+        or not 0 < plan["artifact_size"] <= _MAX_UNSIGNED_BYTES
+        or any(
+            not isinstance(plan[field], str)
+            for field in (
+                "version", "source_root", "source_identity", "target_schema", "mode",
+                "semantic_binding", "plan_id",
+            )
+        )
+    ):
+        _q57_reject(export_id, "export manifest carries a malformed sealed plan")
+    plan_body = {name: plan[name] for name in _EXPORT_PLAN_FIELDS}
+    if (
+        plan["version"] != "q26-export-v1"
+        or plan["target_schema"] not in _EXPORT_TARGETS
+        or plan["mode"] not in {"adapter", "full", "merged"}
+        or (plan["mode"] == "adapter")
+        != (plan["target_schema"] == "adapter-safetensors-v1")
+        or any(
+            re.fullmatch(r"blake3:[0-9a-f]{64}", plan[field]) is None
+            for field in ("source_root", "source_identity", "semantic_binding", "plan_id")
+        )
+        or (
+            plan["delta_id"] is not None
+            and (
+                not isinstance(plan["delta_id"], str)
+                or re.fullmatch(r"blake3:[0-9a-f]{64}", plan["delta_id"]) is None
+            )
+        )
+        or (
+            plan["adapter_rank"] is not None
+            and (type(plan["adapter_rank"]) is not int or plan["adapter_rank"] <= 0)
+        )
+        or (
+            plan["adapter_scale"] is not None
+            and not isinstance(plan["adapter_scale"], str)
+        )
+        or (
+            plan["mode"] == "full"
+            and any(
+                plan[field] is not None
+                for field in ("delta_id", "adapter_rank", "adapter_scale")
+            )
+        )
+        or (
+            plan["mode"] in {"adapter", "merged"}
+            and any(
+                plan[field] is None
+                for field in ("delta_id", "adapter_rank", "adapter_scale")
+            )
+        )
+        or plan["plan_id"] != digest_bytes(canonical_bytes(plan_body))
+    ):
+        _q57_reject(export_id, "export manifest carries a foreign or altered plan")
+    semantic = manifest["semantic_manifest"]
+    if (
+        not isinstance(semantic, dict)
+        or set(semantic) != _EXPORT_SEMANTIC_FIELDS
+        or semantic["version"] != "q10-export-semantics-v1"
+        or not isinstance(semantic["graph"], dict)
+        or set(semantic["graph"]) != {"architecture", "operators", "plans"}
+        or not isinstance(semantic["semantic_assets"], dict)
+        or not isinstance(semantic["tensor_contracts"], list)
+        or not isinstance(semantic["ordered_deltas"], list)
+    ):
+        _q57_reject(export_id, "export semantic sidecar is malformed or detached")
+    try:
+        semantic_digest = digest_bytes(canonical_bytes(semantic))
+    except (OverflowError, TypeError, ValueError) as error:
+        _q57_reject(export_id, f"export semantic sidecar is not bounded canonical JSON: {error}")
+    if semantic_digest != plan["semantic_binding"]:
+        _q57_reject(export_id, "export semantic sidecar is malformed or detached")
+    artifact_semantics = manifest["artifact_semantics"]
+    if plan["mode"] == "adapter":
+        if artifact_semantics is not None:
+            _q57_reject(export_id, "adapter export cannot claim standalone tensor semantics")
+    elif (
+        not isinstance(artifact_semantics, dict)
+        or set(artifact_semantics) != _EXPORT_ARTIFACT_SEMANTIC_FIELDS
+        or artifact_semantics["version"] != "q10-export-artifact-semantics-v1"
+        or artifact_semantics["source_identity"] != plan["source_identity"]
+        or not isinstance(artifact_semantics["graph"], dict)
+        or set(artifact_semantics["graph"]) != {"architecture", "operators", "plans"}
+        or not isinstance(artifact_semantics["semantic_assets"], dict)
+        or not isinstance(artifact_semantics["precision"], str)
+        or not artifact_semantics["precision"]
+        or not isinstance(artifact_semantics["tensor_contracts"], list)
+        or artifact_semantics["ordered_deltas"] != []
+    ):
+        _q57_reject(export_id, "full artifact semantic sidecar is malformed or detached")
+    if artifact_semantics is None:
+        if not semantic["ordered_deltas"] or not isinstance(semantic["ordered_deltas"][-1], dict):
+            _q57_reject(export_id, "adapter export lacks one ordered delta semantic")
+        exported_tensor_material = semantic["ordered_deltas"][-1]
+    else:
+        exported_tensor_material = artifact_semantics["tensor_contracts"]
+        expected_artifact_precision = (
+            _MERGED_EXPORT_PRECISION
+            if plan["mode"] == "merged"
+            else semantic["precision"]
+        )
+        if (
+            artifact_semantics["graph"] != {
+                "architecture": semantic["graph"]["architecture"],
+                "operators": semantic["graph"]["operators"],
+                "plans": [],
+            }
+            or artifact_semantics["semantic_assets"] != semantic["semantic_assets"]
+            or artifact_semantics["precision"] != expected_artifact_precision
+            or (
+                plan["mode"] == "full"
+                and artifact_semantics["tensor_contracts"] != semantic["tensor_contracts"]
+            )
+        ):
+            _q57_reject(export_id, "artifact semantics change a bound graph, asset, or precision")
+    artifact = manifest["artifact"]
+    expected_suffix = ".gguf" if plan["target_schema"] == "gguf-v3" else ".safetensors"
+    if (
+        not isinstance(artifact, dict)
+        or set(artifact) != {"path", "size", "digest"}
+        or not isinstance(artifact["path"], str)
+        or Path(artifact["path"]).name != artifact["path"]
+        or not artifact["path"].endswith(expected_suffix)
+        or any(ord(character) < 32 or ord(character) == 127 for character in artifact["path"])
+        or type(artifact["size"]) is not int
+        or artifact["size"] != plan["artifact_size"]
+        or not isinstance(artifact["digest"], str)
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", artifact["digest"]) is None
+    ):
+        _q57_reject(export_id, "export artifact record is malformed or detached")
+    if (
+        manifest["artifact_role"] != "DERIVATIVE_NOT_PARAMETER_AUTHORITY"
+        or manifest["parameter_authority"]
+        != {"kind": "cartridge_root", "root_digest": plan["source_root"]}
+    ):
+        _q57_reject(export_id, "export manifest declares a second parameter authority")
+    try:
+        source_material = _tuple_from_record(manifest["source_revision"])
+        exported_material = _tuple_from_record(manifest["exported_revision"])
+    except (KeyError, TypeError, ValueError, CassetteError) as error:
+        _q57_reject(export_id, f"export revision evidence is malformed: {error}")
+    source_record = _identity_record(source_material)
+    exported_record = _identity_record(exported_material)
+    expected_format = (
+        [["gguf", "3"]]
+        if plan["target_schema"] == "gguf-v3"
+        else [["safetensors", "1"]]
+    )
+    if (
+        model_identity(source_material) != plan["source_identity"]
+        or semantic["source_identity"] != plan["source_identity"]
+        or semantic["graph"].get("architecture") != source_record["architecture"]
+        or semantic["graph"].get("operators") != source_record["operator_set"]
+        or semantic["semantic_assets"] != {
+            "processor": source_record["processor_digest"],
+            "template": source_record["template_digest"],
+            "tokenizer": source_record["tokenizer_digest"],
+        }
+        or semantic["precision"] != source_record["precision_scheme"]
+        or exported_record["artifacts"] != [artifact]
+        or exported_material.revision_kind != "exported"
+        or exported_record["source_kind"] != "cassette"
+        or exported_record["locator"] != f"cassette-export:{plan['plan_id']}"
+        or exported_record["immutable_revision"] != artifact["digest"]
+        or exported_record["format_versions"] != expected_format
+        or exported_record["tensor_index_digest"]
+        != digest_bytes(canonical_bytes(exported_tensor_material))
+        or exported_record["precision_scheme"] != (
+            artifact_semantics["precision"]
+            if artifact_semantics is not None
+            else source_record["precision_scheme"]
+        )
+        or exported_record["parent_ids"] != [plan["source_identity"]]
+        or exported_record["transform_manifest_digest"] != plan["plan_id"]
+    ):
+        _q57_reject(export_id, "export semantic or identity evidence contradicts its plan")
+    if source_material.revision_kind == "tuned" and (
+        len(source_record["parent_ids"]) != 1
+        or not semantic["ordered_deltas"]
+        or not isinstance(semantic["ordered_deltas"][-1], dict)
+        or semantic["ordered_deltas"][-1].get("base_identity")
+        != source_record["parent_ids"][0]
+        or source_record["transform_manifest_digest"]
+        != digest_bytes(canonical_bytes(semantic["ordered_deltas"]))
+    ):
+        _q57_reject(export_id, "tuned export does not bind its parent and ordered deltas")
+    if (
+        (plan["mode"] == "full" and semantic["ordered_deltas"])
+        or (
+            plan["mode"] in {"adapter", "merged"}
+            and (
+                source_material.revision_kind != "tuned"
+                or not semantic["ordered_deltas"]
+                or not isinstance(semantic["ordered_deltas"][-1], dict)
+                or semantic["ordered_deltas"][-1].get("delta_id") != plan["delta_id"]
+            )
+        )
+    ):
+        _q57_reject(export_id, "export mode cannot represent its ordered delta history")
+    expected = digest_bytes(canonical_bytes({
+        "revision": plan["source_root"],
+        "target_schema": plan["target_schema"],
+        "export_transform": plan["plan_id"],
+        "artifact_digests": [artifact],
+    }))
+    if expected != export_id:
+        _q57_reject(export_id, "export identity does not bind its revision, transform, and artifact")
+    return manifest
+
+
+def import_export(
+    source_cartridge: str | Path,
+    export_id: str,
+    target_cartridge: str | Path,
+    *,
+    base_root: str | None = None,
+) -> str:
+    """Re-import one verified derivative and recover its represented semantic revision."""
+
+    source_cartridge = Path(source_cartridge)
+    manifest = _load_export(source_cartridge, export_id)
+    artifact_record = manifest["artifact"]
+    artifact = source_cartridge / "exports" / "artifacts" / artifact_record["path"]
+    observed_size, observed_digest = _sha256_path(artifact, export_id)
+    if observed_size != artifact_record["size"] or observed_digest != artifact_record["digest"]:
+        _q57_reject(export_id, "export artifact differs from its manifest", "SOURCE_REVISION_CHANGED")
+    plan = manifest["plan"]
+    if plan["mode"] in {"full", "merged"}:
+        revision = manifest["exported_revision"]
+        material = _tuple_from_record(revision)
+        source = {artifact.name: artifact}
+        imported = (
+            import_gguf(source, target_cartridge, material)
+            if plan["target_schema"] == "gguf-v3"
+            else import_safetensors(source, target_cartridge, material)
+        )
+        imported_root = load_root(target_cartridge, imported)
+        containers = imported_root["provenance"]["containers"]
+        if (
+            len(containers) != 1
+            or containers[0]["metadata"].get("cassette.export.v1")
+            != _export_sidecar(plan)
+        ):
+            _q57_reject(export_id, "full artifact is detached from its export plan")
+        semantic = manifest["artifact_semantics"]
+        observed_semantics = _export_semantic_manifest(
+            Path(target_cartridge), imported, imported_root
+        )
+        if (
+            observed_semantics["graph"] != semantic["graph"]
+            or observed_semantics["semantic_assets"] != semantic["semantic_assets"]
+            or observed_semantics["precision"] != semantic["precision"]
+            or observed_semantics["tensor_contracts"] != semantic["tensor_contracts"]
+            or observed_semantics["ordered_deltas"] != semantic["ordered_deltas"]
+        ):
+            _q57_reject(export_id, "re-imported full model lost a bound Q10/Q17 semantic")
+        return imported
+    if base_root is None:
+        _q57_reject(export_id, "adapter import requires its exact base root", "DELTA_BASE_MISMATCH")
+    base = load_root(target_cartridge, base_root)
+    source_revision = manifest["source_revision"]
+    child_material = _tuple_from_record(source_revision)
+    if len(child_material.parent_ids) != 1 or base["identity"] != child_material.parent_ids[0]:
+        _q57_reject(export_id, "adapter base identity differs from its export", "DELTA_BASE_MISMATCH")
+    delta = manifest["plan"]["delta_id"]
+    matches = [
+        row for row in manifest["semantic_manifest"]["ordered_deltas"]
+        if isinstance(row, dict) and row.get("delta_id") == delta
+    ]
+    if len(matches) != 1:
+        _q57_reject(export_id, "adapter export names an absent ordered delta")
+    delta_record = matches[0]
+    semantic = manifest["semantic_manifest"]
+    base_semantics = export_semantic_manifest(target_cartridge, base_root)
+    if (
+        base["deltas"] + [delta_record] != semantic["ordered_deltas"]
+        or any(
+            base_semantics[field] != semantic[field]
+            for field in ("graph", "semantic_assets", "precision", "tensor_contracts")
+        )
+    ):
+        _q57_reject(export_id, "adapter base cannot reconstruct the exported child")
+    inspected = inspect_safetensors(artifact, artifact_record["digest"])
+    sidecar = inspected["metadata"].get("cassette.export.v1")
+    if sidecar != _export_sidecar(plan):
+        _q57_reject(export_id, "adapter artifact detached from its export plan")
+    data_start = inspected["data_start"]
+    ordered = []
+    with artifact.open("rb") as handle:
+        for ordinal, tensor in enumerate(inspected["tensors"]):
+            if tensor["semantic_tensor_id"] != f"delta.{ordinal:08d}":
+                _q57_reject(export_id, "adapter tensors do not preserve delta order")
+            handle.seek(data_start + tensor["offset"])
+            ordered.append(_read_exact(handle, tensor["length"], export_id, "adapter page"))
+    if [digest_bytes(payload) for payload in ordered] != delta_record["ordered_page_digests"]:
+        _q57_reject(export_id, "adapter pages differ from their ordered delta identities", "PAGE_CORRUPT")
+    child = append_training_delta(
+        target_cartridge,
+        base_root,
+        child_material,
+        delta_record["kind"],
+        tuple(ordered),
+        delta_record["manifest_digest"],
+    )
+    if child != plan["source_root"]:
+        _q57_reject(export_id, "adapter re-import did not reconstruct the exact child root")
+    if export_semantic_manifest(
+        target_cartridge, child
+    ) != manifest["semantic_manifest"]:
+        _q57_reject(export_id, "adapter re-import lost a bound Q10/Q17 semantic")
+    return child
+
+
+_REVISION_DELTA_FIELDS = frozenset({
+    "version", "base_root", "base_identity", "target_revision", "target_artifact",
+    "replacements", "tensor_index_digest", "semantic_assets", "operators",
+    "update_manifest_digest", "target_revision_record", "target_identity", "target_root",
+})
+
+
+def _replace_tensor_pages(tensor_maps: list[dict], replacements: Mapping[str, str]) -> list[dict]:
+    return [
+        {
+            **tensor,
+            "spans": [
+                {**span, "page_digest": replacements.get(span["page_digest"], span["page_digest"])}
+                for span in tensor["spans"]
+            ],
+        }
+        for tensor in tensor_maps
+    ]
+
+
+def _canonical_safetensors_identity(
+    cartridge: Path,
+    base_root: str,
+    tensor_maps: list[dict],
+    replacement_payloads: Mapping[str, bytes],
+) -> tuple[int, str]:
+    header = {}
+    cursor = 0
+    for tensor in sorted(tensor_maps, key=lambda row: row["semantic_tensor_id"]):
+        length = sum(span["length"] for span in tensor["spans"])
+        header[tensor["semantic_tensor_id"]] = {
+            "dtype": tensor["dtype"],
+            "shape": tensor["shape"],
+            "data_offsets": [cursor, cursor + length],
+        }
+        cursor += length
+    encoded = canonical_bytes(header)
+    encoded += b" " * (-len(encoded) % 8)
+    prefix = len(encoded).to_bytes(8, "little") + encoded
+    hasher = hashlib.sha256(prefix)
+    locations = _read_index(cartridge, base_root)
+    total = len(prefix)
+    for tensor in sorted(tensor_maps, key=lambda row: row["semantic_tensor_id"]):
+        tensor_offset = 0
+        for span in tensor["spans"]:
+            if span["tensor_offset"] != tensor_offset:
+                _q57_reject(base_root, "updated tensor spans are discontinuous")
+            page = replacement_payloads.get(span["page_digest"])
+            if page is None:
+                location = locations.get(span["page_digest"])
+                if location is None:
+                    _q57_reject(base_root, "updated tensor names an unavailable page", "PAGE_CORRUPT")
+                page = _read_page(cartridge, location)
+            end = span["offset"] + span["length"]
+            if end > len(page):
+                _q57_reject(base_root, "updated tensor span exceeds its page", "PAGE_CORRUPT")
+            payload = page[span["offset"]:end]
+            hasher.update(payload)
+            tensor_offset += len(payload)
+            total += len(payload)
+    return total, "sha256:" + hasher.hexdigest()
+
+
+def _updated_root_record(
+    material: IdentityTuple,
+    tensor_maps: list[dict],
+    locations: tuple[PageLocation, ...],
+) -> dict:
+    identity_record = _identity_record(material)
+    root = {
+        "identity": model_identity(material),
+        "parents": identity_record["parent_ids"],
+        "provenance": {
+            "revision_kind": material.revision_kind,
+            "source_alias": material.source_alias,
+            "requested_revision": material.requested_revision,
+            "identity_material": identity_record,
+            "containers": [{
+                "path": identity_record["artifacts"][0]["path"],
+                "format": "safetensors",
+                "metadata": {},
+            }],
+        },
+        "semantic_assets": {
+            "processor": identity_record["processor_digest"],
+            "template": identity_record["template_digest"],
+            "tokenizer": identity_record["tokenizer_digest"],
+        },
+        "tensor_maps": tensor_maps,
+        "operators": identity_record["operator_set"],
+        "plans": [],
+        "deltas": [],
+    }
+    root["integrity_root"] = _root_integrity(
+        root, tuple(sorted(locations, key=lambda item: item.page_digest))
+    )
+    return root
+
+
+def create_revision_delta(
+    cartridge: str | Path,
+    base_root: str,
+    target_revision: str,
+    replacements: Mapping[str, bytes],
+) -> dict:
+    """Describe one exact same-shape page update without publishing or staging any byte."""
+
+    cartridge = Path(cartridge)
+    base = load_root(cartridge, base_root)
+    _digest("target_revision", target_revision, base_root)
+    if not isinstance(replacements, Mapping) or not replacements:
+        _q57_reject(base_root, "revision delta requires one or more replacement pages", "INVALID_REQUEST")
+    index = _read_index(cartridge, base_root)
+    normalized: dict[str, bytes] = {}
+    rows = []
+    for old_digest, payload in sorted(replacements.items()):
+        _content_hex(old_digest, base_root)
+        if old_digest not in index:
+            _q57_reject(base_root, f"replacement base page {old_digest} is absent", "DELTA_BASE_MISMATCH")
+        if not isinstance(payload, bytes) or not payload or len(payload) != index[old_digest].length:
+            _q57_reject(base_root, "replacement payload must preserve one exact page length", "INVALID_REQUEST")
+        new_digest = digest_bytes(payload)
+        if new_digest == old_digest:
+            _q57_reject(base_root, "revision delta cannot claim an unchanged replacement", "INVALID_REQUEST")
+        normalized[new_digest] = payload
+        rows.append({
+            "old_page_digest": old_digest,
+            "new_page_digest": new_digest,
+            "length": len(payload),
+        })
+    if len(normalized) != len(rows):
+        _q57_reject(base_root, "revision delta replacement pages must remain one-to-one", "INVALID_REQUEST")
+    mapping = {row["old_page_digest"]: row["new_page_digest"] for row in rows}
+    tensor_maps = _replace_tensor_pages(base["tensor_maps"], mapping)
+    size, artifact_digest = _canonical_safetensors_identity(
+        cartridge, base_root, tensor_maps, normalized
+    )
+    artifact = {"path": "model.safetensors", "size": size, "digest": artifact_digest}
+    transform = {
+        "version": "q54-page-delta-v1",
+        "base_root": base_root,
+        "base_identity": base["identity"],
+        "target_revision": target_revision,
+        "target_artifact": artifact,
+        "replacements": rows,
+        "tensor_index_digest": digest_bytes(canonical_bytes(tensor_maps)),
+        "semantic_assets": base["semantic_assets"],
+        "operators": base["operators"],
+    }
+    transform_digest = digest_bytes(canonical_bytes(transform))
+    base_material, base_record = _material_from_provenance(base["provenance"], base_root)
+    material = replace(
+        base_material,
+        revision_kind="updated",
+        requested_revision=target_revision,
+        immutable_revision=target_revision,
+        artifacts=(ArtifactIdentity(**artifact),),
+        format_versions=(("safetensors", "1"),),
+        tensor_index_digest=transform["tensor_index_digest"],
+        parent_ids=(base["identity"],),
+        transform_manifest_digest=transform_digest,
+    )
+    lengths = {
+        page_digest: location.length for page_digest, location in index.items()
+    }
+    lengths.update({digest: len(payload) for digest, payload in normalized.items()})
+    required = {
+        span["page_digest"] for tensor in tensor_maps for span in tensor["spans"]
+    }
+    abstract_locations = tuple(
+        PageLocation(page_digest, page_digest, 0, lengths[page_digest])
+        for page_digest in sorted(required)
+    )
+    root = _updated_root_record(material, tensor_maps, abstract_locations)
+    target_root = digest_bytes(canonical_bytes(root))
+    target_revision_record = {
+        "revision_kind": material.revision_kind,
+        "source_alias": material.source_alias,
+        "requested_revision": material.requested_revision,
+        "identity_material": _identity_record(material),
+    }
+    body = {
+        **transform,
+        "update_manifest_digest": transform_digest,
+        "target_revision_record": target_revision_record,
+        "target_identity": model_identity(material),
+        "target_root": target_root,
+    }
+    return {"delta_digest": digest_bytes(canonical_bytes(body)), **body}
+
+
+def _revision_delta_candidate(
+    cartridge: str | Path,
+    base_root: str,
+    delta: object,
+    payloads: Mapping[str, bytes],
+) -> dict:
+    """Recompute one Q54 candidate and its exact pre-mutation storage demand."""
+
+    cartridge = Path(cartridge)
+    if not isinstance(delta, dict) or set(delta) != _REVISION_DELTA_FIELDS | {"delta_digest"}:
+        _q57_reject(base_root, "revision delta has an incorrect field set", "INVALID_REQUEST")
+    body = {name: delta[name] for name in delta if name != "delta_digest"}
+    if delta["delta_digest"] != digest_bytes(canonical_bytes(body)):
+        _q57_reject(base_root, "declared revision-delta digest does not match its content", "PAGE_CORRUPT")
+    if base_root != delta["base_root"]:
+        _q57_reject(base_root, "revision delta names another base root", "DELTA_BASE_MISMATCH")
+    base = load_root(cartridge, base_root)
+    if base["identity"] != delta["base_identity"]:
+        _q57_reject(base_root, "revision delta names another base identity", "DELTA_BASE_MISMATCH")
+    if not isinstance(payloads, Mapping):
+        _q57_reject(base_root, "revision delta payloads must be a digest map", "INVALID_REQUEST")
+    expected = {row["new_page_digest"] for row in delta["replacements"]}
+    if set(payloads) != expected:
+        _q57_reject(base_root, "revision delta payload set is incomplete", "SOURCE_UNAVAILABLE")
+    old_to_payload = {}
+    for row in delta["replacements"]:
+        payload = payloads[row["new_page_digest"]]
+        if (
+            not isinstance(payload, bytes)
+            or len(payload) != row["length"]
+            or digest_bytes(payload) != row["new_page_digest"]
+        ):
+            _q57_reject(row["new_page_digest"], "revision delta payload is corrupt", "PAGE_CORRUPT")
+        old_to_payload[row["old_page_digest"]] = payload
+    rebuilt = create_revision_delta(
+        cartridge, base_root, delta["target_revision"], old_to_payload
+    )
+    if rebuilt != delta:
+        _q57_reject(base_root, "revision delta does not reconstruct its declared target", "IDENTITY_MISMATCH")
+    index = _read_index(cartridge, base_root)
+    additions = []
+    for digest in sorted(expected):
+        if digest in index:
+            _read_page(cartridge, index[digest])
+        else:
+            additions.append((digest, payloads[digest]))
+    mapping = {
+        row["old_page_digest"]: row["new_page_digest"] for row in delta["replacements"]
+    }
+    tensor_maps = _replace_tensor_pages(base["tensor_maps"], mapping)
+    required = {
+        span["page_digest"] for tensor in tensor_maps for span in tensor["spans"]
+    }
+    material = _tuple_from_record(delta["target_revision_record"])
+    planned = {}
+    segment_payload = bytearray()
+    segment_rows = []
+
+    def finish_segment() -> None:
+        if not segment_rows:
+            return
+        segment_id = digest_bytes(bytes(segment_payload))
+        planned.update({
+            digest: PageLocation(digest, segment_id, offset, length)
+            for digest, offset, length in segment_rows
+        })
+        segment_payload.clear()
+        segment_rows.clear()
+
+    for digest, payload in additions:
+        if segment_payload and len(segment_payload) + len(payload) > SEGMENT_BYTES:
+            finish_segment()
+        segment_rows.append((digest, len(segment_payload), len(payload)))
+        segment_payload.extend(payload)
+    finish_segment()
+    abstract = {**index, **planned}
+    candidate_root = _updated_root_record(
+        material,
+        tensor_maps,
+        tuple(sorted((abstract[digest] for digest in required), key=lambda row: row.page_digest)),
+    )
+    if (
+        digest_bytes(canonical_bytes(candidate_root)) != delta["target_root"]
+        or candidate_root["identity"] != delta["target_identity"]
+    ):
+        _q57_reject(base_root, "revision delta produced another target", "IDENTITY_MISMATCH")
+    stage_bytes = _capacity_sum((
+        sum(len(payload) for _, payload in additions),
+        len(required) * _INDEX_RECORD.size,
+        len(canonical_bytes(candidate_root)),
+    ), base_root)
+    return {
+        "additions": tuple(additions),
+        "base_index": index,
+        "material": material,
+        "locations": tuple(sorted(
+            (abstract[digest] for digest in required), key=lambda row: row.page_digest
+        )),
+        "root": candidate_root,
+        "required": required,
+        "stage_bytes": stage_bytes,
+        "tensor_maps": tensor_maps,
+    }
+
+
+def _revision_delta_demand(
+    cartridge: Path,
+    operation_id: str,
+    base_root: str,
+    target_root: str,
+    candidate: dict,
+) -> dict:
+    publication_bytes = _generation_publication_bytes(
+        cartridge,
+        operation_id,
+        target_root,
+        candidate["root"],
+        candidate["locations"],
+        base_root,
+    )
+    return {
+        "candidate_bytes": candidate["stage_bytes"],
+        "publication_bytes": publication_bytes,
+        "required_bytes": _capacity_sum(
+            (candidate["stage_bytes"], publication_bytes), operation_id
+        ),
+    }
+
+
+def revision_delta_shape(
+    cartridge: str | Path,
+    operation_id: str,
+    base_root: str,
+    delta: object,
+    payloads: Mapping[str, bytes],
+) -> dict:
+    """Return the exact Q53 update-and-publication demand without mutating the cartridge."""
+
+    cartridge = Path(cartridge)
+    candidate = _revision_delta_candidate(cartridge, base_root, delta, payloads)
+    return _revision_delta_demand(
+        cartridge, operation_id, base_root, delta["target_root"], candidate
+    )
+
+
+def apply_revision_delta(
+    cartridge: str | Path,
+    operation_id: str,
+    base_root: str,
+    delta: object,
+    payloads: Mapping[str, bytes],
+    reservation: CapacityReservation,
+) -> str:
+    """Verify, admit, stage, and return one exact unpublished Q54 target revision."""
+
+    cartridge = Path(cartridge)
+    candidate = _revision_delta_candidate(cartridge, base_root, delta, payloads)
+    required = _revision_delta_demand(
+        cartridge, operation_id, base_root, delta["target_root"], candidate
+    )["required_bytes"]
+    active = _active_reservation(reservation, operation_id)
+    if (
+        active.operation_id != operation_id
+        or max(active.phase_totals) != required
+    ):
+        _capacity_reject(
+            operation_id,
+            f"revision delta needs one exact {required}-byte candidate-and-publication phase",
+        )
+    new_locations = _write_segments(cartridge, candidate["additions"])
+    available = {
+        **candidate["base_index"],
+        **{row.page_digest: row for row in new_locations},
+    }
+    root_digest = _write_cartridge_root(
+        cartridge,
+        candidate["material"],
+        _identity_record(candidate["material"]),
+        [{"path": delta["target_artifact"]["path"], "format": "safetensors", "metadata": {}}],
+        candidate["tensor_maps"],
+        tuple(sorted(
+            (available[digest] for digest in candidate["required"]),
+            key=lambda row: row.page_digest,
+        )),
+        durable=True,
+    )
+    if root_digest != delta["target_root"] or load_root(cartridge, root_digest)["identity"] != delta["target_identity"]:
+        _q57_reject(base_root, "revision delta produced another target", "IDENTITY_MISMATCH")
+    return root_digest
+
+
+def _root_catalog(cartridge: Path) -> dict[str, dict]:
+    directory = cartridge / "roots"
+    if not directory.exists():
+        return {}
+    catalog = {}
+    for path in sorted(directory.iterdir()):
+        if path.name.startswith("."):
+            continue
+        if not path.is_file() or len(path.name) != 64 or any(character not in _HEX for character in path.name):
+            _q57_reject(f"root:{path.name}", "root directory contains an unknown object")
+        root_digest = f"blake3:{path.name}"
+        catalog[root_digest] = load_root(cartridge, root_digest)
+    return catalog
+
+
+def revision_reachability(cartridge: str | Path, target: str) -> dict:
+    """Recompute the exact immutable-root reachability proof required before Q6 removal."""
+
+    cartridge = Path(cartridge)
+    _content_hex(target, "revision:remove")
+    catalog = _root_catalog(cartridge)
+    if target in catalog:
+        target_root = target
+    else:
+        matches = sorted(digest for digest, root in catalog.items() if root["identity"] == target)
+        if len(matches) != 1:
+            detail = "revision identity is ambiguous" if matches else "revision is absent"
+            _q57_reject(target, detail, "INVALID_REQUEST")
+        target_root = matches[0]
+    identities: dict[str, list[str]] = {}
+    for root_digest, root in catalog.items():
+        identities.setdefault(root["identity"], []).append(root_digest)
+    generation_roots = sorted({pin.root_digest for pin in _valid_generations(cartridge, True)})
+    reachable = set(generation_roots)
+    frontier = list(generation_roots)
+    while frontier:
+        root_digest = frontier.pop()
+        for parent_identity in catalog[root_digest]["parents"]:
+            for parent_root in identities.get(parent_identity, ()):
+                if parent_root not in reachable:
+                    reachable.add(parent_root)
+                    frontier.append(parent_root)
+    target_index = _read_index(cartridge, target_root)
+    other_segments = {
+        location.segment_id
+        for root_digest in catalog
+        if root_digest != target_root
+        for location in _read_index(cartridge, root_digest).values()
+    }
+    unique_segments = sorted({
+        location.segment_id for location in target_index.values()
+    } - other_segments)
+    paths = [
+        f"roots/{_content_hex(target_root, target_root)}",
+        f"indexes/{_content_hex(target_root, target_root)}",
+        *[f"segments/{_content_hex(segment, segment)}" for segment in unique_segments],
+    ]
+    target_repair_replica = _repair_manifest_replica_path(cartridge, target_root)
+    target_repair_primary = _repair_manifest_path(cartridge, target_root)
+    if target_repair_replica.exists() or target_repair_primary.exists():
+        target_repair, *_ = _repair_record(cartridge, target_root)
+        target_objects = {
+            target_root,
+            target_repair["index_digest"],
+            *[stripe["parity_digest"] for stripe in target_repair["stripes"]],
+        }
+        shared_objects = set()
+        for other_root in catalog:
+            if other_root == target_root:
+                continue
+            replica = _repair_manifest_replica_path(cartridge, other_root)
+            primary = _repair_manifest_path(cartridge, other_root)
+            if not replica.exists() and not primary.exists():
+                continue
+            other_repair, *_ = _repair_record(cartridge, other_root)
+            shared_objects.update({
+                other_root,
+                other_repair["index_digest"],
+                *[stripe["parity_digest"] for stripe in other_repair["stripes"]],
+            })
+        paths.extend((
+            str(target_repair_primary.relative_to(cartridge)),
+            str(target_repair_replica.relative_to(cartridge)),
+            *[
+                str(_repair_object_path(cartridge, digest).relative_to(cartridge))
+                for digest in sorted(target_objects - shared_objects)
+            ],
+        ))
+    catalog_record = [
+        {"root_digest": digest, "identity": root["identity"], "parents": root["parents"]}
+        for digest, root in sorted(catalog.items())
+    ]
+    body = {
+        "version": "q6-reachability-v1",
+        "target_root": target_root,
+        "target_identity": catalog[target_root]["identity"],
+        "current_root": None if not generation_roots else max(
+            _valid_generations(cartridge, True), key=lambda pin: pin.generation
+        ).root_digest,
+        "generation_roots": generation_roots,
+        "reachable_roots": sorted(reachable),
+        "catalog_digest": digest_bytes(canonical_bytes(catalog_record)),
+        "removable_paths": paths,
+    }
+    return {**body, "reachability_digest": digest_bytes(canonical_bytes(body))}
+
+
+def _finish_revision_removal(cartridge: Path, tombstone: Path, record: dict) -> dict:
+    root_path = f"roots/{_content_hex(record['target_root'], record['target_root'])}"
+    paths = record["removable_paths"]
+    if not isinstance(paths, list) or not paths or paths[0] != root_path or len(paths) != len(set(paths)):
+        _q57_reject(record["target_root"], "revision-removal tombstone is malformed")
+    removed = []
+    for relative in paths:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            _q57_reject(record["target_root"], "revision-removal path escapes the cartridge")
+        destination = cartridge / path
+        try:
+            if destination.exists():
+                destination.unlink()
+                _sync_directory(destination.parent, f"remove:{record['target_root']}")
+            removed.append(relative)
+        except OSError as error:
+            _q57_reject(record["target_root"], f"revision removal failed: {error}", "DURABILITY_UNSUPPORTED")
+    try:
+        tombstone.unlink(missing_ok=True)
+        _sync_directory(tombstone.parent, f"remove:{record['target_root']}")
+    except OSError as error:
+        _q57_reject(record["target_root"], f"removal tombstone cleanup failed: {error}", "DURABILITY_UNSUPPORTED")
+    return {"removed_root": record["target_root"], "removed_paths": removed}
+
+
+def _revision_removal_record(cartridge: Path, target: str, reachability: object) -> dict:
+    """Recompute one admissible removal record without changing cartridge bytes."""
+
+    observed = revision_reachability(cartridge, target)
+    if reachability != observed:
+        _q57_reject(target, "reachability proof is stale, foreign, or malformed", "INVALID_REQUEST")
+    target_root = observed["target_root"]
+    if target_root == observed["current_root"]:
+        _q57_reject(target_root, "current revision cannot be removed", "INVALID_REQUEST")
+    if target_root in observed["reachable_roots"]:
+        _q57_reject(target_root, "reachable revision cannot be removed", "INVALID_REQUEST")
+    return {
+        "target_root": target_root,
+        "target_identity": observed["target_identity"],
+        "reachability": observed,
+        "removable_paths": observed["removable_paths"],
+    }
+
+
+def revision_removal_shape(
+    cartridge: str | Path, target: str, reachability: object
+) -> dict:
+    """Return the exact Q53 tombstone demand after all removal refusals pass."""
+
+    cartridge = Path(cartridge)
+    _content_hex(target, "revision:remove")
+    tombstone = cartridge / "removals" / f"{_content_hex(target, target)}.json"
+    if tombstone.exists():
+        record = _read_envelope(tombstone, f"remove:{target}", "ROOT_INVALID")
+        if record.get("reachability") != reachability:
+            _q57_reject(
+                target,
+                "removal retry carries another reachability proof",
+                "IDEMPOTENCY_CONFLICT",
+            )
+    else:
+        record = _revision_removal_record(cartridge, target, reachability)
+    _, payload = _envelope(record)
+    return {"journal_bytes": len(payload)}
+
+
+def remove_revision(
+    cartridge: str | Path,
+    operation_id: str,
+    target: str,
+    reachability: object,
+    reservation: CapacityReservation,
+) -> dict:
+    """Admit and remove one exact unreachable revision through a resumable tombstone."""
+
+    cartridge = Path(cartridge)
+    _content_hex(target, "revision:remove")
+    tombstone = cartridge / "removals" / f"{_content_hex(target, target)}.json"
+    if tombstone.exists():
+        record = _read_envelope(tombstone, f"remove:{target}", "ROOT_INVALID")
+        if record.get("reachability") != reachability:
+            _q57_reject(
+                target,
+                "removal retry carries another reachability proof",
+                "IDEMPOTENCY_CONFLICT",
+            )
+    else:
+        record = _revision_removal_record(cartridge, target, reachability)
+    _, payload = _envelope(record)
+    active = _active_reservation(reservation, operation_id)
+    if active.operation_id != operation_id or max(active.phase_totals) != len(payload):
+        _capacity_reject(
+            operation_id,
+            f"revision removal needs one exact {len(payload)}-byte journal phase",
+        )
+    if tombstone.exists():
+        return _finish_revision_removal(cartridge, tombstone, record)
+    tombstone.parent.mkdir(parents=True, exist_ok=True)
+    digest = digest_bytes(payload)
+    if not digest:
+        _q57_reject(record["target_root"], "revision-removal tombstone lacks an identity")
+    _durable_replace(tombstone, payload, f"remove:{record['target_root']}")
+    return _finish_revision_removal(cartridge, tombstone, record)
+
+
 def _transaction_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
     raise CassetteError(
         code=code,
@@ -2670,6 +4479,121 @@ def _generation_body(record: dict) -> dict:
         "training_manifest": _training_manifest(record["resume"]),
         "transaction_id": record["transaction_id"],
     }
+
+
+def _generation_publication_bytes(
+    cartridge: Path,
+    transaction_id: str,
+    candidate_root_digest: str,
+    candidate_root: dict,
+    locations: tuple[PageLocation, ...],
+    expected_parent_root: str | None,
+) -> int:
+    """Compute the exact additional Q53 bytes at the generation-publication peak."""
+
+    transaction_id = _transaction_id(transaction_id)
+    active = recover_generation(cartridge)
+    active_root = active.root_digest if active else None
+    if active_root != expected_parent_root:
+        _transaction_reject(
+            f"transaction:{transaction_id}",
+            f"expected parent {expected_parent_root!r}, found {active_root!r}",
+            "IDEMPOTENCY_CONFLICT",
+        )
+    resume = _validate_resume({
+        "operation_version": "store-generation-v1",
+        "input_digests": [candidate_root_digest],
+        "random_seed": None,
+        "statistics_digest": None,
+        "page_results": [
+            {"page_digest": row.page_digest, "length": row.length}
+            for row in locations
+        ],
+        "optimizer_step": None,
+        "rng_state_digest": None,
+        "data_cursor": None,
+        "loss_scale": None,
+    }, f"transaction:{transaction_id}", "INVALID_REQUEST")
+    generation = _next_generation(cartridge)
+    parent_id = active.child_id if active else None
+    candidate_id = _generation_identity(
+        candidate_root,
+        parent_id,
+        _training_manifest(resume),
+        [row["page_digest"] for row in resume["page_results"]],
+    )
+    record = {
+        "transaction_id": transaction_id,
+        "step": 0,
+        "state": _TRANSACTION_STATES[0],
+        "candidate_generation": generation,
+        "candidate_root": candidate_root_digest,
+        "candidate_id": candidate_id,
+        "expected_parent_generation": active.generation if active else None,
+        "expected_parent_id": parent_id,
+        "expected_parent_root": active_root,
+        "generation_record_digest": "",
+        "dependency_order": list(_DEPENDENCY_ORDER),
+        "dependency_cursor": 0,
+        "pointer_cursor": 0,
+        "resume": resume,
+    }
+    record["generation_record_digest"] = digest_bytes(
+        canonical_bytes(_generation_body(record))
+    )
+    segment_count = len({row.segment_id for row in locations})
+    boundary_count = segment_count + 5
+    variants = [record]
+    variants.extend(
+        {**record, "step": step, "state": _TRANSACTION_STATES[step]}
+        for step in range(1, 5)
+    )
+    variants.extend(
+        {
+            **record,
+            "step": 5,
+            "state": _TRANSACTION_STATES[5],
+            "dependency_cursor": cursor,
+        }
+        for cursor in range(boundary_count + 2)
+    )
+    variants.append({
+        **record,
+        "step": 6,
+        "state": _TRANSACTION_STATES[6],
+        "dependency_cursor": boundary_count + 1,
+    })
+    variants.extend(
+        {
+            **record,
+            "step": 7,
+            "state": _TRANSACTION_STATES[7],
+            "dependency_cursor": boundary_count + 1,
+            "pointer_cursor": pointer,
+        }
+        for pointer in (1, 2, 3)
+    )
+    variants.append({
+        **record,
+        "step": 8,
+        "state": _TRANSACTION_STATES[8],
+        "dependency_cursor": boundary_count + 1,
+        "pointer_cursor": 3,
+    })
+    journal_sizes = []
+    for variant in variants:
+        _validate_transaction(
+            variant, f"transaction:{transaction_id}"
+        )
+        journal_sizes.append(len(_envelope(variant)[1]))
+    journal_peak = max(
+        journal_sizes[0],
+        *(left + right for left, right in zip(journal_sizes, journal_sizes[1:])),
+    )
+    generation_bytes = len(_envelope(_generation_body(record))[1])
+    return _capacity_sum(
+        (journal_peak, generation_bytes), transaction_id
+    )
 
 
 def _validate_generation(record: object, object_id: str) -> dict:

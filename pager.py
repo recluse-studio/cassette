@@ -20,6 +20,7 @@ from schema.validator import validate
 from store import _read_page, canonical_bytes, digest_bytes, page_locations
 
 _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
+_ADAPTER_MERGE_CASE = "mlx.adapter_merge.i8_f32.rank1.2x3"
 _GIB = 1024**3
 _MAX_ITEMS = 1_048_576
 _MAX_U64 = 2**64 - 1
@@ -1482,6 +1483,16 @@ def _lora_effective(value, base, parameters: dict):
     )
 
 
+def _adapter_merge(values: Sequence[object], parameters: dict) -> object:
+    mx, _ = _mlx_runtime()
+    quantized, adapter, scale, zero_point = values
+    base = mx.multiply(
+        mx.subtract(quantized.astype(mx.float32), zero_point.astype(mx.float32)),
+        scale,
+    )
+    return _lora_effective(adapter, base, parameters)
+
+
 def _autograd_mse(values: Sequence[object], parameters: dict) -> object:
     mx, _ = _mlx_runtime()
     state, base, inputs, target = values
@@ -1541,6 +1552,7 @@ def _optimizer(values: Sequence[object], parameters: dict) -> object:
 
 _EXECUTORS = {
     "activation": _activation,
+    "adapter_merge": _adapter_merge,
     "add": _elementwise_add,
     "attention": _attention,
     "autograd": _autograd,
@@ -1612,6 +1624,114 @@ def dispatch(case_id: str, inputs: Sequence[object]) -> object:
             f"declared {row['output_dtype']} {row['output_shape']}; received {output_dtype} {output_shape}",
         )
     return result
+
+
+def merge_adapter_material(windows: object) -> dict[str, bytes]:
+    """Execute verified Tier-A material only through the generated Q30 merge tuple."""
+
+    row = _CASES.get(_ADAPTER_MERGE_CASE)
+    if (
+        row is None
+        or row["operator"] != "adapter_merge"
+        or row["input_dtypes"] != ["int8", "float32", "float32", "int8"]
+        or row["input_shapes"] != [[2, 3], [2, 3], [1], [1]]
+        or row["output_dtype"] != "float32"
+        or row["output_shape"] != [2, 3]
+        or row["parameters"] != {"adapter_rank": 1, "adapter_scale": 1.0}
+    ):
+        raise _error(
+            "UNSUPPORTED_OPERATOR",
+            _ADAPTER_MERGE_CASE,
+            "Q30: generated adapter-merge tuple",
+            "rank-one adapter merge has no exact generated MLX tuple",
+        )
+    if not isinstance(windows, tuple) or not windows:
+        raise _error(
+            "INVALID_REQUEST",
+            _ADAPTER_MERGE_CASE,
+            "Q30: generated adapter-merge tuple",
+            "adapter merge requires one or more verified material windows",
+        )
+    mx, _ = _mlx_runtime()
+    merged = {}
+    try:
+        for window in windows:
+            if (
+                not isinstance(window, dict)
+                or set(window) != {
+                    "tensor_id",
+                    "quantized_values",
+                    "adapter_values",
+                    "scale",
+                    "zero_point",
+                }
+                or not isinstance(window["tensor_id"], str)
+                or not window["tensor_id"]
+                or window["tensor_id"] in merged
+                or not isinstance(window["quantized_values"], list)
+                or len(window["quantized_values"]) != 6
+                or any(
+                    type(value) is not int or not -128 <= value <= 127
+                    for value in window["quantized_values"]
+                )
+                or not isinstance(window["adapter_values"], list)
+                or len(window["adapter_values"]) != 6
+                or any(
+                    type(value) not in {int, float} or not math.isfinite(value)
+                    for value in window["adapter_values"]
+                )
+                or not isinstance(window["scale"], str)
+                or type(window["zero_point"]) is not int
+                or not -128 <= window["zero_point"] <= 127
+            ):
+                raise _error(
+                    "INVALID_REQUEST",
+                    _ADAPTER_MERGE_CASE,
+                    "Q30: generated adapter-merge tuple",
+                    "adapter merge material is malformed or duplicated",
+                )
+            scale = float(window["scale"])
+            if not math.isfinite(scale) or scale <= 0:
+                raise _error(
+                    "INVALID_REQUEST",
+                    window["tensor_id"],
+                    "Q30: generated adapter-merge tuple",
+                    "adapter merge scale must be finite and positive",
+                )
+            output = dispatch(
+                _ADAPTER_MERGE_CASE,
+                (
+                    mx.array(window["quantized_values"], dtype=mx.int8).reshape((2, 3)),
+                    mx.array(window["adapter_values"], dtype=mx.float32).reshape((2, 3)),
+                    mx.array([scale], dtype=mx.float32),
+                    mx.array([window["zero_point"]], dtype=mx.int8),
+                ),
+            )
+            mx.eval(output)
+            values = tuple(
+                float(value) for output_row in output.tolist() for value in output_row
+            )
+            if len(values) != 6 or any(not math.isfinite(value) for value in values):
+                raise _error(
+                    "GRADIENT_INVALID",
+                    window["tensor_id"],
+                    "Q30: generated adapter-merge tuple",
+                    "merged adapter tensor is non-finite or malformed",
+                )
+            merged[window["tensor_id"]] = struct.pack("<6f", *values)
+            output = None
+            mx.synchronize()
+            mx.clear_cache()
+    except CassetteError:
+        raise
+    except (OverflowError, TypeError, ValueError) as error:
+        raise _error(
+            "INVALID_REQUEST",
+            _ADAPTER_MERGE_CASE,
+            "Q30: generated adapter-merge tuple",
+            f"adapter merge material is invalid: {error}",
+        ) from error
+    return merged
 
 
 _PAGE_STATES = {

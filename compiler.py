@@ -1,4 +1,4 @@
-# compiler.py — contained compilation, Q19 certificates, and certified hardware plans (Q4/Q11/Q19/Q30/Q33/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
+# compiler.py — contained compilation, export admission, Q19 certificates, and hardware plans (Q4/Q11/Q19/Q26/Q30/Q33/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
 """Compile verified SafeTensors material into one independently checkable executable revision."""
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Mapping
 from errors import CassetteError
 from schema.tables import (
     DISPATCH_ROWS,
+    EXPORT_TARGETS,
     HARDWARE_PLAN_CATALOG_VERSION,
     HARDWARE_PLAN_VERSION,
     OPERATOR_DISPATCH,
@@ -28,10 +29,13 @@ from store import (
     ArtifactIdentity,
     IdentityTuple,
     PAGE_BYTES,
+    adapter_export_fields,
     adopt_safetensors,
     canonical_bytes,
     derive_root,
     digest_bytes,
+    export_semantic_binding,
+    export_shape,
     extent_footprint,
     inspect_safetensors,
     load_root,
@@ -121,6 +125,7 @@ _CASES = {
     for row in DISPATCH_ROWS
 }
 _ZERO = (Fraction(0), Fraction(0))
+_EXPORT_TARGETS = frozenset(EXPORT_TARGETS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -395,8 +400,16 @@ def _safe_artifact_path(value: object, object_id: str) -> str:
     ):
         _reject("CONTAINMENT_REJECTED", object_id, "artifact path escapes its canonical source namespace")
     lowered = value.lower()
-    if any(lowered.endswith(suffix) for suffix in _UNSAFE_SUFFIXES) or not lowered.endswith(".safetensors"):
+    if any(lowered.endswith(suffix) for suffix in _UNSAFE_SUFFIXES):
         _reject("CONTAINMENT_REJECTED", object_id, "first-release compilation accepts data-only SafeTensors artifacts")
+    if lowered.endswith(".gguf"):
+        _reject(
+            "MODEL_UNSUPPORTED",
+            object_id,
+            "GGUF import is available, but the first compiled-preparation path requires SafeTensors",
+        )
+    if not lowered.endswith(".safetensors"):
+        _reject("CONTAINMENT_REJECTED", object_id, "artifact type is outside the data-only compiler allowlist")
     return value
 
 
@@ -2149,6 +2162,42 @@ def _select_hardware_plan(
     )
 
 
+def _plan_export(cartridge: str | Path, root_digest: str, target_schema: str) -> dict:
+    """Admit one target only when its artifact plus bound sidecar retains every root semantic."""
+
+    _exact_digest(root_digest, "export:plan", "source root digest")
+    if target_schema not in _EXPORT_TARGETS:
+        _reject("MODEL_UNSUPPORTED", root_digest, f"export target {target_schema!r} is unsupported")
+    root = load_root(cartridge, root_digest)
+    mode = "adapter" if target_schema == "adapter-safetensors-v1" else "full"
+    delta_id = adapter_rank = adapter_scale = None
+    if root["deltas"]:
+        delta_id, adapter_rank, adapter_scale = adapter_export_fields(cartridge, root_digest)
+        if mode == "full":
+            mode = "merged"
+    if target_schema == "gguf-v3" and not set(root["operators"]) <= set(
+        EXPORT_TARGETS[target_schema]["operators"]
+    ):
+        _reject(
+            "MODEL_UNSUPPORTED",
+            root_digest,
+            "GGUF target cannot represent one or more required operators",
+        )
+    semantic_binding = export_semantic_binding(cartridge, root_digest)
+    body = {
+        "version": "q26-export-v1",
+        "source_root": root_digest,
+        "source_identity": root["identity"],
+        "target_schema": target_schema,
+        "mode": mode,
+        "semantic_binding": semantic_binding,
+        "delta_id": delta_id,
+        "adapter_rank": adapter_rank,
+        "adapter_scale": adapter_scale,
+    }
+    return export_shape(cartridge, body)
+
+
 def _boundary(label: str, source: object, function, *arguments):
     try:
         return function(*arguments)
@@ -2187,6 +2236,19 @@ def plan_revision(source: object, extents: object, cartridge: str | Path) -> str
     """Return the immutable compiler-input digest after contained source-driven inventory."""
 
     return _boundary("plan", source, _plan_revision, source, extents, cartridge)
+
+
+def plan_export(cartridge: str | Path, root_digest: str, target_schema: str) -> dict:
+    """Return one exact byte-sized export plan after semantic representability passes."""
+
+    return _boundary(
+        "export-plan",
+        {"identity": root_digest},
+        _plan_export,
+        cartridge,
+        root_digest,
+        target_schema,
+    )
 
 
 def prepare_revision(

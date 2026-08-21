@@ -2568,3 +2568,49 @@ def load_training_artifact(cartridge, root_digest: str) -> dict:
     if manifest["step"] != manifest["total_steps"]:
         _reject("ROOT_INVALID", root_digest, "training artifact is not complete")
     return _decode(canonical_bytes(manifest), manifest_digest, "training artifact")
+
+
+def adapter_merge_material(cartridge, root_digest: str) -> tuple[dict, ...]:
+    """Expose verified Tier-A windows as data; pager.py remains the numerical authority."""
+
+    manifest = load_training_artifact(cartridge, root_digest)
+    if (
+        manifest["tier"] != "A"
+        or manifest["adapter_rank"] != 1
+        or manifest["adapter_scale"] != "1"
+    ):
+        _reject(
+            "TRAINING_UNSUPPORTED",
+            root_digest,
+            "adapter child has no eligible rank-one merged-export material",
+        )
+    material = []
+    tensor_ids = set()
+    for base_row, delta_row in zip(
+        manifest["base_pages"], manifest["delta_pages"], strict=True
+    ):
+        parameter_id = base_row["parameter_id"]
+        if delta_row["parameter_id"] != parameter_id:
+            _reject("ROOT_INVALID", root_digest, "adapter merge order differs from its frozen base")
+        tensor_id = base_row["tensor_id"]
+        if tensor_id in tensor_ids:
+            _reject("ROOT_INVALID", root_digest, "adapter merge names one tensor more than once")
+        tensor_ids.add(tensor_id)
+        codec = base_row["codec"]
+        material.append({
+            "tensor_id": tensor_id,
+            "quantized_values": list(_BASE_VALUES.unpack(
+                _base_payload(cartridge, manifest["parent_root"], base_row)
+            )),
+            "adapter_values": list(_tensor_values(
+                read_training_page(cartridge, root_digest, delta_row["page_digest"]),
+                delta_row["page_digest"],
+                "adapter",
+                parameter_id,
+                (2, 3),
+                manifest["delta_precision"],
+            )),
+            "scale": codec["scale"],
+            "zero_point": codec["zero_point"],
+        })
+    return tuple(material)

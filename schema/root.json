@@ -409,7 +409,8 @@
             "executable",
             "exported",
             "source",
-            "tuned"
+            "tuned",
+            "updated"
           ],
           "maxLength": 256,
           "minLength": 1,

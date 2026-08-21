@@ -31,7 +31,7 @@ from tools.ledger import run as run_ledger
 
 REPO = Path(__file__).resolve().parent.parent
 RUNTIME_COMMIT = "365d6f29b47686a9f5401f6a9ec5825fee162d69"
-DISPATCH_DIGEST = "sha256:11cc11f8f7adb6ce93b48a503ed4aaaa531166101d2eb57cbc59ebb45677d8e4"
+DISPATCH_DIGEST = "sha256:431f63af600822fc10d9566dd3e5de250a1768008a83dac7d5af77a96020d4fe"
 CASE_IDS = [
     "mlx.matmul.f32.2x3_3x2",
     "mlx.matmul.f32.2x4_4x4",
@@ -53,6 +53,8 @@ CASE_IDS = [
     "mlx.autograd_calibration_mse.f32.1_2x3_3x2_2x2_1",
     "mlx.sgd.f32.3",
     "mlx.sgd.f32.1",
+    "mlx.matmul.f32.3x2_2x2",
+    "mlx.adapter_merge.i8_f32.rank1.2x3",
 ]
 MODES = [
     "BYTE_IDENTICAL_LAYOUT",
@@ -579,6 +581,22 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
             ],
             [0.875],
         ),
+        CASE_IDS[20]: (
+            [
+                mx.array([[1, 2], [3, 4], [5, 6]], dtype=mx.float32),
+                mx.array([[1, 0], [0, 2]], dtype=mx.float32),
+            ],
+            [[1.0, 4.0], [3.0, 8.0], [5.0, 12.0]],
+        ),
+        CASE_IDS[21]: (
+            [
+                mx.array([[-2, -1, 0], [1, 2, 3]], dtype=mx.int8),
+                mx.array([[0.25, -0.5, 0.75], [0.5, -0.25, 0]], dtype=mx.float32),
+                mx.array([1.0], dtype=mx.float32),
+                mx.array([0], dtype=mx.int8),
+            ],
+            [[-1.875, -1.25, 0.375], [0.9375, 2.125, 2.8125]],
+        ),
     }
 
 
@@ -698,6 +716,7 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
     assert set(cases) == set(rows)
     assert {row["operator"] for row in rows.values()} == {
         "activation",
+        "adapter_merge",
         "add",
         "attention",
         "autograd",

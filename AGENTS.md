@@ -63,6 +63,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   | Acquired source bytes and resumable transfer checkpoints inside store-granted extents | `sources.py` |
   | Immutable logical cartridge identity marker | `store.py` |
   | Integrity repair manifests, verified replicas, parity objects, and quarantined extents | `store.py` |
+  | Derivative export artifacts, export manifests, and revision-removal tombstones | `store.py` |
   | Canonical broker operation logs, live ownership, and ordered operation events | `broker.py` |
 
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),
@@ -83,6 +84,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     "sources.py": ["Q52"],
     "store.py": ["Q57"],
     "trainer.py": ["Q21"],
+    "tools/capture_fixture.py": ["Q40"],
     "tools/genschema.py": ["Q33"],
     "tools/ledger.py": ["Q29"]
   }

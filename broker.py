@@ -1,4 +1,4 @@
-# broker.py — canonical operations, compilation dispatch, negotiation, scheduling, and leases (Q5/Q6/Q52/Q65/Q77); depends on compiler.py, errors.py, pager.py, schema, sources.py, store.py.
+# broker.py — canonical operations, compilation, export, update, removal, scheduling, and leases (Q5/Q6/Q26/Q52/Q54/Q57/Q65/Q77); depends on compiler.py, errors.py, pager.py, schema, sources.py, store.py, trainer.py.
 """Own the operation log and the single broker admission and dispatch authority."""
 
 from __future__ import annotations
@@ -16,9 +16,15 @@ from pathlib import Path
 import re
 from types import MappingProxyType
 
-from compiler import PreparedRevision, plan_revision, prepare_revision, verify_bundle_structure
+from compiler import (
+    PreparedRevision,
+    plan_export,
+    plan_revision,
+    prepare_revision,
+    verify_bundle_structure,
+)
 from errors import CassetteError
-from pager import CertifiedSchedule, admit_schedule
+from pager import CertifiedSchedule, admit_schedule, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
@@ -26,14 +32,18 @@ from store import (
     ArtifactIdentity,
     CapacityReservation,
     GenerationPin,
+    apply_revision_delta as apply_store_delta,
     canonical_bytes,
     commit_generation,
     digest_bytes,
+    export_revision as export_store_revision,
     load_root,
     page_locations,
     recover_generation,
+    remove_revision as remove_store_revision,
     verify_root_content,
 )
+from trainer import adapter_merge_material
 
 PROTOCOL_VERSION = "1"
 PREPARE_OPERATION = "prepare"
@@ -1309,7 +1319,13 @@ class CanonicalBroker:
         self._signal(operation_id).clear()
         return self._operation(record)
 
-    async def execute(self, request: dict, worker: Callable[[], object]) -> dict:
+    async def execute(
+        self,
+        request: dict,
+        worker: Callable[[], object],
+        *,
+        cancellable: bool = True,
+    ) -> dict:
         """Run one non-preparation Q6 operation through the same error, event, and cancellation log."""
 
         operation = self.issue(request)
@@ -1324,7 +1340,9 @@ class CanonicalBroker:
                 "phase": "EMPTY", "state": "RUNNING",
             }, state="RUNNING")
             try:
-                result = await self._controlled(operation_id, worker, cancellable=True)
+                result = await self._controlled(
+                    operation_id, worker, cancellable=cancellable
+                )
                 if not isinstance(result, dict):
                     _reject("INVALID_REQUEST", operation_id, "operation worker must return one result object")
                 _json_digest(result, operation_id, "operation result")
@@ -1335,6 +1353,124 @@ class CanonicalBroker:
                 raise
             except CassetteError as error:
                 return self._operation(self._failed(self._load(operation_id), error))
+
+    async def export_revision(
+        self,
+        request: dict,
+        cartridge: str | Path,
+        reservation: CapacityReservation,
+    ) -> dict:
+        """Execute one Q26 export whose request binds the exact root and target schema."""
+
+        operation_id = self.operation_id(request)
+
+        def export() -> dict:
+            arguments = request.get("arguments")
+            if (
+                request.get("operation") != "export"
+                or not isinstance(arguments, dict)
+                or set(arguments) != {"target_schema"}
+            ):
+                _reject("INVALID_REQUEST", operation_id, "export requires one canonical export request")
+            target_schema = arguments.get("target_schema")
+            root_digest = request.get("target")
+            plan = plan_export(cartridge, root_digest, target_schema)
+            merged = (
+                merge_adapter_material(adapter_merge_material(cartridge, root_digest))
+                if plan["mode"] == "merged"
+                else None
+            )
+            return export_store_revision(
+                cartridge, operation_id, plan, reservation, merged
+            )
+
+        return await self.execute(
+            request, lambda: asyncio.to_thread(export), cancellable=False
+        )
+
+    async def apply_delta(
+        self,
+        request: dict,
+        cartridge: str | Path,
+        delta: dict,
+        payloads: Mapping[str, bytes],
+        reservation: CapacityReservation,
+    ) -> dict:
+        """Publish only the exact Q54 target whose request binds its base and delta digest."""
+
+        operation_id = self.operation_id(request)
+
+        def apply() -> dict:
+            arguments = request.get("arguments")
+            base_root = request.get("target")
+            if (
+                request.get("operation") != "apply_delta"
+                or not isinstance(arguments, dict)
+                or set(arguments) != {"delta_digest"}
+                or not isinstance(delta, dict)
+                or arguments.get("delta_digest") != delta.get("delta_digest")
+            ):
+                _reject("INVALID_REQUEST", operation_id, "delta request is detached from its declared digest")
+            current = recover_generation(cartridge)
+            if current is None or current.root_digest != base_root:
+                _reject(
+                    "DELTA_BASE_MISMATCH",
+                    operation_id,
+                    "delta base is not the current callable revision",
+                    invariant="Q54: exact callable base before delta publication",
+                )
+            candidate = apply_store_delta(
+                cartridge, operation_id, base_root, delta, payloads, reservation
+            )
+            pin = commit_generation(
+                cartridge,
+                operation_id,
+                candidate,
+                expected_parent_root=base_root,
+            )
+            return {
+                "generation": pin.generation,
+                "revision_id": pin.child_id,
+                "root_digest": pin.root_digest,
+                "model_identity": load_root(cartridge, pin.root_digest)["identity"],
+            }
+
+        return await self.execute(
+            request, lambda: asyncio.to_thread(apply), cancellable=False
+        )
+
+    async def remove_revision(
+        self,
+        request: dict,
+        cartridge: str | Path,
+        reachability: dict,
+        reservation: CapacityReservation,
+    ) -> dict:
+        """Execute exact revision removal only through its request-bound reachability proof."""
+
+        operation_id = self.operation_id(request)
+
+        def remove() -> dict:
+            arguments = request.get("arguments")
+            if (
+                request.get("operation") != "remove_revision"
+                or not isinstance(arguments, dict)
+                or set(arguments) != {"reachability_digest"}
+                or not isinstance(reachability, dict)
+                or arguments.get("reachability_digest") != reachability.get("reachability_digest")
+            ):
+                _reject("INVALID_REQUEST", operation_id, "removal request is detached from its reachability proof")
+            return remove_store_revision(
+                cartridge,
+                operation_id,
+                request.get("target"),
+                reachability,
+                reservation,
+            )
+
+        return await self.execute(
+            request, lambda: asyncio.to_thread(remove), cancellable=False
+        )
 
     async def advance_acquisition(self, request: dict, context: AcquisitionContext) -> dict:
         """Execute exactly one Q5 transition; a new broker process may execute the next one."""
