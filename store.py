@@ -519,6 +519,21 @@ class CartridgeLifecycle:
             )
         return self._path
 
+    def bind(
+        self,
+        access: CartridgeAccess,
+        *,
+        write: bool | None = None,
+    ) -> BoundCartridge:
+        """Bind one path-like value to this exact verified access and mount epoch."""
+
+        self.resolve(access)
+        if write is not None and type(write) is not bool:
+            _lifecycle_reject(
+                self._cartridge_uuid, "bound access mode must be bool or None", "INVALID_REQUEST"
+            )
+        return BoundCartridge(self, access, access.write if write is None else write)
+
     def finish(self, access: CartridgeAccess) -> CartridgeIdentity:
         """Quiesce one operation and refresh the verified root before another operation starts."""
 
@@ -580,6 +595,24 @@ class CartridgeLifecycle:
             )
         self._invalidate()
         self._move(target)
+
+
+@dataclass(frozen=True, slots=True)
+class BoundCartridge(os.PathLike):
+    """Resolve one cartridge path only while its Q49 access token remains current."""
+
+    lifecycle: CartridgeLifecycle
+    access: CartridgeAccess
+    write: bool
+
+    def __fspath__(self) -> str:
+        if self.write and not self.access.write:
+            _lifecycle_reject(
+                self.lifecycle._cartridge_uuid,
+                "read-only access cannot resolve a write operation",
+                "CARTRIDGE_READ_ONLY",
+            )
+        return os.fspath(self.lifecycle.resolve(self.access))
 
 
 def _lifecycle_reject(cartridge_uuid: str, detail: str, code: str) -> None:
@@ -724,6 +757,24 @@ def _active_reservation(
             "INVALID_REQUEST",
         )
     return reservation
+
+
+def require_capacity_demand(
+    reservation: CapacityReservation,
+    operation_id: str,
+    exact_phase_total: int,
+) -> CapacityReservation:
+    """Require one active reservation whose largest phase equals the declared demand."""
+
+    active = _active_reservation(reservation, operation_id)
+    exact = _capacity_value("exact_phase_total", exact_phase_total, operation_id)
+    if max(active.phase_totals, default=0) != exact:
+        _capacity_reject(
+            operation_id,
+            f"reserved phase maximum {max(active.phase_totals, default=0)} bytes; "
+            f"declared demand is {exact} bytes",
+        )
+    return active
 
 
 def release_capacity(reservation: CapacityReservation) -> None:
@@ -1719,8 +1770,7 @@ def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
     }
 
 
-def _write_cartridge_root(
-    cartridge: Path,
+def _cartridge_root_payload(
     material: IdentityTuple,
     identity_record: dict,
     containers: list[dict],
@@ -1728,9 +1778,9 @@ def _write_cartridge_root(
     locations: tuple[PageLocation, ...],
     plans: list[dict] | None = None,
     deltas: list[dict] | None = None,
-    *,
-    durable: bool = False,
-) -> str:
+) -> tuple[bytes, str]:
+    """Return the one canonical root payload and its content identity without writing."""
+
     root = {
         "identity": model_identity(material),
         "parents": identity_record["parent_ids"],
@@ -1755,7 +1805,30 @@ def _write_cartridge_root(
         root, tuple(sorted(locations, key=lambda item: item.page_digest))
     )
     payload = canonical_bytes(root)
-    root_digest = digest_bytes(payload)
+    return payload, digest_bytes(payload)
+
+
+def _write_cartridge_root(
+    cartridge: Path,
+    material: IdentityTuple,
+    identity_record: dict,
+    containers: list[dict],
+    tensor_maps: list[dict],
+    locations: tuple[PageLocation, ...],
+    plans: list[dict] | None = None,
+    deltas: list[dict] | None = None,
+    *,
+    durable: bool = False,
+) -> str:
+    payload, root_digest = _cartridge_root_payload(
+        material,
+        identity_record,
+        containers,
+        tensor_maps,
+        locations,
+        plans,
+        deltas,
+    )
     _write_index(cartridge, root_digest, locations, durable=durable)
     path = cartridge / "roots" / _content_hex(root_digest, root_digest)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2068,13 +2141,13 @@ def adopt_safetensors(
     )
 
 
-def derive_root(
+def _derived_root_inputs(
     cartridge: str | Path,
     parent_root_digest: str,
     material: IdentityTuple,
     plans: tuple[dict, ...],
-) -> str:
-    """Publish one child revision or same-identity plan manifest over verified existing pages."""
+) -> tuple[Path, dict, dict, list[dict], tuple[PageLocation, ...]]:
+    """Validate and normalize one derived-root request without writing a cartridge byte."""
 
     cartridge = Path(cartridge)
     parent = load_root(cartridge, parent_root_digest)
@@ -2106,16 +2179,59 @@ def derive_root(
         canonical_plans = json.loads(canonical_bytes(list(plans)), object_pairs_hook=_unique_object)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         _q57_reject(parent_root_digest, f"derived plans are not canonical JSON: {error}")
+    locations = tuple(sorted(
+        _read_index(cartridge, parent_root_digest).values(),
+        key=lambda item: item.page_digest,
+    ))
+    return cartridge, parent, identity_record, canonical_plans, locations
+
+
+def derived_root_shape(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    material: IdentityTuple,
+    plans: tuple[dict, ...],
+) -> dict:
+    """Return the exact root-and-index bytes required before one derived candidate write."""
+
+    _, parent, identity_record, canonical_plans, locations = _derived_root_inputs(
+        cartridge, parent_root_digest, material, plans
+    )
+    payload, root_digest = _cartridge_root_payload(
+        material,
+        identity_record,
+        parent["provenance"]["containers"],
+        parent["tensor_maps"],
+        locations,
+        canonical_plans,
+        parent["deltas"],
+    )
+    return {
+        "candidate_bytes": _capacity_sum(
+            (len(payload), len(locations) * _INDEX_RECORD.size), root_digest
+        ),
+        "root_digest": root_digest,
+    }
+
+
+def derive_root(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    material: IdentityTuple,
+    plans: tuple[dict, ...],
+) -> str:
+    """Publish one child revision or same-identity plan manifest over verified existing pages."""
+
+    cartridge, parent, identity_record, canonical_plans, locations = _derived_root_inputs(
+        cartridge, parent_root_digest, material, plans
+    )
     return _write_cartridge_root(
         cartridge,
         material,
         identity_record,
         parent["provenance"]["containers"],
         parent["tensor_maps"],
-        tuple(sorted(
-            _read_index(cartridge, parent_root_digest).values(),
-            key=lambda item: item.page_digest,
-        )),
+        locations,
         canonical_plans,
         parent["deltas"],
         durable=True,

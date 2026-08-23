@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import struct
-from typing import Mapping
+from typing import Callable, Mapping
 
 from errors import CassetteError
 from schema.tables import (
@@ -27,12 +27,15 @@ from schema.tables import (
 from schema.validator import validate
 from store import (
     ArtifactIdentity,
+    CapacityPhase,
+    CapacityReservation,
     IdentityTuple,
     PAGE_BYTES,
     adapter_export_fields,
     adopt_safetensors,
     canonical_bytes,
     derive_root,
+    derived_root_shape,
     digest_bytes,
     export_semantic_binding,
     export_shape,
@@ -44,6 +47,9 @@ from store import (
     page_locations,
     read_training_page,
     read_tensor,
+    release_capacity,
+    require_capacity_demand,
+    reserve_capacity,
 )
 
 _MANIFEST_KEY = "cassette.compiler.v1"
@@ -2869,6 +2875,7 @@ def _recompile_revision(
     specification_value: object,
     previous_root_digest: str | None,
     require_recovery: bool,
+    admit_capacity: Callable[[int], None],
 ) -> RecompiledRevision:
     specification = _specification_record(
         _canonical_copy(specification_value), "compiler:recompile"
@@ -2970,9 +2977,20 @@ def _recompile_revision(
             "recompiled proof bundle exceeds the bounded four-megabyte authority",
         )
     material = _recompiled_material(source_root, specification, _digest(bundle))
+    shape = derived_root_shape(
+        cartridge, specification["source_root"], material, (bundle,)
+    )
+    admit_capacity(shape["candidate_bytes"])
     candidate = derive_root(
         cartridge, specification["source_root"], material, (bundle,)
     )
+    if candidate != shape["root_digest"]:
+        _reject(
+            "CAPABILITY_MISMATCH",
+            candidate,
+            "derived candidate differs from its pre-admission root and index shape",
+            "Q53/Q60: exact candidate shape remains stable through durable publication",
+        )
     _verify_bundle_structure(
         cartridge, candidate, source_root["identity"], plan_digest
     )
@@ -3496,20 +3514,68 @@ def compilation_specification(
     )
 
 
+def _compilation_capacity(
+    operation_id: str | None,
+    device_bytes: int | None,
+    allocatable_verified_free: int | None,
+    reserve_extent: Callable[[int], bool] | None,
+    release_extent: Callable[[int], bool] | None,
+):
+    """Reserve one exact Q53 compiler phase before its first candidate write."""
+
+    reservation: CapacityReservation | None = None
+
+    def admit(exact_phase_total: int) -> None:
+        nonlocal reservation
+        if reservation is None:
+            reservation = reserve_capacity(
+                operation_id,
+                device_bytes=device_bytes,
+                allocatable_verified_free=allocatable_verified_free,
+                phases=(CapacityPhase(candidate=exact_phase_total),),
+                reserve_extent=reserve_extent,
+                release_extent=release_extent,
+            )
+        else:
+            require_capacity_demand(reservation, operation_id, exact_phase_total)
+
+    def close() -> None:
+        if reservation is not None:
+            release_capacity(reservation)
+
+    return admit, close
+
+
 def recompile_revision(
     cartridge: str | Path,
     specification: object,
     previous_root_digest: str | None = None,
+    *,
+    operation_id: str | None = None,
+    device_bytes: int | None = None,
+    allocatable_verified_free: int | None = None,
+    reserve_extent: Callable[[int], bool] | None = None,
+    release_extent: Callable[[int], bool] | None = None,
 ) -> RecompiledRevision:
     """Build one deterministic unpublished child and report exact Q27 reuse against its predecessor."""
 
+    admit_capacity, close_capacity = _compilation_capacity(
+        operation_id,
+        device_bytes,
+        allocatable_verified_free,
+        reserve_extent,
+        release_extent,
+    )
+
     def recompile() -> RecompiledRevision:
         incremental = _recompile_revision(
-            cartridge, specification, previous_root_digest, False
+            cartridge, specification, previous_root_digest, False, admit_capacity
         )
         if previous_root_digest is None:
             return incremental
-        clean = _recompile_revision(cartridge, specification, None, False)
+        clean = _recompile_revision(
+            cartridge, specification, None, False, admit_capacity
+        )
         if (
             incremental.candidate_root != clean.candidate_root
             or incremental.plan_digest != clean.plan_digest
@@ -3523,19 +3589,36 @@ def recompile_revision(
             )
         return incremental
 
-    return _boundary(
-        "recompile",
-        {"identity": previous_root_digest or "compiler:clean-recompile"},
-        recompile,
-    )
+    try:
+        return _boundary(
+            "recompile",
+            {"identity": previous_root_digest or "compiler:clean-recompile"},
+            recompile,
+        )
+    finally:
+        close_capacity()
 
 
 def prepare_recovered_revision(
     cartridge: str | Path,
     training_root_digest: str,
     compiled_parent_root_digest: str,
+    *,
+    operation_id: str | None = None,
+    device_bytes: int | None = None,
+    allocatable_verified_free: int | None = None,
+    reserve_extent: Callable[[int], bool] | None = None,
+    release_extent: Callable[[int], bool] | None = None,
 ) -> RecompiledRevision:
     """Consume one committed Tier-B artifact and return its independently regenerated Q19 child."""
+
+    admit_capacity, close_capacity = _compilation_capacity(
+        operation_id,
+        device_bytes,
+        allocatable_verified_free,
+        reserve_extent,
+        release_extent,
+    )
 
     def recover() -> RecompiledRevision:
         _exact_digest(training_root_digest, "compiler:recover", "training root")
@@ -3560,12 +3643,14 @@ def prepare_recovered_revision(
             specification,
             compiled_parent_root_digest,
             True,
+            admit_capacity,
         )
         clean = _recompile_revision(
             cartridge,
             specification,
             None,
             True,
+            admit_capacity,
         )
         if (
             incremental.candidate_root != clean.candidate_root
@@ -3580,11 +3665,14 @@ def prepare_recovered_revision(
             )
         return incremental
 
-    return _boundary(
-        "recover",
-        {"identity": training_root_digest},
-        recover,
-    )
+    try:
+        return _boundary(
+            "recover",
+            {"identity": training_root_digest},
+            recover,
+        )
+    finally:
+        close_capacity()
 
 
 def verify_bundle_structure(

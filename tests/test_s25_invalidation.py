@@ -86,6 +86,18 @@ EXPECTED = {
 }
 
 
+def _compiler_capacity(label: str) -> dict:
+    """Supply one simulated device whose exact compiler reservation always succeeds."""
+
+    return {
+        "operation_id": f"s25-{label}",
+        "device_bytes": 100 * 1024**3,
+        "allocatable_verified_free": 100 * 1024**3,
+        "reserve_extent": lambda _length: True,
+        "release_extent": lambda _length: True,
+    }
+
+
 def _artifact(weights=(1.0, 0.0, 0.0, 1.0)):
     corpus = TRACE
 
@@ -165,6 +177,7 @@ def _base(tmp_path: Path):
         cartridge,
         compilation_specification(cartridge, legacy.candidate_root),
         legacy.candidate_root,
+        **_compiler_capacity("base-recompile"),
     )
     commit_generation(
         cartridge,
@@ -269,9 +282,16 @@ def test_q19_q27_q61_q75_each_input_has_one_exact_incremental_closure_and_clean_
         else:
             _mutate(axis, candidate_specification)
         incremental = recompile_revision(
-            cartridge, candidate_specification, prepared.candidate_root
+            cartridge,
+            candidate_specification,
+            prepared.candidate_root,
+            **_compiler_capacity(f"axis-{axis}-incremental"),
         )
-        clean = recompile_revision(cartridge, candidate_specification)
+        clean = recompile_revision(
+            cartridge,
+            candidate_specification,
+            **_compiler_capacity(f"axis-{axis}-clean"),
+        )
         expected = tuple(EXPECTED[axis])
         assert incremental.changed_inputs == (axis,)
         assert incremental.invalidated_artifacts == expected
@@ -307,19 +327,29 @@ def test_q19_q27_q61_q75_each_input_has_one_exact_incremental_closure_and_clean_
         candidate_specification = deepcopy(specification)
         mutate(candidate_specification)
         incremental = recompile_revision(
-            cartridge, candidate_specification, prepared.candidate_root
+            cartridge,
+            candidate_specification,
+            prepared.candidate_root,
+            **_compiler_capacity(f"complete-{axis}-incremental"),
         )
         assert incremental.changed_inputs == (axis,)
         assert incremental.invalidated_artifacts == tuple(EXPECTED[axis])
         assert incremental.candidate_root == recompile_revision(
-            cartridge, candidate_specification
+            cartridge,
+            candidate_specification,
+            **_compiler_capacity(f"complete-{axis}-clean"),
         ).candidate_root
         assert pin_generation(cartridge).root_digest == prepared.candidate_root
 
     malformed = deepcopy(specification)
     del malformed["profile"]
     with pytest.raises(CassetteError) as missing:
-        recompile_revision(cartridge, malformed, prepared.candidate_root)
+        recompile_revision(
+            cartridge,
+            malformed,
+            prepared.candidate_root,
+            **_compiler_capacity("malformed"),
+        )
     assert missing.value.code == "INVALID_REQUEST"
 
 
@@ -431,7 +461,12 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
 
     cartridge, compiled_v1, parameters = _compiled_parent(tmp_path / "tier-b")
     specification = compilation_specification(cartridge, compiled_v1)
-    compiled_v2 = recompile_revision(cartridge, specification, compiled_v1)
+    compiled_v2 = recompile_revision(
+        cartridge,
+        specification,
+        compiled_v1,
+        **_compiler_capacity("tier-b-parent"),
+    )
     commit_generation(
         cartridge,
         "s25-certified-parent",
@@ -469,7 +504,10 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
     hostile_training_root = pin_generation(hostile).root_digest
     with pytest.raises(CassetteError) as detached:
         prepare_recovered_revision(
-            hostile, hostile_training_root, compiled_v2.candidate_root
+            hostile,
+            hostile_training_root,
+            compiled_v2.candidate_root,
+            **_compiler_capacity("hostile-recovery"),
         )
     assert detached.value.code == "CAPABILITY_MISMATCH"
 
@@ -485,7 +523,10 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
     training_root = pin_generation(cartridge).root_digest
     assert artifact["tier"] == "B" and artifact["operation"] == "COMPILED_RECOVERY"
     recovered = prepare_recovered_revision(
-        cartridge, training_root, compiled_v2.candidate_root
+        cartridge,
+        training_root,
+        compiled_v2.candidate_root,
+        **_compiler_capacity("tier-b-recovery"),
     )
     expected_changes = tuple(name for name in AXES if name in set(axes))
     expected_invalidated = tuple(

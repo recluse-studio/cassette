@@ -1352,13 +1352,14 @@ steps:
   - id: S26
     title: PHASE MACHINE integration gate
     env: macos
-    files: []
+    files: [store.py, compiler.py, pager.py, tests/test_s25_invalidation.py, tests/test_s26_phase_machine.py, tests/test_s26_machine_gate.py, tests/fixtures/s26_machine_gate.json, tests/fixtures/s26_deferred_live_rows.json]
     invariants: [Q36 promotion readiness without promotion claim - every F0-F3 fixture invariant plus S24/S25 machine integration, Tier-A fixture training, Tier-B fixture recovery, independently recomputed Q19 certificate, invalidation closure, export/re-import, delta application, the complete failure_rows 8-operation by 16-injection by 6-assertion contract through concrete acquisition, compilation, prefill, decode, training, export, repair, and revision-removal entrypoints, and simulated resource accounting PASS; no operation coordinate may be satisfied only by a request label, idempotency key, lifecycle access label, or read/write class; no_uncommitted_token must compare delivered inference output with the pager's committed decode frontier; emit the exact real-model and hardware rows deferred to PHASE LIVE]
     acceptance_boundary: "S26 proves that the machine is internally complete and ready for live falsification. It reuses S23's generated coordinate authority but replaces its shared-authority preflight with each concrete operation's durable boundaries and failure behavior. It cannot emit F4 PASS, F5 PASS, frontier capability, physical-drive performance, or hosted-comparison claims because no real model, live source, or physical drive enters before S28."
     expected_size: medium
     done_when: machine gate outcome and deferred-live row manifest recorded; full suite + ledger green
     depends: [S25]
-    status: TODO
+    discovered_scope: "S26's concrete Q49 replay exposed two integration seams rather than new components: CartridgeLifecycle invalidated its own access token, but pager instances retained a plain path across later prefill and decode calls; compilation also wrote an unpublished candidate without consuming the shared Q53 reservation authority. store.py now supplies one lifecycle-bound path object and one exact capacity-demand check, pager.py re-resolves lifecycle binding before every page acquisition, and compiler.py reserves its declared candidate phase before writing. Separate Q49 failure and Q36 successful-machine fixtures own the complete concrete-operation matrix, Tier-A/Tier-B recovery, independent Q19 admission, export/re-import, delta reconstruction, simulated accounting, and retained PHASE LIVE manifests. No model, source, physical drive, cache, account, or live service enters the step."
+    status: IN_PROGRESS 2026-08-23 — concrete eight-operation gate and deferred-live manifest underway
 
   - id: S27
     title: Full accounting and removal proof

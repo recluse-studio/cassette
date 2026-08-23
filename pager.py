@@ -2057,6 +2057,7 @@ class NativePager:
     """Q20/Q64 exact source-route execution; prediction may change read order only."""
 
     def __init__(self, cartridge: str | Path, root_digest: str):
+        self._cartridge_source = cartridge
         self._cartridge = Path(cartridge)
         self._root_digest = root_digest
         self._locations = {
@@ -2073,6 +2074,7 @@ class NativePager:
         timeout_seconds: float | None = None,
         cancel_event: asyncio.Event | None = None,
     ) -> PageExecution:
+        self._cartridge = Path(self._cartridge_source)
         route = tuple(
             _digest_identity(
                 page_digest,
@@ -2495,6 +2497,7 @@ class CertifiedPager:
                 "Q20: immutable page-map identity",
                 "the canonical page map does not match the compiled plan",
             )
+        self._cartridge_source = cartridge
         self._cartridge = Path(cartridge)
         locations = {
             location.page_digest: location
@@ -2659,6 +2662,7 @@ class CertifiedPager:
         tuple[str, ...],
         dict[str, bytes],
     ]:
+        self._cartridge = Path(self._cartridge_source)
         step, sample_units, seed = self._validate_selection(selection)
         deadline = _deadline(timeout_seconds, self._certificate_id)
         sample_pages = dict(step.sample_units)
