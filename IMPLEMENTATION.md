@@ -1237,7 +1237,7 @@ steps:
     done_when: full suite + ledger green; fixture trace corpus committed by digest
     depends: [S10, S18, S19, S21, S22, S23]
     historical_status: DONE 2026-08-21 — step commit d8c1133b764dec837104176d1e9f486a6a42d907; complete arm64 macOS suite 172/172 in 117.75 seconds; ledger clean at 9,439 product LOC, 6,838 test LOC, 615 tool LOC, and 109 generated LOC, with five exact dependencies, one process, and one Python runtime; protected trace corpus committed at blake3:6d5c088dc42b82f8b96e8c189ac39783c23b96e332b6bcb9de16ec0f9070d4bc
-    status: IN_PROGRESS 2026-08-23 — reopened because the S24 fixture remained green after removing five Q26 export-refusal guards and three Q54 identity, digest, and reconstruction guards; the accepted current-versus-reachable removal redundancy is unchanged
+    status: DONE 2026-08-23 — remediation commit 53d7e8bb5f3b80f57b718eac01ce0895abded9a8; complete arm64 macOS suite 172/172 in 136.76 seconds; ledger clean at 9,439 product LOC, 6,949 test LOC, 615 tool LOC, and 109 generated LOC, with five exact dependencies, one process, and one Python runtime; all ten disputed Q26/Q54 guards independently killed by removal; protected trace corpus retained at blake3:6d5c088dc42b82f8b96e8c189ac39783c23b96e332b6bcb9de16ec0f9070d4bc
     closeout:
       - clause: "Q18/Q19/Q30/Q40 protected fixture evidence is immutable, discriminating, and executable"
         test_or_probe: "tests/test_s24_interoperability.py::test_q18_q19_q30_q40_protected_teacher_trace_is_immutable_and_executable plus byte-identical tools/capture_fixture.py regeneration"
@@ -1274,6 +1274,22 @@ steps:
         input: "Execute every reachable invariant after the final numerical-authority and portable-semantics corrections, then inspect accounting, generated output, immutable fixture output, residual environments, and storage pressure."
         expected: "Pass the full suite and ledger without skip, generated drift, trace drift, dependency, process, runtime, authored numerical kernel, model-family branch, duplicate authority, surviving test process, mounted Cassette image, retained mutation tree, or low-space condition."
         observed: "172/172 tests passed in 117.75 seconds. The ledger reported zero violations at 9,439 product LOC, 6,838 test LOC, 615 tool LOC, and 109 generated LOC, with five exact pins, one process, and one Python runtime. Generated schemas and the trace corpus reproduced exactly, diff checking was clean, no test process or Cassette image remained, all disposable S24 trees were deleted, and the system data volume retained 93 GiB free."
+    remediation_closeout:
+      - clause: "Q26 export refusal is proved at the target and portable-package boundaries"
+        test_or_probe: "independent hostile export records plus ten isolated guard-removal mutations against tests/test_s24_interoperability.py"
+        input: "Present GGUF with an otherwise valid unsupported U8 tensor or foreign operator; detach an adapter plan from its delta; forge a tuned source-history binding; make export mode disagree with ordered history; duplicate the selected delta; and replace an adapter page while coherently resealing artifact, plan, source, and export identities without calling store.py's private manifest builder."
+        expected: "SafeTensors remains representable where declared; GGUF refuses unsupported precision or operators with MODEL_UNSUPPORTED; every detached or fabricated adapter package fails with the exact Q26 typed error before target mutation; removal of any governing refusal makes the fixture fail."
+        observed: "The intact fixture refused every attack at its named boundary. Removing the operator, dtype, adapter-plan tuple, tuned-history, mode-history, exact-delta, or adapter-page guard independently made the owning assertion fail; no adjacent checksum failure was accepted as proof."
+      - clause: "Q54 delta identity is proved from independent hostile material"
+        test_or_probe: "the data-driven base_identity, delta_digest, and target_identity attacks in tests/test_s24_interoperability.py plus isolated removal of each corresponding store.py guard"
+        input: "Change the declared base identity and reseal the delta; change only the declared delta digest; or change the target identity and reseal the delta while preserving valid payload bytes and a complete reservation."
+        expected: "Return DELTA_BASE_MISMATCH, PAGE_CORRUPT, or IDENTITY_MISMATCH with the exact named cause, preserve the complete cartridge snapshot, and make the fixture fail if the corresponding refusal is removed."
+        observed: "All three attacks returned the exact code and detail without mutation. Each isolated guard removal changed or eliminated that result and failed the fixture. The deliberate current-versus-reachable removal redundancy remained unchanged because either guard independently enforces Q6 rather than masking an unproved S24 clause."
+      - clause: "S24 remediation done_when"
+        test_or_probe: "complete pinned CPython 3.13 arm64 macOS suite, tools/ledger.py, fresh schema and protected-trace reproduction, diff checking, mount inspection, temporary cleanup, and system-volume inspection"
+        input: "Run the complete repository after the Q26/Q54 proof repair and restore every mutation before inspection."
+        expected: "Pass 172 reachable tests and the ledger with no product-code change, generated drift, trace drift, mounted Cassette image, retained mutation tree, or low-space condition."
+        observed: "172/172 tests passed in 136.76 seconds. The ledger reported zero violations at 9,439 product LOC, 6,949 test LOC, 615 tool LOC, and 109 generated LOC. Generated schemas and the protected trace reproduced byte-identically; compiler.py and store.py matched the committed production implementation after every mutation; no Cassette image remained mounted; and the system data volume retained more than 85 GiB free."
 
   - id: S25
     title: Machine invalidation, certified compile, and resource-frontier replay
