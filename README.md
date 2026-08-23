@@ -8,20 +8,23 @@ drive can hold those bytes. Ordinary offloading cannot make the Mac consume them
 Cassette is an open-source system for changing that relationship. A user selects a complete model
 from Hugging Face, Ollama, Tinker, or another supported source; Cassette writes the authoritative
 model directly to an external USB-C flash or SSD cartridge, prepares the least invasive usable
-representation, executes it through Apple Silicon with a mathematically certified bounded frontier in unified memory, and
-serves it to Codex, Ollama, OpenClaw, Hermes, or a custom agent endpoint. Compatible models can be
-fine-tuned or post-trained where they sit. The full checkpoint does not move onto internal storage,
-and no hosted model answers behind the curtain.
+representation, executes it through Apple Silicon with a mathematically certified bounded frontier
+in unified memory, and serves it to Codex, Ollama, OpenClaw, Hermes, or a custom agent endpoint.
+Compatible models can be fine-tuned or post-trained where they sit. The full checkpoint does not
+move onto internal storage, and no hosted model answers behind the curtain.
 
 > [!IMPORTANT]
-> Cassette is being built in public. S01–S12 are complete: the repository now has its accounting,
-> error, schema, identity, content-store, transaction, integrity, capacity, cartridge-lifecycle,
-> source-adapter, resumable-transfer, evidence-bound preflight, bounded mathematical-schema, and
-> pinned MLX golden-dispatch authorities. S13 is next.
-> Cassette does **not** yet compile, execute, train, or serve a model. The complete release matrix
-> remains `NOT_RUN`.
+> Cassette is being built in public. The research and governance foundation and S01–S24 are
+> complete. The repository now executes its storage, acquisition, compilation, paging, inference,
+> broker, adapter, training, export, update, repair, and revision-removal paths against deterministic
+> generated or checked-in fixtures on scratch cartridges. The latest S24 closeout passed all 172
+> repository tests and the structural ledger with no violation.
+>
+> S25 is next. No PHASE MACHINE step has downloaded a live model, contacted a live model service,
+> touched a physical external drive, or established F4/F5 quality, scale, or service performance.
+> Cassette is not yet a user-ready release, and the complete release matrix remains `NOT_RUN`.
 
-## The completed operation
+## The complete product operation
 
 The product boundary is one continuous machine operation:
 
@@ -67,9 +70,10 @@ verifiable model identity.
 
 ## The storage-native design
 
-The complete architecture is deliberately narrow. Python owns the control plane, MLX owns S12's
-golden tensor execution and will own later Apple execution and autograd, and existing numerical primitives outrank new kernels. The external
-cartridge is the durable meeting place between otherwise separate components.
+The complete architecture is deliberately narrow. Python owns the control plane, MLX owns generated
+Apple tensor execution and trainer autograd at one pinned version, and existing numerical
+primitives outrank new kernels. The external cartridge is the durable meeting place between
+otherwise separate components.
 
 ```mermaid
 flowchart LR
@@ -146,8 +150,8 @@ The canonical cartridge representation separates meaning from placement:
 - immutable roots bind identity, provenance, semantic assets, tensor maps, operators, plans, deltas,
   and integrity evidence;
 - hardware plans may differ without duplicating the underlying weight pages;
-- future atomic generations will decide which immutable root is callable without exposing a mixed
-  revision to readers.
+- atomic generations decide which immutable root is callable without exposing a mixed revision to
+  readers.
 
 This separation permits repacking for a different access pattern without changing the logical model
 root. It also gives training a place to append adapters, replacement pages, optimizer state, and
@@ -209,64 +213,81 @@ there is no partially callable model and no hidden full master on internal stora
 
 ## Current implementation
 
-The repository has finished twelve of twenty-eight machine-build steps. The present code is the
-foundation beneath the future compiler and runtime, not an early user-facing product.
+The numbered implementation queue is complete through S24. The repository contains an executable
+machine scaffold and a deterministic interoperability system, not a user-facing Cassette release.
+Every result below is fixture-scale unless the row says otherwise.
 
 | Step | State | Implemented result |
 |---|---|---|
 | S01 | Done | Reproducible partial $J$ accounting, dependency and interpreter pins, import-layer checks, generated-file checks, test citation checks, and commit-law enforcement. |
 | S02 | Done | One closed `CassetteError` vocabulary and exact five-field machine payload. |
-| S03 | Done | Twelve generated Draft 2020-12 schemas, a generated validator, and regeneration-based hand-edit detection. |
+| S03 | Done | Generated Draft 2020-12 contracts, one generated validator, and regeneration-based hand-edit detection. |
 | S04 | Done | Canonical Q1 identity with alias convergence, immutable-evidence requirements, single-byte divergence, parent and transform binding, BLAKE3, and RFC 8785. |
-| S05 | Done | SafeTensors header validation; content-addressed pages and bounded segments; representation-independent indexes; exact tensor-span reads; repacking without logical-root change; Q1 evidence reconciliation; root reload verification; and a domain-separated Merkle integrity aggregate. |
+| S05 | Done | SafeTensors and GGUF import, content-addressed pages and bounded segments, representation-independent indexes, exact tensor-span reads, root generations, repacking, deltas, export material, and verified integrity roots. |
 | S06 | Done | Durable transaction journal, immutable root generations, process-kill injection, reader isolation, rollback, and APFS remount proof. |
-| S07 | Done | Integrity and repair states, exact capacity reservation, parity repair, and unavailable-page admission. |
+| S07 | Done | Full integrity and repair state machine, exact capacity reservation across all operation classes, parity repair, and exact unavailable-page admission. |
 | S08 | Done | Removable-cartridge lifecycle, identity revalidation, read-only handling, and stale-access rejection. |
 | S09 | Done | Stateless five-operation source boundary with credential-authority and hostile-redirect repair. |
 | S10 | Done | Resumable direct-to-cartridge transfer with bounded ranges, durable SHA-256 continuation, and corruption/drift rejection. |
 | S11 | Done | Evidence-bound metadata normalization and four-outcome preflight that derives strong trust from verified bytes. |
 | S12 | Done | MATHS.md-controlled bounded certificate dimensions, generated Q30 dispatch, ten independently checked MLX golden operator rows, and repository-owned native-link rejection. |
+| S13 | Done | Independent Q19 certificate recomputation, exact contradiction refusal, memory admission, and certified residency scheduling. |
+| S14 | Done | Native and compiled route binding, verified page readiness, seeded fresh correction, cancellation and timeout boundaries, and one fenced MLX submission. |
+| S15 | Done | One complete protected tiny decoder with exact prefill, fresh one-token decode, nonlinear graph execution, committed K/V state, and exhaustive correction outcomes. |
+| S16 | Done | Canonical broker operation state machine, durable event ownership, replay, cancellation, pause, and publication boundaries. |
+| S17 | Done | Scheduler, leases, generated capability negotiation, and byte-denominated page-cache admission against canonical roots. |
+| S18 | Done | Thin, generated, hostile-wire adapters for Codex, Ollama, OpenClaw, Hermes, and custom clients without a second execution authority. |
+| S19 | Done | Contained streaming compilation from verified source bytes, source-to-executable contribution maps, independent mathematical witnesses, and broker-to-compiler publication. |
+| S20 | Done | Generated and independently reconstructed hardware-plan catalogs whose physical policies can change without duplicating weights or changing executable identity. |
+| S21 | Done | Real fixture-scale Tier-A adapter training and Tier-B certificate-recovery primitives with frozen parents, durable checkpoints, and independent unpaged oracles. |
+| S22 | Done | Training preflight, exact reservation, endurance and thermal admission, checkpoint metering, pause, recovery, and typed terminal refusal. |
+| S23 | Done | Generated 128-coordinate failure authority with durable-frontier and lifecycle preflight proof; concrete eight-operation replay remains assigned to S26. |
+| S24 | Done | Deterministic source-to-compiler replay, protected teacher traces, full and adapter export/re-import, named-adapter calls, exact revision deltas and rollback, and independently proved revision removal. |
 
-The audit-remediation implementation at `306055d` passed all 28 tests on arm64 macOS in 1,024.50
-seconds, including the S06, S08, and S12 platform fixtures. Its clean ledger reported 2,813 product
-lines, 470 tool lines, 2,237 test lines, 74 generated lines separately, one process, one authored
-language, and five exact direct dependency pins.
+The remediated S24 tree passed all 172 tests on arm64 macOS. The clean ledger reported 9,439
+product lines, 6,949 test lines, 615 tool lines, and 109 generated lines, with five exact direct
+dependency pins, one process, and one authored language. Ten Q26 and Q54 refusal guards were also
+removed one at a time; each removal failed the fixture that names its contract.
 
-Current boundaries are explicit. Deterministic source fixtures and resumable transfer exist;
-live-source acquisition remains L02. GGUF import, export, appended training deltas, paging, MLX
-model execution, compilation, training, brokering, named-client adapters, and any UI do not yet
-exist. S12 proves bounded record structure, generated dispatch membership, and the declared golden
-MLX rows. S13 must independently recompute certificate truth from source evidence and reject
-internally contradictory claims. Fields reserved for later root material do not count as those
-operations.
+The boundary remains physical and explicit. PHASE MACHINE has used deterministic model fixtures,
+loopback source servers, scratch cartridge images, and simulated recorded storage classes. It has
+not made a live source request, downloaded a selected model, inspected attached storage or a local
+model cache, touched a physical external drive, or measured a real model against its laboratory
+reference. S25 must now prove invalidation, deterministic certified compilation, Tier-A and Tier-B
+integration, and resource-frontier curves on fixture material. S26–S28 close the machine before
+PHASE LIVE begins. No UI has been built.
 
 ## Build path
 
 The implementation proceeds in dependency order and does not promote diagnostic artifacts into a
 release:
 
-1. **S06–S08 — durable cartridge:** atomic transactions, repair states, capacity reservation, and
-   removable-media lifecycle.
-2. **S09–S11 — acquisition:** general source adapters, resumable verified transfer, metadata trust,
-   and a pre-transfer compatibility decision.
-3. **S12–S15 — certified execution:** generated mathematical-plan data, pinned runtime dispatch,
-   compatibility-certificate validation, memory schedules, exact page readiness, fresh stochastic
-   correction, and a tiny certified transformer from a cartridge.
-4. **S16–S18 — agent service:** canonical operation state machines, leases, negotiation, and thin
-   adapters for Codex, Ollama, OpenClaw, Hermes, and custom clients.
-5. **S19–S20 — compilation:** streaming transforms, complete source-to-certificate contribution
-   maps, mathematical witnesses, hardware plans, and exact invalidation without duplicate weights.
-6. **S21–S22 — training:** paged on-cartridge optimization, metering, and admission.
-7. **S23–S26 — falsification:** generated failure injection, protected-condition teacher traces, a
-   Q19-certified 3–8B build, mathematical-resource-versus-quality/service curves, and the F4 gate.
-8. **S27–S28 — machine closeout:** exact minimum-code accounting, removal proof, and a generated live
-   campaign.
-9. **L01–L05 — one live campaign:** qualify real storage classes, acquire real pinned models, pass a
-   20–120B scale gate, execute the frontier, training, protocol, failure, offline, and privacy rows,
-   then produce one reproducible Q80 completion digest.
+1. **S01–S05 — governed representation, done:** accounting, errors, generated contracts, immutable
+   identity, and the storage-native cartridge format.
+2. **S06–S11 — durable cartridge and acquisition boundary, done:** transactions, repair, capacity,
+   removable-media lifecycle, source adapters, resumable transfer, metadata trust, and preflight.
+3. **S12–S15 — certified execution, done:** mathematical contracts, generated MLX dispatch,
+   independent certificate validation, page readiness, stochastic correction, and a complete tiny
+   decoder from cartridge pages.
+4. **S16–S18 — agent service boundary, done:** canonical operations, leases, negotiation, and thin
+   named-client adapters.
+5. **S19–S20 — compiler and hardware plans, done:** contained streaming transforms, complete
+   contribution maps, mathematical witnesses, replaceable physical plans, and profile selection.
+6. **S21–S22 — drive-resident training machinery, done at fixture scale:** paged optimization,
+   certificate recovery, metering, resource admission, checkpoints, interruption, and recovery.
+7. **S23–S24 — failure authority and machine interchange, done:** generated failure coordinates,
+   protected teacher traces, export/re-import, agent calls, revision deltas, and exact removal.
+8. **S25 — next:** deterministic invalidation closure, independently certified end-to-end fixture
+   compilation, both training tiers, and mathematical resource-frontier curves.
+9. **S26–S28 — machine closeout:** concrete failure replay through all eight operations, final $J$
+   and removal proof, and the generated PHASE LIVE runbook.
+10. **L01–L05 — one live campaign after S28:** qualify real storage classes, acquire real pinned
+    models, execute the 3–8B and 20–120B gates, run frontier training, protocol, failure, offline,
+    and privacy rows, and produce one reproducible Q80 completion digest.
 
-F4 and F5 are deliberately useful without being allowed to masquerade as completion. F4 asks a
-permissively licensed 3–8B dense model to cover its frozen protected conditions, carry an
+F4 and F5 remain PHASE LIVE gates and are deliberately useful without being allowed to masquerade
+as completion. F4 asks a permissively licensed 3–8B dense model to cover its frozen protected
+conditions, carry an
 independently recomputable Q19 certificate, pass its mandatory Tier-A training and Tier-B
 certificate-recovery rows, preserve at least 95% of teacher quality, and touch no more than one
 quarter of its native active bytes. F5 repeats the predicates and both training tiers at 20–120B
@@ -303,12 +324,19 @@ remains `NOT_RUN` until every required live row passes.
 | [research/EVIDENCE.md](research/EVIDENCE.md) | Immutable model observations, hardware and format contracts, derived bounds, and falsified claims. |
 | [research/ACCEPTANCE_MATRIX.yaml](research/ACCEPTANCE_MATRIX.yaml) | The machine-readable definition of a complete first release; currently `NOT_RUN`. |
 | [AGENTS.md](AGENTS.md) | The only repository instruction authority: architecture, minimum-code objective, tests, writes, and commit law. |
-| [IMPLEMENTATION.md](IMPLEMENTATION.md) | The ordered and resumable S01–S28 machine phase and L01–L05 live campaign. |
+| [IMPLEMENTATION.md](IMPLEMENTATION.md) | The ordered and resumable S00–S28 machine phase and L01–L05 live campaign. |
 | [BUILD_STORY.md](BUILD_STORY.md) | The attributed human–agent exchange that produced and corrected the specification and build. It is testimony, not a changelog. |
 | [errors.py](errors.py) | Canonical typed error vocabulary. |
-| [store.py](store.py) | Current identity, SafeTensors, content-page, segment, tensor-map, and root authority. |
+| [sources.py](sources.py) | Source resolution, credentials, metadata trust, preflight, and resumable direct-to-cartridge transfer. |
+| [store.py](store.py) | Identity, content pages, roots, transactions, capacity, lifecycle, integrity, export, delta, and revision-removal authority. |
+| [compiler.py](compiler.py) | Contained source interpretation, mathematical certificates, contribution maps, compilation, export planning, and hardware plans. |
+| [pager.py](pager.py) | Certified schedules, page readiness, generated MLX dispatch, correction, and committed transformer execution. |
+| [trainer.py](trainer.py) | Training admission, paged Tier-A optimization, Tier-B recovery, durable checkpoints, metering, and child material. |
+| [broker.py](broker.py) | Canonical operation ownership, scheduling, leases, replay, publication, and component composition. |
+| [adapters/](adapters/) | Generated-map protocol translation for the five declared client surfaces. |
 | [schema/](schema/) | Generated machine contracts and validator; never hand-edited. |
 | [tools/genschema.py](tools/genschema.py) | Sole schema generator. |
+| [tools/capture_fixture.py](tools/capture_fixture.py) | Sole protected S24 teacher-trace generator. |
 | [tools/ledger.py](tools/ledger.py) | Structural enforcement and partial $J$ accounting. |
 | [tests/](tests/) | One acceptance-bound fixture per implemented invariant and stage. |
 | [LICENSE](LICENSE) and [NOTICE](NOTICE) | Apache-2.0 terms and Recluse Studio attribution notice. |
