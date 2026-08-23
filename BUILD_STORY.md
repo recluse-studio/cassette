@@ -6601,3 +6601,134 @@ includes Grok's reading in Entry 70, Opus's review in Entry 71, this response, a
 committed S24 repair. It advances no queue row beyond S24, downloads no model, and touches no
 physical drive. S25 remains next, now depending on an S24 whose refusal semantics fail when their
 guards disappear rather than one whose fixture merely says they exist.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 73 — 2026-08-23, S25, the collapse that was not there, and the probe that told me why
+
+I arrived at S25 with a template. S23's matrix had expanded eight operations by sixteen injections
+into a hundred and twenty-eight labels over far fewer behaviours, and S25's invariant asks for
+thirteen dependency kinds mutated independently. I expected the same shape and went looking for it.
+
+It is not there, and the reason is worth recording because it is the countermeasure. The fixture
+sweeps all thirteen axes and checks each against a per-axis literal expectation table: changing the
+weights invalidates fifteen artifacts, the cover eight, the atom twelve, the description ten. Four
+axes do share a sixteen-artifact closure, which is where a collapse would hide, and the test also
+asserts that the changed input equals exactly the axis under test, so even those remain
+distinguishable. My control — deleting the artifact-to-artifact edge from the closure computation —
+killed two tests immediately. The closure is load-bearing. A literal per-case expectation table is
+what S23 lacked and what makes this one honest.
+
+The product also enforces its own invariant rather than delegating it: `recompile_revision` runs the
+incremental and the clean derivation and refuses divergence at runtime, which is better than a test
+asserting the same thing.
+
+What I did find is that three refusals in that path are never reached. The guard against incremental
+and clean derivations diverging, the guard against a derivation authoring a set that differs from the
+dependency closure, and the guard against a reused artifact drifting outside its closure all survive
+deletion.
+
+The method for that finding is the part I would hand on. A surviving mutation has at least two
+explanations, and they are not equivalent. Either nothing checks the property, or the fixture checks
+it somewhere else and the product guard is redundant defence. Deleting the guard cannot tell them
+apart, because both produce a green suite. So I installed a probe that raises on entry to each guard
+and ran the fixture: all three reported never reached. That distinguishes "unproven" from "proven
+twice", and until I ran it I had drafted the softer version, that these were redundant with the
+test's own assertions. They are not. No input the fixture presents ever arrives at them.
+
+Underneath that is a number. Two `pytest.raises` in the whole step, across three test functions
+covering seven Q-rows. S24 had sixteen, S22 eleven, S17 twenty-six. This is a step whose entire
+subject is invalidation — what must be refused, recomputed, or preserved when an input changes — and
+it is proved almost entirely along paths that succeed.
+
+Which is the thing I would raise above any individual finding. At S24 the five export
+representability refusals were unexercised. At S25 the three invalidation refusals are unreached.
+Both steps prove their success paths carefully and neither makes its refusals fail. S26 is the
+integration gate, it already owns replacing S23's shared-authority preflight with per-operation
+failure behaviour, and it is now carrying the accumulated refusal-side proof for three steps. It is
+declared medium.
+
+One smaller note: `AGENTS.md` changed again outside the declared file list, one step after I raised
+the same omission at S24.
+
+I record the collapse hypothesis dying as the more useful half of this review. I had the finding
+half-written before I read the expectation table, which is the fifth or sixth time a prepared shape
+has arrived ahead of the evidence. The difference now is only that the reading happens before the
+paragraph does.
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 74 — 2026-08-23, S25, three sleeping guards and the defect each one was waiting for
+
+Drew asked for remediation after Entry 73, not a courteous vote on whether Opus's review sounded
+plausible. The distinction mattered. A review can be intelligent, specific, and still use an
+instrument that answers a different question from the contract. I had to find the defect, repair
+it, and prove the repair; or, if the alleged defect did not exist, I had to prove that with equal
+care and refuse the more theatrical remedy of adding code because a reviewer had supplied three
+line numbers.
+
+Entry 73 had already done useful work. It rejected its opening suspicion that S25's thirteen
+dependency axes collapsed into a few decorative labels. It found the literal expected closure for
+each axis, removed a dependency edge as a control, and confirmed that the closure machinery was
+load-bearing. Its remaining finding used another method: replace each refusal branch with an
+exception, run the valid fixture, and observe that the exception never appears. From this it
+concluded that three guards were unreached and therefore unproved. The count of two
+`pytest.raises` blocks then gave the conclusion a numerical shadow.
+
+That method confuses dormancy with impotence. A smoke alarm should remain quiet in clean air. Its
+proof begins when smoke exists. The corresponding engineering question was not whether a valid S25
+compile entered a refusal branch. It was whether the inconsistency named by that branch could be
+created and then pass through the branch without refusal. I made three clean archives of the exact
+closed S25 commit and paired each guard with the defect it names. These were disposable
+reproductions, not edits to the working tree, and each one ran the owning S25 fixture through the
+public compile path.
+
+The first defect disabled unchanged-record carry-forward. The compiler reached the Q27 authorship
+check and returned `CAPABILITY_MISMATCH`: artifact authorship differed from the exact dependency
+closure. The second defect removed the cover-to-observation dependency edge. It did not reach the
+later stale-artifact comparison because the independently recomputed clean bundle rejected the
+wrong `observation_contract` first. This was not a false pass. The invalid candidate never escaped,
+and the earlier verifier named the affected artifact. The third defect altered only the
+incremental candidate after its clean derivation. The compiler reached the clean-equivalence guard
+and returned `CAPABILITY_MISMATCH`: the incremental recompile differed from its clean full
+derivation.
+
+Two guards therefore fired under the contradictions they own. The third contradiction failed at a
+stronger earlier boundary. Removing a guard while leaving the program in a valid state had proved
+only that valid state does not require refusal. Counting exception blocks proved still less. S25's
+contract is a relation among changed inputs, exact transitive closures, preserved records, clean
+derivations, and callable parents. Its fixture asserts those relations for thirteen primary axes
+and eleven further complete-input mutations. Twenty-four exact cases do not become weak because
+they share two exception contexts, just as twenty-four vague exception contexts would not become
+strong by being numerous.
+
+The smaller scope finding also dissolved under chronology. S25's `discovered_scope` names
+`AGENTS.md` explicitly because the step added the Q37 resource-frontier tool to the removal map.
+The README commit cited as undeclared work predates both S25 commits. Neither file had wandered
+into the step unseen. These were facts available in the implementation record and Git history, so
+I recorded them rather than converting them into another patch.
+
+The most consequential choice was what not to send down the road. Entry 73 proposed that S26 carry
+the refusal-side proof accumulated from earlier steps. Drew has repeatedly objected when a present
+obligation is rolled into a later gate and called prudence. I checked S25 where S25 lives. The
+accepted predicates held, no escaping defect reproduced, and S26 received no orphaned duty. S26 is
+the integration gate. It will have enough real work without becoming a cupboard for unresolved
+reviews.
+
+The appropriate remediation was therefore documentary and exact. I added the paired reproductions,
+their expected distinction, and their observed typed failures to S25's closeout. I changed no
+product code and added no test whose only purpose would be to increase an exception count. This was
+not inaction. It was the smaller and more difficult act: decline a patch after doing enough work to
+know that the patch would lie about what had happened.
+
+The exchange left a useful rule in operational form. When a review says a guard is unproved, pair
+the guard with its contradiction. If the contradiction passes, repair the product. If another
+independent boundary refuses it first, record the ordering. If no contradiction was supplied, the
+review measured reachability under valid state, not protection under invalid state. Drew should not
+have to arbitrate among those meanings. That is the principal engineer's work, and on S25 it ended
+where the evidence ended: the step remains `DONE`, the review remains on the record, and the queue
+moves forward without borrowed debt.
