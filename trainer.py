@@ -34,7 +34,7 @@ from store import (
 
 _VERSION = "cassette-training-v1"
 _TENSOR_VERSION = "cassette-training-tensor-v1"
-_TRACE_VERSION = "cassette-training-trace-v1"
+_TRACE_VERSION = "cassette-training-trace-v2"
 _TIER_A = (
     "ADAPTER_SFT",
     "ADAPTER_CONTINUED_PRETRAINING",
@@ -1351,11 +1351,11 @@ def _update_delta(
         shape,
         precision,
     )
+    net_retained_bytes = max(active_after - active_before, 0)
     return _numeric_payload(stored_values, precision), {
         "parameter_id": object_id,
-        "active_before_bytes": active_before,
         "peak_delta_bytes": peak_delta,
-        "active_after_bytes": active_after,
+        "net_retained_bytes": net_retained_bytes,
         "loss_hex": loss_hex,
     }
 
@@ -1677,14 +1677,13 @@ def _validate_trace(payload: bytes, manifest: dict, ordinal: int) -> int:
         row = _record(
             window,
             {
-                "parameter_id", "active_before_bytes", "peak_delta_bytes",
-                "active_after_bytes", "loss_hex",
+                "parameter_id", "peak_delta_bytes", "net_retained_bytes", "loss_hex",
             },
             object_id,
             "MLX allocation window",
         )
         _text(row["parameter_id"], object_id, "MLX parameter id")
-        for field in ("active_before_bytes", "peak_delta_bytes", "active_after_bytes"):
+        for field in ("peak_delta_bytes", "net_retained_bytes"):
             _counter(row[field], object_id, f"MLX {field}")
         if (
             not isinstance(row["loss_hex"], str)
@@ -1693,7 +1692,7 @@ def _validate_trace(payload: bytes, manifest: dict, ordinal: int) -> int:
             or not math.isfinite(struct.unpack("<f", bytes.fromhex(row["loss_hex"]))[0])
         ):
             _reject("GRADIENT_INVALID", object_id, "MLX loss must be one finite FP32 value")
-        if row["active_after_bytes"] > row["active_before_bytes"]:
+        if row["net_retained_bytes"]:
             _reject("MEMORY_BUDGET_EXCEEDED", object_id, "MLX retained an undeclared training allocation")
         runtime_peak = max(runtime_peak, row["peak_delta_bytes"])
     if (

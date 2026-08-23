@@ -587,8 +587,8 @@ def _replay_traces(cartridge: Path, root_digest: str, artifact: dict) -> None:
         assert [row["parameter_id"] for row in trace["mlx_windows"]] == expected_parameters
         runtime_peak = 0
         for window in trace["mlx_windows"]:
-            assert window["active_after_bytes"] <= window["active_before_bytes"]
             assert window["peak_delta_bytes"] >= 0
+            assert window["net_retained_bytes"] == 0
             assert math.isfinite(struct.unpack("<f", bytes.fromhex(window["loss_hex"]))[0])
             runtime_peak = max(runtime_peak, window["peak_delta_bytes"])
         assert trace["peak_um_bytes"] == peak + runtime_peak <= artifact["window_limit_bytes"]
