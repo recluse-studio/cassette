@@ -1,4 +1,4 @@
-# compiler.py — contained compilation, export admission, Q19 certificates, and hardware plans (Q4/Q11/Q19/Q26/Q30/Q33/Q40/Q51/Q55/Q58/Q59/Q60/Q62); depends on errors.py, schema, store.py.
+# compiler.py — contained compilation, invalidation, export, Q19 certificates, and hardware plans (Q4/Q11/Q19/Q26/Q27/Q30/Q33/Q37/Q40/Q51/Q55/Q58/Q59/Q60/Q61/Q62/Q70/Q73/Q75); depends on errors.py, schema, store.py.
 """Compile verified SafeTensors material into one independently checkable executable revision."""
 
 from __future__ import annotations
@@ -42,11 +42,115 @@ from store import (
     model_identity,
     page_index_byte_count,
     page_locations,
+    read_training_page,
     read_tensor,
 )
 
 _MANIFEST_KEY = "cassette.compiler.v1"
 _VERSION = "s19-compiler-v1"
+_RECOMPILE_VERSION = "s25-compiler-v1"
+_DERIVATION_VERSION = "q27-q75-v1"
+_RECOVERY_KINDS = (
+    "condition", "atom", "description", "estimator", "observation", "precision",
+)
+_RECOVERY_INPUTS = {
+    "condition": "condition_metric",
+    "atom": "atom",
+    "description": "description",
+    "estimator": "residual_estimator",
+    "observation": "observation",
+    "precision": "precision",
+}
+_INVALIDATION_INPUTS = (
+    "weights", "condition_metric", "atom", "cover", "observation", "description",
+    "residual_estimator", "composition", "precision", "tokenizer", "template",
+    "context", "operator",
+)
+_DERIVATION_ORDER = (
+    "protected_trace_corpus", "page_stats", "page_layout", "semantic_manifest",
+    "observation_contract", "condition_metrics", "compatibility_witnesses",
+    "atom_cover", "description_distortion", "residual_metadata",
+    "estimator_calibration", "precision_calibration", "composition_proof",
+    "kernel_plan", "physical_schedule", "quality_proof", "protocol_capabilities",
+    "cache_key",
+)
+_DERIVATION_DEPENDENCIES = {
+    "protected_trace_corpus": (
+        "input:observation", "input:composition", "input:tokenizer", "input:template",
+        "input:context", "input:operator",
+    ),
+    "page_stats": ("input:weights",),
+    "page_layout": ("input:weights", "input:precision"),
+    "semantic_manifest": (
+        "input:precision", "input:tokenizer", "input:template", "input:context",
+        "input:operator",
+    ),
+    "observation_contract": (
+        "input:cover", "input:observation", "input:tokenizer", "input:template",
+        "input:context", "input:operator", "artifact:protected_trace_corpus",
+    ),
+    "condition_metrics": (
+        "input:weights", "input:condition_metric", "input:tokenizer", "input:template",
+        "input:context", "input:operator", "artifact:protected_trace_corpus",
+    ),
+    "compatibility_witnesses": (
+        "input:weights", "input:atom", "input:tokenizer", "input:template",
+        "input:context", "input:operator", "artifact:condition_metrics",
+    ),
+    "atom_cover": (
+        "input:weights", "input:atom", "input:cover", "input:observation",
+        "input:tokenizer", "input:template", "input:context", "input:operator",
+        "artifact:compatibility_witnesses", "artifact:observation_contract",
+    ),
+    "description_distortion": (
+        "input:weights", "input:atom", "input:description", "input:precision",
+        "artifact:compatibility_witnesses",
+    ),
+    "residual_metadata": (
+        "input:weights", "input:atom", "input:description",
+        "input:residual_estimator", "input:precision",
+        "artifact:description_distortion",
+    ),
+    "estimator_calibration": (
+        "input:weights", "input:atom", "input:residual_estimator",
+        "input:observation", "artifact:protected_trace_corpus",
+        "artifact:residual_metadata",
+    ),
+    "precision_calibration": (
+        "input:weights", "input:description", "input:residual_estimator",
+        "input:precision", "artifact:page_layout", "artifact:residual_metadata",
+    ),
+    "composition_proof": (
+        "input:composition", "input:observation", "input:operator",
+        "artifact:atom_cover", "artifact:description_distortion",
+        "artifact:estimator_calibration", "artifact:protected_trace_corpus",
+    ),
+    "kernel_plan": (
+        "input:weights", "input:precision", "input:operator", "artifact:page_layout",
+        "artifact:atom_cover", "artifact:description_distortion",
+        "artifact:estimator_calibration", "artifact:composition_proof",
+    ),
+    "physical_schedule": (
+        "input:weights", "input:context", "input:precision", "input:operator",
+        "artifact:page_stats", "artifact:page_layout", "artifact:kernel_plan",
+        "artifact:composition_proof",
+    ),
+    "quality_proof": (
+        "artifact:condition_metrics", "artifact:compatibility_witnesses",
+        "artifact:atom_cover", "artifact:description_distortion",
+        "artifact:estimator_calibration", "artifact:precision_calibration",
+        "artifact:composition_proof", "artifact:physical_schedule",
+    ),
+    "protocol_capabilities": (
+        "input:tokenizer", "input:template", "input:context", "input:operator",
+        "artifact:semantic_manifest", "artifact:observation_contract",
+        "artifact:kernel_plan", "artifact:quality_proof",
+    ),
+    "cache_key": tuple(
+        [f"input:{name}" for name in _INVALIDATION_INPUTS]
+        + [f"artifact:{name}" for name in _DERIVATION_ORDER[:-1]]
+    ),
+}
 _MAX_ITEMS = 1_048_576
 _MAX_RECORD_BYTES = 4 * 1024 * 1024
 _MAX_U64 = 2**64 - 1
@@ -79,6 +183,22 @@ _BUNDLE_FIELDS = frozenset({
     "version", "source_identity", "source_root", "preparation_plan_digest",
     "operator_inventory", "tensor_inventory", "evidence", "certificate", "profile",
     "contribution_map", "execution_plan", "extent_metrics",
+})
+_RECOMPILE_BUNDLE_FIELDS = _BUNDLE_FIELDS | {"derivation", "recovery"}
+_SPECIFICATION_FIELDS = frozenset({
+    "source_root", "target_tensor", "evidence", "profile", "eta_rep", "rank_budget",
+    "operation_bounds", "operator_inventory", "tensor_inventory", "prior_mode_failures", "architecture",
+    "config_digest", "format_versions", "precision_scheme", "processor_digest",
+    "template_digest", "tokenizer_digest",
+})
+_TRAINING_MANIFEST_FIELDS = frozenset({
+    "format", "job_id", "tier", "operation", "parent_root", "parent_identity",
+    "parent_certificate_digest", "base_precision", "delta_precision", "operator_cases",
+    "adapter_rank", "adapter_scale", "step", "total_steps", "optimizer_step",
+    "data_cursor", "random_seed", "rng_counter", "window_limit_bytes",
+    "declared_peak_bytes", "base_pages", "delta_pages", "objective_pages",
+    "calibration_pages", "state_pages", "trace_pages", "master_pages", "admission",
+    "meter",
 })
 _HARDWARE_CATALOG_FIELDS = frozenset({
     "version", "catalog_id", "q19_certificate_digest", "base_execution_plan_id", "plans",
@@ -148,6 +268,20 @@ class HardwarePlanSelection:
     measured_profile_digest: str
     predicted_total_latency_ns: int
     plan: dict
+
+
+@dataclass(frozen=True, slots=True)
+class RecompiledRevision:
+    """One unpublished deterministic child plus the exact Q27 reuse decision that built it."""
+
+    source_identity: str
+    plan_digest: str
+    candidate_root: str
+    derivation_digest: str
+    changed_inputs: tuple[str, ...]
+    invalidated_artifacts: tuple[str, ...]
+    recomputed_artifacts: tuple[str, ...]
+    reused_artifacts: tuple[str, ...]
 
 
 def _reject(
@@ -1193,6 +1327,409 @@ def _contribution_map(
     }
 
 
+def _canonical_copy(value: object) -> object:
+    """Copy one bounded JSON value through the repository's canonical representation."""
+
+    payload = canonical_bytes(value)
+    if len(payload) > _MAX_RECORD_BYTES:
+        raise ValueError("canonical compiler record exceeds four megabytes")
+    return json.loads(payload, object_pairs_hook=_unique_object)
+
+
+def _axis_materials(
+    source_root: dict,
+    target_tensor: str,
+    evidence: dict,
+    profile: dict,
+    inventory: list[dict],
+    semantics: dict,
+    controls: dict,
+    recovery: dict[str, dict],
+) -> dict[str, object]:
+    atoms = _items(evidence["atoms"], "invalidation:inputs", "atom evidence")
+    observation = _record(
+        evidence["observation_contract"],
+        {"confidence", "experiment", "kind", "loss_family", "off_support", "sample_count", "selector", "support"},
+        "invalidation:inputs",
+        "observation contract",
+    )
+    descriptions = []
+    estimators = []
+    atom_values = []
+    for value in atoms:
+        atom = _record(
+            value,
+            {"atom_id", "description", "matrix", "service_face_id"},
+            "invalidation:inputs",
+            "atom evidence",
+        )
+        description = _record(
+            atom["description"],
+            {"class", "description_bytes", "estimator", "estimator_calibration", "metadata_bytes", "reconstruction", "sampling_law_id"},
+            "invalidation:inputs",
+            "description evidence",
+        )
+        atom_values.append({
+            "atom_id": atom["atom_id"],
+            "matrix": atom["matrix"],
+            "service_face_id": atom["service_face_id"],
+        })
+        descriptions.append({
+            "atom_id": atom["atom_id"],
+            "class": description["class"],
+            "description_bytes": description["description_bytes"],
+            "metadata_bytes": description["metadata_bytes"],
+            "reconstruction": description["reconstruction"],
+            "sampling_law_id": description["sampling_law_id"],
+        })
+        estimators.append({
+            "atom_id": atom["atom_id"],
+            "estimator": description["estimator"],
+            "estimator_calibration": description["estimator_calibration"],
+        })
+    target_maps = [
+        row for row in source_root["tensor_maps"] if row["semantic_tensor_id"] == target_tensor
+    ]
+    if len(target_maps) != 1:
+        _reject("CAPABILITY_MISMATCH", target_tensor, "invalidation input requires one exact target tensor map")
+    execution = _record(
+        evidence["execution_contract"],
+        {"operations", "risk_composition", "sampling_laws"},
+        "invalidation:inputs",
+        "execution contract",
+    )
+    raw = {
+        "weights": {
+            "target_tensor": target_tensor,
+            "target": evidence["target"],
+            "target_tensor_map": target_maps[0],
+            "tensor_maps": source_root["tensor_maps"],
+            "artifacts": source_root["provenance"]["identity_material"]["artifacts"],
+            "tensor_index_digest": source_root["provenance"]["identity_material"]["tensor_index_digest"],
+        },
+        "condition_metric": {
+            "conditions": evidence["conditions"],
+            "eta_rep": controls["eta_rep"],
+        },
+        "atom": {
+            "atoms": atom_values,
+            "minimal_nonface_proofs": evidence["minimal_nonface_proofs"],
+            "rank_budget": controls["rank_budget"],
+        },
+        "cover": observation["selector"],
+        "observation": {
+            "contract": {
+                name: value for name, value in observation.items() if name != "selector"
+            },
+            "excluded_conditions": evidence["excluded_conditions"],
+        },
+        "description": {
+            "contract": evidence["description_contract"],
+            "atoms": descriptions,
+        },
+        "residual_estimator": {
+            "atoms": estimators,
+            "sampling_laws": execution["sampling_laws"],
+        },
+        "composition": {
+            "operations": [
+                {
+                    name: value for name, value in row.items()
+                    if name != "operator_case_id"
+                }
+                for row in execution["operations"]
+            ],
+            "operation_bounds": controls["operation_bounds"],
+            "risk_composition": execution["risk_composition"],
+            "trace_contract": evidence["trace_contract"],
+        },
+        "precision": {
+            "precision_scheme": semantics["precision_scheme"],
+            "format_versions": semantics["format_versions"],
+            "tensor_dtypes": [
+                {"semantic_tensor_id": row["semantic_tensor_id"], "dtype": row["dtype"]}
+                for row in source_root["tensor_maps"]
+            ],
+        },
+        "tokenizer": semantics["tokenizer_digest"],
+        "template": semantics["template_digest"],
+        "context": {
+            "profile": profile,
+            "physical_conversion": evidence["physical_conversion"],
+            "architecture": semantics["architecture"],
+            "config_digest": semantics["config_digest"],
+            "processor_digest": semantics["processor_digest"],
+            "prior_mode_failures": controls["prior_mode_failures"],
+            "license_digest": source_root["provenance"]["identity_material"]["license_digest"],
+        },
+        "operator": {
+            "operator_inventory": inventory,
+            "operator_set": semantics["operator_set"],
+            "operation_cases": [
+                {
+                    "operation_id": row["operation_id"],
+                    "operator_case_id": row["operator_case_id"],
+                }
+                for row in execution["operations"]
+            ],
+        },
+    }
+    return {
+        name: {
+            "value": raw[name],
+            "recovery": recovery.get(name),
+        }
+        for name in _INVALIDATION_INPUTS
+    }
+
+
+def _derivation_products(
+    source_root: dict,
+    target_tensor: str,
+    evidence: dict,
+    certificate: dict,
+    profile: dict,
+    inventory: list[dict],
+    tensor_inventory: list[dict],
+    semantics: dict,
+) -> dict[str, object]:
+    atom_descriptions = [
+        {
+            "atom_id": row["atom_id"],
+            "description": {
+                name: value for name, value in row["description"].items()
+                if name not in {"estimator_digest", "estimator_calibration_digest"}
+            },
+        }
+        for row in certificate["atoms"]
+    ]
+    estimator_claims = [
+        {
+            "atom_id": row["atom_id"],
+            "estimator_digest": row["description"]["estimator_digest"],
+            "estimator_calibration_digest": row["description"]["estimator_calibration_digest"],
+        }
+        for row in certificate["atoms"]
+    ]
+    witness_claims = [
+        {
+            "atom_id": row["atom_id"],
+            "witness_digest": row["witness_digest"],
+            "rank": row["rank"],
+            "service_face_id": row["service_face_id"],
+            "witness_losses": row["witness_losses"],
+        }
+        for row in certificate["atoms"]
+    ]
+    page_layout = [
+        {
+            "semantic_tensor_id": row["semantic_tensor_id"],
+            "dtype": row["dtype"],
+            "shape": row["shape"],
+            "spans": row["spans"],
+        }
+        for row in source_root["tensor_maps"]
+    ]
+    products = {
+        "protected_trace_corpus": {
+            "excluded_conditions": evidence["excluded_conditions"],
+            "trace_contract": evidence["trace_contract"],
+        },
+        "page_stats": {
+            "tensor_inventory": tensor_inventory,
+            "tensor_count": len(tensor_inventory),
+            "tensor_bytes": sum(row["length"] for row in tensor_inventory),
+        },
+        "page_layout": page_layout,
+        "semantic_manifest": {
+            "precision_scheme": semantics["precision_scheme"],
+            "processor_digest": semantics["processor_digest"],
+            "template_digest": semantics["template_digest"],
+            "tokenizer_digest": semantics["tokenizer_digest"],
+            "operator_set": semantics["operator_set"],
+            "context_digest": _digest(profile),
+        },
+        "observation_contract": certificate["observation_contract"],
+        "condition_metrics": certificate["condition_metrics"],
+        "compatibility_witnesses": {
+            "atoms": witness_claims,
+            "service_faces": certificate["compatibility"]["service_faces"],
+            "minimal_nonfaces": certificate["compatibility"]["minimal_nonfaces"],
+        },
+        "atom_cover": {
+            "cover": certificate["compatibility"]["cover"],
+            "excluded_conditions": certificate["compatibility"]["excluded_conditions"],
+        },
+        "description_distortion": {
+            "contract": certificate["description_contract"],
+            "atoms": atom_descriptions,
+        },
+        "residual_metadata": {
+            "residuals": [
+                {
+                    "atom_id": row["atom_id"],
+                    "residual_relation_digest": row["description"]["residual_relation_digest"],
+                    "sampling_law_id": row["description"]["sampling_law_id"],
+                }
+                for row in certificate["atoms"]
+            ],
+            "sampling_laws": certificate["execution_contract"]["sampling_laws"],
+        },
+        "estimator_calibration": {
+            "claims": estimator_claims,
+            "per_atom_resources": certificate["resource_tables"]["per_atom"],
+        },
+        "precision_calibration": {
+            "precision_scheme": semantics["precision_scheme"],
+            "tensor_dtypes": [row["dtype"] for row in source_root["tensor_maps"]],
+            "target_tensor": target_tensor,
+        },
+        "composition_proof": {
+            "execution_contract": certificate["execution_contract"],
+            "trace_contract": certificate["trace_contract"],
+            "resource_tables": certificate["resource_tables"],
+        },
+        "kernel_plan": {
+            "case_ids": [row["case_id"] for row in inventory],
+            "dispatch_digest": OPERATOR_DISPATCH["dispatch_digest"],
+            "resource_limits": certificate["resources"],
+        },
+        "physical_schedule": {
+            "page_layout": page_layout,
+            "profile": profile,
+            "physical_conversion": certificate["physical_conversion"],
+        },
+        "quality_proof": certificate,
+        "protocol_capabilities": {
+            "certificate_id": certificate["certificate_id"],
+            "operator_inventory": inventory,
+            "semantic_manifest": {
+                "tokenizer_digest": semantics["tokenizer_digest"],
+                "template_digest": semantics["template_digest"],
+                "operator_set": semantics["operator_set"],
+            },
+        },
+    }
+    products["cache_key"] = {
+        "input_names": list(_INVALIDATION_INPUTS),
+        "artifact_outputs": {
+            name: _digest(products[name]) for name in _DERIVATION_ORDER[:-1]
+        },
+    }
+    return products
+
+
+def _derivation_document(
+    inputs: dict[str, object],
+    products: dict[str, object],
+    previous: dict | None = None,
+) -> tuple[dict, tuple[str, ...], tuple[str, ...]]:
+    input_digests = {name: _digest(inputs[name]) for name in _INVALIDATION_INPUTS}
+    previous_rows = (
+        {row["artifact"]: row for row in previous["artifacts"]}
+        if previous is not None
+        else {}
+    )
+    records = {}
+    rows = []
+    authored = []
+    carried = []
+    for name in _DERIVATION_ORDER:
+        dependencies = _DERIVATION_DEPENDENCIES[name]
+        vector = []
+        for dependency in dependencies:
+            kind, dependency_name = dependency.split(":", 1)
+            dependency_digest = (
+                input_digests[dependency_name]
+                if kind == "input"
+                else records[dependency_name]["artifact_digest"]
+            )
+            vector.append({"dependency": dependency, "digest": dependency_digest})
+        prior = previous_rows.get(name)
+        if prior is not None and prior["dependencies"] == vector:
+            row = prior
+            carried.append(name)
+        else:
+            row = {
+                "artifact": name,
+                "dependencies": vector,
+                "complete_input_digest": _digest(vector),
+                "output_digest": _digest(products[name]),
+            }
+            row["artifact_digest"] = _digest(row)
+            authored.append(name)
+        records[name] = row
+        rows.append(row)
+    edges = [
+        {"artifact": name, "dependencies": list(_DERIVATION_DEPENDENCIES[name])}
+        for name in _DERIVATION_ORDER
+    ]
+    document = {
+        "version": _DERIVATION_VERSION,
+        "derivation_id": _digest("unsealed-derivation"),
+        "input_digests": input_digests,
+        "edges": edges,
+        "artifacts": rows,
+    }
+    document["derivation_id"] = _digest({
+        name: value for name, value in document.items() if name != "derivation_id"
+    })
+    return document, tuple(authored), tuple(carried)
+
+
+def _invalidation_audit(
+    previous: dict | None,
+    current: dict,
+    authored: tuple[str, ...],
+    carried: tuple[str, ...],
+) -> tuple[tuple[str, ...], ...]:
+    if previous is None:
+        expected = tuple(_DERIVATION_ORDER)
+        if authored != expected or carried:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                current["derivation_id"],
+                "a clean derivation did not author every artifact exactly once",
+                "Q27/Q61/Q75: exact transitive invalidation and unchanged-input reuse",
+            )
+        return tuple(_INVALIDATION_INPUTS), expected, authored, carried
+    changed = tuple(
+        name for name in _INVALIDATION_INPUTS
+        if previous["input_digests"][name] != current["input_digests"][name]
+    )
+    invalidated = []
+    changed_set = set(changed)
+    invalidated_set = set()
+    for name in _DERIVATION_ORDER:
+        dependencies = _DERIVATION_DEPENDENCIES[name]
+        if any(
+            (dependency.startswith("input:") and dependency[6:] in changed_set)
+            or (dependency.startswith("artifact:") and dependency[9:] in invalidated_set)
+            for dependency in dependencies
+        ):
+            invalidated.append(name)
+            invalidated_set.add(name)
+    previous_rows = {row["artifact"]: row for row in previous["artifacts"]}
+    current_rows = {row["artifact"]: row for row in current["artifacts"]}
+    reused = tuple(name for name in _DERIVATION_ORDER if name not in invalidated_set)
+    if authored != tuple(invalidated) or carried != reused:
+        _reject(
+            "CAPABILITY_MISMATCH",
+            current["derivation_id"],
+            "artifact authorship differs from the exact Q27 dependency closure",
+            "Q27/Q61/Q75: exact transitive invalidation and unchanged-input reuse",
+        )
+    for name in reused:
+        if previous_rows[name] != current_rows[name]:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                name,
+                "an artifact changed outside its declared Q27 dependency closure",
+                "Q27/Q61/Q75: exact transitive invalidation and unchanged-input reuse",
+            )
+    return changed, tuple(invalidated), authored, carried
+
+
 def _execution_plan(
     source_root: dict,
     source_root_digest: str,
@@ -1202,7 +1739,14 @@ def _execution_plan(
     inventory: list[dict],
     prior_failures: list[dict],
     cartridge: str | Path,
+    invalidation_graph_digest: str | None = None,
 ) -> dict:
+    if invalidation_graph_digest is not None:
+        _exact_digest(
+            invalidation_graph_digest,
+            source_root_digest,
+            "persisted invalidation derivation digest",
+        )
     locations = sorted(page_locations(cartridge, source_root_digest), key=lambda item: item.page_digest)
     plan = {
         "plan_version": "compiled-plan-v1",
@@ -1225,7 +1769,7 @@ def _execution_plan(
             for item in source_root["tensor_maps"]
         ]),
         "semantic_manifest_digest": _digest(contribution),
-        "invalidation_graph_digest": _digest({
+        "invalidation_graph_digest": invalidation_graph_digest or _digest({
             "source_root": source_root_digest,
             "certificate_id": certificate["certificate_id"],
             "contribution_map_digest": _digest(contribution),
@@ -1816,6 +2360,634 @@ def _preparation_inputs(source_value: object, extents: object, cartridge: str | 
     return source, descriptors, manifest, tensors, material
 
 
+def _bundle_record(root: dict, object_id: str) -> dict:
+    plans = root.get("plans")
+    if not isinstance(plans, list) or len(plans) not in {1, 2} or not isinstance(plans[0], dict):
+        _reject("ROOT_INVALID", object_id, "compiled root requires one preparation bundle and at most one hardware catalog")
+    version = plans[0].get("version")
+    fields = _BUNDLE_FIELDS if version == _VERSION else _RECOMPILE_BUNDLE_FIELDS
+    if version not in {_VERSION, _RECOMPILE_VERSION}:
+        _reject("ROOT_INVALID", object_id, "compiled preparation bundle version is unsupported")
+    return _record(plans[0], fields, object_id, "preparation bundle")
+
+
+def _semantic_record(value: object, object_id: str) -> dict:
+    record = _record(
+        value,
+        {
+            "architecture", "config_digest", "format_versions", "precision_scheme",
+            "processor_digest", "template_digest", "tokenizer_digest", "operator_set",
+        },
+        object_id,
+        "compiled semantic record",
+    )
+    _identifier(record["architecture"], object_id, "architecture")
+    if not isinstance(record["precision_scheme"], str) or not 0 < len(record["precision_scheme"]) <= 256:
+        _reject("INVALID_REQUEST", object_id, "precision scheme must be bounded text")
+    for name in ("config_digest", "processor_digest", "template_digest", "tokenizer_digest"):
+        _exact_digest(record[name], object_id, name)
+    formats = _items(record["format_versions"], object_id, "format versions")
+    normalized_formats = []
+    for row in formats:
+        if not isinstance(row, list) or len(row) != 2 or any(
+            not isinstance(part, str) or not part or len(part) > 256 for part in row
+        ):
+            _reject("INVALID_REQUEST", object_id, "format versions require bounded [name, version] pairs")
+        normalized_formats.append(row)
+    operators = _items(record["operator_set"], object_id, "operator set")
+    for operator in operators:
+        _identifier(operator, object_id, "operator")
+    if normalized_formats != sorted(normalized_formats) or operators != sorted(set(operators)):
+        _reject("INVALID_REQUEST", object_id, "format versions and operator set must be canonical unique lists")
+    return record
+
+
+def _specification_record(value: object, object_id: str) -> dict:
+    specification = _record(value, _SPECIFICATION_FIELDS, object_id, "recompile specification")
+    _exact_digest(specification["source_root"], object_id, "source root")
+    _identifier(specification["target_tensor"], object_id, "target tensor")
+    for name in ("config_digest", "processor_digest", "template_digest", "tokenizer_digest"):
+        _exact_digest(specification[name], object_id, name)
+    _identifier(specification["architecture"], object_id, "architecture")
+    if not isinstance(specification["precision_scheme"], str) or not 0 < len(specification["precision_scheme"]) <= 256:
+        _reject("INVALID_REQUEST", object_id, "precision scheme must be bounded text")
+    specification["operator_inventory"] = _inventory(
+        specification["operator_inventory"], object_id
+    )
+    if not isinstance(specification["profile"], dict):
+        _reject("INVALID_REQUEST", object_id, "profile must be one bounded record")
+    evidence = _record(
+        specification["evidence"],
+        {
+            "atoms", "conditions", "description_contract", "excluded_conditions",
+            "execution_contract", "minimal_nonface_proofs", "observation_contract",
+            "physical_conversion", "target", "trace_contract",
+        },
+        object_id,
+        "recompile evidence",
+    )
+    target = _record(
+        evidence["target"],
+        {"field", "flattening_order", "shape", "source_shape"},
+        object_id,
+        "recompile target evidence",
+    )
+    if "source_values" in target:
+        _reject("INVALID_REQUEST", object_id, "recompile target values must come only from verified tensor bytes")
+    formats = _items(specification["format_versions"], object_id, "format versions")
+    if any(
+        not isinstance(row, list)
+        or len(row) != 2
+        or any(not isinstance(part, str) or not part or len(part) > 256 for part in row)
+        for row in formats
+    ) or formats != sorted(formats) or len(formats) != len({tuple(row) for row in formats}):
+        _reject("INVALID_REQUEST", object_id, "format versions must be sorted unique bounded pairs")
+    if not isinstance(specification["prior_mode_failures"], list):
+        _reject("INVALID_REQUEST", object_id, "prior mode failures must be one bounded list")
+    return specification
+
+
+def _operation_bounds(certificate: dict) -> list[dict]:
+    return [
+        {
+            "operation_id": row["operation_id"],
+            "epsilon_exec": row["epsilon_exec"],
+            "delta_exec": row["delta_exec"],
+        }
+        for row in certificate["execution_contract"]["operations"]
+    ]
+
+
+def _specification_from_bundle(cartridge: str | Path, root_digest: str, root: dict, bundle: dict) -> dict:
+    source_root = load_root(cartridge, bundle["source_root"])
+    material = root["provenance"]["identity_material"]
+    evidence = _canonical_copy(bundle["evidence"])
+    evidence["target"].pop("source_values", None)
+    formats = [
+        list(row) for row in material["format_versions"] if row[0] != "cassette"
+    ]
+    specification = {
+        "source_root": bundle["source_root"],
+        "target_tensor": bundle["contribution_map"]["target_tensor"],
+        "evidence": evidence,
+        "profile": _canonical_copy(bundle["profile"]),
+        "eta_rep": bundle["certificate"]["compatibility"]["eta_rep"],
+        "rank_budget": bundle["certificate"]["compatibility"]["rank_budget"],
+        "operation_bounds": _operation_bounds(bundle["certificate"]),
+        "operator_inventory": _canonical_copy(bundle["operator_inventory"]),
+        "tensor_inventory": _canonical_copy(bundle["tensor_inventory"]),
+        "prior_mode_failures": _canonical_copy(bundle["execution_plan"]["prior_mode_failures"]),
+        "architecture": material["architecture"],
+        "config_digest": material["config_digest"],
+        "format_versions": sorted(formats),
+        "precision_scheme": material["precision_scheme"],
+        "processor_digest": material["processor_digest"],
+        "template_digest": material["template_digest"],
+        "tokenizer_digest": material["tokenizer_digest"],
+    }
+    if source_root["identity"] != bundle["source_identity"]:
+        _reject("IDENTITY_MISMATCH", root_digest, "compiled source identity differs from its verified source root")
+    return _specification_record(specification, root_digest)
+
+
+def _recovery_bindings(cartridge: str | Path, root_digest: str) -> tuple[dict[str, dict], dict]:
+    root = load_root(cartridge, root_digest)
+    if not root["deltas"] or root["deltas"][-1]["kind"] != "certificate_recovery":
+        return {}, {"kind": "NONE"}
+    delta = root["deltas"][-1]
+    manifest_digest = _exact_digest(
+        delta["manifest_digest"], root_digest, "recovery manifest digest"
+    )
+    manifest_payload = read_training_page(cartridge, root_digest, manifest_digest)
+    try:
+        manifest = json.loads(manifest_payload, object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        _reject("ROOT_INVALID", manifest_digest, f"recovery manifest is malformed: {error}")
+    if canonical_bytes(manifest) != manifest_payload:
+        _reject("ROOT_INVALID", manifest_digest, "recovery manifest is not canonical JSON")
+    manifest = _record(
+        manifest, _TRAINING_MANIFEST_FIELDS, manifest_digest, "recovery manifest"
+    )
+    if (
+        manifest["format"] != "cassette-training-v1"
+        or manifest["tier"] != "B"
+        or manifest["operation"] != "COMPILED_RECOVERY"
+        or manifest["operator_cases"] != [
+            "mlx.autograd_calibration_mse.f32.1_2x3_3x2_2x2_1",
+            "mlx.sgd.f32.1",
+        ]
+        or manifest["delta_precision"] not in {"BF16", "FP32"}
+        or type(manifest["step"]) is not int
+        or type(manifest["total_steps"]) is not int
+        or not 0 < manifest["step"] <= manifest["total_steps"] <= 4096
+        or manifest["step"] != manifest["total_steps"]
+        or manifest["optimizer_step"] != manifest["step"]
+        or manifest["data_cursor"] != manifest["step"]
+        or manifest["rng_counter"] != manifest["step"]
+        or manifest["adapter_rank"] is not None
+        or manifest["adapter_scale"] is not None
+        or manifest["master_pages"] != []
+        or not isinstance(manifest["base_pages"], list)
+        or len(manifest["base_pages"]) != 1
+    ):
+        _reject("ROOT_INVALID", manifest_digest, "recovery manifest is incomplete or names another training tier")
+    parent_root_digest = _exact_digest(
+        manifest["parent_root"], manifest_digest, "recovery parent root"
+    )
+    parent = load_root(cartridge, parent_root_digest)
+    parent_bundle = _bundle_record(parent, parent_root_digest)
+    if (
+        root["parents"] != [parent["identity"]]
+        or manifest["parent_identity"] != parent["identity"]
+        or delta["base_identity"] != parent["identity"]
+        or root["plans"] != parent["plans"]
+        or root["tensor_maps"] != parent["tensor_maps"]
+        or root["deltas"] != [*parent["deltas"], delta]
+        or manifest["parent_certificate_digest"]
+        != parent_bundle["certificate"]["certificate_id"]
+    ):
+        _reject("IDENTITY_MISMATCH", manifest_digest, "recovery artifact is detached from its compiled parent")
+    calibration_rows = manifest["calibration_pages"]
+    delta_rows = manifest["delta_pages"]
+    if (
+        not isinstance(calibration_rows, list)
+        or not isinstance(delta_rows, list)
+        or [row.get("kind") for row in calibration_rows if isinstance(row, dict)]
+        != list(_RECOVERY_KINDS)
+        or [row.get("parameter_id") for row in delta_rows if isinstance(row, dict)]
+        != [f"recovery.{kind}" for kind in _RECOVERY_KINDS]
+        or any(set(row) != {"kind", "page_digest"} for row in calibration_rows)
+        or any(set(row) != {"parameter_id", "page_digest"} for row in delta_rows)
+    ):
+        _reject("ROOT_INVALID", manifest_digest, "recovery page catalogs do not cover the six canonical kinds")
+    states = _record(
+        manifest["state_pages"], {"optimizer", "rng", "journal"}, manifest_digest, "training state pages"
+    )
+    objectives = manifest["objective_pages"]
+    traces = manifest["trace_pages"]
+    if (
+        not isinstance(objectives, list)
+        or len(objectives) != manifest["total_steps"]
+        or any(
+            not isinstance(row, dict)
+            or set(row) != {"step", "page_digest"}
+            or row["step"] != index
+            for index, row in enumerate(objectives)
+        )
+        or not isinstance(traces, list)
+        or len(traces) != manifest["step"]
+    ):
+        _reject("ROOT_INVALID", manifest_digest, "recovery objective or trace catalog is malformed")
+    ordered = [
+        manifest_digest,
+        *[row["page_digest"] for row in delta_rows],
+        *[row.get("page_digest") for row in objectives if isinstance(row, dict)],
+        *[row["page_digest"] for row in calibration_rows],
+        *[states[name] for name in ("optimizer", "rng", "journal")],
+        *traces,
+    ]
+    if (
+        any(not isinstance(value, str) for value in ordered)
+        or ordered != delta["ordered_page_digests"]
+        or len(ordered) != len(set(ordered))
+    ):
+        _reject("ROOT_INVALID", manifest_digest, "recovery root does not bind the complete ordered training artifact")
+    bindings = {}
+    expected_dtype = "float32" if manifest["delta_precision"] == "FP32" else "bfloat16"
+    expected_bytes = 4 if expected_dtype == "float32" else 2
+    for kind, calibration_row, delta_row in zip(
+        _RECOVERY_KINDS, calibration_rows, delta_rows, strict=True
+    ):
+        calibration_digest = _exact_digest(
+            calibration_row["page_digest"], manifest_digest, f"{kind} calibration page"
+        )
+        calibration_payload = read_training_page(cartridge, root_digest, calibration_digest)
+        try:
+            calibration_page = json.loads(calibration_payload, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            _reject("ROOT_INVALID", calibration_digest, f"calibration page is malformed: {error}")
+        if canonical_bytes(calibration_page) != calibration_payload:
+            _reject("ROOT_INVALID", calibration_digest, "calibration page is not canonical JSON")
+        envelope = _record(
+            calibration_page, {"format", "role", "record"}, calibration_digest, "calibration page"
+        )
+        record = _record(
+            envelope["record"],
+            {"kind", "input_digest", "output_digest", "sample_count", "loss"},
+            calibration_digest,
+            "calibration record",
+        )
+        if (
+            envelope["format"] != "cassette-training-v1"
+            or envelope["role"] != "calibration"
+            or record["kind"] != kind
+            or type(record["sample_count"]) is not int
+            or record["sample_count"] < 32768
+            or record["input_digest"] == record["output_digest"]
+            or not isinstance(record["loss"], str)
+            or not 0 < len(record["loss"]) <= 64
+        ):
+            _reject("ROOT_INVALID", calibration_digest, "calibration record is incomplete, undersampled, or unchanged")
+        try:
+            loss = Fraction(record["loss"])
+        except (TypeError, ValueError, ZeroDivisionError):
+            _reject("ROOT_INVALID", calibration_digest, "calibration loss is not finite nonnegative decimal text")
+        if loss < 0:
+            _reject("ROOT_INVALID", calibration_digest, "calibration loss is not finite nonnegative decimal text")
+        _exact_digest(record["input_digest"], calibration_digest, "calibration input digest")
+        _exact_digest(record["output_digest"], calibration_digest, "calibration output digest")
+        delta_digest = _exact_digest(
+            delta_row["page_digest"], manifest_digest, f"{kind} recovery delta"
+        )
+        delta_payload = read_training_page(cartridge, root_digest, delta_digest)
+        try:
+            delta_page = json.loads(delta_payload, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            _reject("ROOT_INVALID", delta_digest, f"recovery delta page is malformed: {error}")
+        if canonical_bytes(delta_page) != delta_payload:
+            _reject("ROOT_INVALID", delta_digest, "recovery delta page is not canonical JSON")
+        delta_page = _record(
+            delta_page,
+            {"format", "role", "tensor_id", "dtype", "shape", "payload_hex"},
+            delta_digest,
+            "recovery delta page",
+        )
+        payload_hex = delta_page["payload_hex"]
+        if (
+            not isinstance(payload_hex, str)
+            or len(payload_hex) != expected_bytes * 2
+            or any(character not in "0123456789abcdef" for character in payload_hex)
+        ):
+            _reject("ROOT_INVALID", delta_digest, "recovery delta payload is not canonical hexadecimal")
+        try:
+            numeric = bytes.fromhex(payload_hex)
+        except ValueError:
+            _reject("ROOT_INVALID", delta_digest, "recovery delta payload is not canonical hexadecimal")
+        if (
+            delta_page["format"] != "cassette-training-tensor-v1"
+            or delta_page["role"] != "certificate_recovery"
+            or delta_page["tensor_id"] != f"recovery.{kind}"
+            or delta_page["dtype"] != expected_dtype
+            or delta_page["shape"] != [1]
+            or len(numeric) != expected_bytes
+        ):
+            _reject("ROOT_INVALID", delta_digest, "recovery delta page changed role, precision, shape, or parameter")
+        value = (
+            struct.unpack("<f", numeric)[0]
+            if expected_dtype == "float32"
+            else struct.unpack("<f", struct.pack("<I", struct.unpack("<H", numeric)[0] << 16))[0]
+        )
+        if not math.isfinite(value):
+            _reject("GRADIENT_INVALID", delta_digest, "recovery delta is not finite")
+        axis = _RECOVERY_INPUTS[kind]
+        bindings[axis] = {
+            "kind": kind,
+            "calibration_page_digest": calibration_digest,
+            "delta_page_digest": delta_digest,
+            "record": record,
+        }
+    summary = {
+        "kind": "COMPILED_RECOVERY",
+        "manifest_digest": manifest_digest,
+        "parent_root": parent_root_digest,
+        "parent_certificate_digest": manifest["parent_certificate_digest"],
+        "bindings": [bindings[_RECOVERY_INPUTS[kind]] for kind in _RECOVERY_KINDS],
+    }
+    return bindings, summary
+
+
+def _semantic_from_specification(specification: dict) -> dict:
+    return _semantic_record({
+        "architecture": specification["architecture"],
+        "config_digest": specification["config_digest"],
+        "format_versions": specification["format_versions"],
+        "precision_scheme": specification["precision_scheme"],
+        "processor_digest": specification["processor_digest"],
+        "template_digest": specification["template_digest"],
+        "tokenizer_digest": specification["tokenizer_digest"],
+        "operator_set": sorted({row["operator"] for row in specification["operator_inventory"]}),
+    }, specification["source_root"])
+
+
+def _proof_from_specification(
+    cartridge: str | Path,
+    specification: dict,
+    previous_derivation: dict | None = None,
+) -> tuple[
+    dict, dict, dict, list[dict], dict, dict, dict, dict,
+    tuple[str, ...], tuple[str, ...],
+]:
+    source_root_digest = specification["source_root"]
+    source_root = load_root(cartridge, source_root_digest)
+    values, shape = _decode_tensor(
+        source_root, cartridge, source_root_digest, specification["target_tensor"]
+    )
+    evidence = _canonical_copy(specification["evidence"])
+    if evidence["target"]["source_shape"] != shape:
+        _reject("CAPABILITY_MISMATCH", specification["target_tensor"], "recompile target shape differs from verified tensor bytes")
+    evidence["target"]["source_values"] = values
+    certificate = _certificate(
+        evidence,
+        specification["eta_rep"],
+        specification["rank_budget"],
+        specification["operation_bounds"],
+    )
+    inventory = specification["operator_inventory"]
+    tensor_inventory = _tensor_inventory(
+        specification["tensor_inventory"], source_root, source_root_digest
+    )
+    contribution = _contribution_map(
+        source_root,
+        source_root_digest,
+        certificate,
+        specification["target_tensor"],
+        inventory,
+        tensor_inventory,
+    )
+    semantics = _semantic_from_specification(specification)
+    recovery_bindings, recovery = _recovery_bindings(cartridge, source_root_digest)
+    plain_inputs = _axis_materials(
+        source_root,
+        specification["target_tensor"],
+        evidence,
+        specification["profile"],
+        inventory,
+        semantics,
+        specification,
+        {},
+    )
+    for axis, binding in recovery_bindings.items():
+        if binding["record"]["output_digest"] != _digest(plain_inputs[axis]):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                binding["calibration_page_digest"],
+                f"{binding['kind']} calibration output does not name the recovered Q19 input",
+                "Q70/Q75: committed recovery evidence regenerates its exact invalidated witness",
+            )
+    inputs = _axis_materials(
+        source_root,
+        specification["target_tensor"],
+        evidence,
+        specification["profile"],
+        inventory,
+        semantics,
+        specification,
+        recovery_bindings,
+    )
+    products = _derivation_products(
+        source_root,
+        specification["target_tensor"],
+        evidence,
+        certificate,
+        specification["profile"],
+        inventory,
+        tensor_inventory,
+        semantics,
+    )
+    derivation, authored, carried = _derivation_document(
+        inputs, products, previous_derivation
+    )
+    return (
+        source_root,
+        evidence,
+        certificate,
+        tensor_inventory,
+        contribution,
+        semantics,
+        derivation,
+        recovery,
+        authored,
+        carried,
+    )
+
+
+def _derivation_from_bundle(
+    cartridge: str | Path, root_digest: str, root: dict, bundle: dict
+) -> tuple[dict, dict]:
+    specification = _specification_from_bundle(
+        cartridge, root_digest, root, bundle
+    )
+    (
+        _, _, _, _, _, _, derivation, recovery, _, _,
+    ) = _proof_from_specification(cartridge, specification)
+    if bundle["version"] == _RECOMPILE_VERSION:
+        if bundle["derivation"] != derivation or bundle["recovery"] != recovery:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                root_digest,
+                "persisted derivation or recovery binding differs from clean recomputation",
+                "Q27/Q61/Q70/Q75: clean derivation equals the persisted incremental result",
+            )
+    return derivation, specification
+
+
+def _verified_compiled_bundle(
+    cartridge: str | Path, root_digest: str
+) -> tuple[dict, dict]:
+    root = load_root(cartridge, root_digest)
+    bundle = _bundle_record(root, root_digest)
+    _verify_bundle_structure(
+        cartridge,
+        root_digest,
+        bundle["source_identity"],
+        bundle["preparation_plan_digest"],
+    )
+    return root, bundle
+
+
+def _recompiled_material(source_root: dict, specification: dict, transform_digest: str) -> IdentityTuple:
+    provenance = source_root["provenance"]
+    source = provenance["identity_material"]
+    formats = tuple(
+        tuple(row) for row in specification["format_versions"] if row[0] != "cassette"
+    ) + (("cassette", _RECOMPILE_VERSION),)
+    return IdentityTuple(
+        revision_kind="executable",
+        source_kind=source["source_kind"],
+        source_alias=provenance["source_alias"],
+        canonical_locator=source["locator"],
+        requested_revision=provenance["requested_revision"],
+        immutable_revision=source["immutable_revision"],
+        artifacts=tuple(ArtifactIdentity(**row) for row in source["artifacts"]),
+        format_versions=formats,
+        tensor_index_digest=source["tensor_index_digest"],
+        config_digest=specification["config_digest"],
+        architecture=specification["architecture"],
+        operator_set=tuple(sorted({row["operator"] for row in specification["operator_inventory"]})),
+        tokenizer_digest=specification["tokenizer_digest"],
+        processor_digest=specification["processor_digest"],
+        template_digest=specification["template_digest"],
+        precision_scheme=specification["precision_scheme"],
+        license_digest=source["license_digest"],
+        parent_ids=(source_root["identity"],),
+        transform_manifest_digest=transform_digest,
+    )
+
+
+def _recompile_revision(
+    cartridge: str | Path,
+    specification_value: object,
+    previous_root_digest: str | None,
+    require_recovery: bool,
+) -> RecompiledRevision:
+    specification = _specification_record(
+        _canonical_copy(specification_value), "compiler:recompile"
+    )
+    previous_derivation = None
+    if previous_root_digest is not None:
+        _exact_digest(previous_root_digest, "compiler:recompile", "previous compiled root")
+        previous_root, previous_bundle = _verified_compiled_bundle(
+            cartridge, previous_root_digest
+        )
+        previous_derivation, _ = _derivation_from_bundle(
+            cartridge, previous_root_digest, previous_root, previous_bundle
+        )
+    (
+        source_root,
+        evidence,
+        certificate,
+        tensor_inventory,
+        contribution,
+        _,
+        derivation,
+        recovery,
+        authored,
+        carried,
+    ) = _proof_from_specification(cartridge, specification, previous_derivation)
+    if require_recovery and recovery["kind"] != "COMPILED_RECOVERY":
+        _reject(
+            "TRAINING_UNSUPPORTED",
+            specification["source_root"],
+            "certificate recovery requires one complete committed Tier-B artifact",
+            "Q70/Q75: committed Tier-B recovery precedes certificate regeneration",
+        )
+    if not require_recovery and recovery["kind"] != "NONE":
+        _reject(
+            "INVALID_REQUEST",
+            specification["source_root"],
+            "a certificate-recovery source must use the recovery recompile operation",
+        )
+    changed, invalidated, recomputed, reused = _invalidation_audit(
+        previous_derivation, derivation, authored, carried
+    )
+    if require_recovery and previous_derivation is not None:
+        expected_changes = tuple(
+            name for name in _INVALIDATION_INPUTS
+            if name in set(_RECOVERY_INPUTS.values())
+        )
+        if changed != expected_changes:
+            _reject(
+                "CAPABILITY_MISMATCH",
+                specification["source_root"],
+                f"Tier-B recovery changed {list(changed)} instead of {list(expected_changes)}",
+                "Q70/Q75: recovery changes only its six committed certificate inputs",
+            )
+    plan = _execution_plan(
+        source_root,
+        specification["source_root"],
+        certificate,
+        specification["profile"],
+        contribution,
+        specification["operator_inventory"],
+        specification["prior_mode_failures"],
+        cartridge,
+        derivation["derivation_id"],
+    )
+    plan_digest = _digest({
+        "version": _RECOMPILE_VERSION,
+        "specification": specification,
+    })
+    proof = {
+        "operator_inventory": specification["operator_inventory"],
+        "tensor_inventory": tensor_inventory,
+        "evidence": evidence,
+        "certificate": certificate,
+        "profile": specification["profile"],
+        "contribution_map": contribution,
+        "execution_plan": plan,
+    }
+    bundle = {
+        "version": _RECOMPILE_VERSION,
+        "source_identity": source_root["identity"],
+        "source_root": specification["source_root"],
+        "preparation_plan_digest": plan_digest,
+        **proof,
+        "extent_metrics": _extent_metrics(
+            source_root,
+            proof,
+            sum(
+                location.length
+                for location in page_locations(cartridge, specification["source_root"])
+            ),
+        ),
+        "derivation": derivation,
+        "recovery": recovery,
+    }
+    if len(canonical_bytes(bundle)) > _MAX_RECORD_BYTES:
+        _reject(
+            "CONTAINMENT_REJECTED",
+            specification["source_root"],
+            "recompiled proof bundle exceeds the bounded four-megabyte authority",
+        )
+    material = _recompiled_material(source_root, specification, _digest(bundle))
+    candidate = derive_root(
+        cartridge, specification["source_root"], material, (bundle,)
+    )
+    _verify_bundle_structure(
+        cartridge, candidate, source_root["identity"], plan_digest
+    )
+    return RecompiledRevision(
+        source_root["identity"],
+        plan_digest,
+        candidate,
+        derivation["derivation_id"],
+        changed,
+        invalidated,
+        recomputed,
+        reused,
+    )
+
+
 def _plan_revision(source: object, extents: object, cartridge: str | Path) -> str:
     source_record, _, manifest, tensors, _ = _preparation_inputs(source, extents, cartridge)
     return _digest(_compile_inputs(source_record, manifest, tensors))
@@ -1968,14 +3140,11 @@ def _verify_bundle_structure(
     _exact_digest(source_identity, root_digest, "source identity")
     _exact_digest(plan_digest, root_digest, "preparation plan digest")
     root = load_root(cartridge, root_digest)
-    if len(root["plans"]) not in {1, 2}:
-        _reject("ROOT_INVALID", root_digest, "compiled root requires one preparation bundle and at most one hardware catalog")
-    bundle = _record(root["plans"][0], _BUNDLE_FIELDS, root_digest, "preparation bundle")
+    bundle = _bundle_record(root, root_digest)
     if len(canonical_bytes(bundle)) > _MAX_RECORD_BYTES:
         _reject("ROOT_INVALID", root_digest, "compiled proof bundle exceeds its bounded authority")
     if (
-        bundle["version"] != _VERSION
-        or bundle["source_identity"] != source_identity
+        bundle["source_identity"] != source_identity
         or bundle["preparation_plan_digest"] != plan_digest
         or root["parents"] != [source_identity]
     ):
@@ -1989,6 +3158,44 @@ def _verify_bundle_structure(
     plan = bundle["execution_plan"]
     if validate("mathematical_certificate", certificate) or validate("execution_plan", plan):
         _reject("ROOT_INVALID", root_digest, "compiled certificate or execution plan is structurally invalid")
+    graph_digest = None
+    if bundle["version"] == _RECOMPILE_VERSION:
+        specification = _specification_from_bundle(
+            cartridge, root_digest, root, bundle
+        )
+        expected_plan_digest = _digest({
+            "version": _RECOMPILE_VERSION,
+            "specification": specification,
+        })
+        (
+            _,
+            expected_evidence,
+            expected_certificate,
+            expected_tensor_inventory,
+            expected_contribution,
+            _,
+            expected_derivation,
+            expected_recovery,
+            _,
+            _,
+        ) = _proof_from_specification(cartridge, specification)
+        if (
+            plan_digest != expected_plan_digest
+            or bundle["evidence"] != expected_evidence
+            or certificate != expected_certificate
+            or tensor_inventory != expected_tensor_inventory
+            or bundle["contribution_map"] != expected_contribution
+            or bundle["derivation"] != expected_derivation
+            or bundle["recovery"] != expected_recovery
+            or root["deltas"] != source_root["deltas"]
+        ):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                root_digest,
+                "recompiled root differs from its clean source, certificate, dependency, or recovery derivation",
+                "Q27/Q61/Q70/Q75: clean derivation equals the persisted incremental result",
+            )
+        graph_digest = expected_derivation["derivation_id"]
     expected_contribution = _contribution_map(
         source_root,
         bundle["source_root"],
@@ -2008,6 +3215,7 @@ def _verify_bundle_structure(
         inventory,
         plan.get("prior_mode_failures") if isinstance(plan, dict) else [],
         cartridge,
+        graph_digest,
     )
     if plan != expected_plan:
         _reject("CAPABILITY_MISMATCH", root_digest, "execution plan is detached from canonical pages or proof objects")
@@ -2267,6 +3475,115 @@ def prepare_revision(
         extents,
         cartridge,
         expected_plan_digest,
+    )
+
+
+def compilation_specification(
+    cartridge: str | Path, compiled_root_digest: str
+) -> dict:
+    """Return the complete editable Q75 input record for one verified compiled revision."""
+
+    def inspect() -> dict:
+        root, bundle = _verified_compiled_bundle(cartridge, compiled_root_digest)
+        return _specification_from_bundle(
+            cartridge, compiled_root_digest, root, bundle
+        )
+
+    return _boundary(
+        "recompile-specification",
+        {"identity": compiled_root_digest},
+        inspect,
+    )
+
+
+def recompile_revision(
+    cartridge: str | Path,
+    specification: object,
+    previous_root_digest: str | None = None,
+) -> RecompiledRevision:
+    """Build one deterministic unpublished child and report exact Q27 reuse against its predecessor."""
+
+    def recompile() -> RecompiledRevision:
+        incremental = _recompile_revision(
+            cartridge, specification, previous_root_digest, False
+        )
+        if previous_root_digest is None:
+            return incremental
+        clean = _recompile_revision(cartridge, specification, None, False)
+        if (
+            incremental.candidate_root != clean.candidate_root
+            or incremental.plan_digest != clean.plan_digest
+            or incremental.derivation_digest != clean.derivation_digest
+        ):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                previous_root_digest,
+                "incremental recompile differs from its clean full derivation",
+                "Q27/Q61/Q75: incremental and clean compilation produce one exact child",
+            )
+        return incremental
+
+    return _boundary(
+        "recompile",
+        {"identity": previous_root_digest or "compiler:clean-recompile"},
+        recompile,
+    )
+
+
+def prepare_recovered_revision(
+    cartridge: str | Path,
+    training_root_digest: str,
+    compiled_parent_root_digest: str,
+) -> RecompiledRevision:
+    """Consume one committed Tier-B artifact and return its independently regenerated Q19 child."""
+
+    def recover() -> RecompiledRevision:
+        _exact_digest(training_root_digest, "compiler:recover", "training root")
+        _exact_digest(compiled_parent_root_digest, "compiler:recover", "compiled parent root")
+        _, recovery = _recovery_bindings(cartridge, training_root_digest)
+        if (
+            recovery["kind"] != "COMPILED_RECOVERY"
+            or recovery["parent_root"] != compiled_parent_root_digest
+        ):
+            _reject(
+                "IDENTITY_MISMATCH",
+                training_root_digest,
+                "Tier-B recovery artifact names another compiled parent",
+                "Q70/Q75: recovery consumes its exact callable compiled parent",
+            )
+        specification = compilation_specification(
+            cartridge, compiled_parent_root_digest
+        )
+        specification["source_root"] = training_root_digest
+        incremental = _recompile_revision(
+            cartridge,
+            specification,
+            compiled_parent_root_digest,
+            True,
+        )
+        clean = _recompile_revision(
+            cartridge,
+            specification,
+            None,
+            True,
+        )
+        if (
+            incremental.candidate_root != clean.candidate_root
+            or incremental.plan_digest != clean.plan_digest
+            or incremental.derivation_digest != clean.derivation_digest
+        ):
+            _reject(
+                "CAPABILITY_MISMATCH",
+                training_root_digest,
+                "incremental Tier-B recovery differs from its clean full certificate derivation",
+                "Q70/Q75: incremental and clean recovery produce one exact child",
+            )
+        return incremental
+
+    return _boundary(
+        "recover",
+        {"identity": training_root_digest},
+        recover,
     )
 
 

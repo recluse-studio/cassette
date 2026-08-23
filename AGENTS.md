@@ -86,7 +86,8 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     "trainer.py": ["Q21"],
     "tools/capture_fixture.py": ["Q40"],
     "tools/genschema.py": ["Q33"],
-    "tools/ledger.py": ["Q29"]
+    "tools/ledger.py": ["Q29"],
+    "tools/resource_frontier.py": ["Q37"]
   }
   ```
   <!-- CASSETTE_REMOVAL_MAP_END -->
