@@ -7,6 +7,7 @@ import asyncio
 import ast
 from copy import deepcopy
 from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,7 @@ from store import (
     derive_root,
     digest_bytes,
     export_semantic_manifest,
+    export_shape,
     import_export,
     import_safetensors,
     load_root,
@@ -74,6 +76,10 @@ pytestmark = pytest.mark.skipif(
 REPO = Path(__file__).resolve().parent.parent
 TRACE_PATH = REPO / "tests" / "fixtures" / "s24_teacher_trace.json"
 GIB = 1024**3
+_EXPORT_PLAN_BODY_FIELDS = (
+    "version", "source_root", "source_identity", "target_schema", "mode",
+    "semantic_binding", "delta_id", "adapter_rank", "adapter_scale",
+)
 
 
 def _trace() -> dict:
@@ -259,6 +265,74 @@ def _store_snapshot(cartridge: Path) -> dict[str, str]:
         for path in cartridge.rglob("*")
         if path.is_file()
     }
+
+
+def _reseal_export_manifest(manifest: dict, *, bind_source_history: bool = True) -> str:
+    """Recompute an attacked portable package without borrowing store.py's manifest builder."""
+
+    semantic = manifest["semantic_manifest"]
+    source = manifest["source_revision"]["identity_material"]
+    if bind_source_history and manifest["source_revision"]["revision_kind"] == "tuned":
+        source["transform_manifest_digest"] = digest_bytes(
+            canonical_bytes(semantic["ordered_deltas"])
+        )
+    source_identity = digest_bytes(canonical_bytes(source))
+    semantic["source_identity"] = source_identity
+    artifact_semantics = manifest["artifact_semantics"]
+    if artifact_semantics is not None:
+        artifact_semantics["source_identity"] = source_identity
+
+    plan = manifest["plan"]
+    plan["source_identity"] = source_identity
+    plan["semantic_binding"] = digest_bytes(canonical_bytes(semantic))
+    plan["plan_id"] = digest_bytes(canonical_bytes({
+        name: plan[name] for name in _EXPORT_PLAN_BODY_FIELDS
+    }))
+
+    exported = manifest["exported_revision"]
+    exported["source_alias"] = f"export:{source_identity}"
+    exported["requested_revision"] = plan["source_root"]
+    exported_record = exported["identity_material"]
+    exported_record["locator"] = f"cassette-export:{plan['plan_id']}"
+    exported_record["immutable_revision"] = manifest["artifact"]["digest"]
+    exported_record["artifacts"] = [manifest["artifact"]]
+    exported_record["tensor_index_digest"] = digest_bytes(canonical_bytes(
+        artifact_semantics["tensor_contracts"]
+        if artifact_semantics is not None
+        else semantic["ordered_deltas"][-1]
+    ))
+    exported_record["architecture"] = semantic["graph"]["architecture"]
+    exported_record["operator_set"] = semantic["graph"]["operators"]
+    exported_record["tokenizer_digest"] = semantic["semantic_assets"]["tokenizer"]
+    exported_record["processor_digest"] = semantic["semantic_assets"]["processor"]
+    exported_record["template_digest"] = semantic["semantic_assets"]["template"]
+    exported_record["precision_scheme"] = (
+        artifact_semantics["precision"]
+        if artifact_semantics is not None
+        else source["precision_scheme"]
+    )
+    exported_record["parent_ids"] = [source_identity]
+    exported_record["transform_manifest_digest"] = plan["plan_id"]
+
+    export_id = digest_bytes(canonical_bytes({
+        "revision": plan["source_root"],
+        "target_schema": plan["target_schema"],
+        "export_transform": plan["plan_id"],
+        "artifact_digests": [manifest["artifact"]],
+    }))
+    manifest["export_id"] = export_id
+    return export_id
+
+
+def _write_attacked_export(
+    package: Path, manifest: dict, *, bind_source_history: bool = True
+) -> str:
+    export_id = _reseal_export_manifest(
+        manifest, bind_source_history=bind_source_history
+    )
+    path = package / "exports" / "manifests" / export_id.partition(":")[2]
+    path.write_bytes(canonical_bytes(manifest))
+    return export_id
 
 
 def _material(root: dict) -> IdentityTuple:
@@ -519,7 +593,6 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     forged = plan_export(cartridge, compiled_root, "safetensors-v1")
     forged["semantic_binding"] = digest_bytes(b"dropped tokenizer operator and precision")
     with pytest.raises(CassetteError) as semantic_loss:
-        from store import export_shape
         export_shape(cartridge, {
             name: forged[name]
             for name in (
@@ -570,6 +643,51 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     assert _store_snapshot(direct_cartridge) == pre_admission
     release_capacity(short_reservation)
     direct_reservation = _capacity(direct_operation, direct_shape["required_bytes"])
+    delta_contract_attacks = (
+        (
+            "base_identity",
+            digest_bytes(b"foreign-q54-base-identity"),
+            True,
+            "DELTA_BASE_MISMATCH",
+            "revision delta names another base identity",
+        ),
+        (
+            "delta_digest",
+            digest_bytes(b"foreign-q54-declared-digest"),
+            False,
+            "PAGE_CORRUPT",
+            "declared revision-delta digest does not match its content",
+        ),
+        (
+            "target_identity",
+            digest_bytes(b"foreign-q54-target-identity"),
+            True,
+            "IDENTITY_MISMATCH",
+            "revision delta does not reconstruct its declared target",
+        ),
+    )
+    for field, value, reseal, code, detail in delta_contract_attacks:
+        attacked_delta = deepcopy(delta)
+        attacked_delta[field] = value
+        if reseal:
+            attacked_delta["delta_digest"] = digest_bytes(canonical_bytes({
+                name: attacked_delta[name]
+                for name in attacked_delta
+                if name != "delta_digest"
+            }))
+        guard_snapshot = _store_snapshot(direct_cartridge)
+        with pytest.raises(CassetteError) as refused_delta:
+            apply_revision_delta(
+                direct_cartridge,
+                direct_operation,
+                base_root,
+                attacked_delta,
+                payloads,
+                direct_reservation,
+            )
+        assert refused_delta.value.code == code
+        assert refused_delta.value.detail == detail
+        assert _store_snapshot(direct_cartridge) == guard_snapshot
     with pytest.raises(CassetteError) as wrong_base:
         apply_revision_delta(
             direct_cartridge,
@@ -722,6 +840,40 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     orphan_root = import_safetensors(
         {orphan_source.name: orphan_source}, update_cartridge, orphan_material
     )
+    assert plan_export(update_cartridge, orphan_root, "safetensors-v1")[
+        "target_schema"
+    ] == "safetensors-v1"
+    with pytest.raises(CassetteError) as unrepresentable_precision:
+        plan_export(update_cartridge, orphan_root, "gguf-v3")
+    assert unrepresentable_precision.value.code == "MODEL_UNSUPPORTED"
+    assert (
+        unrepresentable_precision.value.detail
+        == "GGUF target cannot represent one or more dtypes"
+    )
+
+    operator_cartridge = tmp_path / "q26-operator-cartridge"
+    operator_cartridge.mkdir()
+    operator_material = replace(
+        orphan_material,
+        source_alias="fixture/s24-foreign-operator",
+        canonical_locator="fixture/s24-foreign-operator",
+        immutable_revision="git-sha1:" + "8" * 40,
+        operator_set=("s24_foreign_operator",),
+    )
+    operator_root = import_safetensors(
+        {orphan_source.name: orphan_source}, operator_cartridge, operator_material
+    )
+    assert plan_export(operator_cartridge, operator_root, "safetensors-v1")[
+        "target_schema"
+    ] == "safetensors-v1"
+    with pytest.raises(CassetteError) as unrepresentable_operator:
+        plan_export(operator_cartridge, operator_root, "gguf-v3")
+    assert unrepresentable_operator.value.code == "MODEL_UNSUPPORTED"
+    assert (
+        unrepresentable_operator.value.detail
+        == "GGUF target cannot represent one or more required operators"
+    )
+
     repair_reservation = _repair_capacity("s24-orphan-repair", 16 * 1024 * 1024)
     repair_set = create_repair_set(
         update_cartridge, orphan_root, repair_reservation
@@ -847,6 +999,16 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
         "arguments": {"target_schema": "adapter-safetensors-v1"},
     }
     adapter_plan = plan_export(tier_a, tier_a_child, "adapter-safetensors-v1")
+    detached_plan = {
+        name: adapter_plan[name] for name in _EXPORT_PLAN_BODY_FIELDS
+    }
+    detached_plan["delta_id"] = digest_bytes(b"foreign-q26-adapter-delta")
+    with pytest.raises(CassetteError) as detached_delta:
+        export_shape(tier_a, detached_plan)
+    assert detached_delta.value.code == "IDENTITY_MISMATCH"
+    assert detached_delta.value.detail == (
+        "adapter export or merge is detached from its ordered delta"
+    )
     adapter_reservation = _capacity(
         adapter_broker.operation_id(adapter_request), adapter_plan["reservation_bytes"]
     )
@@ -865,6 +1027,92 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     )
     assert rebuilt_child == tier_a_child
     assert load_root(tier_a_reimport, rebuilt_child)["deltas"] == load_root(tier_a, tier_a_child)["deltas"]
+    adapter_manifest = json.loads(
+        (portable_adapter / adapter_export["result"]["manifest_path"]).read_bytes()
+    )
+    export_contract_attacks = (
+        (
+            "tuned-binding",
+            "tuned export does not bind its parent and ordered deltas",
+        ),
+        (
+            "mode-history",
+            "export mode cannot represent its ordered delta history",
+        ),
+        (
+            "duplicate-delta",
+            "adapter export names an absent ordered delta",
+        ),
+    )
+    for label, detail in export_contract_attacks:
+        hostile_package = tmp_path / f"portable-hostile-{label}"
+        shutil.copytree(portable_adapter, hostile_package)
+        hostile_manifest = deepcopy(adapter_manifest)
+        bind_source_history = True
+        if label == "tuned-binding":
+            hostile_manifest["source_revision"]["identity_material"][
+                "transform_manifest_digest"
+            ] = digest_bytes(b"foreign-q26-ordered-history")
+            bind_source_history = False
+        elif label == "mode-history":
+            hostile_manifest["semantic_manifest"]["ordered_deltas"][-1][
+                "delta_id"
+            ] = digest_bytes(b"foreign-q26-mode-delta")
+        else:
+            hostile_manifest["semantic_manifest"]["ordered_deltas"].append(
+                deepcopy(
+                    hostile_manifest["semantic_manifest"]["ordered_deltas"][-1]
+                )
+            )
+        hostile_export_id = _write_attacked_export(
+            hostile_package,
+            hostile_manifest,
+            bind_source_history=bind_source_history,
+        )
+        hostile_target = tmp_path / f"hostile-{label}-target"
+        shutil.copytree(tier_a_reimport, hostile_target)
+        hostile_snapshot = _store_snapshot(hostile_target)
+        with pytest.raises(CassetteError) as refused_export:
+            import_export(
+                hostile_package,
+                hostile_export_id,
+                hostile_target,
+                base_root=tier_a_base,
+            )
+        assert refused_export.value.code == "ROOT_INVALID"
+        assert refused_export.value.detail == detail
+        assert _store_snapshot(hostile_target) == hostile_snapshot
+
+    corrupt_page_package = tmp_path / "portable-hostile-adapter-page"
+    shutil.copytree(portable_adapter, corrupt_page_package)
+    corrupt_page_manifest = deepcopy(adapter_manifest)
+    corrupt_page_path = (
+        corrupt_page_package / adapter_export["result"]["artifact_path"]
+    )
+    corrupt_page_bytes = bytearray(corrupt_page_path.read_bytes())
+    corrupt_page_bytes[-1] ^= 1
+    corrupt_page_path.write_bytes(corrupt_page_bytes)
+    corrupt_page_manifest["artifact"]["digest"] = (
+        f"sha256:{hashlib.sha256(corrupt_page_bytes).hexdigest()}"
+    )
+    corrupt_page_export_id = _write_attacked_export(
+        corrupt_page_package, corrupt_page_manifest
+    )
+    corrupt_page_target = tmp_path / "hostile-adapter-page-target"
+    shutil.copytree(tier_a_reimport, corrupt_page_target)
+    corrupt_page_snapshot = _store_snapshot(corrupt_page_target)
+    with pytest.raises(CassetteError) as refused_page:
+        import_export(
+            corrupt_page_package,
+            corrupt_page_export_id,
+            corrupt_page_target,
+            base_root=tier_a_base,
+        )
+    assert refused_page.value.code == "PAGE_CORRUPT"
+    assert refused_page.value.detail == (
+        "adapter pages differ from their ordered delta identities"
+    )
+    assert _store_snapshot(corrupt_page_target) == corrupt_page_snapshot
     expected_merged = _expected_merged_tensors(
         tier_a, tier_a_base, tier_a_child, tier_a_artifact
     )
