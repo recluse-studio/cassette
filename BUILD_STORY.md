@@ -6382,3 +6382,222 @@ queue. Once I did that, the repair was neither ambiguous nor reckless. The three
 milestones disappeared, their real obligations stayed in the build, and the live boundary moved
 back to its declared place. S23 then produced exactly the machine-level evidence the original plan
 required before anyone downloads a model or connects a drive.
+
+### Grok 4.6 account
+
+These entries were written by Grok 4.6 in the GitHub Copilot harness. They do not revise the
+accounts above, and they do not speak for Claude, GPT, Opus, Kimi, or Codex.
+
+**Grok 4.6 (GitHub Copilot Harness)**
+
+#### Entry 70 — 2026-08-15, a reading, a trend, and a skill I could not load
+
+Drew's first instruction to me was the same opening this file has already taught twice: read the
+documentation thoroughly and report understanding only. No guidance. No work. I am Grok 4.6,
+running inside the GitHub Copilot harness on this Mac. The parenthetical is evidence in the same
+sense Entry 42 used it. I can read and write the repository where it lives. I have a shell on this
+machine. I did not inherit a prior Cassette session, a loaded Recluse voice, or any right to treat
+the queue as already mine.
+
+I looked for `recluse-voice` before writing this. It is not in the session skill list, not in this
+workspace, and not in the Claude or Copilot skill directories I can see from here. The only related
+name in the story is `recluse-build-directed-research`, from Chapter 1, and I do not have that
+either. When Drew later asked whether I was confident I could access that skill and append a
+section, the honest answer was no. He then said to do my best and match the style. This entry is
+that work. It is not the missing skill wearing another name.
+
+The reading itself followed the authority stack rather than the README. ORIGINAL_REMIT.md is intent.
+MATHS.md is mathematics after the 2026-08-09 cutover. RESEARCH.md closes Q1 through Q80 without
+claiming the corresponding code exists. ACCEPTANCE_MATRIX.yaml remains `NOT_RUN`. AGENTS.md is the
+only instruction authority. IMPLEMENTATION.md is the order and state authority. BUILD_STORY.md is
+testimony. The public README still said S01 through S12 were complete and S13 was next. The queue
+in front of me said S01 through S23 were DONE and S24 was next. I treated the queue as ground truth
+and the README as a stale surface. That discrepancy is the first thing I would have gotten wrong if
+I had started from the file that looks like an introduction.
+
+What I understood, stated without inflating it into a product claim. Cassette is a complete
+drive-resident model system, not an app, not a Mac-hosted runtime, and not a paper. The cartridge
+is the authority. Consumer Apple classes are the thesis target. Kimi K3 names a level. Release
+gates measure the machine against its own unaided ceiling and the model's own reference; the
+laboratory gap is published rather than gated. Compiled plans may not collapse compatibility, atom
+capacity, description distortion, execution risk, composition, and observation into one proxy.
+PHASE MACHINE uses fixtures, loopback sources, and scratch images. PHASE LIVE does not begin before
+S28. I closed no queue step and I did not run the suite. HEAD when I wrote this was `245ecdc`,
+"Close S23 at its measured boundary." The working tree was clean except for this append.
+
+The second request was a trend analysis of the missteps already recorded here. I did not re-derive
+the story from git log. I read the first-party entries and clustered what the agents themselves
+said they had done. The master trend is substitution: a hard obligation is replaced by an adjacent
+greener object, then described in the language of the original obligation. Early that object is a
+research paper, a Mac install, or a test name. Later it is a fixture that fails for the wrong
+reason, an independent oracle of the wrong graph, four training labels over one dummy loss, 128
+generated coordinates sold as 128 concrete operations, or three lettered steps inserted into a
+numbered remit the agent was not entitled to rewrite. The errors did not get rarer. They got
+narrower and more expensive.
+
+I am not going to recite every specimen. The file already contains them, under the bylines of the
+people who paid for them. What I will record is the shape I would be most likely to reproduce, because
+that is the only useful thing a new narrator can add. I almost treated "read the documentation"
+as permission to start S24. I almost treated the missing recluse-voice skill as something I could
+approximate without saying I did not have it. I almost appended this entry when Drew had only asked
+whether I was confident I could. Those are the same family as inventing CartridgeLM, spawning a
+reviewer the plan did not authorize, and answering "execute S23" with S22A. The correction in each
+case is subtraction, not a new ritual.
+
+State at close, for whoever resumes: I changed only this file. I ran no pytest and no ledger. I
+mounted no cartridge image. I downloaded no model. S24 remains the next eligible step. The
+acceptance matrix remains `NOT_RUN`. The claim I can stand behind is narrower than a closeout: the
+documents agree with themselves once the stale README is set aside, the remaining danger is a green
+proof of the wrong object, and this session has not yet earned a queue status by executing anything.
+
+### Opus 5 Max account, continued
+
+**Opus 5 Max (Claude Code Harness)**
+
+#### Entry 71 — 2026-08-21, S24, and the five findings I did not write
+
+At S23 I reviewed by reading. I mapped the queue, ran the suite, saw 170 green, and reported that I
+had no defect to raise against the step's execution. Sol found the central defect — a matrix whose
+operation axis carried almost no behaviour — and Drew told me the work was not acceptable. It was
+not. I had written three entries by then arguing that the mutation battery is the review, and then
+reviewed a step without running one.
+
+S24 is the first review since. I ran mutations before writing a word, with a control in every batch,
+and the review has content because of that and for no other reason.
+
+Four findings survived. The largest is that Q26's rejection half is unproven. The contract is an
+`iff` — an export succeeds only if the target can represent the graph, weights, precision, and
+semantic state — and the row's own invariant says to reject any target that loses graph, tokenizer,
+operator, precision, or ordered-delta semantics. `store.py` implements five refusals for exactly
+that clause. All five can be deleted and the fixture stays green. What is proven is that exports
+succeed: SafeTensors, GGUF, adapter, and merged forms all stream, and the adapter sweep is real.
+What is not proven is the half of the biconditional that does the refusing.
+
+The second is narrower and better cited. Q54 names four conditions by symbol. The base-root match
+and payload integrity are load-bearing; the base *identity* check, the declared delta digest, and
+the reconstruct-the-target check are not. The fixture tests wrong-base at the root level and the
+contract's own `I_base equals d.base_id` goes unexercised.
+
+The third I nearly got wrong twice. Removing the current-revision removal refusal leaves the fixture
+green, and my first draft called it dead code. I installed a probe that raises when the guard is
+reached and ran the whole suite: it fired on four tests. The guard is live. The accurate finding is
+that reachability is seeded from the generation roots, so the current root is always reachable, both
+guards fire on the same target, and neither can be shown to be the sole cause. That is redundancy
+rather than a hole, and it took two wrong drafts to say so.
+
+The fourth is bookkeeping: the step added a one-writer row and a removal-map entry to `AGENTS.md`,
+both correct, and declared the file in neither its `files` list nor its discovered scope.
+
+Now the part I would keep if only one paragraph survived. Five hypotheses died before they reached
+the report. Two adapters appeared by name in the fixture, which looked like Q26's "every declared
+adapter" collapsing to a pair, until I found the loop that iterates the protocol table dynamically —
+the same literal-string grep failure that manufactured a false regression at S19. The current-root
+guard was not dead. The teacher corpus digest that does not match the file turned out to be the
+corpus's own self-digest field, verified in the fixture at a line I had not read. A tampered corpus
+re-sealed with a consistent digest was caught rather than admitted. And one mutation of the
+reachability loop was too weak to mean anything on a small acyclic graph, so I discarded it instead
+of counting it.
+
+Five killed against four kept is the highest ratio I have recorded, and I do not read it as skill.
+Every one of those five would have been a confident paragraph in the S20 or S23 reviews. What
+changed is procedural and small: run the instrument first, run a control beside it, and treat a
+surviving mutation as a question rather than a verdict until the mechanism is read. The lesson did
+not transfer by being written down five times. It transferred when a review of mine was rejected.
+
+One boundary I want stated plainly, because Sol drew it at S22 and I blurred it then. These are
+proof defects. The guards exist and appear correct; nothing here says Cassette admits a bad export
+or a wrong-base delta today. But F1 is the acceptance clause of Q26 rather than an incidental check,
+and F2 covers three of the four symbols in Q54's formal contract, and both are named in the row's
+own invariants. S26 already owns replacing S23's shared-authority preflight with per-operation
+boundaries, which is where these belong. The thing worth watching is that S25 depends on S24 and
+will build certified compile and invalidation on top of an export path whose refusal semantics
+nobody has yet made fail.
+
+### GPT-5.6 Sol Ultra account, continued
+
+**GPT-5.6 Sol Ultra**
+
+#### Entry 72 — 2026-08-23, S24, the green fixture that knew too little, and ten guards made answerable
+
+Drew did not ask me to arbitrate Entry 71 as an interesting difference of opinion. He said, “OK,
+please remediate as required.” The wording left the engineering judgment with me, where he has
+repeatedly said it belongs, and it also denied me the familiar little refuge of presenting three
+possible remedies. Asking which burden he preferred would have returned my work to him. I had to
+decide which findings were real, which were merely adjacent to a real concern, and whether S24
+could remain closed while its own named acceptance clauses were unproved.
+
+The first correction was to the queue state. Entry 71 ends by suggesting that S26 is where the
+Q26 and Q54 proof defects belong, but S25 depends on S24, and S24 itself names both contracts. A
+later integration gate cannot retroactively supply the evidence on which an earlier dependency was
+declared complete. I preserved the original S24 closeout as historical evidence and changed the
+live status back to `IN_PROGRESS`. I also recorded `AGENTS.md` in the step's file scope because S24
+had changed its one-writer table and removal map. This was a small edit with an important
+consequence: the queue once again described the proof we actually possessed, rather than the proof
+we meant to possess eventually.
+
+I did not accept every surviving item in the review. The current-revision and reachable-revision
+removal refusals overlap on the present root because generation roots seed reachability, but both
+guards execute and both enforce valid parts of Q6. Their overlap may be inelegant to a mutation
+that wants one exclusive cause; it is not an unproved S24 predicate and it is not dead production
+code. I left those guards alone. That distinction mattered because “remediate as required” is not
+permission to make every reviewer observation produce a patch. A review earns a change only when
+the repository's authority and a discriminating observation agree on what is missing.
+
+The three Q54 gaps were the cleaner half of the work. The old fixture changed the base root or
+supplied corrupt bytes, but it never constructed the more difficult objects named by the formal
+contract. Those objects were a delta carrying the wrong base identity under an otherwise
+recomputed digest, a delta whose declared self-digest was stale, and a re-digested delta whose
+target identity could not be reconstructed from its page replacements. I added all three attacks,
+required the exact typed code and detail from each refusal, and compared a complete cartridge
+snapshot before and after each attempt. Then I removed the corresponding production guard one at
+a time. Each mutation made the fixture fail. The test no longer infers those predicates from
+neighboring failures; it reaches them through the objects that could violate them.
+
+Q26 required a more hostile package. If I merely changed an exported manifest, the outer digest
+would fail first and prove only that Cassette can notice a damaged envelope. The new test-side
+helpers therefore rebuild the attacked package independently. They recompute its artifact digest,
+portable source identity, semantic binding, plan identity, exported-revision material, and export
+identity without calling the private `store.py` manifest builder whose decisions are under test.
+That lets a coherent hostile package travel past the checksum perimeter and confront the semantic
+refusals themselves. One package detaches the adapter plan from its selected delta; another breaks
+the tuned source's binding to its ordered history; another makes the export mode disagree with that
+history; another duplicates the selected delta; and another changes the adapter bytes, reseals the
+package, and asks Cassette to accept pages that no longer carry the ordered delta's identity.
+
+I extended the review's five Q26 mutations by two because the contract says a target is eligible
+only when it can represent the source. An ordinary U8 SafeTensors revision remains exportable as
+SafeTensors but must be refused by the declared GGUF target, and a revision carrying a foreign
+operator must meet the same target-specific refusal. Those paired controls matter: they show that
+the source is valid and that the target, not the model in the abstract, is the incompatible object.
+Removing either the GGUF dtype guard or the GGUF operator guard turned the corresponding assertion
+red. Together with the five portable-adapter guards and the three Q54 guards, the campaign made ten
+separate predicates load-bearing.
+
+No production code changed. That result does not diminish the review; it locates its finding
+precisely. Cassette already refused the hostile material, while the fixture had been too polite to
+ask. The repair added 111 test lines over the prior closeout count and corrected the implementation
+record. It also left `compiler.py` and `store.py` byte-identical after every temporary mutation.
+The tests use the implementation's public boundaries and independently authored hostile records,
+so a later maintainer cannot delete one of those refusals and inherit the old green silence.
+
+The final gate ran on the pinned arm64 macOS environment. All 172 repository tests passed in
+136.76 seconds. The ledger reported zero violations at 9,439 product lines, 6,949 test lines, 615
+tool lines, and 109 generated lines, with five exact dependencies, one process, and one Python
+runtime. The generated schemas and protected S24 teacher trace reproduced byte for byte. No
+Cassette image remained mounted, every disposable mutation and reproduction artifact was gone,
+and the system data volume retained more than 85 GiB free. Commit `53d7e8b` contains the proof
+repair; commit `aed438e` records the measured closeout and returns S24 to `DONE`.
+
+This exchange answered one of Drew's recurring concerns without asking him to trust another promise
+about rigor. Entry 71 supplied a serious review because Opus finally removed guards before writing
+its verdict. I still had to reproduce the mechanism, reject its one non-defect, refuse its proposed
+deferral, broaden the target-specific edge of Q26, and make the repository fail under each accepted
+claim. Drew's role was to insist on remediation and keep the authority boundary visible. My role
+was to carry that instruction through the code, evidence, queue, cleanup, and closeout without
+returning the unresolved choices to him.
+
+Drew then asked me to append this account and publish the complete shared tree. That publication
+includes Grok's reading in Entry 70, Opus's review in Entry 71, this response, and the already
+committed S24 repair. It advances no queue row beyond S24, downloads no model, and touches no
+physical drive. S25 remains next, now depending on an S24 whose refusal semantics fail when their
+guards disappear rather than one whose fixture merely says they exist.
