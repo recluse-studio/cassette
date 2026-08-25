@@ -79,6 +79,18 @@ EXPECTED_INJECTIONS = (
     "invalid_gradient_nan_inf",
     "cancellation",
 )
+EXPECTED_PHASE_LIVE_INJECTIONS = (
+    "cartridge_disconnect",
+    "reconnect_same_identity",
+    "reconnect_wrong_identity",
+    "sleep_wake",
+    "bus_reset",
+    "port_migration",
+    "readonly_remount",
+    "insufficient_capacity_before_start",
+    "insufficient_capacity_during_candidate_write",
+    "source_revision_change_during_transfer",
+)
 EXPECTED_ASSERTIONS = (
     "no_partial_callable_revision",
     "exact_typed_error",
@@ -97,6 +109,7 @@ class _Matrix:
     required: bool
     operations: tuple[str, ...]
     injections: tuple[str, ...]
+    phase_live_injections: tuple[str, ...]
     assertions: tuple[str, ...]
 
 
@@ -149,12 +162,16 @@ def _failure_matrix() -> _Matrix:
             value.append(line.removeprefix("    - "))
             continue
         raise AssertionError(f"failure_rows contains unsupported syntax: {line!r}")
-    if set(rows) != {"required", "expand_over_operations", "injections", "assertions"}:
+    if set(rows) != {
+        "required", "expand_over_operations", "injections", "phase_live_injections",
+        "assertions",
+    }:
         raise AssertionError(f"failure_rows has an incorrect field set: {sorted(rows)}")
     return _Matrix(
         required=rows["required"] is True,
         operations=tuple(rows["expand_over_operations"]),
         injections=tuple(rows["injections"]),
+        phase_live_injections=tuple(rows["phase_live_injections"]),
         assertions=tuple(rows["assertions"]),
     )
 
@@ -743,6 +760,7 @@ def test_q49_failure_rows_generate_complete_matrix_and_execute_shared_authoritie
         True,
         EXPECTED_OPERATIONS,
         EXPECTED_INJECTIONS,
+        EXPECTED_PHASE_LIVE_INJECTIONS,
         EXPECTED_ASSERTIONS,
     )
     assert len(GENERATED_ROWS) == 128

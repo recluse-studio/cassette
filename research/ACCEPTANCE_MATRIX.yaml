@@ -1,8 +1,8 @@
-schema_version: 3
+schema_version: 4
 matrix_id: cassette-first-complete-release
 scope_mode: GENERAL_PRODUCT
 initial_status: NOT_RUN
-amended: 2026-08-09
+amended: 2026-08-24
 remit_authority: ../ORIGINAL_REMIT.md (amended 2026-08-05)
 mathematical_authority: ../MATHS.md (cutover after S11, before S12)
 thesis: >-
@@ -12,6 +12,7 @@ thesis: >-
   is measured and published, never gated.
 
 completion_rule:
+  contract: Q80
   required_status: PASS
   forbidden_terminal_substitutes:
     - NOT_RUN
@@ -64,6 +65,22 @@ compute_provenance:
     external compute permitted once per transform, recorded completely in the open reproducible
     transform manifest; the resulting cartridge verifies by identity like any acquired artifact
     (remit ruling 2026-08-05)
+
+phase_machine_deferral:
+  phases:
+    - L01
+    - L02
+    - L03
+    - L04
+    - L05
+  outcome: READY_FOR_LIVE_FALSIFICATION_ONLY
+  live_evidence: NOT_RUN
+  prohibited_evidence:
+    - F4_PASS
+    - F5_PASS
+    - frontier_capability
+    - hosted_comparison
+    - physical_drive_performance
 
 immutable_models:
   kimi_k3:
@@ -501,6 +518,17 @@ failure_rows:
     - source_revision_change_during_transfer
     - invalid_gradient_nan_inf
     - cancellation
+  phase_live_injections:
+    - cartridge_disconnect
+    - reconnect_same_identity
+    - reconnect_wrong_identity
+    - sleep_wake
+    - bus_reset
+    - port_migration
+    - readonly_remount
+    - insufficient_capacity_before_start
+    - insufficient_capacity_during_candidate_write
+    - source_revision_change_during_transfer
   assertions:
     - no_partial_callable_revision
     - exact_typed_error

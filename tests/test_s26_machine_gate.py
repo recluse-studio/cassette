@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import json
 from pathlib import Path
 import platform
@@ -73,6 +74,135 @@ EXPECTED_RECOVERY_INVALIDATION = (
     "residual_metadata", "estimator_calibration", "precision_calibration", "composition_proof",
     "kernel_plan", "physical_schedule", "quality_proof", "protocol_capabilities", "cache_key",
 )
+
+
+def _matrix_block(name: str) -> tuple[str, ...]:
+    """Return one top-level matrix block without interpreting unrelated YAML."""
+
+    lines = MATRIX_PATH.read_text(encoding="utf-8").splitlines()
+    start = lines.index(f"{name}:") + 1
+    end = next(
+        (index for index in range(start, len(lines)) if lines[index] and not lines[index].startswith(" ")),
+        len(lines),
+    )
+    return tuple(lines[start:end])
+
+
+def _direct_fields(name: str) -> dict[str, object]:
+    """Parse direct scalar and scalar-list fields from one bounded matrix block."""
+
+    fields: dict[str, object] = {}
+    current: str | None = None
+    for line in _matrix_block(name):
+        if not line.strip():
+            continue
+        if line.startswith("  ") and not line.startswith("    ") and ":" in line:
+            current, raw = line.strip().split(":", 1)
+            if raw.strip():
+                value = raw.strip()
+                fields[current] = value == "true" if value in {"true", "false"} else value
+                current = None
+            else:
+                fields[current] = []
+            continue
+        if line.startswith("    - ") and current is not None:
+            values = fields[current]
+            assert isinstance(values, list)
+            values.append(line.removeprefix("    - "))
+            continue
+        current = None
+    return fields
+
+
+def _mapping_records(name: str) -> dict[str, dict[str, str]]:
+    """Parse direct records from a top-level keyed matrix mapping."""
+
+    records: dict[str, dict[str, str]] = {}
+    current: str | None = None
+    for line in _matrix_block(name):
+        if line.startswith("  ") and not line.startswith("    ") and line.endswith(":"):
+            current = line.strip()[:-1]
+            records[current] = {}
+        elif current is not None and line.startswith("    ") and not line.startswith("      ") and ":" in line:
+            field, value = line.strip().split(":", 1)
+            records[current][field] = value.strip()
+    return records
+
+
+def _list_records(name: str) -> tuple[dict[str, str], ...]:
+    """Parse direct scalar fields from a top-level matrix list of records."""
+
+    records: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for line in _matrix_block(name):
+        if line.startswith("  - id: "):
+            current = {"id": line.removeprefix("  - id: ")}
+            records.append(current)
+        elif current is not None and line.startswith("    ") and not line.startswith("      ") and ":" in line:
+            field, value = line.strip().split(":", 1)
+            current[field] = value.strip()
+    return tuple(records)
+
+
+def _validate_deferred_manifest(deferred: dict) -> None:
+    """Resolve every deferred field through its exact matrix section."""
+
+    top = {
+        line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+        for line in MATRIX_PATH.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith(" ") and ": " in line
+    }
+    completion = _direct_fields("completion_rule")
+    boundary = _direct_fields("phase_machine_deferral")
+    models = _mapping_records("immutable_models")
+    gates = _list_records("fixture_gate_rows")
+    assert set(deferred) == {
+        "acceptance_matrix_digest", "claim", "matrix_id", "matrix_schema_version",
+        "live_evidence", "phase_machine_outcome", "phases", "prohibited_evidence",
+        "version",
+    }
+    assert deferred["acceptance_matrix_digest"] == digest_bytes(MATRIX_PATH.read_bytes())
+    assert deferred["matrix_id"] == top["matrix_id"]
+    assert deferred["matrix_schema_version"] == int(top["schema_version"])
+    assert deferred["claim"] == "DEFERRED_TO_PHASE_LIVE_NOT_RUN"
+    assert deferred["live_evidence"] == boundary["live_evidence"]
+    assert deferred["phase_machine_outcome"] == boundary["outcome"]
+    assert deferred["prohibited_evidence"] == boundary["prohibited_evidence"]
+    assert list(deferred["phases"]) == boundary["phases"]
+
+    l01 = deferred["phases"]["L01"]
+    storage = _mapping_records("storage_classes")
+    assert l01 == {
+        "apple_classes": list(_mapping_records("apple_classes")),
+        "qualification": sorted({record["profile_contract"] for record in storage.values()}),
+        "storage_classes": list(storage),
+    }
+    assert deferred["phases"]["L02"] == {
+        "immutable_models": [
+            {"id": model_id, "revision": record["revision"]}
+            for model_id, record in models.items()
+        ],
+        "source_rows": [record["id"] for record in _list_records("source_rows")],
+    }
+    assert deferred["phases"]["L03"] == {
+        "fixture_gates": [
+            {"id": record["id"], "model_class": record["model_class"]}
+            for record in gates
+        ],
+    }
+    assert deferred["phases"]["L04"] == {
+        "execution_rows": [record["id"] for record in _list_records("execution_rows")],
+        "offline_rows": [record["id"] for record in _list_records("offline_and_privacy_rows")],
+        "protocol_cross_product": _direct_fields("protocol_cross_product")["id"],
+        "remaining_failure_injections": list(MATRIX.phase_live_injections),
+        "training_rows": [record["id"] for record in _list_records("training_rows")],
+        "workload_suites": [record["id"] for record in _list_records("workload_suites")],
+    }
+    assert deferred["phases"]["L05"] == {
+        "completion_contract": completion["contract"],
+        "require_live_evidence": completion["require_live_evidence"],
+        "required_status": completion["required_status"],
+    }
 
 
 def _compiler_capacity(label: str) -> dict:
@@ -286,34 +416,16 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
 
     deferred = json.loads(LIVE_ROWS_PATH.read_bytes())
     assert canonical_bytes(deferred) + b"\n" == LIVE_ROWS_PATH.read_bytes()
-    assert deferred["acceptance_matrix_digest"] == digest_bytes(MATRIX_PATH.read_bytes())
-    assert deferred["matrix_id"] == "cassette-first-complete-release"
-    assert deferred["claim"] == "DEFERRED_TO_PHASE_LIVE_NOT_RUN"
-    assert deferred["phase_machine_outcome"] == "READY_FOR_LIVE_FALSIFICATION_ONLY"
-    assert set(deferred["phases"]) == {"L01", "L02", "L03", "L04", "L05"}
-    assert deferred["prohibited_evidence"] == [
-        "F4_PASS", "F5_PASS", "frontier_capability", "hosted_comparison",
-        "physical_drive_performance",
-    ]
-    matrix_text = MATRIX_PATH.read_text(encoding="utf-8")
-    named_values = []
-    for phase in deferred["phases"].values():
-        for value in phase.values():
-            if isinstance(value, str):
-                named_values.append(value)
-            elif isinstance(value, list):
-                named_values.extend(
-                    item["id"] if isinstance(item, dict) else item for item in value
-                )
-    exempt = {
-        "Q41", "Q42", "Q43", "Q44", "Q80", "PASS_AND_LIVE_PROVEN",
-        "3-8B dense, permissive license", "20-120B sparse",
-        "actual_read_only_external_remount", "bus_reset_on_physical_transport",
-        "copied_replacement_on_actual_media", "host_sleep_with_active_external_io",
-        "live_source_revision_drift", "physical_usb_c_detach_and_reattach",
-        "port_migration_on_physical_transport", "real_drive_exhaustion",
-    }
-    assert all(value in matrix_text for value in named_values if value not in exempt)
+    _validate_deferred_manifest(deferred)
+    for replacement in ("physical_usb_c_detach_and_reattach", "cancellation"):
+        unsupported = deepcopy(deferred)
+        unsupported["phases"]["L04"]["remaining_failure_injections"][0] = replacement
+        with pytest.raises(AssertionError):
+            _validate_deferred_manifest(unsupported)
+    wrong_revision = deepcopy(deferred)
+    wrong_revision["phases"]["L02"]["immutable_models"][0]["revision"] = "0" * 40
+    with pytest.raises(AssertionError):
+        _validate_deferred_manifest(wrong_revision)
 
     outcome = {
         "version": 1,
