@@ -93,7 +93,7 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
     assert first.stdout == second.stdout
     report = json.loads(first.stdout)
     assert report["violations"] == []
-    assert report["j_partial"]["direct_dependencies"], "pins must be recorded"
+    assert report["accounting"]["direct_dependency_manifest"], "pins must be recorded"
 
     for name in ("local-python", "build/runtime-3.13"):
         environment = clone / name
@@ -154,6 +154,13 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
 
 def test_q78_removal_map_is_exact_and_authority_bound(tmp_path):
     """Q78 acceptance: each authored product or tool file has one real removal authority."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "errors.py").write_text(
+        "# errors.py — Q6 fixture authority; depends on (none).\n"
+    )
+    (tmp_path / "tools" / "ledger.py").write_text(
+        "# ledger.py — Q29 fixture authority; depends on (none).\n"
+    )
     (tmp_path / "AGENTS.md").write_text(
         "<!-- CASSETTE_REMOVAL_MAP_BEGIN -->\n"
         "```json\n"

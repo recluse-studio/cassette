@@ -1419,10 +1419,11 @@ steps:
     files: [tools/ledger.py]
     invariants: [Q29 acceptance (reproduce complete J from a clean checkout), Q78 acceptance (delete each mapped product or tool file in isolation and observe its recorded acceptance authority fail; reject every stale, missing, or nonconsequential map entry)]
     acceptance_boundary: "S01's aggregate-audit remediation makes the per-file Q78 map incremental and ledger-enforced as each authority enters the tree. S27 does not postpone map authorship; it performs the completed-tree deletion experiment and emits the final J report."
+    discovered_scope: "tests/test_s01_ledger.py moves from S01's partial-accounting key to the completed accounting authority. tests/test_s27_ledger.py independently fixes the nine-coordinate J order, injects a new kernel, process, model branch, duplicate digest authority, and binary closure, resolves all twelve map entries to direct authority-citing tests, and proves that mandatory import failure cannot make an otherwise inert owner consequential. tools/generated/s27_j_report.json is the canonical, evidence-digest-bound output produced only after the clean-checkout full suite and twelve isolated control, physical-deletion, and executable-bypass experiments pass. tools/ledger.py remains the single Q29/Q78 accounting and removal authority above 800 physical lines because splitting report measurement from deletion proof would create the second ledger Q29 and Q32 prohibit. No product module, runtime, dependency, process, numerical kernel, model branch, source request, model, service, or physical drive is added."
     expected_size: medium
     done_when: full suite + ledger green; J report committed
     depends: [S23, S26]
-    status: TODO
+    status: IN_PROGRESS 2026-08-25 — implementing the complete deterministic J report and the completed-tree isolated deletion campaign; no live model, source, service, or physical-drive input is admitted
 
   - id: S28
     title: PHASE MACHINE closeout
