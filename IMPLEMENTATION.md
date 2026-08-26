@@ -1423,7 +1423,28 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green; J report committed
     depends: [S23, S26]
-    status: IN_PROGRESS 2026-08-25 — implementing the complete deterministic J report and the completed-tree isolated deletion campaign; no live model, source, service, or physical-drive input is admitted
+    status: DONE 2026-08-25 — implementation commit d2893852b0700fbbd1b08467cf377169d8dfb93c; a detached clean checkout reproduced 307/307 tests, complete J=(0,0,10795,1,1,5,0,0,0), and twelve isolated passing controls followed by twelve physical-deletion failures and twelve owner-marked executable-bypass failures; canonical report sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3; ledger green
+    closeout:
+      - clause: "Q29 reproduces the complete nine-coordinate J tuple from one clean checkout"
+        test_or_probe: "tools/ledger.py --prove-j in a detached clean worktree at d2893852b0700fbbd1b08467cf377169d8dfb93c plus tests/test_s27_ledger.py::test_q29_complete_j_classifies_every_surface_and_exposes_all_nine_coordinates"
+        input: "Classify every governed source and binary; derive authored product and tool LOC, generated and test LOC, the process manifest, Python runtime pin, exact dependency manifest, numerical-kernel sites, model-specific branch table, duplicate-authority sites, and shipped binary closure; inject one new native kernel, process import, model-family branch, second digest authority, and NUL-bearing binary."
+        expected: "Emit all nine J coordinates in Q29 order from the clean evidence tree; keep tests and generated code separate; report every injected surface in its exact coordinate; bind the report to the executable, fixture, schema, matrix, maths, lock, and instruction evidence."
+        observed: "The injected tree reported authored.metal, subprocess, hostile.py:5, hashlib, and the seven-byte binary in their five exact surfaces. The clean checkout emitted J=(0,0,10795,1,1,5,0,0,0): zero failed acceptance rows, zero new kernels, 10,795 authored executable LOC, one process, one runtime, five direct dependencies, zero model-specific branches, zero duplicate authorities, and zero shipped binary bytes. Generated LOC remained 109 and test LOC remained 7,970 outside J."
+      - clause: "Q78 deletes and semantically bypasses every mapped owner in isolation"
+        test_or_probe: "the twelve removal_proofs in tools/generated/s27_j_report.json, each produced by one passing direct cited control, one physical deletion, byte-exact restoration, and one all-function executable bypass"
+        input: "For each AGENTS.md removal-map entry, resolve one test that directly imports the owner and cites its sole mapped Q authority; run it unchanged; delete only that file and rerun; restore it byte-exactly; replace every executable function with the owner-specific Q78_BYPASS marker and rerun; restore again."
+        expected: "Every control passes. Every deletion fails at the missing owner boundary. Every import-preserving bypass fails through the owner-specific marker, proving that mandatory import alone cannot establish necessity. No mutation survives into the next experiment."
+        observed: "All twelve controls returned zero. All twelve physical deletions returned nonzero with the target module as witness. All twelve bypasses returned nonzero through their Q78_BYPASS marker: adapters/Q76, broker/Q5, compiler/Q58, errors/Q6, pager/Q19, sources/Q52, store/Q57, capture_fixture/Q40, genschema/Q33, ledger/Q29, resource_frontier/Q37, and trainer/Q21. The clean worktree was unchanged after the campaign."
+      - clause: "Q78 rejects missing, stale, foreign-authority, and nonconsequential map entries"
+        test_or_probe: "tests/test_s01_ledger.py::test_q78_removal_map_is_exact_and_authority_bound plus tests/test_s27_ledger.py::test_q78_isolated_deletion_rejects_a_nonconsequential_map_entry"
+        input: "Omit a governed owner, name a nonexistent owner, name Q999, bind an owner to an authority absent from its header, and create one mandatory imported module whose cited assertion never executes its code."
+        expected: "Reject every malformed or stale map before proof, and reject the mandatory-import example when physical deletion fails but executable bypass survives."
+        observed: "The map checker rejected missing, stale, unknown, and undeclared authority bindings. The synthetic imported owner failed collection when deleted but its cited test passed after executable bypass, so S27 rejected it as nonconsequential."
+      - clause: "S27 done_when and machine-only boundary"
+        test_or_probe: "complete pinned CPython 3.13 arm64 macOS suite, detached clean-checkout proof generator, final tools/ledger.py readback, canonical report readback, diff checking, worktree inspection, process inspection, mount inspection, and system-volume inspection"
+        input: "Run every PHASE MACHINE invariant, generate the report only from the committed clean source, validate it again from the working tree, and inspect for leaked test state or prohibited live inputs."
+        expected: "Pass the complete suite and ledger; commit one canonical J report; retain no worktree, test process, mount, source request, downloaded model, external-drive operation, live-service evidence, F4 result, or F5 result."
+        observed: "The complete suite passed 307/307 in 385.37 seconds before the implementation commit, and the detached committed checkout independently recorded 307 passed with zero skipped and zero failed acceptance rows. The final ledger reproduced the report with zero violations. The report is 4,954 canonical bytes at sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3. No temporary worktree, pytest process, or Cassette image remained; the system data volume retained 73 GiB free."
 
   - id: S28
     title: PHASE MACHINE closeout
