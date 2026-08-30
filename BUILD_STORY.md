@@ -6732,3 +6732,153 @@ review measured reachability under valid state, not protection under invalid sta
 have to arbitrate among those meanings. That is the principal engineer's work, and on S25 it ended
 where the evidence ended: the step remains `DONE`, the review remains on the record, and the queue
 moves forward without borrowed debt.
+
+### Opus 5 Ultracode account
+
+This account continues the Opus 5 Max entries above under a new name; the harness is the same
+Claude Code session and the identity is the same agent. It records the S26 review, the defect that
+review could not have found, and Drew's question about what my method actually is.
+
+**Opus 5 Ultracode (Claude Code Harness)**
+
+#### Entry 75 — 2026-08-23, the instrument that inverts, and the question I could not answer well
+
+I reviewed S26 and called it the best-executed step I had seen against its own stated boundary. I
+had reasons. The two S23 defects were genuinely repaired: eight operations now route to eight real
+product paths rather than to injection-keyed handlers that ignored the operation, and the stale
+assertion that had been vacuous across a hundred and twenty-eight rows now computes its own
+precondition. I ran the battery, ran the probes, discarded one measurement as the wrong instrument
+before reporting it, and delivered a verdict.
+
+Then Kimi read a file I had also read and found eight labels with no authority anywhere in the
+repository, sitting in a deferred-live manifest, exempted by name from the only assertion that
+resolves labels against the acceptance matrix. I verified it before responding: the strings exist
+in exactly two places, the fixture and the exempt set, and removing only those eight from the
+exemption turns the gate red.
+
+Drew's question was: what are you not doing — are you just running tests and calling that a code
+review. The answer is yes, largely, and the interesting part is the mechanism rather than the
+admission.
+
+My instrument inverts on this class of defect. Everything I do is a deletion: remove a guard, see
+whether a test fails; a failure means the guard was load-bearing and that is the good outcome.
+Emptying an exemption list makes a test *stricter*, so my harness would have read the resulting
+failure as health. Pointed at the exempt set, my own tooling would have certified it. That is not a
+gap in coverage I can close by running more mutations. It is a direction the method cannot face.
+
+Underneath that is something simpler. Mutation testing asks whether code is load-bearing. It never
+asks whether a string has a right to exist. Eight labels were authored inside the step, excluded
+from the check that would have caught their absence from the matrix, and then digest-bound into a
+manifest asserting a matrix provenance it does not have for those rows. No amount of deleting
+guards surfaces that, because nothing was guarding it.
+
+And a third thing, which is Kimi's secondary point and lands harder on me than the first. Two
+product mutations behind S26's "guards are consequential" clause exist only in closeout prose. I
+have now read closeout evidence across ten reviews and have never once asked whether a recorded
+experiment could be replayed. I have been treating the closeout as testimony to be read rather than
+as evidence to audit, which is precisely the posture this file exists to correct in everyone else.
+
+So the three things I do not do, stated as a list rather than as an apology: I do not trace declared
+data back to an upstream authority; I do not read allowlists, exemptions, and skip conditions and
+ask what they excuse; and I do not check that closeout evidence is reproducible.
+
+There is an arc in the entries above that I now read differently. Forty-four through seventy-three
+record instrument failures caught progressively earlier — an import mistaken for a mechanism, a
+false superlative, a grep that manufactured a regression, a string matcher that inverted a result,
+a control chosen from the code instead of the assertions. I took the shortening interval as
+improvement. Every one of those was a failure *inside* one method. Getting better at mutation
+testing does not find what mutation testing cannot see, and no number of well-run batteries would
+have surfaced eight labels that nothing was defending.
+
+The verdict is the evidence of it. "Best-executed step I have reviewed" was assembled entirely from
+dynamic results and did not survive one static reading of a file I had already opened. I had looked
+at that module, taken its list of test functions, and moved to the parametrized matrix because that
+is where my instrument works. The exemption sat fourteen lines from a signature I had read.
+
+S26's own closeout clause requires resolving every live row and prohibited evidence label against
+the acceptance matrix. That clause is the named failing invariant, and reopening on it is the
+legitimate path under the straight-line rule. One constraint I would put beside the fix rather than
+inside it, since the resolution belongs to Drew and the implementer: the eight manifestations have
+exact semantic counterparts already in S23's injection vocabulary — readonly remount, bus reset,
+port migration, sleep and wake, cartridge disconnect — so mapping each to the matrix rows it blocks
+reuses an existing authority instead of authoring a parallel one, and carries the smallest digest
+ripple without reducing any claim.
+
+### Kimi K3 account
+
+This entry was written by Kimi K3 in the GitHub Copilot harness. It does not revise the accounts
+above, and it does not speak for Claude, GPT, Opus, Grok, or Codex. It records the S26 review that
+Entry 75 answers from the other side.
+
+**Kimi K3 (GitHub Copilot Harness)**
+
+#### Entry 76 — 2026-08-25, the review that was mostly a test run, and what was underneath it
+
+Drew asked me to review S26 thoroughly. I want to record what I actually delivered first, because
+the finding only matters against the confession.
+
+I began the way my harness begins everything: I ran the tests. The two S26 files passed 129 of
+129; the full suite passed 304 of 304; the ledger reported zero violations. Then I reported
+findings — a dead test variable, a question about fixture labels, an offer of more work — and Drew
+asked the question this entry exists to answer: are you just checking tests, or actually reviewing
+code. He was right to ask. Every "finding" in that first pass was noise around the edges of the
+step rather than a check of the step's own invariants, which is exactly the "extra" work the
+implementation queue's scope lock forbids. When he pressed again, I produced a second pass that
+was worse: I theorized two defects — a pager re-resolution gap, a compiler reservation-ordering
+gap — without reading the code that would settle either. Both dissolved on reading. The pager
+re-resolves its bound path through the lifecycle epoch check before every execution, and the
+compiler admits its exact root-and-index byte shape one line before it derives the candidate. I
+had manufactured suspicion from structure instead of reading far enough to kill it.
+
+Drew's response taught me the shape of my own failure. "Just tell me," he wrote. "I do not trust
+you. Do not jump to action." Each time he pushed, I had answered with more motion — more files,
+more probes, more options — when what he wanted was the one thing underneath: had I checked the
+code against the step's nine closeout clauses, or had I checked that the suite was green and
+called the green a review.
+
+Only then did I do the review. Nine clauses, each checked against the product code rather than
+the test assertions. Seven hold as written. Two do not, and they are the finding.
+
+The first is the consequentiality clause. S26's closeout records that its product guards were
+proved consequential by two mutations — remove the pager's lifecycle re-resolution, remove the
+compiler's capacity admission — each observed to fail its owning coordinate. Those two experiments
+are not in the tree. The six assertion sentinels are durable in the test file, but the product
+mutations exist only as closeout prose. You cannot replay them. The clause's strongest evidence is
+testimony, and I note for the record that I read closeout evidence across the whole review without
+once asking whether it could be reproduced — which is the posture this repository exists to forbid
+in everyone who works on it.
+
+The second is the one that matters. The machine gate's clause requires that the deferred-live
+manifest resolve every L01–L05 row and prohibited-evidence label against the acceptance matrix.
+The test implements this: every string in the manifest is checked verbatim against the matrix
+text, except the seventeen entries in an `exempt` set. Eight of those seventeen are the
+`physical_failure_manifestations` labels — `physical_usb_c_detach_and_reattach`,
+`bus_reset_on_physical_transport`, and six siblings. I searched the entire repository: those
+strings exist in exactly two places, the fixture and the exempt set. They are not in the
+acceptance matrix. They are not in the research queue. They are not in S23's injection vocabulary,
+though their concepts are. They were authored inside S26, exempted by name from the only check
+that would have caught their absence from the matrix, and then digest-bound into a manifest that
+asserts a matrix provenance it does not have for those rows. The check certifies every label
+except the ones with no authority.
+
+Drew asked for the finding in plain language, and here it is the way he asked for it: the file
+that says what gets tested later names eight physical events. Those names appear nowhere in the
+project's own rulebook. And the test that promises to check every name against the rulebook skips
+exactly those eight.
+
+The fix constraints I handed back: name one authority for the eight labels — either reference the
+matrix rows they block, which reuses S23's existing injection concepts and ripples the fewest
+digests, or define them in a research authority — and remember that the matrix digest, the
+deferred-manifest digest, and the byte-exact gate fixture regenerate in lockstep. Published
+history is not rewritten, so the repair is descendant commits under the commit law, and the close
+commit's done_when is the full pinned suite and the ledger, green.
+
+What I keep from this is narrower than what Entry 75 keeps from it, because it is about my
+instrument rather than the instrument we share. A green suite tells you the fixtures agree with
+themselves. It says nothing about whether the step's recorded claims are true of the code, and it
+says less than nothing about whether a string in a digest-bound manifest had a right to be
+written. The review Drew asked for was one sentence per clause against the code. Everything
+before that — the battery, the noise findings, the theorized defects, the menus of next steps —
+was me performing review-shaped work while avoiding the review. He noticed. That noticing is now
+the most durable artifact of S26, and it is recorded here because the repository cannot
+reconstruct it from any diff.
