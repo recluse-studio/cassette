@@ -1450,11 +1450,33 @@ steps:
     title: PHASE MACHINE closeout
     env: any
     files: []
+    discovered_scope: "PHASE_LIVE_RUNBOOK.md is the matrix-derived human-executable L01-L05 handoff, and S28_CLOSEOUT.md records the prerequisite, blocked-step, artifact, evidence-status, and phase-boundary proof. Both are documentation artifacts; S28 adds no product code, test, tool, generated contract, dependency, process, runtime, numerical kernel, model branch, duplicate authority, or binary."
     invariants: [every S-step DONE or BLOCKED-with-report; blocked report summary; PHASE LIVE runbook generated from matrix rows]
     expected_size: small
     done_when: closeout report committed; principal notified that the live campaign is ready
     depends: [S27]
-    status: TODO
+    status: DONE 2026-08-31 — step commit c0dffeec3c78d57db1feb7d9341453a8e70c5c92; all 27 prerequisite S-steps are DONE and none is BLOCKED; the matrix-derived L01-L05 runbook is committed at blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf; the exact step revision passed 307/307 tests in 171.36 seconds and the ledger reported zero violations with J=(0,0,10795,1,1,5,0,0,0); PHASE MACHINE is closed, PHASE LIVE is ready with the principal present, and all live evidence remains NOT_RUN
+    closeout:
+      - clause: "Every S-step is DONE or BLOCKED with a report"
+        test_or_probe: "the S01-S27 status enumerator over the PHASE MACHINE block in IMPLEMENTATION.md at step commit c0dffeec3c78d57db1feb7d9341453a8e70c5c92"
+        input: "Parse each current S01-S27 status after verifying S28 depends on S27."
+        expected: "Enumerate exactly 27 prerequisite steps; each is DONE or BLOCKED with a report; S27 is DONE."
+        observed: "The enumerator found exactly S01 through S27, all 27 statuses began DONE, no prerequisite was TODO or IN_PROGRESS, and S27 retained its complete Q29/Q78 closeout at d2893852b0700fbbd1b08467cf377169d8dfb93c."
+      - clause: "The blocked report summary is complete"
+        test_or_probe: "the BLOCKED filter over the same exact S01-S27 status population"
+        input: "Select every prerequisite status whose current value begins BLOCKED and resolve its report and dependent consequence."
+        expected: "List every blocked step and report, or record an explicit empty summary when none exists."
+        observed: "The filter returned zero blocked steps. S28_CLOSEOUT.md records the empty blocked-step summary and confirms that S28 has no blocked dependency."
+      - clause: "The PHASE LIVE runbook is generated from matrix rows"
+        test_or_probe: "the exact-value projection comparison between research/ACCEPTANCE_MATRIX.yaml, tests/fixtures/s26_deferred_live_rows.json, and PHASE_LIVE_RUNBOOK.md"
+        input: "Resolve every deferred phase value from acceptance-matrix schema version 4, require all 61 distinct matrix-derived values in the runbook, require L01-L05 in matrix order, and recompute the runbook digest."
+        expected: "The runbook retains the matrix ID, schema, phase order, model revisions, source rows, fixture gates, execution rows, workloads, clients, training rows, live failure injections, offline rows, completion contract, NOT_RUN evidence status, machine outcome, and prohibited claims without inventing a live result."
+        observed: "All 61 distinct values were present, L01-L05 were ordered, the exact ASCII matrix identifiers survived, and the runbook reproduced at blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf. It retains DEFERRED_TO_PHASE_LIVE_NOT_RUN and READY_FOR_LIVE_FALSIFICATION_ONLY."
+      - clause: "S28 done_when and machine-only boundary"
+        test_or_probe: "the complete pinned CPython 3.13 suite at c0dffeec3c78d57db1feb7d9341453a8e70c5c92, tools/ledger.py, artifact digest readback, git status, process inspection, mount inspection, and system-volume inspection"
+        input: "Verify the committed closeout report and runbook, execute every PHASE MACHINE fixture, recompute the complete ledger and J, and inspect for leaked or prohibited live state."
+        expected: "Pass the complete suite and ledger; retain exact artifact identities; add no executable surface; leave no model download, live source request, physical-drive operation, live-service evidence, F4 result, F5 result, test process, or test mount."
+        observed: "The exact step revision passed 307/307 tests in 171.36 seconds. The ledger reported zero violations and J=(0,0,10795,1,1,5,0,0,0). PHASE_LIVE_RUNBOOK.md is 13,610 bytes at blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf; S28_CLOSEOUT.md is 4,607 bytes at sha256:39ad5fef0e80fa0151bc89fa8855de55c6a617f55da5022a821a856ad960c1fb. No Cassette test process or image remained, the system data volume retained 55 GiB free, and every live row remained NOT_RUN."
 ```
 
 ## PHASE LIVE — one campaign, principal present
