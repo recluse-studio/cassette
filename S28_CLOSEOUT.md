@@ -12,9 +12,9 @@ has run.
   `blake3:372ddc5da3c64fd837bc95c2a0bca8a5aecc5d47862a1bf306f9f807dbde34c4`.
 - Machine evidence: S26 gate
   `blake3:f7c9a1e53346eef5053fc3b759e1f8236a5cae14ce4486f1806fa9a0a5d2a9d7` and S27 report
-  `sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3`.
+  `sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343`.
 - S28 artifacts: this report and `PHASE_LIVE_RUNBOOK.md`,
-  `blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf`.
+  `blake3:b180c539716c8f717a4d6eacf515888e80273c4ab8cac775ee6fddde4cf6ffe0`.
 - Product, test, tool, generated, dependency, process, runtime, kernel, and model-branch changes:
   none.
 
@@ -34,7 +34,7 @@ no live campaign.
 - Observed: all 27 prerequisite steps are `DONE`; zero are `TODO`, `IN_PROGRESS`, or `BLOCKED`.
   S27 records implementation commit `d2893852b0700fbbd1b08467cf377169d8dfb93c`, 307 passing tests,
   zero failed acceptance rows, twelve consequential removal proofs, and
-  `J=(0,0,10795,1,1,5,0,0,0)`.
+  `J=(0,0,10806,1,1,5,0,0,0)`.
 
 ### Blocked-step summary is complete
 
@@ -70,7 +70,7 @@ The S27 resume gate ran before any S28 file changed:
 
 .venv/bin/python tools/ledger.py
 violations: []
-J: (0,0,10795,1,1,5,0,0,0)
+J: (0,0,10806,1,1,5,0,0,0)
 ```
 
 The complete post-artifact suite then passed `307/307` in 172.71 seconds. A fresh ledger readback
@@ -81,6 +81,17 @@ surface.
 After the S28 artifacts are committed, the close commit records the step commit, the final complete
 suite, ledger result, artifact digests, and repository state in `IMPLEMENTATION.md`. Until that
 close commit exists, S28 remains `TODO` and PHASE LIVE remains ineligible.
+
+## Q30 repair addendum
+
+A post-close review reproduced one false pass in the Q30 ledger guard: `broker.py` could obtain MLX
+through `pager._mlx_runtime()` without importing MLX directly. Source repair `0c3e72a` makes direct
+and indirect access outside `pager.py` and `trainer.py` fail the same confinement check. The clean
+Q29/Q78 proof then passed 307 tests with zero skips, twelve controls, twelve deletion failures, and
+twelve executable-bypass failures. The current report is
+`sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343`, with
+`J=(0,0,10806,1,1,5,0,0,0)`. The repaired runbook identity above supersedes its original S28
+identity for the Phase Live preflight; the original closeout remains preserved in Git history.
 
 ## Handoff boundary
 

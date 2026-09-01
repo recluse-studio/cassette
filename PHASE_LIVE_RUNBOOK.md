@@ -16,7 +16,7 @@ from the matrix before touching a source account, model, or physical drive.
 | Acceptance matrix `cassette-first-complete-release`, schema version 4 | `blake3:372ddc5da3c64fd837bc95c2a0bca8a5aecc5d47862a1bf306f9f807dbde34c4` |
 | S26 deferred-live projection, `s26-deferred-live-v2` | `blake3:23d9e57572d0580e0626fd958b89f0e600f8dfdfac93f41897375a29ad82adcf` |
 | S26 machine gate | `blake3:f7c9a1e53346eef5053fc3b759e1f8236a5cae14ce4486f1806fa9a0a5d2a9d7` |
-| S27 complete J report | `sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3` |
+| S27 complete J report | `sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343` |
 
 The machine claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`, and its outcome is
 `READY_FOR_LIVE_FALSIFICATION_ONLY`. Its exact prohibited-evidence labels are `F4_PASS`, `F5_PASS`,
