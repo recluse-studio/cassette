@@ -546,7 +546,7 @@ steps:
     done_when: full suite + ledger green
     depends: [S03, S01]
     historical_status: "DONE 2026-08-09 — original step 73997e0; platform-gate repair 26a0913; complete macOS suite 28 passed in 46.17 seconds with no skips; synthetic Linux gate skipped before MLX or pager import; ledger clean with 2,813 product LOC, 2,136 test LOC, 406 tool LOC, 74 generated LOC, one process, one Python runtime, and five exact dependency pins"
-    status: DONE 2026-08-09 — audit remediation 306055ddefb4e5d5a735c3dc5e4ae6e09b7d57c0 parses real Mach-O dependencies, binds generated certificate dimensions to MATHS.md, supplies the complete isolated proof command, states S12's structural/execution boundary, preserves S13 as the next TODO, and assigns deferred Q55/Q30 work to S19/S24; focused S03 and S12 fixtures passed 4/4 and 3/3, the complete macOS suite passed 28/28 in 1,024.50 seconds with no platform skips, and the ledger remained clean
+    status: DONE 2026-09-01 — Q30 indirect-runtime confinement repair 0c3e72a48d0478a036cc1fa037515b8051589394 closes the review-reproduced broker false pass while preserving the prior audit remediation 306055ddefb4e5d5a735c3dc5e4ae6e09b7d57c0; the focused Q30 fixture passed, the complete proof passed 307/307 with zero skips, and the repaired ledger and J report are green
     reopened_by: "S12 test-harness portability failure reproduced after ec551de: with MLX unavailable, test_s12_pager.py reached its module-level MLX import and aborted collection; with MLX installed under a synthetic Linux platform, the golden operator fixture ran and failed at Q30's Apple Silicon Metal guard instead of skipping. Future env:any steps therefore could not satisfy their complete-suite gate outside macOS."
     closeout:
       - clause: "Q33/Q40 bounded data represents every separate MATHS.md certificate dimension and the least-invasive compiled mode"
@@ -601,6 +601,12 @@ steps:
         input: "Inspect the S12/S13 boundary, all eight contradictory certificate classes, future Q55/Q30 owners, and every corrected field-manual slide; execute all repository fixtures on arm64 macOS."
         expected: "S12 claims no semantic truth it did not recompute. S13 remains TODO and owns all eight contradictions. S19 owns Q55 plus tuple discovery/refusal, S24 owns representative-model execution and re-goldening, and the presentation distinguishes fixture, image, and live-hardware proof."
         observed: "The queue and presentation state those boundaries explicitly. All 28 tests passed in 1,024.50 seconds with S06, S08, and S12 executed; the ledger reported zero violations and no new dependency, process, runtime, language, kernel, or model branch."
+    q30_confinement_repair_closeout:
+      - clause: "Q30 runtime confinement rejects indirect MLX acquisition outside pager.py and trainer.py"
+        test_or_probe: "tests/test_s12_pager.py::test_q30_ledger_confines_mlx_to_pager_and_trainer plus the pre-repair synthetic broker probe and the complete Q29/Q78 proof at source repair 0c3e72a48d0478a036cc1fa037515b8051589394"
+        input: "Let broker.py import pager, obtain the runtime through pager._mlx_runtime(), and call mx.synchronize() without importing mlx directly. Retain the original hostile compiler.py direct-import case."
+        expected: "The pre-repair ledger admits the indirect broker path, proving the false pass. The repaired ledger rejects both paths as Q30 confinement violations while pager.py and trainer.py retain sole MLX ownership."
+        observed: "The original ledger returned no confinement violation for the broker fixture. After repair, the focused Q30 fixture passed; the clean complete proof passed 307 tests with zero skips, twelve controls, twelve deletion failures, and twelve executable-bypass failures. No product module gained an MLX reference, runtime, dependency, process, kernel, or model branch."
 
   - id: S13
     title: Compatibility-certificate validation, memory budget, and residency schedules
@@ -1423,7 +1429,7 @@ steps:
     expected_size: medium
     done_when: full suite + ledger green; J report committed
     depends: [S23, S26]
-    status: DONE 2026-08-25 — implementation commit d2893852b0700fbbd1b08467cf377169d8dfb93c; a detached clean checkout reproduced 307/307 tests, complete J=(0,0,10795,1,1,5,0,0,0), and twelve isolated passing controls followed by twelve physical-deletion failures and twelve owner-marked executable-bypass failures; canonical report sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3; ledger green
+    status: DONE 2026-09-01 — original implementation d2893852b0700fbbd1b08467cf377169d8dfb93c; Q30 repair artifact commit 4c4744a80fd7e5ebcd58b31745a04c162cd52534 regenerated the complete proof at J=(0,0,10806,1,1,5,0,0,0), 307/307 tests with zero skips, twelve controls, twelve physical-deletion failures, and twelve owner-marked executable-bypass failures; canonical report sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343; ledger green
     closeout:
       - clause: "Q29 reproduces the complete nine-coordinate J tuple from one clean checkout"
         test_or_probe: "tools/ledger.py --prove-j in a detached clean worktree at d2893852b0700fbbd1b08467cf377169d8dfb93c plus tests/test_s27_ledger.py::test_q29_complete_j_classifies_every_surface_and_exposes_all_nine_coordinates"
@@ -1445,6 +1451,12 @@ steps:
         input: "Run every PHASE MACHINE invariant, generate the report only from the committed clean source, validate it again from the working tree, and inspect for leaked test state or prohibited live inputs."
         expected: "Pass the complete suite and ledger; commit one canonical J report; retain no worktree, test process, mount, source request, downloaded model, external-drive operation, live-service evidence, F4 result, or F5 result."
         observed: "The complete suite passed 307/307 in 385.37 seconds before the implementation commit, and the detached committed checkout independently recorded 307 passed with zero skipped and zero failed acceptance rows. The final ledger reproduced the report with zero violations. The report is 4,954 canonical bytes at sha256:a59b5b975fbbdb34df13aafa8a9a2d8d2e283331b307746fbd2d0c35a65dd4a3. No temporary worktree, pytest process, or Cassette image remained; the system data volume retained 73 GiB free."
+    q30_repair_accounting_closeout:
+      - clause: "Q29 and Q78 are regenerated after the Q30 confinement repair"
+        test_or_probe: "tools/ledger.py --prove-j from a clean isolated descendant of source repair 0c3e72a48d0478a036cc1fa037515b8051589394, followed by tools/ledger.py against artifact commit 4c4744a80fd7e5ebcd58b31745a04c162cd52534"
+        input: "Recompute every J coordinate and the evidence digest, run the complete suite, and repeat all twelve control, physical-deletion, and executable-bypass experiments after adding the indirect-runtime guard and its existing-stage test case."
+        expected: "Record the justified Q30 tool growth, preserve every zero-valued surface, and replace the stale S27 report only after the complete proof passes."
+        observed: "The complete proof passed 307 tests with zero skips and all 36 removal experiments. The ledger reports zero violations and J=(0,0,10806,1,1,5,0,0,0). The 4,954-byte canonical report is sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343."
 
   - id: S28
     title: PHASE MACHINE closeout
@@ -1455,7 +1467,7 @@ steps:
     expected_size: small
     done_when: closeout report committed; principal notified that the live campaign is ready
     depends: [S27]
-    status: DONE 2026-08-31 — step commit c0dffeec3c78d57db1feb7d9341453a8e70c5c92; all 27 prerequisite S-steps are DONE and none is BLOCKED; the matrix-derived L01-L05 runbook is committed at blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf; the exact step revision passed 307/307 tests in 171.36 seconds and the ledger reported zero violations with J=(0,0,10795,1,1,5,0,0,0); PHASE MACHINE is closed, PHASE LIVE is ready with the principal present, and all live evidence remains NOT_RUN
+    status: DONE 2026-09-01 — original step commit c0dffeec3c78d57db1feb7d9341453a8e70c5c92; Q30 repair artifact commit 4c4744a80fd7e5ebcd58b31745a04c162cd52534 preserves all 27 resolved prerequisites and refreshes the matrix-derived L01-L05 runbook at blake3:b180c539716c8f717a4d6eacf515888e80273c4ab8cac775ee6fddde4cf6ffe0; the repaired complete proof passed 307/307 with zero skips and ledger J=(0,0,10806,1,1,5,0,0,0); PHASE MACHINE remains closed, PHASE LIVE is ready with the principal present, and all live evidence remains NOT_RUN
     closeout:
       - clause: "Every S-step is DONE or BLOCKED with a report"
         test_or_probe: "the S01-S27 status enumerator over the PHASE MACHINE block in IMPLEMENTATION.md at step commit c0dffeec3c78d57db1feb7d9341453a8e70c5c92"
@@ -1477,6 +1489,12 @@ steps:
         input: "Verify the committed closeout report and runbook, execute every PHASE MACHINE fixture, recompute the complete ledger and J, and inspect for leaked or prohibited live state."
         expected: "Pass the complete suite and ledger; retain exact artifact identities; add no executable surface; leave no model download, live source request, physical-drive operation, live-service evidence, F4 result, F5 result, test process, or test mount."
         observed: "The exact step revision passed 307/307 tests in 171.36 seconds. The ledger reported zero violations and J=(0,0,10795,1,1,5,0,0,0). PHASE_LIVE_RUNBOOK.md is 13,610 bytes at blake3:ed2e5fe69a120aa23b90586a236a7be36b0587240d9de40db9cc3a1817c439cf; S28_CLOSEOUT.md is 4,607 bytes at sha256:39ad5fef0e80fa0151bc89fa8855de55c6a617f55da5022a821a856ad960c1fb. No Cassette test process or image remained, the system data volume retained 55 GiB free, and every live row remained NOT_RUN."
+    q30_repair_handoff_closeout:
+      - clause: "The Phase Live handoff resolves the repaired machine identities"
+        test_or_probe: "artifact digest readback and tools/ledger.py after artifact commit 4c4744a80fd7e5ebcd58b31745a04c162cd52534"
+        input: "Replace the superseded S27 report identity in the runbook, recompute the runbook and closeout identities, and preserve every matrix-derived L01-L05 value and every NOT_RUN live status."
+        expected: "The pre-L01 identity check resolves the repaired report and runbook without changing the release matrix, introducing live evidence, or reopening a live row."
+        observed: "PHASE_LIVE_RUNBOOK.md remains 13,610 bytes at blake3:b180c539716c8f717a4d6eacf515888e80273c4ab8cac775ee6fddde4cf6ffe0. S28_CLOSEOUT.md is 5,356 bytes at sha256:0fa627b6640e6b9198c4234da7adf2a49cd6b2d3608ae277e8bb70c86474098f. The ledger is green, the matrix remains schema version 4 at its recorded digest, and all live evidence remains NOT_RUN."
 ```
 
 ## PHASE LIVE — one campaign, principal present
