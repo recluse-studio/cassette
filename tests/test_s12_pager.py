@@ -794,9 +794,11 @@ def test_q30_f2_every_generated_operator_dtype_and_shape_matches_an_independent_
 
 
 def test_q30_ledger_confines_mlx_to_pager_and_trainer(tmp_path):
-    """Q30 acceptance: the ledger accepts pager.py and rejects an MLX import in another product authority."""
+    """Q30 acceptance: the ledger rejects direct and indirect MLX access outside its owners."""
     current = run_ledger(REPO)
-    assert not [violation for violation in current["violations"] if "mlx import outside" in violation]
+    assert not [
+        violation for violation in current["violations"] if "(Q30 confinement)" in violation
+    ]
 
     (tmp_path / "research").mkdir()
     (tmp_path / "research" / "RESEARCH.md").write_text("question_id: Q30\n", encoding="utf-8")
@@ -809,5 +811,13 @@ def test_q30_ledger_confines_mlx_to_pager_and_trainer(tmp_path):
         "# compiler.py — hostile confinement fixture; depends on (none).\nimport mlx.core\n",
         encoding="utf-8",
     )
+    (tmp_path / "broker.py").write_text(
+        "# broker.py — hostile indirect confinement fixture; depends on pager.py.\n"
+        "import pager\n"
+        "mx, _ = pager._mlx_runtime()\n"
+        "mx.synchronize()\n",
+        encoding="utf-8",
+    )
     report = run_ledger(tmp_path)
     assert any("compiler.py: mlx import outside" in violation for violation in report["violations"])
+    assert any("broker.py: MLX runtime reference outside" in violation for violation in report["violations"])

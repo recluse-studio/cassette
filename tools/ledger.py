@@ -271,6 +271,31 @@ def top_level_imports(root: Path, rel: Path) -> set[str]:
     return found
 
 
+def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str]:
+    """Reject direct imports and indirect MLX runtime access outside its two owners."""
+
+    if rel.name in MLX_ALLOWED_FILES:
+        return []
+    if "mlx" in imported:
+        return [f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
+    tree = ast.parse((root / rel).read_text(encoding="utf-8"), filename=str(rel))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and (
+            node.attr == "_mlx_runtime"
+            or isinstance(node.value, ast.Name) and node.value.id == "mx"
+        ):
+            return [
+                f"{rel}: MLX runtime reference outside {sorted(MLX_ALLOWED_FILES)} "
+                "(Q30 confinement)"
+            ]
+        if isinstance(node, ast.Name) and node.id == "_mlx_runtime":
+            return [
+                f"{rel}: MLX runtime reference outside {sorted(MLX_ALLOWED_FILES)} "
+                "(Q30 confinement)"
+            ]
+    return []
+
+
 def check_identity_authority(rel: Path, imported: set[str]) -> list[str]:
     """Q32: only store.py may import product digest or canonicalization engines."""
     forbidden = sorted(imported & IDENTITY_AUTHORITY_IMPORTS)
@@ -907,8 +932,7 @@ def run(root: Path, *, verify_report: bool = True) -> dict:
             allowed = ALLOWED_EDGES.get(owner, set())
             for target in sorted(actual - allowed - {owner}):
                 violations.append(f"{rel}: illegal import of '{target}' (allowed: {sorted(allowed) or 'none'})")
-            if "mlx" in imported and rel.name not in MLX_ALLOWED_FILES:
-                violations.append(f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)")
+            violations.extend(check_mlx_confinement(root, rel, imported))
             violations.extend(check_identity_authority(rel, imported))
         if cls == "tests":
             violations.extend(check_test_citations(root, rel, authorities))
