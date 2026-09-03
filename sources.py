@@ -21,13 +21,18 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from errors import CassetteError
 from schema.validator import validate
 from store import (
-    CapacityPhase,
-    CapacityReservation,
+    CapacityClaim,
+    CapacityCoordinator,
+    CapacityTransition,
     artifact_hasher,
     artifact_hash_state,
     canonical_bytes,
-    capacity_requirement,
+    complete_capacity_claim,
     digest_bytes,
+    execute_claimed_write,
+    TransferExtent,
+    grant_transfer_extent,
+    pause_capacity_claim,
     resumable_artifact_hasher,
     resume_artifact_hasher,
 )
@@ -155,8 +160,6 @@ class MetadataProbe:
 class CompatibilityProfile:
     """General class bounds supplied to Q56; no current-device inspection occurs here."""
 
-    device_bytes: int
-    allocatable_verified_free: int
     memory_bytes: int
     supported_operators: frozenset[str]
     supported_modalities: frozenset[str]
@@ -185,9 +188,7 @@ class PreflightDecision:
     training_tiers: tuple[str, ...]
     mode_candidates: tuple[str, ...]
     reasons: tuple[str, ...]
-    required_bytes: int | None
     memory_bound: int | None
-    storage_bound: int
     deferred_checks: tuple[dict, ...]
     evidence: dict
 
@@ -210,23 +211,11 @@ class PreflightDecision:
             "training_tiers": list(self.training_tiers),
             "mode_candidates": list(self.mode_candidates),
             "reasons": list(self.reasons),
-            "required_bytes": self.required_bytes,
             "memory_bound": self.memory_bound,
-            "storage_bound": self.storage_bound,
             "deferred_checks": list(self.deferred_checks),
             "evidence": self.evidence,
         }
         return json.loads(canonical_bytes(record))
-
-
-@dataclass(frozen=True, slots=True)
-class TransferExtent:
-    """One pre-opened cartridge extent; the store owns its path and allocation."""
-
-    fd: int
-    offset: int
-    length: int
-    operation_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -853,11 +842,8 @@ def normalize_remote_metadata(
 def _preflight_profile(profile: CompatibilityProfile, object_id: str) -> None:
     if not isinstance(profile, CompatibilityProfile):
         _preflight_fail(object_id, "CompatibilityProfile is required")
-    integers = (profile.device_bytes, profile.allocatable_verified_free, profile.memory_bytes)
-    if (any(type(value) is not int or not 0 <= value <= 2**64 - 1 for value in integers)
-            or profile.device_bytes == 0 or profile.memory_bytes == 0
-            or profile.allocatable_verified_free > profile.device_bytes):
-        _preflight_fail(object_id, "profile byte bounds must be exact and internally consistent")
+    if type(profile.memory_bytes) is not int or not 0 < profile.memory_bytes <= 2**64 - 1:
+        _preflight_fail(object_id, "profile memory bytes must be an exact positive bound")
     for name, values in (
         ("supported_operators", profile.supported_operators),
         ("supported_modalities", profile.supported_modalities),
@@ -1095,26 +1081,9 @@ def preflight(
         decisive.append("CUSTOM_CODE_REQUIRES_CONTAINMENT")
     decisive.extend(f"INVALID_METADATA:{field}" for field in sorted(set(invalid)))
 
-    required_bytes = None
     objects = (*revision.artifacts, *revision.metadata_assets)
     if any(artifact.size > _MAX_FILE_OFFSET for artifact in objects):
         decisive.append("SOURCE_ARTIFACT_EXCEEDS_TRANSFER_LIMIT")
-    else:
-        try:
-            payload_bytes = sum(artifact.size for artifact in objects)
-            state_bytes = sum(transfer_state_bytes(artifact.size) for artifact in objects)
-            requirement = capacity_requirement(
-                "preflight",
-                device_bytes=profile.device_bytes,
-                phases=(CapacityPhase(inflight=payload_bytes, journal=state_bytes),),
-            )
-            required_bytes = requirement.required_bytes
-            if required_bytes > profile.allocatable_verified_free:
-                decisive.append("CAPACITY_EXCEEDED")
-        except CassetteError as error:
-            if error.code != "CAPACITY_EXCEEDED":
-                raise
-            decisive.append("CAPACITY_EXCEEDED")
 
     format_name = model_format.casefold() if model_format is not None else None
     unsupported_operators = (
@@ -1231,9 +1200,7 @@ def preflight(
         training_tiers,
         selected_modes,
         tuple(reasons),
-        required_bytes,
         peak_bytes,
-        profile.allocatable_verified_free,
         deferred_checks,
         metadata,
     )
@@ -1287,43 +1254,58 @@ def _pread_exact(extent: TransferExtent, offset: int, length: int, object_id: st
     return bytes(payload)
 
 
-def _pwrite_all(extent: TransferExtent, offset: int, payload: bytes, object_id: str) -> None:
+def _pwrite_all(
+    extent: TransferExtent,
+    offset: int,
+    payload: bytes,
+    object_id: str,
+    claim: CapacityClaim,
+) -> None:
     if (type(offset) is not int or not isinstance(payload, bytes) or offset < 0
             or offset > extent.length - len(payload)):
         _transfer_fail("INVALID_REQUEST", object_id, "cartridge write exceeds its granted extent")
-    written = 0
-    while written < len(payload):
-        try:
-            count = os.pwrite(extent.fd, payload[written:], extent.offset + offset + written)
-        except OSError as error:
-            if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
-                _transfer_fail(
-                    "CAPACITY_EXCEEDED",
-                    object_id,
-                    f"cartridge write exceeded its reserved extent: {error}",
-                )
-            _transfer_fail("CARTRIDGE_DISCONNECTED", object_id, f"cartridge write failed: {error}", "retryable")
-        if count <= 0:
-            _transfer_fail("DURABILITY_UNSUPPORTED", object_id, "cartridge write made no progress")
-        written += count
+    def write() -> None:
+        written = 0
+        while written < len(payload):
+            try:
+                count = os.pwrite(extent.fd, payload[written:], extent.offset + offset + written)
+            except OSError as error:
+                if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
+                    raise OSError(errno.ENOSPC, error.strerror) from error
+                _transfer_fail("CARTRIDGE_DISCONNECTED", object_id, f"cartridge write failed: {error}", "retryable")
+            if count <= 0:
+                _transfer_fail("DURABILITY_UNSUPPORTED", object_id, "cartridge write made no progress")
+            written += count
+
+    execute_claimed_write(claim, write)
 
 
 def _pwrite_verified(
-    extent: TransferExtent, offset: int, payload: bytes, object_id: str, description: str
+    extent: TransferExtent,
+    offset: int,
+    payload: bytes,
+    object_id: str,
+    description: str,
+    claim: CapacityClaim,
 ) -> None:
-    _pwrite_all(extent, offset, payload, object_id)
+    _pwrite_all(extent, offset, payload, object_id, claim)
     if digest_bytes(_pread_exact(extent, offset, len(payload), object_id)) != digest_bytes(payload):
         _transfer_fail("DURABILITY_UNSUPPORTED", object_id, f"{description} changed during readback")
 
 
-def _sync_fd(fd: int, object_id: str) -> None:
-    try:
-        os.fsync(fd)
-        command = getattr(fcntl, "F_FULLFSYNC", None)
-        if command is not None:
-            fcntl.fcntl(fd, command)
-    except OSError as error:
-        _transfer_fail("DURABILITY_UNSUPPORTED", object_id, f"durable extent synchronization failed: {error}")
+def _sync_fd(fd: int, object_id: str, claim: CapacityClaim) -> None:
+    def synchronize() -> None:
+        try:
+            os.fsync(fd)
+            command = getattr(fcntl, "F_FULLFSYNC", None)
+            if command is not None:
+                fcntl.fcntl(fd, command)
+        except OSError as error:
+            if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
+                raise OSError(errno.ENOSPC, error.strerror) from error
+            _transfer_fail("DURABILITY_UNSUPPORTED", object_id, f"durable extent synchronization failed: {error}")
+
+    execute_claimed_write(claim, synchronize)
 
 
 def _state_envelope(record: dict, object_id: str) -> bytes:
@@ -1375,7 +1357,12 @@ def _decode_state_slot(payload: bytes, slot: int) -> dict | None:
     return record
 
 
-def _load_state(extent: TransferExtent, object_id: str) -> tuple[dict, tuple[str, ...]] | None:
+def _load_state(
+    extent: TransferExtent,
+    object_id: str,
+    capacity_coordinator: CapacityCoordinator,
+    boundary_prefix: str,
+) -> tuple[dict, tuple[str, ...]] | None:
     slots = tuple(
         _pread_exact(extent, slot * _TRANSFER_SLOT_BYTES, _TRANSFER_SLOT_BYTES, object_id)
         for slot in range(2)
@@ -1386,13 +1373,23 @@ def _load_state(extent: TransferExtent, object_id: str) -> tuple[dict, tuple[str
     )
     if not candidates:
         if any(any(payload) for payload in slots):
-            _clear_state(extent, object_id)
+            _clear_state(
+                extent,
+                object_id,
+                capacity_coordinator,
+                f"{boundary_prefix}:invalid-header",
+            )
             _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer checkpoint header remains")
         return None
     record = max(candidates, key=lambda candidate: candidate["generation"])
     record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
     if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
-        _clear_state(extent, object_id)
+        _clear_state(
+            extent,
+            object_id,
+            capacity_coordinator,
+            f"{boundary_prefix}:records-overflow",
+        )
         _transfer_fail("IDENTITY_MISMATCH", object_id, "transfer chunk records exceed their checkpoint extent")
     encoded_records = _pread_exact(
         extent,
@@ -1405,13 +1402,23 @@ def _load_state(extent: TransferExtent, object_id: str) -> tuple[dict, tuple[str
         start = index * _TRANSFER_RECORD_BYTES
         raw = encoded_records[start:start + _TRANSFER_RECORD_BYTES]
         if raw[0] != 1:
-            _clear_state(extent, object_id)
+            _clear_state(
+                extent,
+                object_id,
+                capacity_coordinator,
+                f"{boundary_prefix}:record-{index}",
+            )
             _transfer_fail("IDENTITY_MISMATCH", object_id, f"transfer chunk record {index} is incomplete")
         digests.append("blake3:" + raw[1:].hex())
     return record, tuple(digests)
 
 
-def _write_state(extent: TransferExtent, record: dict, object_id: str) -> None:
+def _write_state(
+    extent: TransferExtent,
+    record: dict,
+    object_id: str,
+    claim: CapacityClaim,
+) -> None:
     slot = record["generation"] % 2
     _pwrite_verified(
         extent,
@@ -1419,22 +1426,53 @@ def _write_state(extent: TransferExtent, record: dict, object_id: str) -> None:
         _state_envelope(record, object_id),
         object_id,
         "transfer checkpoint header",
+        claim,
     )
-    _sync_fd(extent.fd, object_id)
+    _sync_fd(extent.fd, object_id, claim)
 
 
-def _clear_state(extent: TransferExtent, object_id: str) -> None:
-    _pwrite_verified(
-        extent,
-        0,
-        bytes(_TRANSFER_RECORDS_OFFSET),
+def _clear_state(
+    extent: TransferExtent,
+    object_id: str,
+    capacity_coordinator: CapacityCoordinator,
+    boundary_id: str,
+) -> None:
+    checkpoint_bytes = _TRANSFER_RECORDS_OFFSET
+    claim = _transfer_claim(
+        capacity_coordinator,
+        _checkpoint_transition(
+            extent.operation_id,
+            boundary_id,
+            payload_bytes=0,
+            checkpoint_bytes=checkpoint_bytes,
+            write_bytes=(checkpoint_bytes, 0),
+        ),
         object_id,
-        "discarded transfer checkpoint",
     )
-    _sync_fd(extent.fd, object_id)
+    try:
+        _pwrite_verified(
+            extent,
+            0,
+            bytes(checkpoint_bytes),
+            object_id,
+            "discarded transfer checkpoint",
+            claim,
+        )
+        _sync_fd(extent.fd, object_id, claim)
+        complete_capacity_claim(claim)
+    except Exception:
+        _pause_transfer_claim(claim, "discarded checkpoint did not reach a durable boundary")
+        raise
 
 
-def _reset_state(extent: TransferExtent, material: dict, generation: int, object_id: str) -> dict:
+def _reset_state(
+    extent: TransferExtent,
+    material: dict,
+    generation: int,
+    object_id: str,
+    capacity_coordinator: CapacityCoordinator,
+    boundary_id: str,
+) -> dict:
     identity = {name: material[name] for name in _TRANSFER_IDENTITY_FIELDS}
     source = resumable_artifact_hasher(identity["expected_digest"], object_id)
     records = resumable_artifact_hasher("sha256:" + "0" * 64, object_id)
@@ -1447,7 +1485,24 @@ def _reset_state(extent: TransferExtent, material: dict, generation: int, object
         "contiguous_source_hash_digest": _source_hash_state(source, identity["expected_digest"]),
         "chunk_records_digest": _source_hash_state(records, "sha256:"),
     }
-    _write_state(extent, record, object_id)
+    checkpoint_bytes = len(_state_envelope(record, object_id))
+    claim = _transfer_claim(
+        capacity_coordinator,
+        _checkpoint_transition(
+            extent.operation_id,
+            boundary_id,
+            payload_bytes=0,
+            checkpoint_bytes=checkpoint_bytes,
+            write_bytes=(checkpoint_bytes, 0),
+        ),
+        object_id,
+    )
+    try:
+        _write_state(extent, record, object_id, claim)
+        complete_capacity_claim(claim)
+    except Exception:
+        _pause_transfer_claim(claim, "reset checkpoint did not reach a durable boundary")
+        raise
     return record
 
 
@@ -1514,13 +1569,60 @@ def _transfer_identity(
     }
 
 
+def _transfer_claim(
+    capacity_coordinator: CapacityCoordinator,
+    transition: CapacityTransition,
+    object_id: str,
+) -> CapacityClaim:
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _transfer_fail(
+            "INVALID_REQUEST",
+            object_id,
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    claim = capacity_coordinator(transition)
+    if not isinstance(claim, CapacityClaim) or claim.transition != transition:
+        _transfer_fail("INVALID_REQUEST", object_id, "coordinator returned a foreign capacity claim")
+    if not claim.active:
+        _transfer_fail(
+            "CAPACITY_EXCEEDED",
+            object_id,
+            "the next transfer transition is paused for recoverable capacity",
+            "retryable",
+        )
+    return claim
+
+
+def _pause_transfer_claim(claim: CapacityClaim, reason: str) -> None:
+    if claim.active:
+        pause_capacity_claim(claim, reason)
+
+
+def _checkpoint_transition(
+    operation_id: str,
+    boundary_id: str,
+    *,
+    payload_bytes: int,
+    checkpoint_bytes: int,
+    write_bytes: tuple[int, ...],
+) -> CapacityTransition:
+    return CapacityTransition(
+        operation_id=operation_id,
+        boundary_id=boundary_id,
+        payload_bytes=payload_bytes,
+        journal_bytes=checkpoint_bytes,
+        declared_writes=len(write_bytes),
+        write_bytes=write_bytes,
+    )
+
+
 async def transfer_artifact(
     adapter: SourceAdapter,
     revision: ResolvedSource,
     artifact: Artifact,
     data_extent: TransferExtent,
     state_extent: TransferExtent,
-    reservation: CapacityReservation,
+    capacity_coordinator: CapacityCoordinator,
     *,
     authoritative_chunk_digests: tuple[str, ...] | None = None,
 ) -> PartialState:
@@ -1531,6 +1633,21 @@ async def transfer_artifact(
     adapter._revision(revision)
     if not isinstance(artifact, Artifact) or artifact not in revision.artifacts:
         _transfer_fail("INVALID_REQUEST", revision.locator, "artifact must belong to the resolved source revision")
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _transfer_fail(
+            "INVALID_REQUEST",
+            artifact.path,
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    if (
+        not capacity_coordinator.owns_descriptor(data_extent.fd)
+        or not capacity_coordinator.owns_descriptor(state_extent.fd)
+    ):
+        _transfer_fail(
+            "INVALID_REQUEST",
+            artifact.path,
+            "transfer extents must belong to the coordinator's cartridge filesystem",
+        )
     identity = _transfer_identity(revision, artifact, authoritative_chunk_digests)
     state_required = transfer_state_bytes(artifact.size)
     data_metadata = _extent(data_extent, artifact.size, artifact.path, "data extent")
@@ -1539,13 +1656,26 @@ async def transfer_artifact(
             and max(data_extent.offset, state_extent.offset)
             < min(data_extent.offset + artifact.size, state_extent.offset + state_required)):
         _transfer_fail("INVALID_REQUEST", artifact.path, "data and checkpoint extents overlap")
-    if (not isinstance(reservation, CapacityReservation) or not reservation.active
-            or data_extent.operation_id != reservation.operation_id
-            or state_extent.operation_id != reservation.operation_id
-            or max(reservation.phase_totals, default=0) < artifact.size + state_required):
-        _transfer_fail("CAPACITY_EXCEEDED", artifact.path, "an active reservation must contain data and checkpoint extents")
+    if data_extent.operation_id != state_extent.operation_id:
+        _transfer_fail("INVALID_REQUEST", artifact.path, "transfer extents must share one operation ID")
 
-    loaded = _load_state(state_extent, artifact.path)
+    def reset_checkpoint(material: dict, generation: int, reason: str) -> dict:
+        artifact_id = material.get("artifact_id", identity["artifact_id"])
+        return _reset_state(
+            state_extent,
+            material,
+            generation,
+            artifact.path,
+            capacity_coordinator,
+            f"{artifact_id}:checkpoint-reset-{generation + 1}:{reason}",
+        )
+
+    loaded = _load_state(
+        state_extent,
+        artifact.path,
+        capacity_coordinator,
+        f"{identity['artifact_id']}:checkpoint-clear",
+    )
     if loaded is None:
         hasher = resumable_artifact_hasher(artifact.digest, artifact.path)
         header = {
@@ -1558,13 +1688,29 @@ async def transfer_artifact(
             "chunk_records_digest": "sha256:" + "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         }
         chunk_digests: tuple[str, ...] = ()
-        _write_state(state_extent, header, artifact.path)
+        initial_claim = _transfer_claim(
+            capacity_coordinator,
+            _checkpoint_transition(
+                data_extent.operation_id,
+                f"{identity['artifact_id']}:checkpoint-initial",
+                payload_bytes=0,
+                checkpoint_bytes=len(_state_envelope(header, artifact.path)),
+                write_bytes=(len(_state_envelope(header, artifact.path)), 0),
+            ),
+            artifact.path,
+        )
+        try:
+            _write_state(state_extent, header, artifact.path, initial_claim)
+            complete_capacity_claim(initial_claim)
+        except Exception:
+            _pause_transfer_claim(initial_claim, "initial checkpoint did not reach a durable boundary")
+            raise
         records_hasher = resumable_artifact_hasher("sha256:" + "0" * 64, artifact.path)
     else:
         header, chunk_digests = loaded
         if any(header[name] != value for name, value in identity.items()):
             retained_progress = header["completed_count"] > 0
-            header = _reset_state(state_extent, identity, header["generation"], artifact.path)
+            header = reset_checkpoint(identity, header["generation"], "identity")
             chunk_digests = ()
             if retained_progress:
                 _transfer_fail("SOURCE_REVISION_CHANGED", artifact.path, "checkpoint identity differs from the selected source object")
@@ -1572,7 +1718,7 @@ async def transfer_artifact(
         for digest in chunk_digests:
             records_hasher.update(b"\x01" + bytes.fromhex(digest[7:]))
         if _source_hash_state(records_hasher, "sha256:") != header["chunk_records_digest"]:
-            _reset_state(state_extent, header, header["generation"], artifact.path)
+            reset_checkpoint(header, header["generation"], "record-digest")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "transfer chunk records changed after checkpoint")
         try:
             hasher = resume_artifact_hasher(
@@ -1582,14 +1728,14 @@ async def transfer_artifact(
                 artifact.path,
             )
         except CassetteError:
-            _reset_state(state_extent, header, header["generation"], artifact.path)
+            reset_checkpoint(header, header["generation"], "hash-state")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "serialized source hash state is invalid")
         if _source_hash_state(hasher, artifact.digest) != header["contiguous_source_hash_digest"]:
-            _reset_state(state_extent, header, header["generation"], artifact.path)
+            reset_checkpoint(header, header["generation"], "hash-digest")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "serialized source hash state changed after checkpoint")
         if header["completed_count"] == header["chunk_count"]:
             if header["contiguous_source_hash_digest"] != artifact.digest:
-                _reset_state(state_extent, header, header["generation"], artifact.path)
+                reset_checkpoint(header, header["generation"], "completed-digest")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, "completed checkpoint does not carry the expected whole-object digest")
             return _partial(header, chunk_digests)
         for index, expected in enumerate(chunk_digests):
@@ -1597,7 +1743,7 @@ async def transfer_artifact(
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
             payload = _pread_exact(data_extent, offset, length, artifact.path)
             if digest_bytes(payload) != expected:
-                _reset_state(state_extent, header, header["generation"], artifact.path)
+                reset_checkpoint(header, header["generation"], f"local-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
 
     completed = header["completed_count"]
@@ -1622,7 +1768,7 @@ async def transfer_artifact(
         )
         if failure is not None:
             if revision_failure is not None:
-                header = _reset_state(state_extent, header, header["generation"], artifact.path)
+                header = reset_checkpoint(header, header["generation"], "source-revision")
             if isinstance(failure, asyncio.CancelledError):
                 raise failure
             if isinstance(failure, CassetteError):
@@ -1634,44 +1780,68 @@ async def transfer_artifact(
             network_digest = digest_bytes(payload)
             if (authoritative_chunk_digests is not None
                     and network_digest != authoritative_chunk_digests[index]):
-                _reset_state(state_extent, header, header["generation"], artifact.path)
+                reset_checkpoint(header, header["generation"], f"source-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"source chunk {index} differs from its authoritative digest")
-            _pwrite_all(data_extent, offset, payload, artifact.path)
-            readback = _pread_exact(data_extent, offset, length, artifact.path)
-            if digest_bytes(readback) != network_digest:
-                _reset_state(state_extent, header, header["generation"], artifact.path)
-                _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local write changed transfer chunk {index}")
-            _sync_fd(data_extent.fd, artifact.path)
             hasher.update(payload)
             chunk = TransferChunk(identity["artifact_id"], offset, length, network_digest)
             chunk_record = b"\x01" + bytes.fromhex(chunk.blake3_digest[7:])
-            _pwrite_verified(
-                state_extent,
-                _TRANSFER_RECORDS_OFFSET + index * _TRANSFER_RECORD_BYTES,
-                chunk_record,
-                artifact.path,
-                f"transfer chunk record {index}",
-            )
             records_hasher.update(chunk_record)
-            completed += 1
-            chunk_digests += (chunk.blake3_digest,)
-            header = {
+            next_completed = completed + 1
+            next_header = {
                 **header,
                 "generation": header["generation"] + 1,
-                "completed_count": completed,
-                "contiguous_source_hash_offset": min(completed * _TRANSFER_CHUNK_BYTES, artifact.size),
+                "completed_count": next_completed,
+                "contiguous_source_hash_offset": min(next_completed * _TRANSFER_CHUNK_BYTES, artifact.size),
                 "serialized_hash_state": artifact_hash_state(
                     hasher,
                     artifact.digest,
-                    min(completed * _TRANSFER_CHUNK_BYTES, artifact.size),
+                    min(next_completed * _TRANSFER_CHUNK_BYTES, artifact.size),
                     artifact.path,
                 ),
                 "contiguous_source_hash_digest": _source_hash_state(hasher, artifact.digest),
                 "chunk_records_digest": _source_hash_state(records_hasher, "sha256:"),
             }
-            _write_state(state_extent, header, artifact.path)
+            claim = _transfer_claim(
+                capacity_coordinator,
+                _checkpoint_transition(
+                    data_extent.operation_id,
+                    f"{identity['artifact_id']}:chunk-{index}",
+                    payload_bytes=length,
+                    checkpoint_bytes=len(chunk_record) + len(_state_envelope(next_header, artifact.path)),
+                    write_bytes=(
+                        length,
+                        0,
+                        len(chunk_record),
+                        len(_state_envelope(next_header, artifact.path)),
+                        0,
+                    ),
+                ),
+                artifact.path,
+            )
+            try:
+                _pwrite_all(data_extent, offset, payload, artifact.path, claim)
+                readback = _pread_exact(data_extent, offset, length, artifact.path)
+                if digest_bytes(readback) != network_digest:
+                    _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local write changed transfer chunk {index}")
+                _sync_fd(data_extent.fd, artifact.path, claim)
+                _pwrite_verified(
+                    state_extent,
+                    _TRANSFER_RECORDS_OFFSET + index * _TRANSFER_RECORD_BYTES,
+                    chunk_record,
+                    artifact.path,
+                    f"transfer chunk record {index}",
+                    claim,
+                )
+                _write_state(state_extent, next_header, artifact.path, claim)
+                complete_capacity_claim(claim)
+            except Exception:
+                _pause_transfer_claim(claim, "transfer chunk did not reach a durable checkpoint")
+                raise
+            completed = next_completed
+            chunk_digests += (chunk.blake3_digest,)
+            header = next_header
 
     if header["contiguous_source_hash_digest"] != artifact.digest:
-        _reset_state(state_extent, header, header["generation"], artifact.path)
+        reset_checkpoint(header, header["generation"], "whole-digest")
         _transfer_fail("IDENTITY_MISMATCH", artifact.path, "whole source digest differs after all ranges completed")
     return _partial(header, chunk_digests)

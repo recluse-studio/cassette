@@ -1497,44 +1497,1400 @@ steps:
         observed: "PHASE_LIVE_RUNBOOK.md remains 13,610 bytes at blake3:b180c539716c8f717a4d6eacf515888e80273c4ab8cac775ee6fddde4cf6ffe0. S28_CLOSEOUT.md is 5,356 bytes at sha256:0fa627b6640e6b9198c4234da7adf2a49cd6b2d3608ae277e8bb70c86474098f. The ledger is green, the matrix remains schema version 4 at its recorded digest, and all live evidence remains NOT_RUN."
 ```
 
-## PHASE LIVE — one campaign, principal present
+## PHASE LIVE — bounded sessions over one governed campaign
+
+**Reconciliation, 2026-09-03.** The contract still has six phase labels: L01.25, L01.5, and
+L02-L05. They remain the matrix gates. They are not working-session IDs. The earlier flat draft
+named twenty-seven items but still hid repeated sessions, long-operation completion checks, and
+matrix cross-products inside several items. This queue replaces that draft with fixed sessions and
+matrix-expanded session records. Every executable record is flat. One record is one agent session
+of at most twenty minutes.
+
+No live result changed during this reconciliation. The adaptive-capacity and storage-eligibility
+controls remain `NOT_RUN` until the amended machine gate passes. Every physical, source, model,
+training, failure, offline, and completion row remains `NOT_RUN`.
+
+### Preserved phase coverage
+
+| Matrix phase | Flat records that satisfy it | Preserved work |
+|---|---|---|
+| L01.25 | L01-L13 | S28 ancestry; exact certificates; MLX confinement; plan-derived shapes; adaptive Q53; liberal drive admission; separately bounded campaign-tool authorities and hostile proof; full suite, ledger, and Q78 checkpoint |
+| L01.5 | L17-L20 close the source-entry gate; later physical-qualification records gate only their exact consumers | off-drive inventory; campaign-root confinement; Q44 remount proof; exact drive × host × operation × plan profiles; full read, write, latency, IOPS, flush, thermal, health, and endurance records |
+| L02 | L14-L16, L19-L20, header, acquisition, Ollama, and Tinker records | immutable pins; post-selection machine refresh; live source wires; header-only containment and tuple audit; direct-to-cartridge transfer, kill/resume, terminal digests; derivative-source round trips |
+| L03 | L21-L32 plus F4/F5 inference and training records | F4 then F5 compilation, exact Q19 recomputation, inference traffic, Tier A/B, Q37 curves, and PASS or Q38 falsification |
+| L04 | L33 plus execution, sustained, protocol, frontier-training, failure, offline, Q79, and final Q78 records | every required matrix expansion; no sample row or representative operation substitutes for a required coordinate |
+| L05 | L34-L35 plus the materialized `Q80-*` replay records | dependency-preserving clean-root replay of every required live coordinate and one completion digest only after all rows pass |
+
+### Session protocol
+
+One session has four parts in order: resume (at most two minutes), read-only preparation (at most
+seven), principal approval or action at the back (at most five), and the already printed approved
+execution plus capture (at most six). No cartridge profile, header, transfer, training, fault, or
+write begins during preparation. After the cue, the agent may run only the frozen command and may
+not edit code, documentation, assertions, or the card. A record with no principal action may use the
+unused action time, but the whole session remains at most twenty minutes. Credentials enter only
+through the terminal or keychain as opaque references.
+
+A long transfer, compile, training job, sustained run, or clean replay has a `START` record and a
+separate `VERIFY` record. `START` closes only after the first durable boundary and one real
+kill/resume proof. `VERIFY` is not eligible until the operation is terminal. An early terminal
+check creates a preflight record and leaves the step `TODO`; normal waiting is neither `FAIL` nor
+`BLOCKED` and consumes no attempt.
+
+Matrix expansions are templates, not executable group stages. Before the first record in a family
+runs, `tools/campaign.py` materializes every instance from the exact matrix order and any explicitly
+named frozen Q15/Q16 condition or baseline manifest, gives it a stable flat ID, literal dependency
+list, status, and empty attempt list, and seals the expansion digest. Each instance then runs and is
+reviewed separately. The materialized list may add no row, operation, condition, baseline, client,
+injection, threshold, or exception absent from those authorities.
+
+The dependency graph has append-only revisions under one atomic compare-and-swap head. L10 proves
+the expansion and graph builder against the preselection authorities; that provisional digest may
+not bind a later execution. L15 succeeds it with the first post-F4-selection revision. L16, L19,
+L21, L27, and each later declared materializer extend the current head before any new record becomes
+eligible. Every successor names its parent graph digest and preserves every inherited node, literal
+edge, evidence level, assertion owner, permission binding, and terminal-state meaning byte-for-byte.
+It may add only nodes and edges authorized by its declared materializer. Deletion, rewrite, or
+retargeting rejects succession; a governing-authority change that needs one starts a new graph root
+under the recorded campaign-invalidation rule. Every attempt binds the exact active revision. A
+review derives invalidation from the latest sealed successor whose ancestry contains the
+attempt-bound graph, and records both digests. L33 seals the final source graph used by L34 and Q80.
+
+L01-L11 bootstrap the campaign tool they will later use. They use the `machine-stage-review`
+bootstrap profile. Each off-tree append-only bootstrap manifest records the stage and attempt IDs,
+source commit and tree, lock, matrix, runbook, assertion-set and predecessor-manifest digests,
+declared commands, raw outputs, and every inspected file digest. That profile requires no campaign
+namespace, review lease, expansion registry, or dependency graph before the owning stage creates it.
+Its off-tree bootstrap receipt has one atomic compare-and-swap head keyed by stage, attempt, and
+manifest digest. Each review record names the current head and may advance it once; a stale head or
+fork fails. At most five bootstrap review records exist per attempt, and the fifth incomplete review
+returns `QUEUE_ROUTE`. Review is read-only, automatic remediation is disabled, and returns only
+`PASS_READY`, `INCOMPLETE`, or `QUEUE_ROUTE`. L12 is the
+first normal machine-stage review. It imports no claim: it verifies those same bytes and digests
+through the completed namespace, lease, review-history, expansion, invalidation, and diff machinery.
+A mismatch reopens the owning record. Automatic reviewer commits become eligible only after L12
+passes, and no physical or live-source record becomes eligible until L12 and the L13 machine gate
+pass.
+
+### Evidence lineage
+
+Machine-only L01-L11 attempts use the bootstrap profile above. L12, L13, and L15 use a frozen
+machine-attempt manifest and the normal repo-local `machine-stage-review` profile. They require only
+applicable STATIC, FIXTURE, INTEGRATION, or PLATFORM artifacts and never claim LIVE evidence. Fixed
+record L14 and L16 onward, plus live expanded records, use `tools/campaign.py` and the repo-local
+`live-stage-review` skill.
+
+A live card has two immutable templates:
+
+- `card_template`: operation, disk and paths, permission class, expected writes, required evidence,
+  stop conditions, and row/assertion scope;
+- `principal_action_template`: numbered cues and required observations, or an explicit no-action
+  record.
+
+Every live record that can write to the cartridge binds an approved card digest. The principal
+either approves that exact card during the record or the binding cites an earlier immutable general
+campaign approval whose disk, root, permission, command class, byte-claim rule, and stop conditions
+contain the action exactly. `principal_action: none` never means approval-free. A physical fault,
+path mutation, destructive action, new permission class, or action outside that exact scope always
+requires a new principal cue.
+
+Each execution has a new attempt binding. It records UTC times, observations, source commit and
+tree, lock, matrix, runbook, expansion-registry, and dependency-graph digests, hardware and profile identities, fresh broker
+operation IDs, durable boundaries, execution transcript, and logical-operation lineage. A rerun
+reuses both template digests only when disk, paths, permission, physical action, cues, and stop
+conditions are unchanged. It freshly records the source revision; that revision may equal the prior
+attempt when no remediation or invalidation requires a child. It never reuses timestamps,
+observations, or a terminal operation ID.
+
+The execution bundle is sealed once. Sealing uses `lstat` without following links and accepts only
+directories and regular files whose link count is one. Its canonical recursive manifest contains
+every relative path, object type, and regular-file content digest, then hashes that manifest as the
+namespace root. Exact namespace equality rejects an extra, missing, renamed, substituted, or
+type-changed path, every symbolic or hard link, and every socket, device, FIFO, or other special
+object. Review envelopes use the same rule in a separate immutable namespace. Every counted attempt has a bundle. If capture fails after an
+attempt begins, `tools/campaign.py` seals a capture-failure bundle containing every recoverable raw
+artifact, the exact missing-item list, and the last valid operation state; the affected assertions
+remain `NOT_RUN`. A null bundle belongs only to an uncounted preflight. Every evidence item is
+`APPLICABLE` or `NOT_APPLICABLE`; an
+N/A item cites the authority that makes it irrelevant. N/A never applies to a declared assertion.
+Applicable artifacts include, as the record requires: templates and binding; raw stdout/stderr;
+before/after hardware, storage, memory, power, thermal, process, socket, and filesystem telemetry;
+Q53 A_t/E_n transitions; broker logs; runtime memory; wall-clock parts; suite/ledger outputs;
+off-drive inventories; and every raw-file digest. Missing evidence makes the dependent assertion
+`NOT_RUN`.
+
+The review report is a separately sealed review envelope. It names the immutable execution-bundle
+digest, attempt binding, closed assertion-set digest, review base revision, reviewer environment,
+exclusive review lease, replay and mutation artifacts, remediation lineage, and invalidation
+decision. No reviewer adds, deletes, or rewrites a byte named by the execution manifest.
+
+Each attempt record contains:
 
 ```yaml
-steps:
-  - id: L01
-    title: Storage qualification on real drives
-    env: macos+hardware
-    invariants: [Q41-Q44 acceptance - measured profiles, durable-flush qualification, falsified classes recorded]
-    status: TODO
-  - id: L02
-    title: Live acquisition to cartridge
-    env: macos+hardware
-    invariants: [first live model acquisition after S28; matrix source_rows - actual Hugging Face, Ollama, and Tinker request/authentication/manifest/range wires from pinned revisions; acquire the selected permissively licensed 3-8B F4 model directly to the qualified external cartridge; ranged resume, digest pass, no fixture-only route, no internal model file]
-    depends: [L01]
-    status: TODO
-  - id: L03
-    title: Real-model F4 at 3-8B and F5 at 20-120B
-    env: macos+hardware
-    invariants: [Q36 F4 GATE on the acquired permissively licensed 3-8B dense model, followed only after PASS by Q36 F5 GATE on a 20-120B sparse model; both gates execute their Q19 predicates, Tier-A training, Tier-B recovery, quality bounds, touched-byte bounds, and peak/total resource certificates on qualified external cartridges; each emits PASS or Q38-FALSIFIED]
-    depends: [L02]
-    status: TODO
-  - id: L04
-    title: Frontier rows per matrix
-    env: macos+hardware
-    invariants: [execution_rows, workload_suites, protocol_cross_product, training_rows, remaining failure_rows, offline_and_privacy_rows]
-    depends: [L03]
-    status: TODO
-  - id: L05
-    title: Q80 completion run
-    env: macos+hardware
-    invariants: [complete matrix from clean checkout and blank qualified cartridges; one reproducible completion digest]
-    depends: [L04]
-    status: TODO
+attempt_id: <stage-id>-<three-digit-number>
+number: <integer>
+kind: initial | rerun
+rerun_of: <attempt-id-or-null>
+started_at_utc: <timestamp>
+closure_outcome: INCOMPLETE | PASS | Q38_FALSIFIED
+action_templates:
+  card_template_digest: <blake3>
+  principal_action_template_digest: <blake3>
+binding:
+  digest: <blake3>
+  execution_revision: <full-sha>
+  execution_tree_digest: <sha256>
+  lock_digest: <sha256>
+  matrix_digest: <blake3>
+  runbook_digest: <blake3>
+  expansion_registry_digest: <blake3>
+  dependency_graph_digest: <blake3>
+  assertion_set_digest: <blake3>
+  execution_transcript_digest: <blake3>
+  hardware_identity_digest: <blake3-or-null>
+  operations:
+    - logical_operation_id: <stable-id>
+      operation_id: <fresh-id>
+      resumes_operation_id: <id-or-null>
+      recovery_boundary: <digest-or-null>
+      state_at_seal: <state>
+execution_bundle_digest: <blake3>
+per_assertion:
+  - assertion: <authority-key>
+    applicability: APPLICABLE
+    required_level: STATIC | FIXTURE | INTEGRATION | PLATFORM | LIVE
+    status: PASS | FAIL | NOT_RUN | BLOCKED
+    raw_artifact_digest: <digest-or-null>
+review_history:
+  head_digest: <blake3-or-null>
+  entries:
+    - review_id: <stage-id>-<attempt-number>-R<three-digit-number>
+      review_of: <execution-bundle-or-prior-review-envelope-digest>
+      prior_review_envelope_digest: <blake3-or-null>
+      history_cas_expected_head: <blake3-or-null>
+      history_cas_new_head: <blake3>
+      review_lease_id: <id>
+      lease_chain_digest: <blake3>
+      review_report_digest: <blake3>
+      review_base_revision: <full-sha>
+      replay_evidence_level: STATIC | FIXTURE | INTEGRATION | PLATFORM
+      does_not_change_original_attempt_status: true
+      remediation:
+        assertion: <authority-key-or-null>
+        parent_sha: <full-sha-or-null>
+        commit_sha: <full-sha-or-null>
+        changed_paths: []
+        executable_lines_changed: 0
+        diff_digest: <blake3-or-null>
+        red_probe_digest: <digest-or-null>
+        mutation_proof_digest: <digest-or-null>
+        full_gate_digest: <digest-or-null>
+      invalidation_class: replay_only | assertion_local_rerun | machine_proof_rerun_required | physical_requalification_required | mechanism_revision_new_campaign_required
+      invalidated_attempts: []
+      invalidated_operation_lineages: []
+      invalidated_qualification_lineages: []
+      invalidation_graph_digest: <blake3>
+      invalidation_scope_digest: <blake3>
+```
+
+Each machine and live record has five attempt slots. A machine attempt begins when its frozen
+manifest starts the first declared command. A live attempt begins when an approved card is bound and
+either a principal cue is printed or a live operation begins. A capture failure after either start
+point still consumes the attempt and produces the capture-failure bundle described above. A
+preflight that stops earlier, a review, a remediation, and normal background waiting do not. The
+fifth non-PASS attempt sets the record `BLOCKED`; a sixth requires a recorded queue decision.
+
+Review uses separate twenty-minute sessions and at most five review envelopes per execution
+attempt. Each resumed review has a new review ID, names the current head as its prior envelope,
+acquires a new linked lease, and atomically compares and swaps that exact head to its sealed envelope
+digest. A stale expected head or fork is rejected. Time expiry seals an `INCOMPLETE` envelope with
+every unreached assertion `NOT_RUN`; it does not consume an execution attempt. A fifth incomplete
+review returns `QUEUE_ROUTE`; another review requires a recorded queue decision. An accepted
+`REMEDIATED` envelope is terminal for that attempt's review history: no later review or second
+automatic repair may descend from it. The queue must create a new execution attempt on the exact
+child revision.
+
+A verification-replay record is also append-only. It names its own ID, the original immutable
+execution-bundle digest, original assertion, original required evidence level, repaired verifier
+commit and tree, raw-input namespace root, replay command and output digests, status, and review
+envelope. It changes no field of the original attempt.
+
+### Review and remediation
+
+One review lease exists for `(stage_id, attempt_id, execution_bundle_digest)`. The reviewer acquires
+it with atomic create-or-compare-and-swap. Its `review_base_revision` must equal the attempt
+binding's `execution_revision`. Lease records retain holder, creation, expiry, release, and any
+abandonment. An expired or abandoned lease may be succeeded only by an atomic compare-and-swap that
+names the prior lease digest; it is never overwritten or silently stolen. The reviewer works from a
+fresh context in an isolated clean child worktree and rechecks the parent before any commit. A
+remediation must descend linearly from the attempt revision. An unrelated
+merge, rebase, dirty tree, base mismatch, or competing lease returns control to the queue.
+
+Automatic remediation remains allowed for one named product-implementation,
+mathematical-implementation, collector, or verifier defect. The complete remediation—not each
+commit separately—may change at most forty executable lines, one assertion, no dependency, no
+threshold, no authority, and no model-specific branch. The canonical command is
+`tools/ledger.py remediation-diff --parent <sha> --child <sha>`. Its versioned allowlist is the
+Python source in the AGENTS removal map plus `tools/campaign.py`. It rejects generated, test,
+documentation, lock, schema, and unknown paths, emits normalized diff JSON, counts the
+parent-relative sum of added and deleted executable lines, and excludes comments and docstrings by
+its pinned Python parser. The review envelope records the JSON digest and count. One execution
+attempt may produce at most one accepted remediation commit in total. An accepted remediation seals
+`REMEDIATED`, terminates that review history, and requires a new attempt; serial repairs against one
+old execution claim are forbidden.
+
+One discriminating probe must fail on parent R. The reviewer then makes and commits the sole child
+R+1 in the isolated worktree before running any green proof. The same probe must pass on exact
+commit R+1; a relevant guard-removal or sensitivity probe must fail there; and that exact commit
+must pass the full suite and ledger. No byte may change after R+1 is created. A rejected child
+remains isolated and is recorded as rejected, never as accepted remediation. A changed test alone
+never upgrades live evidence.
+
+Missing evidence caused by a collector or verifier defect is remediation-eligible, but the original
+attempt and its status never change. A lawful raw replay creates a separate verification-replay
+record naming the original bundle, repaired verifier revision, assertion set, and replay artifacts.
+It may satisfy closure at the original required evidence level only for `replay_only`, only when the
+sealed original bundle already contains every required raw input, and only when no physical action
+or observation must be repeated. Otherwise a new live attempt is required.
+
+Every review names a primary cause and may name contributing causes. It also emits exactly one
+invalidation class. Its scope is derived from the latest sealed graph successor whose ancestry
+contains the attempt-bound graph. The review records that graph digest and seals the result as an
+`invalidation_scope_digest`. Except for `replay_only`, the scope names at least one exact invalidated
+attempt or evidence ID and every affected logical-operation and physical-qualification lineage. If
+the narrower class cannot be proved, use the broader one. Product semantics,
+durable formats, schemas, certificates, operation behavior, physical measurements, or mechanism
+results changed by a repair force the corresponding machine proof, physical qualification, or new
+campaign. Active live operations are not resumed across a revision unless the envelope proves the
+exact compatible durable boundary.
+
+A principal-template defect returns a successor template for queue approval. An account, hardware,
+permission, service, or environment limitation is `BLOCKED` until that prerequisite changes. A
+missing baseline, identity, assertion, threshold, evidence level, outcome rule, or other binding
+standard is `AUTHORITY_GAP` and blocks closure until the governing document is amended. A
+performance or mechanism failure follows Q38; it is not patched as an instrument defect.
+
+The reviewer never closes a step. Its baton is `PASS_READY` only when every applicable assertion is
+PASS at its required level; `INCOMPLETE` names every `NOT_RUN` or `BLOCKED` assertion;
+`REMEDIATED` names the exact child and rerun route; and `QUEUE_ROUTE` names the governing decision.
+`DONE/PASS` requires `PASS_READY` and the queue's closure check. A step that declares Q38 may be `DONE/Q38_FALSIFIED` when the
+exact failure record is complete, but its row is `FAIL`, its PASS-dependent descendants remain
+ineligible, and it cannot contribute to Q80. A queue-maintenance commit may append the immutable
+attempt and review digests. Git history supplies the enclosing commit after the record is written;
+the record never contains the hash of its own commit. A later, distinct queue-maintenance commit may
+name a remediation commit. No queue commit may silently change assertions, dependencies, order, or
+status.
+
+### Principal actions
+
+The principal acts only at the back of the named record:
+
+- drive records: attach or move the named drive, confirm the printed physical identity, and approve
+  a READ_ONLY or CAMPAIGN_DIRECTORY_WRITE card;
+- model/source records: choose the F4 row, place credentials in the terminal, and accept a source
+  license in the browser only when the live source requests it;
+- training records: approve the exact drive, operation, plan, bounded current write, and endurance
+  profile; unknown future output is not reserved;
+- fault records: approve one PHYSICAL_FAULT card naming one disk and action, then perform only the
+  printed cable, port, lid, or replacement-drive cue;
+- offline records: disable and restore external networking on exact cues; and
+- Q80 replay records: repeat only the card-specific action for that one replay session.
+
+Formatting, erasure, repartitioning, repair, firmware changes, endurance stress, filler writes, and
+physical faults never inherit authority from a general campaign card.
+
+### Dependency rules
+
+A plain dependency requires the predecessor record to close `DONE/PASS`. A dependency ending in
+`@PASS` distinguishes a gate's PASS outcome from `DONE/Q38_FALSIFIED`. Every expanded record
+carries literal predecessor IDs after materialization; phrases such as “matching record” below are
+template rules that `tools/campaign.py` must resolve before sealing the expansion. An unresolved,
+duplicate, cyclic, or ineligible edge rejects the expansion.
+
+Preparation before a principal cue is read-only and may create only off-drive control records. No
+profile, header, transfer, training, fault, or cartridge write begins before its exact card is
+approved. After the cue, the agent may run only the already printed command within the approved
+scope, then capture and seal evidence; it may not edit code, documentation, assertions, or the card.
+The four session parts are resume (at most two minutes), preparation (at most seven), principal
+approval or action (at most five), and approved execution plus capture (at most six). A record with
+no principal action may use the unused action time, but the whole session remains at most twenty
+minutes.
+
+### Flat fixed queue
+
+```yaml
+phase_live_queue:
+  schema_version: 3
+  next_step: L01
+  matrix_phases: [L01.25, L01.5, L02, L03, L04, L05]
+  statuses: [TODO, IN_PROGRESS, DONE, BLOCKED]
+  row_statuses: [NOT_RUN, RUNNING, PASS, FAIL, BLOCKED]
+  campaign_result_statuses: [NOT_RUN, RUNNING, INCOMPLETE, PASS, FAIL, BLOCKED]
+  materialized_record_contract:
+    required_literal_fields: [evidence_level, matrix_assertion_owners]
+    family_evidence_levels:
+      baseline_freeze: INTEGRATION
+      physical_qualification: LIVE
+      source_header: LIVE
+      acquisition: LIVE
+      ollama_source: LIVE
+      f4_inference: LIVE
+      f5_inference: LIVE
+      tinker_source: LIVE
+      training: LIVE
+      execution: LIVE
+      sustained: LIVE
+      protocol: LIVE
+      failure_materialization: INTEGRATION
+      live_failure: LIVE
+      offline_inference: LIVE
+      offline_training_audit: LIVE
+      l04_runtime_closure: LIVE
+      q80_clean_replay: LIVE
+    matrix_assertion_owner_rules:
+      - selector: every QUALIFY-<consumer-flat-id>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]
+      - selector: ACQ-<kimi_k3|llama_4_scout|qwen3_235b_a22b>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]
+      - selector: OLLAMA-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_ollama_content_addressed_reimport].assertions[*]
+      - selector: TINKER-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_tinker_export_reimport].assertions[*]
+      - selector: L26
+        owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f4_gate].pass_condition
+      - selector: L32
+        owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f5_gate].pass_condition
+      - selector: every TRAIN-<row>-<operation>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#training_rows[id=<row>]+training_assertions.required_for_every_training_row[*]
+      - selector: every EXEC-<row>-RUN_VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#execution_rows[id=<row>]+workload_suites[id=capability_complete_q16].assertions[*]
+      - selector: every SUSTAINED-<row>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#workload_suites[id=sustained_q48].assertions[*]
+      - selector: every PROTOCOL-<row>-<client>
+        owns: research/ACCEPTANCE_MATRIX.yaml#protocol_cross_product.assertions[*]
+      - selector: every FAILURE-<injection>-<operation>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#failure_rows.assertions[*]
+      - selector: every OFFLINE-INFERENCE-<row>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_inference_all_execution_rows].assertions[*]
+      - selector: every OFFLINE-TRAINING-<row>-<operation>-VERIFY
+        owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_training_all_training_rows].assertions[*]
+      - selector: L33
+        owns: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
+    pre_live_assertion_binding_rules:
+      - authority: research/ACCEPTANCE_MATRIX.yaml#adaptive_capacity_control.required_assertions[*]
+        sealed_by: L13
+      - authority: research/ACCEPTANCE_MATRIX.yaml#storage_eligibility_control.required_assertions[*]
+        sealed_by: L13
+      - authority: research/ACCEPTANCE_MATRIX.yaml#baseline_freeze.assertions[*]
+        sealed_by: BASELINES-ALL-PASS
+      - authority: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
+        sealed_by: [L13, L33]
+    completion_contract_binding: L35
+    default_matrix_assertion_owners: []
+    completeness_rule: >-
+      materialization resolves every selector to literal record IDs and literal authority keys;
+      every assertion named by a live-owner rule has at least one terminal LIVE owner, every
+      pre-live assertion has its exact sealed prior-proof binding, Q78 has both checkpoints, and
+      every remaining required matrix assertion or completion clause is assigned to one of these
+      rules; a missing, ambiguous, or out-of-matrix assignment rejects the graph revision
+  dependency_graph_revision_contract:
+    head_update: atomic_compare_and_swap
+    successor_fields: [revision_digest, parent_graph_digest, expansion_registry_digest, materializer_record_id]
+    provisional_graph: L10
+    first_execution_eligible_graph: L15
+    later_materializers: [L16, L19, L21, L24, L27, L30, FAILURE-MATERIALIZE, L34]
+    attempt_binding: exact_active_graph_digest
+    invalidation_graph: latest_sealed_successor_containing_attempt_graph
+    q80_source_graph: final_L33_graph_head
+    monotonic_extension_rule: >-
+      every successor preserves inherited nodes, literal edges, evidence levels, assertion owners,
+      permission bindings, and terminal-state meanings byte-for-byte and may add only records and
+      edges authorized by its declared materializer; mutation, deletion, or retargeting rejects the
+      successor
+  fixed_steps:
+    - id: L01
+      matrix_phase: L01.25
+      title: Freeze the amended machine starting point
+      depends: [S28]
+      evidence_level: STATIC
+      principal_action: none
+      work: >-
+        Resolve the S28 close and lock without checkout; prove current ancestry; record source, tree,
+        lock, matrix, and runbook identities; run the complete suite and ledger; retain the exact
+        expected amendment failures.
+      done_when: >-
+        Every starting failure is explained by the amended Q53, J, or matrix work; any unrelated
+        failure blocks L02.
+      status: TODO
+      attempts: []
+    - id: L02
+      matrix_phase: L01.25
+      title: Repair exact certificate comparison and MLX confinement
+      depends: [L01]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Make the named S13 rational-collision and computed-MLX-import probes fail on the parent and
+        pass on the child; kill both guards; run the full gate.
+      done_when: >-
+        Q19 certificate claims use exact declared rules and Q30 detects static and computed MLX
+        acquisition outside pager.py and trainer.py.
+      status: TODO
+      attempts: []
+    - id: L03
+      matrix_phase: L01.25
+      title: Generalize training and merge shapes from plan data
+      depends: [L02]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Add one non-2x3 tensor fixture; remove trainer and pager literal shapes in favor of plan,
+        certificate, and tensor-map data; retain existing Q21, Q24, Q70, Q72, and Q30 behavior.
+      done_when: >-
+        Both shapes pass through the same production dataflow, full suite, ledger, and shape-source
+        mutation.
+      status: TODO
+      attempts: []
+    - id: L04
+      matrix_phase: L01.25
+      title: Prove adaptive capacity and liberal storage eligibility
+      depends: [L03]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Pass every adaptive-capacity and storage-eligibility assertion on scratch APFS images,
+        including concurrent claims, reclamation exclusions, ENOSPC recovery, resume, and removal
+        of fixed fraction, byte, whole-job, media, connector, class, and capacity gates.
+      done_when: >-
+        Every cited matrix assertion passes; no physical drive or live source was touched.
+      carried_work: >-
+        Existing unaccepted implementation and fixtures are present; L04 begins only after L01-L03
+        close.
+      status: TODO
+      attempts: []
+    - id: L05
+      matrix_phase: L01.25
+      title: Integrate the capacity amendment and make status honest
+      depends: [L04]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Restore lifecycle checks at first filesystem use; regenerate canonical schema-v5 fixtures
+        and J evidence; set both machine controls PASS only from the green committed result.
+      done_when: >-
+        The complete suite and ledger pass; J and evidence digests match the exact tree; matrix
+        status matches observed proof.
+      status: TODO
+      attempts: []
+    - id: L06
+      matrix_phase: L01.25
+      title: Build immutable action templates and fresh attempt bindings
+      depends: [L05]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Implement the card-template, principal-action-template, and per-execution binding records,
+        including fresh operation IDs and the four frozen authority digests.
+      done_when: >-
+        Focused fixtures reject mutable templates, stale terminal IDs, absent authority identities,
+        and an execution revision that differs from the review base.
+      status: TODO
+      attempts: []
+    - id: L07
+      matrix_phase: L01.25
+      title: Build protected-content inventory and telemetry capture
+      depends: [L06]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Implement off-drive top-level name, type, and aggregate-byte inventory plus the fixed
+        hardware, storage, memory, power, thermal, process, socket, and filesystem telemetry set.
+      done_when: >-
+        Focused fixtures detect additions, removals, type changes, and aggregate-byte changes while
+        recording no descendant inventory or protected content.
+      status: TODO
+      attempts: []
+    - id: L08
+      matrix_phase: L01.25
+      title: Build exact namespace sealing and capture-failure bundles
+      depends: [L07]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Implement lstat-based canonical recursive manifests for link-count-one regular files and
+        directories in execution bundles and review envelopes; implement counted capture-failure
+        bundles.
+      done_when: >-
+        Extra, missing, renamed, substituted, or type-changed paths fail exact namespace equality;
+        symbolic links, hard links, sockets, devices, FIFOs, and other special objects fail; every
+        counted interrupted capture seals recoverable artifacts and a missing-item list.
+      status: TODO
+      attempts: []
+    - id: L09
+      matrix_phase: L01.25
+      title: Build append-only review history and atomic leases
+      depends: [L08]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Implement ordered review-history heads, atomic head compare-and-swap, and atomic
+        create-or-compare-and-swap leases with expiry, release, abandonment, and digest-linked
+        succession.
+      done_when: >-
+        Competing reviewers yield one writer; no review entry overwrites or forks another; stale
+        history heads, base mismatch, silent lease theft, and broken lease ancestry fail.
+      status: TODO
+      attempts: []
+    - id: L10
+      matrix_phase: L01.25
+      title: Build matrix expansion and versioned dependency graphs
+      depends: [L09]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Expand fixed and repeated records from matrix order; materialize literal edges, aggregate
+        records, source selectors, evidence levels, matrix-assertion owners, and append-only graph
+        revisions with an atomic head.
+      done_when: >-
+        Missing, duplicate, cyclic, unresolved, out-of-matrix, or order-unstable records fail; the
+        same authorities reproduce byte-identical expansion and graph digests; deletion or rewrite
+        of an inherited edge, evidence level, assertion owner, permission, or terminal meaning fails;
+        the provisional preselection graph is marked ineligible for later execution.
+      status: TODO
+      attempts: []
+    - id: L11
+      matrix_phase: L01.25
+      title: Build invalidation and remediation-diff accounting
+      depends: [L10]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Derive invalidation from the frozen graph; implement the versioned ledger remediation-diff
+        command over the AGENTS removal-map source allowlist and tools/campaign.py.
+      done_when: >-
+        Non-replay invalidation names exact attempts, operation lineages, and qualification
+        lineages; generated, test, documentation, and unknown-path edits route to the queue; the
+        normalized diff and added-plus-deleted executable-line count reproduce.
+      status: TODO
+      attempts: []
+    - id: L12
+      matrix_phase: L01.25
+      title: Prove the complete campaign tool on a scratch APFS image
+      depends: [L06, L07, L08, L09, L10, L11]
+      evidence_level: FIXTURE
+      principal_action: none
+      work: >-
+        Run the integrated campaign tool against scratch APFS images with decoys, corrupt
+        manifests, interrupted capture, extra files, rename attacks, outside-pointing symlinks,
+        hard links, special files, stale review heads, competing leases, graph damage, serial
+        remediation attempts, inherited-edge and owner rewrites under a valid parent digest, and
+        attempted writes outside the scratch campaign root.
+      done_when: >-
+        Every hostile control fails at its owning assertion; accepted bundles and review histories
+        reproduce without forks; one accepted remediation ends the old attempt's review history; no
+        write escapes the scratch root; ledger ownership and removal checks pass.
+      status: TODO
+      attempts: []
+    - id: L13
+      matrix_phase: L01.25
+      title: Close the amended machine gate and pre-live Q78 checkpoint
+      depends: [L01, L02, L03, L04, L05, L06, L07, L08, L09, L10, L11, L12]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        From the exact clean revision run full suite, ledger, J reproduction, Q78 removal proof,
+        schema expansion, and both reviewer-skill validations; record source, tree, lock, matrix,
+        runbook, expansion, and dependency-graph digests.
+      done_when: >-
+        Every machine assertion is PASS, both matrix controls are PASS, and no LIVE label exists.
+      status: TODO
+      attempts: []
+    - id: L14
+      matrix_phase: L02
+      title: Pin the permissive F4 model and opaque credential
+      depends: [L13]
+      evidence_level: PLATFORM
+      principal_action: >-
+        Choose one printed candidate row and place any required token in the terminal or keychain.
+      work: >-
+        Resolve candidate immutable revisions, artifact bytes, and license evidence without moving
+        model payload; write the exact selection through the matrix's canonical amendment path.
+      done_when: >-
+        The matrix contains the exact F4 model, immutable revision, and selection-record digest;
+        license evidence and the secret-free credential reference resolve; no model payload moved.
+      status: TODO
+      attempts: []
+    - id: L15
+      matrix_phase: L02
+      title: Refresh machine identities after the F4 selection
+      depends: [L14]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Update the runbook matrix identity; rerun full suite, ledger, J reproduction, Q78 removal
+        proof, schema expansion, and both reviewer-skill validations from the clean post-selection
+        revision; invalidate the provisional L10 graph and atomically seal the exact post-selection
+        expansion and dependency-graph revision.
+      done_when: >-
+        F4 authority is exact; matrix, runbook, expansion, and graph identities match; the new graph
+        names L10 as its parent and is eligible for later bindings; machine assertions remain PASS;
+        no model byte moved and no LIVE model result exists.
+      status: TODO
+      attempts: []
+    - id: L16
+      matrix_phase: L02
+      title: Materialize Q13 and Q67 baseline-freeze records
+      depends: [L15]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Expand one B_teacher and B_hosted freeze per applicable immutable model plus the complete
+        B_native C1 and C2 candidate-set and selection records.
+      done_when: >-
+        Every baseline record has a literal identity, dependency, credential action template or
+        no-action record, status, and empty attempt list; BASELINES-ALL-PASS has exact membership.
+      status: TODO
+      attempts: []
+    - id: L17
+      matrix_phase: L01.5
+      title: Record drive identity and protected-content inventory
+      depends: [BASELINES-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: >-
+        Attach the candidate drive, confirm the printed disk identifier and APFS UUID, and approve
+        the READ_ONLY card.
+      work: >-
+        After approval, capture host and path telemetry and the off-drive top-level name, type, and
+        aggregate-byte inventory.
+      done_when: >-
+        Identity and inventory are sealed; the drive has no recorded byte change.
+      status: TODO
+      attempts: []
+    - id: L18
+      matrix_phase: L01.5
+      title: Create the campaign root and prove Q44 through remount
+      depends: [L17]
+      evidence_level: LIVE
+      principal_action: >-
+        Approve the exact CAMPAIGN_DIRECTORY_WRITE and PHYSICAL_FAULT cards; detach and reattach
+        only on their printed cues.
+      work: >-
+        After approval, create the campaign root as the first write; execute write, readback hash,
+        F_FULLFSYNC, root, pointer, F_FULLFSYNC; remount by exact identity; compare inventories.
+      done_when: >-
+        The exact generation survives remount and no top-level change exists outside the campaign
+        root.
+      status: TODO
+      attempts: []
+    - id: L19
+      matrix_phase: L01.5
+      title: Materialize source qualification and header records
+      depends: [BASELINES-ALL-PASS, L18]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Materialize separate HEADER and ACQ physical-profile requests for F4, kimi_k3,
+        llama_4_scout, and qwen3_235b_a22b, plus OLLAMA; materialize one header record per model.
+      done_when: >-
+        Every request has literal profile predecessors, action templates, statuses, and empty
+        attempt lists; SOURCE-PROFILES-ALL-PASS and HEADERS-ALL-PASS have exact sealed memberships.
+      status: TODO
+      attempts: []
+    - id: L20
+      matrix_phase: L01.5
+      title: Close source-entry physical qualification
+      depends: [SOURCE-PROFILES-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute every HEADER, ACQ, and OLLAMA physical profile from its sealed bundle and
+        reconcile the coarse protected-content inventory before any live source request.
+      done_when: >-
+        Every HEADER and ACQ profile and the OLLAMA profile are PASS; no live source request or
+        model payload acquisition has begun.
+      status: TODO
+      attempts: []
+    - id: L21
+      matrix_phase: L03
+      title: Materialize F4 compile and inference qualification
+      depends: [ACQ-F4-VERIFY, L20]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Materialize exact F4 compile and inference physical-profile requests from the pinned model,
+        current drive, host, path, and certified plans.
+      done_when: >-
+        F4-PROFILES-ALL-PASS has exactly the two required profile records with literal dependencies.
+      status: TODO
+      attempts: []
+    - id: L22
+      matrix_phase: L03
+      title: Close F4 compile and inference qualification
+      depends: [F4-PROFILES-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute both profile results and inventory effects from their sealed bundles.
+      done_when: >-
+        The exact F4 compile and inference paths are PASS; no profile is inherited by label.
+      status: TODO
+      attempts: []
+    - id: L23
+      matrix_phase: L03
+      title: Start F4 compilation
+      depends: [L22]
+      evidence_level: LIVE
+      principal_action: >-
+        Approve the exact F4 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
+        claim, paths, recovery boundary, and stop conditions are printed.
+      work: >-
+        Start Q19 compilation; prove the first durable boundary and one real kill and resume; leave
+        the broker operation RUNNING or terminal.
+      done_when: >-
+        Start assertions pass and the exact logical operation is durably recoverable.
+      status: TODO
+      attempts: []
+    - id: L24
+      matrix_phase: L03
+      title: Verify terminal F4 compilation and Q19 certificate
+      depends: [L23]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        When terminal, verify source and executable digests, peak extent, containment, total map,
+        resume, and independent exact recomputation of every Q19 field; materialize the frozen F4
+        inference conditions and atomically extend the graph.
+      done_when: >-
+        One immutable F4 compiled revision is published, every certificate field recomputes, and
+        the F4 inference records and aggregate reproduce from its frozen condition set.
+      status: TODO
+      attempts: []
+    - id: L25
+      matrix_phase: L03
+      title: Close the expanded F4 inference proof
+      depends: [F4-INFERENCE-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute every frozen Q15 and Q16 condition, touched-byte result, schedule, memory bound,
+        corruption discriminator, and restoration result from the expanded records.
+      done_when: >-
+        Every F4 inference coordinate is PASS at LIVE evidence.
+      status: TODO
+      attempts: []
+    - id: L26
+      matrix_phase: L03
+      title: Decide the F4 gate
+      depends: [L25, TRAIN-train_dense_fixture_tier_a-ALL-PASS, TRAIN-train_dense_fixture_tier_b-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Compute the predeclared paired Q17 and Q18 statistics and all Q36 predicates from raw
+        evidence; emit PASS or FAIL with Q38_FALSIFIED.
+      done_when: >-
+        The exact gate record exists; only PASS satisfies L27 and the two frontier-compiled L04
+        rows.
+      status: TODO
+      attempts: []
+    - id: L27
+      matrix_phase: L03
+      title: Materialize pinned Scout F5 qualification
+      depends: [L26@PASS, ACQ-llama_4_scout-VERIFY]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Bind the matrix-pinned Scout revision as F5 and materialize its exact compile and inference
+        physical-profile requests.
+      done_when: >-
+        F5-PROFILES-ALL-PASS has exactly the two required profile records with literal dependencies.
+      status: TODO
+      attempts: []
+    - id: L28
+      matrix_phase: L03
+      title: Close F5 compile and inference qualification
+      depends: [F5-PROFILES-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute both profile results and inventory effects from their sealed bundles.
+      done_when: >-
+        The exact Scout F5 compile and inference paths are PASS.
+      status: TODO
+      attempts: []
+    - id: L29
+      matrix_phase: L03
+      title: Start F5 compilation
+      depends: [L28]
+      evidence_level: LIVE
+      principal_action: >-
+        Approve the exact F5 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
+        claim, paths, recovery boundary, and stop conditions are printed.
+      work: >-
+        Start the pinned Scout sparse Q19 compilation; prove the first durable boundary and one real
+        kill and resume; leave the broker operation RUNNING or terminal.
+      done_when: >-
+        Start assertions pass and the exact logical operation is durably recoverable.
+      status: TODO
+      attempts: []
+    - id: L30
+      matrix_phase: L03
+      title: Verify terminal F5 compilation and Q19 certificate
+      depends: [L29]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        When terminal, verify source and executable digests, total contribution map, recovery,
+        containment, and independent exact Q19 recomputation at sparse scale; materialize the frozen
+        F5 inference conditions and atomically extend the graph.
+      done_when: >-
+        One immutable Scout F5 revision is published with every certificate field exact, and the F5
+        inference records and aggregate reproduce from its frozen condition set.
+      status: TODO
+      attempts: []
+    - id: L31
+      matrix_phase: L03
+      title: Close the expanded F5 inference proof
+      depends: [F5-INFERENCE-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute every frozen condition, traffic bound, schedule, memory, corruption, risk, and
+        horizon result from the expanded records.
+      done_when: >-
+        Every F5 inference coordinate is PASS at LIVE evidence.
+      status: TODO
+      attempts: []
+    - id: L32
+      matrix_phase: L03
+      title: Decide the F5 gate from Q37 curves
+      depends: [L31, TRAIN-train_sparse_fixture_tier_a-ALL-PASS, TRAIN-train_sparse_fixture_tier_b-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Fit the predeclared mathematical-resource, quality, and service curves; compare the
+        predicted feasible point with Q68 and E-011; emit PASS or FAIL with Q38_FALSIFIED.
+      done_when: >-
+        The exact F5 record exists; only PASS makes the two frontier-compiled L04 rows eligible and
+        permits completion.
+      status: TODO
+      attempts: []
+    - id: L33
+      matrix_phase: L04
+      title: Seal Q79 and final Q78 after every runtime row
+      depends:
+        - L04-RUNTIME-ALL-PASS
+        - TINKER-VERIFY
+        - ACQ-F4-VERIFY
+        - ACQ-kimi_k3-VERIFY
+        - ACQ-llama_4_scout-VERIFY
+        - ACQ-qwen3_235b_a22b-VERIFY
+        - OLLAMA-VERIFY
+        - L26@PASS
+        - L32@PASS
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute Q79 provenance and privacy from raw traces; rerun full suite, ledger, J, and Q78
+        removal proof from the exact clean tree; reconcile every required row; atomically seal the
+        final source dependency-graph head for Q80.
+      done_when: >-
+        Q79 and q78_exact_accounting are PASS with immutable evidence and every required L04 runtime
+        row is PASS; the final graph digest and owner-completeness report reproduce.
+      status: TODO
+      attempts: []
+    - id: L34
+      matrix_phase: L05
+      title: Materialize the clean-root Q80 replay graph
+      depends: [L33]
+      evidence_level: INTEGRATION
+      principal_action: none
+      work: >-
+        Compute the transitive LIVE prerequisite closure of every terminal record that owns a
+        required matrix assertion plus L33; create one replay record per member and mirror every
+        dependency edge.
+      done_when: >-
+        The sorted original-record list, source count, replay count, edge count, and graph digest
+        reproduce; every replay record is TODO; Q80-ALL-PASS has exact one-to-one membership.
+      status: TODO
+      attempts: []
+    - id: L35
+      matrix_phase: L05
+      title: Verify Q80 and emit or withhold the completion digest
+      depends: [Q80-ALL-PASS]
+      evidence_level: LIVE
+      principal_action: none
+      work: >-
+        Recompute every row from raw clean-root replay evidence; rerun Q78 and Q79; verify gate
+        order, inventories, identities, and forbidden substitutes; compute the canonical preimage.
+      done_when: >-
+        Set campaign result PASS and attach one digest only if every required row is PASS and
+        LIVE_PROVEN; otherwise retain the exact non-passing result and sealed evidence bundle.
+      status: TODO
+      attempts: []
+
+  expanded_session_families:
+    - family: baseline_freeze
+      matrix_phase: L02
+      materialized_by: L16
+      expand_over: every_applicable_model_x_B_teacher_and_B_hosted_plus_B_native_c1_and_B_native_c2
+      records_per_coordinate: [FREEZE]
+      id_format: BASELINE-<baseline-coordinate>-FREEZE
+      dependencies:
+        FREEZE: [L15]
+      work: >-
+        Freeze the exact model revision, source and compute provenance, prompts, decoding and tool
+        settings, context, quantization, hardware and software, repeated-trial design, candidate set,
+        deterministic selection, and honest NON_EQUIVALENT fields that apply to this one baseline.
+      principal_action: >-
+        Supply a hosted-reference credential only for the exact hosted coordinate and only as an
+        opaque terminal or keychain reference; every other coordinate requires none.
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record: BASELINES-ALL-PASS
+      aggregate_dependencies: [every-BASELINE-<baseline-coordinate>-FREEZE]
+      aggregate_rule: >-
+        PASS only when every applicable baseline has one immutable manifest and no teacher trace or
+        Q17, Q18, or Q68 comparison predates it.
+    - family: physical_qualification
+      matrix_phase: L01.5
+      expand_over: every_exact_consumer_profile_request
+      records_per_request: [START, VERIFY]
+      id_format: QUALIFY-<consumer-flat-id>-<record>
+      request_fields:
+        - consumer_flat_id
+        - physical_disk_id
+        - apfs_volume_uuid
+        - host_id
+        - assembled_path_digest
+        - operation
+        - plan_digest
+        - expected_read_write_shape
+      dependencies:
+        START: [literal_consumer_prerequisites_that_do_not_depend_on_this_profile]
+        VERIFY: [matching-START]
+      start_work: >-
+        Prepare the exact card; after approval, begin the complete Q41-Q44 profile as a resumable
+        broker operation and seal its first durable measurement window.
+      verify_work: >-
+        After terminal state, verify all plan sizes, alignments, patterns, cache crossing, p05, p50,
+        p95, p99, maximum latency, IOPS, flushes, errors, thermal events, writes, health, endurance,
+        Q44 ordering, and inventory effects that apply.
+      principal_action: >-
+        On START, attach or move the named drive when cued, confirm exact identity, and approve this
+        one profile card. VERIFY requires none.
+      path_change_rule: >-
+        Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
+        request and blocks resumed I/O until its VERIFY record passes.
+      group_aggregate_id_format: <request-group>-ALL-PASS
+      group_aggregate_rule: >-
+        Materialization stages assign every request to one sealed group. The group aggregate lists
+        every literal QUALIFY-<consumer-flat-id>-VERIFY member and passes only when all pass. L19
+        creates SOURCE-PROFILES, L21 creates F4-PROFILES, and L27 creates F5-PROFILES.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: source_header
+      matrix_phase: L02
+      materialized_by: L19
+      instances: [F4, kimi_k3, llama_4_scout, qwen3_235b_a22b]
+      records_per_instance: [RUN]
+      id_format: HEADER-<instance>-RUN
+      dependencies:
+        RUN: [L20, BASELINES-ALL-PASS, QUALIFY-HEADER-<instance>-VERIFY]
+      work: >-
+        After approval, exercise live resolve, enumerate, metadata, license, authentication, and
+        header-range paths; land only header bytes; inventory dtypes, shapes, operators, semantics,
+        and execute no remote code.
+      principal_action: >-
+        Approve the exact HEADER CAMPAIGN_DIRECTORY_WRITE card; accept a source license in the
+        browser only when the service requests it.
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record: HEADERS-ALL-PASS
+      aggregate_dependencies:
+        - every HEADER-<instance>-RUN
+      aggregate_rule: >-
+        PASS only when all four literal header members pass and no model payload acquisition has begun.
+    - family: acquisition
+      matrix_phase: L02
+      instances: [F4, kimi_k3, llama_4_scout, qwen3_235b_a22b]
+      records_per_instance: [START, VERIFY]
+      id_format: ACQ-<instance>-<record>
+      dependencies:
+        START: [L20, HEADER-<instance>-RUN, QUALIFY-ACQ-<instance>-VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        After approval, start direct-to-cartridge ranged acquisition; prove per-transition Q53,
+        first durable boundary, real kill and resume, and no internal model file.
+      verify_work: >-
+        After terminal state, prove immutable revision, complete intervals, final source and local
+        digests, exact byte total, and no internal model file.
+      principal_action: >-
+        START requires the exact drive and write card; a different drive first requires its own
+        physical-qualification request and PASS. VERIFY requires none.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: ollama_source
+      matrix_phase: L02
+      instances: [source_ollama_content_addressed_reimport]
+      records_per_instance: [START, VERIFY]
+      id_format: OLLAMA-<record>
+      dependencies:
+        START: [ACQ-llama_4_scout-VERIFY, QUALIFY-OLLAMA-VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        Re-expose the pinned Scout bytes as content-addressed Ollama manifests and blobs; start
+        production-adapter reacquisition; prove the first durable boundary and kill and resume.
+      verify_work: >-
+        After terminal state, prove complete manifest and blob digests, semantic identity, source
+        identity, and the shared Q5 lifecycle.
+      principal_action: >-
+        START requires the exact bounded drive-write card. VERIFY requires none.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: f4_inference
+      matrix_phase: L03
+      materialized_by: L24
+      expand_over: frozen_Q15_Q16_conditions_for_selected_F4
+      records_per_coordinate: [START, VERIFY]
+      id_format: F4-INFERENCE-<condition-digest>-<record>
+      dependencies:
+        START: [L24, QUALIFY-F4-INFERENCE-VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        Start one frozen condition and seal the first committed result frontier.
+      verify_work: >-
+        Verify its quality inputs, touched bytes, schedule, memory, corrupt-page discriminator, and
+        exact restoration result.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record: F4-INFERENCE-ALL-PASS
+      aggregate_dependencies: [every-F4-INFERENCE-<condition-digest>-VERIFY]
+    - family: f5_inference
+      matrix_phase: L03
+      materialized_by: L30
+      expand_over: frozen_Q15_Q16_conditions_for_pinned_Scout_F5
+      records_per_coordinate: [START, VERIFY]
+      id_format: F5-INFERENCE-<condition-digest>-<record>
+      dependencies:
+        START: [L30, QUALIFY-F5-INFERENCE-VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        Start one frozen sparse-scale condition and seal the first committed result frontier.
+      verify_work: >-
+        Verify its quality inputs, traffic bound, schedule, memory, corruption, error-risk, and
+        horizon predicates.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record: F5-INFERENCE-ALL-PASS
+      aggregate_dependencies: [every-F5-INFERENCE-<condition-digest>-VERIFY]
+    - family: tinker_source
+      matrix_phase: L02
+      instances: [source_tinker_export_reimport]
+      records_per_instance: [QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
+      id_format: TINKER-<record>
+      dependencies:
+        QUALIFY_START: [TRAIN-train_dense_fixture_tier_a-ALL-PASS]
+        QUALIFY_VERIFY: [matching-QUALIFY_START]
+        START: [matching-QUALIFY_VERIFY]
+        VERIFY: [matching-START]
+      qualify_start_work: >-
+        After approval, begin the exact export and re-import profile measurement.
+      qualify_verify_work: >-
+        Verify the terminal Q41-Q44 and Q74 profile.
+      start_work: >-
+        After approval, export the dense Tier-A child in Tinker form and begin production-wire
+        re-import; prove first durable boundary and kill and resume.
+      verify_work: >-
+        Prove terminal weight identity, parent, training provenance, digests, and shared lifecycle.
+      principal_action: >-
+        QUALIFY_START and START each require their own exact bounded card; the other records require
+        none.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: training
+      matrix_phase: L03_or_L04_from_matrix_row
+      expand_over: training_rows_x_every_declared_operation
+      records_per_coordinate: [QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
+      id_format: TRAIN-<row>-<operation>-<record>
+      dependencies:
+        QUALIFY_START: [literal-row-dependencies]
+        QUALIFY_VERIFY: [matching-QUALIFY_START]
+        START: [matching-QUALIFY_VERIFY]
+        VERIFY: [matching-START]
+      row_dependencies:
+        train_dense_fixture_tier_a: [L25]
+        train_dense_fixture_tier_b: [TRAIN-train_dense_fixture_tier_a-ALL-PASS]
+        train_sparse_fixture_tier_a: [L31, L26@PASS]
+        train_sparse_fixture_tier_b: [TRAIN-train_sparse_fixture_tier_a-ALL-PASS]
+        train_c1_frontier_tier_a: [EXEC-exec_c1_frontier_compiled-RUN_VERIFY]
+        train_c1_frontier_tier_b: [TRAIN-train_c1_frontier_tier_a-ALL-PASS]
+        train_c1_scout_tier_a: [EXEC-exec_c1_scout_least_invasive-RUN_VERIFY]
+        train_c3_frontier_tier_a: [EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY]
+        train_c3_frontier_tier_b: [TRAIN-train_c3_frontier_tier_a-ALL-PASS]
+      qualify_start_work: >-
+        After approval, begin the exact training-plan Q41-Q44 and Q74 profile.
+      qualify_verify_work: >-
+        Verify terminal profile, writes, health, endurance, and inventory evidence.
+      start_work: >-
+        With Q79 tracing armed and external networking disabled, start the exact Q23, Q28, Q47,
+        Q53, and Q74 operation; prove one Q25 kill and resume; leave it running.
+      verify_work: >-
+        Prove terminal Q70, Q71, Q72, Q73, measured writes, estimate bound, quality,
+        non-regression, client callability, and Tier-B derivation where applicable.
+      principal_action: >-
+        QUALIFY_START requires the exact profile card. START requires the exact
+        drive-operation-plan card and network-off cue; restore networking during capture. The other
+        records require none.
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record_per_row: ALL-PASS
+      aggregate_id_format: TRAIN-<row>-ALL-PASS
+      aggregate_dependencies: [every-TRAIN-<row>-<declared-operation>-VERIFY]
+      aggregate_rule: >-
+        PASS only when every operation declared by that exact matrix row is PASS at its required
+        evidence level.
+    - family: execution
+      matrix_phase: L04
+      expand_over: execution_rows
+      records_per_row: [QUALIFY_START, QUALIFY_VERIFY, PREPARE_START, PREPARE_VERIFY, RUN_START, RUN_VERIFY]
+      id_format: EXEC-<row>-<record>
+      dependencies:
+        QUALIFY_START: [literal-row-dependencies]
+        QUALIFY_VERIFY: [matching-QUALIFY_START]
+        PREPARE_START: [matching-QUALIFY_VERIFY]
+        PREPARE_VERIFY: [matching-PREPARE_START]
+        RUN_START: [matching-PREPARE_VERIFY]
+        RUN_VERIFY: [matching-RUN_START]
+      row_dependencies:
+        exec_c1_frontier_compiled: [ACQ-kimi_k3-VERIFY, L26@PASS, L32@PASS]
+        exec_c1_scout_least_invasive: [ACQ-llama_4_scout-VERIFY]
+        exec_c2_qwen_least_invasive: [ACQ-qwen3_235b_a22b-VERIFY]
+        exec_c3_k3_native_teacher: [ACQ-kimi_k3-VERIFY]
+        exec_c3_k3_compiled_portability: [ACQ-kimi_k3-VERIFY, L26@PASS, L32@PASS]
+      qualify_start_work: >-
+        After approval, begin the row's exact drive, path, host, operation, and plan profile.
+      qualify_verify_work: >-
+        Verify terminal Q41-Q44 and applicable Q74 evidence.
+      prepare_start_work: >-
+        Start the least-invasive Q40 preparation; for compiled K3 rows start full-scale F6
+        compilation; prove first durable boundary and kill and resume.
+      prepare_verify_work: >-
+        Verify terminal native or immutable prepared revision, prior-mode Q38 records, total map,
+        and independent Q19 certificate when compiled.
+      run_start_work: >-
+        Start the complete Q16 capability suite and seal its first valid result frontier.
+      run_verify_work: >-
+        Verify every case, context boundary, gate, honesty vector, tail, capability, and forbidden
+        label from raw evidence.
+      principal_action: >-
+        QUALIFY_START requires drive identity and the exact profile card. PREPARE_START and
+        RUN_START each require an exact CAMPAIGN_DIRECTORY_WRITE card for that record's printed
+        command, paths, next-byte claim, recovery boundary, and stop conditions. The verify records
+        require none.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: sustained
+      matrix_phase: L04
+      expand_over: execution_rows
+      records_per_row: [START, VERIFY]
+      id_format: SUSTAINED-<row>-<record>
+      dependencies:
+        START: [matching-EXEC-<row>-RUN_VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        Start the 120-minute and 20000-token run with five-minute service, thermal, write, and
+        integrity windows; verify the first two windows.
+      verify_work: >-
+        After terminal state, recompute every window, decay, tail, thermal, availability, and
+        integrity assertion.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: protocol
+      matrix_phase: L04
+      expand_over: execution_rows_x_agent_clients
+      records_per_coordinate: [RUN]
+      id_format: PROTOCOL-<row>-<client>
+      dependencies:
+        RUN: [matching-EXEC-<row>-RUN_VERIFY]
+      work: >-
+        Capture all eight required traces and prove Q76, Q77, and no fabricated feature for this
+        one row and client mapping.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: failure_materialization
+      matrix_phase: L04
+      records: [FAILURE-MATERIALIZE]
+      dependencies:
+        - HEADER-F4-RUN
+        - ACQ-F4-VERIFY
+        - L24
+        - L25
+        - TRAIN-train_dense_fixture_tier_a-ALL-PASS
+      work: >-
+        Resolve the eight matrix operation subjects to literal source artifacts and plans;
+        materialize all eighty failure coordinates, the eight starting physical-profile requests,
+        and the matrix-determined requalification nodes; atomically extend the graph.
+      done_when: >-
+        Operation bindings, 80 coordinates, 320 base records, 112 requalification records, profile
+        requests, assertion owners, action templates, and every literal edge reproduce.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: live_failure
+      matrix_phase: L04
+      materialized_by: FAILURE-MATERIALIZE
+      expand_over: phase_live_injections_x_failure_operations
+      base_records_per_coordinate: [ARM, INJECT, RECOVER, VERIFY]
+      requalification_records: [REQUALIFY_START, REQUALIFY_VERIFY]
+      requalification_rule: >-
+        Materialize both requalification records exactly when the injection appears in
+        matrix.failure_rows.requalification_after_recovery.required_for; omit both exactly when it
+        appears in not_applicable_for. An injection in neither or both lists rejects expansion.
+        This produces 320 base records plus 112 requalification records from the current matrix.
+      id_format: FAILURE-<injection>-<operation>-<record>
+      materialized_binding_fields:
+        - source_artifact_record_id
+        - source_artifact_digest
+        - operation_plan_digest
+        - physical_qualification_record_id
+        - logical_operation_id
+        - recovery_action_template_digest
+        - requalification_required
+      requalification_field_rule: >-
+        requalification_required is true exactly for an injection listed in
+        matrix.failure_rows.requalification_after_recovery.required_for and false exactly for one
+        listed in not_applicable_for; no runtime observation may change the materialized value
+      operation_subjects: matrix.failure_rows.phase_live_operation_bindings
+      starting_profile_requests: >-
+        FAILURE-MATERIALIZE creates the eight exact QUALIFY-FAILURE-<operation> profile requests;
+        each profile START depends on FAILURE-MATERIALIZE and its literal source artifact. Every
+        VERIFY must pass before the matching ARM records become eligible.
+      dependencies:
+        ARM: [FAILURE-MATERIALIZE, literal-source-artifact-record-id, literal-physical-qualification-record-id]
+        INJECT: [matching-ARM]
+        RECOVER: [matching-INJECT]
+        REQUALIFY_START: [matching-RECOVER]
+        REQUALIFY_VERIFY: [matching-REQUALIFY_START]
+        VERIFY:
+          always: [matching-RECOVER]
+          when_requalification_required: [matching-REQUALIFY_VERIFY]
+      arm_work: >-
+        Create a fresh operation from its exact source artifact through the declared durable
+        pre-injection boundary; reuse no prior terminal operation.
+      inject_work: >-
+        After exact approval, apply one injection and capture the immediate typed result.
+      recover_work: >-
+        After an exact recovery card when physical action is required, restore or refuse the named
+        identity and seal the resulting boundary.
+      requalify_start_work: >-
+        After path-profile approval, start a new exact Q41-Q44 profile for any changed drive, cable,
+        port, host, path, plan, or mechanism.
+      requalify_verify_work: >-
+        Verify the terminal replacement profile before any resumed I/O.
+      verify_work: >-
+        Prove all six failure assertions and inventory effects from the coordinate's own lineage.
+      principal_action: >-
+        ARM requires the exact coordinate's CAMPAIGN_DIRECTORY_WRITE card before creating its fresh
+        durable operation. INJECT always requires its separate exact injection card. RECOVER
+        requires a separate exact card when it changes physical state. REQUALIFY_START requires its
+        own profile card. Perform only the printed cue; a general campaign approval never applies.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: offline_inference
+      matrix_phase: L04
+      expand_over: execution_rows
+      records_per_row: [START, VERIFY]
+      id_format: OFFLINE-INFERENCE-<row>-<record>
+      dependencies:
+        START: [matching-EXEC-<row>-RUN_VERIFY]
+        VERIFY: [matching-START]
+      start_work: >-
+        After the network-off cue, start the complete row through loopback while tracing processes,
+        sockets, files, identities, credentials, and persistence.
+      verify_work: >-
+        Recompute every offline and privacy assertion and restore networking only on its sealed cue.
+      principal_action: >-
+        START requires the exact network-off cue; VERIFY requires the exact network-restore cue.
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: offline_training_audit
+      matrix_phase: L04
+      expand_over: training_rows_x_every_declared_operation
+      records_per_coordinate: [VERIFY]
+      id_format: OFFLINE-TRAINING-<row>-<operation>-VERIFY
+      dependencies:
+        VERIFY: [matching-TRAIN-<row>-<operation>-VERIFY]
+      work: >-
+        Verify this one operation's placement, socket, credential, and persistence traces; a
+        missing trace requires a new matching TRAIN attempt.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: l04_runtime_closure
+      matrix_phase: L04
+      records: [L04-RUNTIME-ALL-PASS]
+      dependencies:
+        - every EXEC-<row>-RUN_VERIFY
+        - every SUSTAINED-<row>-VERIFY
+        - every PROTOCOL-<row>-<client>
+        - every L04 TRAIN-<row>-ALL-PASS
+        - every FAILURE-<injection>-<operation>-VERIFY
+        - every OFFLINE-INFERENCE-<row>-VERIFY
+        - every OFFLINE-TRAINING-<row>-<operation>-VERIFY
+      work: >-
+        Resolve the sealed registry against every required runtime expansion and reject any
+        missing, duplicate, ineligible, FAIL, BLOCKED, RUNNING, or NOT_RUN coordinate.
+      done_when: >-
+        PASS only when every required L04 runtime row is PASS; independent rows may run after a
+        gate failure, but this aggregate cannot pass until both gates and their dependent rows pass.
+      principal_action: none
+      status_per_record: TODO
+      attempts_per_record: []
+    - family: q80_clean_replay
+      matrix_phase: L05
+      materialized_by: L34
+      membership_rule: >-
+        From materialized_record_contract, resolve every literal record whose evidence_level is LIVE
+        and whose matrix_assertion_owners list is nonempty. Reject any required live assertion
+        without a resolved owner or any required pre-live assertion without its sealed prior-proof
+        binding. Add L33. Let V be their transitive prerequisite closure in L33's
+        final sealed Phase Live graph, excluding the q80_clean_replay family itself. Keep only LIVE
+        records and their LIVE aggregate records; treat pre-live authority selection and baseline
+        records as frozen inputs, not repeatable choices. Sort V by canonical flat ID. The
+        source_record_count and expected_replay_count both equal cardinality(V).
+      edge_rule: >-
+        For each original edge u to v with u and v in V, add Q80-u to Q80-v. No replay record may
+        have an edge absent from that induced graph or omit one present in it.
+      records_per_member: [REPLAY]
+      id_format: Q80-<original-flat-id>
+      lineage_rule: >-
+        A replay START creates a fresh logical operation in one clean campaign root. Its replay
+        VERIFY, recovery, and aggregate descendants bind that same replay logical operation and
+        root, never the original campaign operation.
+      work: >-
+        Re-execute exactly one original record with a new binding, fresh operation ID where
+        applicable, raw evidence, and review history.
+      principal_action: >-
+        Mirror the original record's one exact action template, or none when the original required
+        none.
+      status_per_record: TODO
+      attempts_per_record: []
+      aggregate_record: Q80-ALL-PASS
+      aggregate_dependencies: [every-Q80-<original-flat-id>]
+      aggregate_rule: >-
+        PASS only when the one-to-one record and edge counts match the sealed source graph and every
+        replay member is PASS at LIVE evidence.
 ```
 
 ## Status vocabulary
 
-TODO, IN_PROGRESS (with started date), DONE (with date and commit hash), BLOCKED (with report:
-approaches tried, exact errors, suspected cause, failing invariant). No other statuses exist.
-A BLOCKED step is revisited only when its root cause is resolved by a later step or a recorded
-decision — never by retrying the same approach a fourth time.
+Queue status is `TODO`, `IN_PROGRESS`, `DONE`, or `BLOCKED`. Matrix row status is `NOT_RUN`,
+`RUNNING`, `PASS`, `FAIL`, or `BLOCKED`. Closure outcome is `INCOMPLETE`, `PASS`, or
+`Q38_FALSIFIED`. These vocabularies do not substitute for one another. A background operation may
+be `RUNNING` while its `START` record is `DONE` and its `VERIFY` record remains `TODO`. Campaign
+result status is `NOT_RUN`, `RUNNING`, `INCOMPLETE`, `PASS`, `FAIL`, or `BLOCKED` under the matrix
+definitions. Only campaign `PASS` carries the Q80 completion digest.

@@ -1,0 +1,5 @@
+# This file provides Codex UI metadata for the live-stage-review skill; dependencies: ../SKILL.md.
+interface:
+  display_name: "Live Stage Review"
+  short_description: "Review immutable live evidence, make one proved bounded repair, and declare invalidation"
+  default_prompt: "Use $live-stage-review to review this live attempt from its immutable execution bundle: verify its action-template and attempt lineage, replay every declared assertion, find the nearest false pass, make at most one red-on-parent and green-on-child bounded remediation, seal a separate review envelope, declare invalidation, and return the baton without closing the stage or changing live evidence."

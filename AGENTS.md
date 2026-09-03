@@ -156,7 +156,13 @@ not whitespace.
 
 ## Byte and durability discipline
 
-- Every admission computes its byte budget (Q47/Q53) and asserts it before allocating.
+- Every storage admission computes Q53's next atomic byte claim and asserts it before allocating;
+  no fixed device fraction, byte floor, user ceiling, or whole-job storage reservation may
+  substitute for the live claim. A feasible next step must not require whole-campaign fit.
+- Storage media, storage class, connector, brand, advertised speed, and nominal capacity are
+  descriptive fields, never product or generated-schema admission gates. Any locally attached
+  macOS APFS drive may attempt operation-bound measurement.
+  Memory admission remains governed separately by Q47.
 - Every durable write follows Q44: write → readback hash → F_FULLFSYNC → root → atomic pointer →
   F_FULLFSYNC. Never trust a file by name, size, or prior process state (Q60).
 - Every error is one of the canonical typed errors (Q6). Inventing an error shape is a defect.

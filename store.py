@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import ctypes
 from dataclasses import dataclass, field, replace
+import errno
 import fcntl
 import hashlib
 import json
@@ -23,6 +24,7 @@ import re
 import stat
 import struct
 import tempfile
+import threading
 import uuid
 
 from blake3 import blake3
@@ -38,9 +40,9 @@ _HEX = frozenset("0123456789abcdef")
 _REVISION_KINDS = frozenset({"source", "executable", "tuned", "updated", "exported"})
 _MAX_JSON_INTEGER = 2**53 - 1
 _MAX_UNSIGNED_BYTES = 2**64 - 1
-_CAPACITY_FIELDS = (
-    "committed", "inflight", "candidate", "rollback", "optimizer", "master",
-    "dataset", "precision", "journal", "repair",
+_TRANSITION_BYTE_FIELDS = (
+    "payload_bytes", "journal_bytes", "index_bytes", "root_bytes", "pointer_bytes",
+    "recovery_bytes",
 )
 _INTEGRITY_STATES = frozenset({
     "VALID", "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "UNAVAILABLE",
@@ -296,56 +298,334 @@ class TransactionContext:
 
 
 @dataclass(frozen=True)
-class CapacityPhase:
-    """One Q53 lifecycle phase, stated in exact unsigned bytes by storage owner."""
+class CapacityTransition:
+    """One exact Q53 transition from a committed boundary to its next durable boundary."""
 
-    committed: int = 0
-    inflight: int = 0
-    candidate: int = 0
-    rollback: int = 0
-    optimizer: int = 0
-    master: int = 0
-    dataset: int = 0
-    precision: int = 0
-    journal: int = 0
-    repair: int = 0
+    operation_id: str
+    boundary_id: str
+    payload_bytes: int = 0
+    journal_bytes: int = 0
+    index_bytes: int = 0
+    root_bytes: int = 0
+    pointer_bytes: int = 0
+    recovery_bytes: int = 0
+    declared_writes: int = 1
+    write_bytes: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        for field in _CAPACITY_FIELDS:
-            _capacity_value(field, getattr(self, field), "capacity:phase")
+        if (not isinstance(self.operation_id, str)
+                or _TRANSACTION_ID.fullmatch(self.operation_id) is None):
+            _capacity_reject(
+                "unidentified", "operation_id must satisfy the durable identifier grammar",
+                "INVALID_REQUEST",
+            )
+        if not isinstance(self.boundary_id, str) or not self.boundary_id.strip():
+            _capacity_reject(self.operation_id, "boundary_id must be nonempty text", "INVALID_REQUEST")
+        for name in _TRANSITION_BYTE_FIELDS:
+            _capacity_value(name, getattr(self, name), self.operation_id)
+        if type(self.declared_writes) is not int or self.declared_writes < 1:
+            _capacity_reject(
+                self.operation_id, "declared_writes must be a positive integer", "INVALID_REQUEST"
+            )
+        if not isinstance(self.write_bytes, tuple):
+            _capacity_reject(
+                self.operation_id, "write_bytes must be a tuple", "INVALID_REQUEST"
+            )
+        if self.write_bytes:
+            if (
+                len(self.write_bytes) != self.declared_writes
+                or any(type(value) is not int or value < 0 for value in self.write_bytes)
+                or _capacity_sum(self.write_bytes, self.operation_id) != self.total_bytes
+            ):
+                _capacity_reject(
+                    self.operation_id,
+                    "write_bytes must assign every claimed byte to each declared write",
+                    "INVALID_REQUEST",
+                )
+        elif self.declared_writes == 1:
+            object.__setattr__(self, "write_bytes", (self.total_bytes,))
+        else:
+            _capacity_reject(
+                self.operation_id,
+                "multiple declared writes require an exact per-write byte assignment",
+                "INVALID_REQUEST",
+            )
 
     @property
-    def total(self) -> int:
-        """Return this phase's checked Q53 sum."""
+    def total_bytes(self) -> int:
+        """Return the checked byte claim for this transition alone."""
 
         return _capacity_sum(
-            (getattr(self, field) for field in _CAPACITY_FIELDS), "capacity:phase"
+            (getattr(self, name) for name in _TRANSITION_BYTE_FIELDS), self.operation_id
         )
 
 
-@dataclass(frozen=True)
-class CapacityRequirement:
-    """The one Q53 phase maximum and safety calculation, before physical reservation."""
+@dataclass(frozen=True, slots=True)
+class TransferExtent:
+    """One store-created sparse extent whose writes remain confined to its open handle."""
 
-    device_bytes: int
-    safety_bytes: int
-    phase_totals: tuple[int, ...]
-    repair_bytes: int
-    required_bytes: int
-
-
-@dataclass(frozen=True)
-class CapacityReservation:
-    """A Q53 extent owned by one operation until its terminal cleanup releases it."""
-
+    fd: int
+    offset: int
+    length: int
     operation_id: str
-    device_bytes: int
-    safety_bytes: int
-    phase_totals: tuple[int, ...]
-    repair_bytes: int
-    required_bytes: int
-    _release_extent: Callable[[int], bool] = field(repr=False, compare=False)
-    active: bool = field(default=True, init=False)
+
+
+@dataclass(frozen=True)
+class CapacityClaim:
+    """One active or paused Q53 coordination claim for exactly one transition."""
+
+    transition: CapacityTransition
+    coordinator: CapacityCoordinator = field(repr=False, compare=False)
+    state: str = field(default="PLANNED", init=False)
+    history: tuple[str, ...] = field(default=(), init=False)
+    observations: tuple[int, ...] = field(default=(), init=False)
+    writes_started: int = field(default=0, init=False)
+    recovery_parent: GenerationPin | None = field(default=None, init=False)
+    recovery_parent_callable: bool = field(default=False, init=False)
+
+    @property
+    def active(self) -> bool:
+        """Whether this transition still owns Cassette coordination bytes."""
+
+        return self.state == "ACTIVE"
+
+
+@dataclass
+class _CapacityPool:
+    """One process-local Q53 claim ledger shared by every path on one filesystem."""
+
+    lock: threading.RLock = field(default_factory=threading.RLock)
+    active: dict[tuple[str, str], int] = field(default_factory=dict)
+
+
+_CAPACITY_POOLS_LOCK = threading.Lock()
+_CAPACITY_POOLS: dict[int, _CapacityPool] = {}
+
+
+class CapacityCoordinator:
+    """Measure one cartridge filesystem and coordinate its exact next-transition claims."""
+
+    __slots__ = ("_cartridge", "_device", "_issued", "_measurement_root", "_pool")
+
+    def __init__(self, cartridge: str | Path):
+        path = Path(cartridge)
+        measurement_root = path
+        while not measurement_root.exists() and measurement_root != measurement_root.parent:
+            measurement_root = measurement_root.parent
+        try:
+            device = os.stat(measurement_root).st_dev
+        except OSError as error:
+            _capacity_reject(
+                "coordinator",
+                f"cartridge path is unavailable for capacity coordination: {error}",
+                "CARTRIDGE_DISCONNECTED",
+                "retryable",
+            )
+        with _CAPACITY_POOLS_LOCK:
+            pool = _CAPACITY_POOLS.setdefault(device, _CapacityPool())
+        self._cartridge = path
+        self._device = device
+        self._issued: list[CapacityClaim] = []
+        self._measurement_root = measurement_root
+        self._pool = pool
+
+    @property
+    def cartridge(self) -> Path:
+        """Return the exact cartridge path whose filesystem this coordinator measures."""
+
+        return self._cartridge
+
+    def __call__(self, transition: CapacityTransition) -> CapacityClaim:
+        """Claim one exact transition through this concrete store-owned coordinator."""
+
+        return claim_next_transition(transition, coordinator=self)
+
+    def claims(self) -> tuple[CapacityClaim, ...]:
+        """Return this coordinator's ordered claim and observation record."""
+
+        with self._pool.lock:
+            return tuple(self._issued)
+
+    def _raw_free(self, operation_id: str) -> int:
+        measurement_path = (
+            self._cartridge if self._cartridge.exists() else self._measurement_root
+        )
+        try:
+            if os.stat(measurement_path).st_dev != self._device:
+                _capacity_reject(
+                    operation_id,
+                    "cartridge filesystem identity changed during capacity coordination",
+                    "CARTRIDGE_DISCONNECTED",
+                    "retryable",
+                )
+            snapshot = os.statvfs(measurement_path)
+        except CassetteError:
+            raise
+        except OSError as error:
+            _capacity_reject(
+                operation_id,
+                f"capacity measurement failed: {error}",
+                "CARTRIDGE_DISCONNECTED",
+                "retryable",
+            )
+        fragment = _capacity_value("filesystem fragment bytes", snapshot.f_frsize, operation_id)
+        available_fragments = _capacity_value(
+            "filesystem available fragments", snapshot.f_bavail, operation_id
+        )
+        if fragment == 0:
+            _capacity_reject(
+                operation_id,
+                "filesystem capacity measurement reported a zero fragment size",
+                "DURABILITY_UNSUPPORTED",
+            )
+        if available_fragments > _MAX_UNSIGNED_BYTES // fragment:
+            _capacity_reject(operation_id, "filesystem free-byte measurement overflowed")
+        return available_fragments * fragment
+
+    def _available(self, claim: CapacityClaim | None, operation_id: str) -> int:
+        """Return raw free bytes minus every other live Cassette claim."""
+
+        with self._pool.lock:
+            raw_free = self._raw_free(operation_id)
+            current_key = None if claim is None else _capacity_claim_key(claim.transition)
+            other_claimed = _capacity_sum(
+                (
+                    amount
+                    for key, amount in self._pool.active.items()
+                    if key != current_key
+                ),
+                operation_id,
+            )
+            return max(raw_free - other_claimed, 0)
+
+    def _activate(self, claim: CapacityClaim) -> bool:
+        """Atomically admit and record this transition against all other Cassette writers."""
+
+        transition = claim.transition
+        key = _capacity_claim_key(transition)
+        with self._pool.lock:
+            parent, callable_parent = _capacity_boundary_marker(self._cartridge)
+            object.__setattr__(claim, "recovery_parent", parent)
+            object.__setattr__(claim, "recovery_parent_callable", callable_parent)
+            self._issued.append(claim)
+            if key in self._pool.active:
+                _capacity_reject(
+                    transition.operation_id,
+                    f"transition {transition.boundary_id!r} already has an active claim",
+                    "INVALID_REQUEST",
+                )
+            raw_free = self._raw_free(transition.operation_id)
+            already_claimed = _capacity_sum(
+                self._pool.active.values(), transition.operation_id
+            )
+            available = max(raw_free - already_claimed, 0)
+            _record_capacity_observation(claim, available, "MEASURE")
+            object.__setattr__(claim, "history", (*claim.history, "PLAN_NEXT"))
+            if available < transition.total_bytes:
+                object.__setattr__(claim, "state", "PAUSED_RECOVERABLE")
+                object.__setattr__(claim, "history", (*claim.history, "PAUSED_RECOVERABLE"))
+                return False
+            self._pool.active[key] = transition.total_bytes
+            object.__setattr__(claim, "state", "ACTIVE")
+            object.__setattr__(claim, "history", (*claim.history, "CLAIM_NEXT"))
+            return True
+
+    def _release(self, claim: CapacityClaim) -> None:
+        """Release exactly the active ledger entry owned by this claim."""
+
+        key = _capacity_claim_key(claim.transition)
+        with self._pool.lock:
+            observed = self._pool.active.get(key)
+            if key not in self._pool.active or observed != claim.transition.total_bytes:
+                _capacity_reject(
+                    claim.transition.operation_id,
+                    "active claim ledger differs from the transition being released",
+                    "INVALID_REQUEST",
+                )
+            del self._pool.active[key]
+
+    def _recover(self, claim: CapacityClaim) -> bool:
+        """Select the valid parent or committed child through store-owned recovery."""
+
+        return _recover_capacity_boundary(self._cartridge, claim)
+
+    def active_claims(self) -> tuple[tuple[str, str, int], ...]:
+        """Return a stable inspection record of live claims on this filesystem."""
+
+        with self._pool.lock:
+            return tuple(
+                (operation_id, boundary_id, amount)
+                for (operation_id, boundary_id), amount in sorted(self._pool.active.items())
+            )
+
+    def owns(self, cartridge: str | Path) -> bool:
+        """Return whether a path still resolves to this coordinator's filesystem."""
+
+        path = Path(cartridge)
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        try:
+            return os.stat(path).st_dev == self._device
+        except OSError:
+            return False
+
+    def owns_descriptor(self, descriptor: int) -> bool:
+        """Return whether an open extent belongs to this coordinated filesystem."""
+
+        try:
+            return os.fstat(descriptor).st_dev == self._device
+        except OSError:
+            return False
+
+
+CapacityTransitionController = CapacityCoordinator
+
+
+def _capacity_coordinator(
+    cartridge: str | Path,
+    controller: CapacityCoordinator | None,
+    operation_id: str,
+) -> CapacityCoordinator:
+    """Bind every storage mutation to the concrete coordinator for its filesystem."""
+
+    if controller is None:
+        return CapacityCoordinator(cartridge)
+    if not isinstance(controller, CapacityCoordinator) or not controller.owns(cartridge):
+        _capacity_reject(
+            operation_id,
+            "capacity coordinator does not own this cartridge filesystem",
+            "INVALID_REQUEST",
+        )
+    return controller
+
+
+@dataclass(frozen=True)
+class ReclaimableObject:
+    """The complete Q53 reclaim decision record for one Cassette object."""
+
+    object_id: str
+    cassette_owned: bool
+    pinned: bool
+    reachable_from_retained_root: bool
+    rollback_retained: bool
+    retention_class: str
+    active_claim_reference: bool
+    active_transaction_reference: bool
+    active_journal_reference: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.object_id, str) or not self.object_id:
+            _capacity_reject("reclaim", "object_id must be nonempty text", "INVALID_REQUEST")
+        for name in (
+            "cassette_owned", "pinned", "reachable_from_retained_root", "rollback_retained",
+            "active_claim_reference", "active_transaction_reference", "active_journal_reference",
+        ):
+            if type(getattr(self, name)) is not bool:
+                _capacity_reject("reclaim", f"{name} must be bool", "INVALID_REQUEST")
+        if self.retention_class not in {"TEMPORARY", "REPRODUCIBLE", "DURABLE", "USER_OWNED"}:
+            _capacity_reject(
+                "reclaim", "retention_class must be TEMPORARY, REPRODUCIBLE, DURABLE, or USER_OWNED", "INVALID_REQUEST"
+            )
 
 
 @dataclass(frozen=True)
@@ -638,12 +918,17 @@ def _normalize_uuid(value: object, field: str) -> str:
         _lifecycle_reject(str(object_id), f"{field} is not a UUID", "INVALID_REQUEST")
 
 
-def _capacity_reject(operation_id: str, detail: str, code: str = "CAPACITY_EXCEEDED") -> None:
+def _capacity_reject(
+    operation_id: str,
+    detail: str,
+    code: str = "CAPACITY_EXCEEDED",
+    retryability: str = "terminal",
+) -> None:
     raise CassetteError(
         code=code,
         object_id=f"operation:{operation_id}",
-        failed_invariant="Q53: exact extent reservation before transfer or mutation",
-        retryability="terminal",
+        failed_invariant="Q53: exact next-transition claim before transfer or mutation",
+        retryability=retryability,
         detail=detail,
     )
 
@@ -659,146 +944,414 @@ def _capacity_value(field: str, value: object, operation_id: str) -> int:
 def _capacity_sum(values, operation_id: str) -> int:
     total = 0
     for value in values:
-        value = _capacity_value("phase byte field", value, operation_id)
+        value = _capacity_value("transition byte field", value, operation_id)
         if value > _MAX_UNSIGNED_BYTES - total:
             _capacity_reject(operation_id, "capacity arithmetic exceeds unsigned 64-bit bytes")
         total += value
     return total
 
 
-def capacity_requirement(
-    operation_id: str,
-    *,
-    device_bytes: int,
-    phases: tuple[CapacityPhase, ...],
-) -> CapacityRequirement:
-    """Compute Q53 once for preflight and the later physical reservation."""
+def _capacity_claim_key(transition: CapacityTransition) -> tuple[str, str]:
+    """Return the single ledger key for one operation boundary."""
 
-    if not isinstance(operation_id, str) or _TRANSACTION_ID.fullmatch(operation_id) is None:
-        _capacity_reject(
-            "unidentified", "operation_id must satisfy the durable identifier grammar", "INVALID_REQUEST"
-        )
-    device_bytes = _capacity_value("device_bytes", device_bytes, operation_id)
-    if (not isinstance(phases, tuple) or not phases
-            or any(not isinstance(phase, CapacityPhase) for phase in phases)):
-        _capacity_reject(operation_id, "one or more CapacityPhase values are required", "INVALID_REQUEST")
-    totals = tuple(phase.total for phase in phases)
-    five_percent = device_bytes // 20 + bool(device_bytes % 20)
-    safety = max(8 * 1024**3, five_percent)
-    return CapacityRequirement(
-        device_bytes,
-        safety,
-        totals,
-        max(phase.repair for phase in phases),
-        _capacity_sum((max(totals), safety), operation_id),
+    return transition.operation_id, transition.boundary_id
+
+
+def _record_capacity_observation(
+    claim: CapacityClaim, available: int, state: str
+) -> int:
+    """Append one checked available-byte observation to a claim."""
+
+    available = _capacity_value(
+        "allocatable bytes", available, claim.transition.operation_id
     )
+    object.__setattr__(claim, "observations", (*claim.observations, available))
+    object.__setattr__(claim, "history", (*claim.history, state))
+    return available
 
 
-def reserve_capacity(
-    operation_id: str,
-    *,
-    device_bytes: int,
-    allocatable_verified_free: int,
-    phases: tuple[CapacityPhase, ...],
-    reserve_extent: Callable[[int], bool],
-    release_extent: Callable[[int], bool],
-) -> CapacityReservation:
-    """Admit Q53 only after one atomic preallocator reserves the exact phase maximum plus safety."""
+def _observe_capacity(claim: CapacityClaim, state: str) -> int:
+    """Measure physical free bytes; claims coordinate Cassette writers but do not reserve the filesystem."""
 
-    requirement = capacity_requirement(
-        operation_id, device_bytes=device_bytes, phases=phases
-    )
-    free = _capacity_value("allocatable_verified_free", allocatable_verified_free, operation_id)
-    if free > requirement.device_bytes:
+    if not isinstance(claim.coordinator, CapacityCoordinator):
         _capacity_reject(
-            operation_id, "allocatable verified free bytes exceed device bytes", "INVALID_REQUEST"
-        )
-    if not callable(reserve_extent) or not callable(release_extent):
-        _capacity_reject(
-            operation_id,
-            "reserve_extent and release_extent must be callable",
+            claim.transition.operation_id,
+            "claim lacks the concrete store-owned capacity coordinator",
             "INVALID_REQUEST",
         )
-    if free < requirement.required_bytes:
-        _capacity_reject(
-            operation_id,
-            f"required {requirement.required_bytes} bytes; verified allocatable free is {free}",
-        )
-    try:
-        reserved = reserve_extent(requirement.required_bytes)
-    except OSError as error:
-        _capacity_reject(
-            operation_id,
-            f"preallocate failed for {requirement.required_bytes} bytes: {error}",
-        )
-    if reserved is not True:
-        _capacity_reject(
-            operation_id,
-            f"preallocate refused one exact {requirement.required_bytes}-byte extent despite {free} reported free bytes",
-        )
-    return CapacityReservation(
-        operation_id,
-        requirement.device_bytes,
-        requirement.safety_bytes,
-        requirement.phase_totals,
-        requirement.repair_bytes,
-        requirement.required_bytes,
-        release_extent,
+    return _record_capacity_observation(
+        claim,
+        claim.coordinator._available(claim, claim.transition.operation_id),
+        state,
     )
 
 
-def _active_reservation(
-    reservation: CapacityReservation, operation_id: str
-) -> CapacityReservation:
-    if not isinstance(reservation, CapacityReservation) or not reservation.active:
+def _release_claim_bytes(claim: CapacityClaim) -> None:
+    """Release only this transition's Cassette coordination claim."""
+
+    claim.coordinator._release(claim)
+
+
+def _pause_claim(claim: CapacityClaim, reason: str) -> CapacityClaim:
+    """Recover exactly the prior or committed-child boundary, then pause this transition."""
+
+    if claim.state == "PAUSED_RECOVERABLE":
+        return claim
+    if claim.state != "ACTIVE":
         _capacity_reject(
-            operation_id,
-            "an active completed CapacityReservation is required",
+            claim.transition.operation_id, "only an active claim can pause", "INVALID_REQUEST"
+        )
+    recovered = claim.coordinator._recover(claim)
+    if recovered is not True:
+        _capacity_reject(
+            claim.transition.operation_id, "boundary recovery did not select parent or committed child", "ROOT_INVALID"
+        )
+    _release_claim_bytes(claim)
+    object.__setattr__(claim, "state", "PAUSED_RECOVERABLE")
+    object.__setattr__(claim, "history", (*claim.history, "PAUSED_RECOVERABLE"))
+    return claim
+
+
+def claim_next_transition(
+    transition: CapacityTransition,
+    *,
+    coordinator: CapacityCoordinator,
+) -> CapacityClaim:
+    """Measure, atomically coordinate, and remeasure one exact next Q53 transition."""
+
+    if not isinstance(transition, CapacityTransition):
+        _capacity_reject("unidentified", "transition must be CapacityTransition", "INVALID_REQUEST")
+    if not isinstance(coordinator, CapacityCoordinator):
+        _capacity_reject(
+            transition.operation_id,
+            "the concrete store-owned CapacityCoordinator is required",
             "INVALID_REQUEST",
         )
-    return reservation
+    claim = CapacityClaim(transition, coordinator)
+    if not coordinator._activate(claim):
+        return claim
+    if _observe_capacity(claim, "MEASURE") < transition.total_bytes:
+        return _pause_claim(claim, "post-claim capacity loss")
+    return claim
 
 
-def require_capacity_demand(
-    reservation: CapacityReservation,
-    operation_id: str,
-    exact_phase_total: int,
-) -> CapacityReservation:
-    """Require one active reservation whose largest phase equals the declared demand."""
+def observe_claim_before_write(claim: CapacityClaim) -> CapacityClaim:
+    """Remeasure immediately before one declared write or pause at its committed boundary."""
 
-    active = _active_reservation(reservation, operation_id)
-    exact = _capacity_value("exact_phase_total", exact_phase_total, operation_id)
-    if max(active.phase_totals, default=0) != exact:
+    active = _active_claim(claim, claim.transition.operation_id)
+    if active.writes_started >= active.transition.declared_writes:
         _capacity_reject(
-            operation_id,
-            f"reserved phase maximum {max(active.phase_totals, default=0)} bytes; "
-            f"declared demand is {exact} bytes",
+            active.transition.operation_id, "write exceeds the declared next transition", "INVALID_REQUEST"
         )
+    remaining_bytes = _capacity_sum(
+        active.transition.write_bytes[active.writes_started:],
+        active.transition.operation_id,
+    )
+    if _observe_capacity(active, "MEASURE") < remaining_bytes:
+        _pause_claim(active, "pre-write capacity loss")
+        _capacity_reject(
+            active.transition.operation_id,
+            f"capacity fell below the remaining {remaining_bytes}-byte transition before write",
+            retryability="retryable",
+        )
+    object.__setattr__(active, "writes_started", active.writes_started + 1)
+    object.__setattr__(active, "history", (*active.history, "EXECUTE"))
     return active
 
 
-def release_capacity(reservation: CapacityReservation) -> None:
-    """Release one Q53 extent exactly once during terminal operation cleanup."""
+def execute_claimed_write(claim: CapacityClaim, write: Callable[[], object]) -> object:
+    """Execute one observed write and turn ENOSPC into a recoverable same-boundary pause."""
 
-    if not isinstance(reservation, CapacityReservation):
-        _capacity_reject(
-            "release", "a completed CapacityReservation is required", "INVALID_REQUEST"
-        )
-    if not reservation.active:
-        return
+    if not callable(write):
+        _capacity_reject(claim.transition.operation_id, "write must be callable", "INVALID_REQUEST")
+    observe_claim_before_write(claim)
     try:
-        released = reservation._release_extent(reservation.required_bytes)
+        return write()
     except OSError as error:
+        if error.errno != errno.ENOSPC:
+            raise
+        _pause_claim(claim, "ENOSPC during declared write")
         _capacity_reject(
-            reservation.operation_id,
-            f"release failed for {reservation.required_bytes} bytes: {error}",
+            claim.transition.operation_id, "ENOSPC during declared write", retryability="retryable"
         )
-    if released is not True:
+
+
+def _run_claimed_transition(claim: CapacityClaim, mutation: Callable[[], object]) -> object:
+    """Execute one store mutation under its claim and close it only after its durable boundary."""
+
+    if isinstance(claim, CapacityClaim) and claim.state == "PAUSED_RECOVERABLE":
         _capacity_reject(
-            reservation.operation_id,
-            f"release refused the owned {reservation.required_bytes}-byte extent",
+            claim.transition.operation_id,
+            f"next transition {claim.transition.boundary_id!r} has no active capacity claim",
+            retryability="retryable",
         )
-    object.__setattr__(reservation, "active", False)
+    try:
+        result = execute_claimed_write(claim, mutation)
+    except Exception:
+        if isinstance(claim, CapacityClaim) and claim.active:
+            _pause_claim(claim, "store mutation did not reach its durable boundary")
+        raise
+    complete_capacity_claim(claim)
+    return result
+
+
+def _run_claimed_writes(
+    controller: CapacityCoordinator,
+    transition: CapacityTransition,
+    mutation: Callable[[CapacityClaim], object],
+) -> object:
+    """Run each declared physical write, then release only at the durable boundary."""
+
+    claim = controller(transition)
+    if not claim.active:
+        _capacity_reject(
+            transition.operation_id,
+            f"next transition {transition.boundary_id!r} needs {transition.total_bytes} available bytes",
+            retryability="retryable",
+        )
+    try:
+        result = mutation(claim)
+    except Exception as error:
+        if claim.active:
+            _pause_claim(claim, "store mutation did not reach its durable boundary")
+        if isinstance(error, OSError) and error.errno == errno.ENOSPC:
+            _capacity_reject(
+                transition.operation_id,
+                "ENOSPC before the declared durable boundary",
+                retryability="retryable",
+            )
+        raise
+    complete_capacity_claim(claim)
+    return result
+
+
+def _claimed_store_write(
+    controller: CapacityTransitionController,
+    operation_id: str,
+    boundary_id: str,
+    *,
+    payload_bytes: int = 0,
+    journal_bytes: int = 0,
+    index_bytes: int = 0,
+    root_bytes: int = 0,
+    pointer_bytes: int = 0,
+    recovery_bytes: int = 0,
+    write: Callable[[], object],
+) -> object:
+    """Claim and complete one store-owned durable write boundary."""
+
+    if not isinstance(controller, CapacityCoordinator):
+        _capacity_reject(
+            operation_id,
+            "the concrete store-owned CapacityCoordinator is required",
+            "INVALID_REQUEST",
+        )
+    transition = CapacityTransition(
+        operation_id=operation_id,
+        boundary_id=boundary_id,
+        payload_bytes=payload_bytes,
+        journal_bytes=journal_bytes,
+        index_bytes=index_bytes,
+        root_bytes=root_bytes,
+        pointer_bytes=pointer_bytes,
+        recovery_bytes=recovery_bytes,
+    )
+    return _run_claimed_writes(
+        controller,
+        transition,
+        lambda claim: execute_claimed_write(claim, write),
+    )
+
+
+def _claimed_directories(
+    controller: CapacityCoordinator,
+    operation_id: str,
+    boundary_id: str,
+    path: Path,
+    object_id: str,
+) -> None:
+    """Create each missing directory as its own observed zero-payload mutation."""
+
+    missing = _missing_directories(path)
+    if not missing:
+        return
+    transition = CapacityTransition(
+        operation_id,
+        boundary_id,
+        declared_writes=len(missing),
+        write_bytes=(0,) * len(missing),
+    )
+
+    def create(claim: CapacityClaim) -> None:
+        for directory in missing:
+            execute_claimed_write(claim, directory.mkdir)
+            _sync_directory(directory.parent, object_id)
+
+    _run_claimed_writes(controller, transition, create)
+
+
+def complete_capacity_claim(claim: CapacityClaim) -> CapacityClaim:
+    """Observe after the durable boundary, then release exactly this coordination claim."""
+
+    active = _active_claim(claim, claim.transition.operation_id)
+    if active.writes_started != active.transition.declared_writes:
+        _capacity_reject(
+            active.transition.operation_id, "durable boundary has undeclared writes remaining", "INVALID_REQUEST"
+        )
+    object.__setattr__(active, "history", (*active.history, "DURABLE_BOUNDARY"))
+    try:
+        _observe_capacity(active, "OBSERVE")
+    finally:
+        _release_claim_bytes(active)
+        object.__setattr__(active, "state", "COMPLETED")
+    return active
+
+
+def pause_capacity_claim(claim: CapacityClaim, reason: str) -> CapacityClaim:
+    """Pause an active transition only after exact same-boundary recovery."""
+
+    if not isinstance(reason, str) or not reason:
+        _capacity_reject(claim.transition.operation_id, "pause reason must be nonempty text", "INVALID_REQUEST")
+    return _pause_claim(_active_claim(claim, claim.transition.operation_id), reason)
+
+
+def resume_capacity_claim(
+    paused_claim: CapacityClaim,
+) -> CapacityClaim:
+    """Retry only the paused operation's exact same transition and boundary."""
+
+    if not isinstance(paused_claim, CapacityClaim) or paused_claim.state != "PAUSED_RECOVERABLE":
+        _capacity_reject("resume", "a paused CapacityClaim is required", "INVALID_REQUEST")
+    resumed = claim_next_transition(
+        paused_claim.transition,
+        coordinator=paused_claim.coordinator,
+    )
+    object.__setattr__(resumed, "history", (*paused_claim.history, "RESUME", *resumed.history))
+    return resumed
+
+
+def grant_transfer_extent(
+    cartridge: str | Path,
+    operation_id: str,
+    extent_id: str,
+    length: int,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+) -> TransferExtent:
+    """Create one sparse transfer extent without treating its logical size as reserved space."""
+
+    if (
+        not isinstance(operation_id, str)
+        or _TRANSACTION_ID.fullmatch(operation_id) is None
+        or not isinstance(extent_id, str)
+        or _TRANSACTION_ID.fullmatch(extent_id) is None
+        or type(length) is not int
+        or not 0 <= length <= 2**63 - 1
+    ):
+        _capacity_reject(
+            str(operation_id),
+            "transfer extent requires valid operation and extent IDs plus a signed 64-bit length",
+            "INVALID_REQUEST",
+        )
+    cartridge = Path(cartridge)
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    directory = cartridge / "transfers" / operation_id
+    path = directory / f"{extent_id}.extent"
+    if path.exists():
+        try:
+            metadata = path.stat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != length:
+                _capacity_reject(
+                    operation_id,
+                    f"existing transfer extent {extent_id!r} has another shape",
+                    "INVALID_REQUEST",
+                )
+            descriptor = os.open(path, os.O_RDWR)
+        except CassetteError:
+            raise
+        except OSError as error:
+            _capacity_reject(
+                operation_id,
+                f"existing transfer extent {extent_id!r} is unavailable: {error}",
+                "CARTRIDGE_DISCONNECTED",
+                "retryable",
+            )
+        return TransferExtent(descriptor, 0, length, operation_id)
+
+    missing = _missing_directories(directory)
+    write_bytes = (*((0,) * len(missing)), 0, 0)
+    transition = CapacityTransition(
+        operation_id,
+        f"transfer-extent:{extent_id}",
+        declared_writes=len(write_bytes),
+        write_bytes=write_bytes,
+    )
+
+    def create(claim: CapacityClaim) -> TransferExtent:
+        descriptor = None
+        try:
+            for missing_directory in missing:
+                execute_claimed_write(claim, missing_directory.mkdir)
+                _sync_directory(
+                    missing_directory.parent,
+                    f"transfer-extent:{extent_id}",
+                )
+            descriptor = execute_claimed_write(
+                claim,
+                lambda: os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600),
+            )
+
+            def size_and_sync() -> None:
+                os.ftruncate(descriptor, length)
+                os.fsync(descriptor)
+                command = getattr(fcntl, "F_FULLFSYNC", None)
+                if command is not None:
+                    fcntl.fcntl(descriptor, command)
+
+            execute_claimed_write(claim, size_and_sync)
+            _sync_directory(directory, f"transfer-extent:{extent_id}")
+            return TransferExtent(descriptor, 0, length, operation_id)
+        except Exception:
+            if descriptor is not None:
+                os.close(descriptor)
+            path.unlink(missing_ok=True)
+            raise
+
+    return _run_claimed_writes(capacity_controller, transition, create)
+
+
+def _active_claim(claim: CapacityClaim, operation_id: str) -> CapacityClaim:
+    if (not isinstance(claim, CapacityClaim) or not claim.active
+            or claim.transition.operation_id != operation_id):
+        _capacity_reject(operation_id, "an active claim for this operation is required", "INVALID_REQUEST")
+    return claim
+
+
+def is_reclaimable_object(candidate: ReclaimableObject) -> bool:
+    """Return true only for the narrow Q53 deletion set."""
+
+    if not isinstance(candidate, ReclaimableObject):
+        _capacity_reject("reclaim", "candidate must be ReclaimableObject", "INVALID_REQUEST")
+    return (
+        candidate.cassette_owned
+        and not candidate.pinned
+        and not candidate.reachable_from_retained_root
+        and not candidate.rollback_retained
+        and candidate.retention_class in {"TEMPORARY", "REPRODUCIBLE"}
+        and not candidate.active_claim_reference
+        and not candidate.active_transaction_reference
+        and not candidate.active_journal_reference
+    )
+
+
+def select_reclaimable_objects(candidates: tuple[ReclaimableObject, ...]) -> tuple[ReclaimableObject, ...]:
+    """Select only Q53-eligible objects; this function performs no deletion."""
+
+    if not isinstance(candidates, tuple):
+        _capacity_reject("reclaim", "candidates must be a tuple", "INVALID_REQUEST")
+    return tuple(candidate for candidate in candidates if is_reclaimable_object(candidate))
 
 
 def _reject(field: str, reason: str, object_id: str = "model:unidentified") -> None:
@@ -1297,6 +1850,8 @@ def _clone_extent(source_fd: int, destination: Path, object_id: str) -> None:
         directory_fd = os.open(destination.parent, os.O_RDONLY)
         result = _FCLONEFILEAT(source_fd, directory_fd, os.fsencode(destination.name), 0)
     except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
         _q57_reject(
             object_id,
             f"copy-on-write extent adoption failed before clone completion: {error}",
@@ -1307,6 +1862,8 @@ def _clone_extent(source_fd: int, destination: Path, object_id: str) -> None:
             os.close(directory_fd)
     if result != 0:
         error = OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()))
+        if error.errno == errno.ENOSPC:
+            raise error
         _q57_reject(
             object_id,
             f"copy-on-write extent adoption is unavailable and a full parameter copy is forbidden: {error}",
@@ -1321,6 +1878,9 @@ def stage_conversion_extent(
     target_digest: str,
     object_id: str,
     growth_chunks=(),
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> Path:
     """Resume one COW identity, shrink, or page-bounded grow transform into immutable storage."""
 
@@ -1341,8 +1901,38 @@ def stage_conversion_extent(
     if not stat.S_ISREG(source_stat.st_mode):
         _q57_reject(object_id, "conversion source descriptor is not a regular file", "INVALID_REQUEST")
     source_size = source_stat.st_size
-    directory = Path(cartridge) / "segments"
-    directory.mkdir(parents=True, exist_ok=True)
+    cartridge = Path(cartridge)
+    operation_id = operation_id or f"conversion-{target_name}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    try:
+        chunks = tuple(growth_chunks)
+    except TypeError:
+        _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
+    if target_size <= source_size and chunks:
+        _q57_reject(object_id, "identity and shrink transforms cannot carry growth chunks")
+    if target_size > source_size:
+        if any(
+            not isinstance(chunk, bytes) or not 0 < len(chunk) <= PAGE_BYTES
+            for chunk in chunks
+        ):
+            _q57_reject(
+                object_id,
+                "growth chunks must be nonempty bytes bounded by one canonical page",
+                "INVALID_REQUEST",
+            )
+        if sum(map(len, chunks)) != target_size - source_size:
+            _q57_reject(object_id, "growth chunks do not fill the declared target extent")
+    directory = cartridge / "segments"
+    if not directory.exists():
+        _claimed_directories(
+            capacity_controller,
+            operation_id,
+            f"conversion:{target_name}:directory",
+            directory,
+            object_id,
+        )
     destination = directory / target_name
     pending = destination.with_name(f".{target_name}.pending")
 
@@ -1355,63 +1945,70 @@ def stage_conversion_extent(
     if destination.exists():
         if not exact(destination):
             _q57_reject(target_digest, "existing conversion segment is corrupt", "PAGE_CORRUPT")
-        try:
-            destination.chmod(0o400)
-        except OSError as error:
-            _q57_reject(
-                target_digest,
-                f"existing conversion segment cannot be made read-only: {error}",
-                "DURABILITY_UNSUPPORTED",
-            )
+        if destination.stat().st_mode & 0o222:
+            try:
+                _claimed_store_write(
+                    capacity_controller,
+                    operation_id,
+                    f"conversion:{target_name}:seal-existing",
+                    write=lambda: destination.chmod(0o400),
+                )
+            except OSError as error:
+                _q57_reject(
+                    target_digest,
+                    f"existing conversion segment cannot be made read-only: {error}",
+                    "DURABILITY_UNSUPPORTED",
+                )
         return destination
     if pending.exists() and exact(pending):
-        _fullsync_file(pending, object_id)
-        try:
-            pending.chmod(0o400)
-            os.replace(pending, destination)
-        except OSError as error:
-            _q57_reject(object_id, f"resumed conversion extent cannot commit: {error}", "DURABILITY_UNSUPPORTED")
-        _sync_directory(directory, object_id)
-        return destination
-    try:
-        pending.unlink(missing_ok=True)
-        _clone_extent(source_fd, pending, object_id)
-        pending.chmod(0o600)
-        empty = object()
+        transition = CapacityTransition(
+            operation_id,
+            f"conversion:{target_name}:resume-publication",
+            declared_writes=2,
+            write_bytes=(0, 0),
+        )
+
+        def publish_resumed(claim: CapacityClaim) -> Path:
+            _fullsync_file(pending, object_id)
+            execute_claimed_write(claim, lambda: pending.chmod(0o400))
+            execute_claimed_write(claim, lambda: os.replace(pending, destination))
+            _sync_directory(directory, object_id)
+            return destination
+
+        return _run_claimed_writes(capacity_controller, transition, publish_resumed)
+
+    pending.unlink(missing_ok=True)
+    write_bytes = [0, 0]
+    if target_size < source_size:
+        write_bytes.append(0)
+    elif target_size > source_size:
+        write_bytes.extend(len(chunk) for chunk in chunks)
+    write_bytes.extend((0, 0))
+    transition = CapacityTransition(
+        operation_id,
+        f"conversion:{target_name}:materialize",
+        payload_bytes=sum(map(len, chunks)),
+        declared_writes=len(write_bytes),
+        write_bytes=tuple(write_bytes),
+    )
+
+    def materialize(claim: CapacityClaim) -> Path:
+        execute_claimed_write(claim, lambda: _clone_extent(source_fd, pending, object_id))
+        execute_claimed_write(claim, lambda: pending.chmod(0o600))
         if target_size < source_size:
-            try:
-                if next(iter(growth_chunks), empty) is not empty:
-                    _q57_reject(object_id, "identity and shrink transforms cannot carry growth chunks")
-            except TypeError:
-                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
-            os.truncate(pending, target_size)
+            execute_claimed_write(claim, lambda: os.truncate(pending, target_size))
         elif target_size > source_size:
             cursor = source_size
-            try:
-                chunks = iter(growth_chunks)
-            except TypeError:
-                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
             with pending.open("r+b", buffering=0) as handle:
                 for chunk in chunks:
-                    if not isinstance(chunk, bytes) or not 0 < len(chunk) <= PAGE_BYTES:
-                        _q57_reject(
-                            object_id,
-                            "growth chunks must be nonempty bytes bounded by one canonical page",
-                            "INVALID_REQUEST",
-                        )
-                    if cursor + len(chunk) > target_size:
-                        _q57_reject(object_id, "growth chunks exceed the declared target extent")
                     handle.seek(cursor)
-                    handle.write(chunk)
+
+                    def append(chunk=chunk) -> None:
+                        if handle.write(chunk) != len(chunk):
+                            raise OSError(errno.ENOSPC, "conversion growth write was incomplete")
+
+                    execute_claimed_write(claim, append)
                     cursor += len(chunk)
-            if cursor != target_size:
-                _q57_reject(object_id, "growth chunks do not fill the declared target extent")
-        else:
-            try:
-                if next(iter(growth_chunks), empty) is not empty:
-                    _q57_reject(object_id, "identity and shrink transforms cannot carry growth chunks")
-            except TypeError:
-                _q57_reject(object_id, "growth chunks must be iterable", "INVALID_REQUEST")
         if not exact(pending):
             _q57_reject(
                 object_id,
@@ -1419,73 +2016,125 @@ def stage_conversion_extent(
                 "SOURCE_REVISION_CHANGED",
             )
         _fullsync_file(pending, object_id)
-        pending.chmod(0o400)
-        os.replace(pending, destination)
+        execute_claimed_write(claim, lambda: pending.chmod(0o400))
+        execute_claimed_write(claim, lambda: os.replace(pending, destination))
         _sync_directory(directory, object_id)
+        return destination
+
+    try:
+        return _run_claimed_writes(capacity_controller, transition, materialize)
     except CassetteError:
         raise
     except OSError as error:
-        _q57_reject(object_id, f"conversion extent cannot commit: {error}", "DURABILITY_UNSUPPORTED")
-    return destination
+        _q57_reject(
+            object_id,
+            f"conversion extent cannot commit: {error}",
+            "DURABILITY_UNSUPPORTED",
+        )
 
 
-def _write_segments(cartridge: Path, pages) -> tuple[PageLocation, ...]:
+def _write_segments(
+    cartridge: Path,
+    pages,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
+    boundary_id: str = "segments",
+) -> tuple[PageLocation, ...]:
+    """Write each content segment through one exact multi-write durable transition."""
+
+    operation_id = operation_id or f"segments-{uuid.uuid4().hex}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     directory = cartridge / "segments"
-    directory.mkdir(parents=True, exist_ok=True)
-    locations = []
-    temporary = None
-    pending = []
-    segment_digest = None
+    if not directory.exists():
+        _claimed_directories(
+            capacity_controller,
+            operation_id,
+            f"{boundary_id}:directory",
+            directory,
+            boundary_id,
+        )
+    locations: list[PageLocation] = []
+    pending: list[tuple[str, bytes, int]] = []
     segment_length = 0
 
     def finish() -> None:
-        nonlocal temporary, pending, segment_digest, segment_length
-        if temporary is None:
+        nonlocal pending, segment_length
+        if not pending:
             return
-        temporary.flush()
-        temporary.close()
-        segment_id = f"blake3:{segment_digest.hexdigest()}"
+        segment_hasher = blake3()
+        for _, payload, _ in pending:
+            segment_hasher.update(payload)
+        segment_id = f"blake3:{segment_hasher.hexdigest()}"
         destination = directory / _content_hex(segment_id, segment_id)
-        temporary_path = Path(temporary.name)
         if destination.exists():
             if _file_digest(destination) != segment_id:
                 _q57_reject(segment_id, "existing segment bytes do not match their name", "PAGE_CORRUPT")
-            temporary_path.unlink()
         else:
-            temporary_path.replace(destination)
+            transition = CapacityTransition(
+                operation_id=operation_id,
+                boundary_id=f"{boundary_id}:{_content_hex(segment_id, segment_id)}",
+                payload_bytes=segment_length,
+                declared_writes=len(pending) + 2,
+                write_bytes=(0, *tuple(len(payload) for _, payload, _ in pending), 0),
+            )
+
+            def write_segment(claim: CapacityClaim) -> None:
+                temporary = None
+                temporary_path = None
+                try:
+                    def create_temporary() -> None:
+                        nonlocal temporary, temporary_path
+                        temporary = tempfile.NamedTemporaryFile(
+                            mode="w+b",
+                            buffering=0,
+                            dir=directory,
+                            prefix=".pending-",
+                            delete=False,
+                        )
+                        temporary_path = Path(temporary.name)
+
+                    execute_claimed_write(claim, create_temporary)
+                    for _, payload, _ in pending:
+                        def append(payload=payload) -> None:
+                            if temporary.write(payload) != len(payload):
+                                raise OSError(errno.ENOSPC, "segment write was incomplete")
+
+                        execute_claimed_write(claim, append)
+                    temporary.close()
+                    temporary = None
+                    _fullsync_file(temporary_path, f"segment:{segment_id}")
+                    execute_claimed_write(
+                        claim, lambda: os.replace(temporary_path, destination)
+                    )
+                    temporary_path = None
+                    _sync_directory(directory, f"segment:{segment_id}")
+                finally:
+                    if temporary is not None:
+                        temporary.close()
+                    if temporary_path is not None:
+                        temporary_path.unlink(missing_ok=True)
+
+            _run_claimed_writes(capacity_controller, transition, write_segment)
         locations.extend(
-            PageLocation(page_digest, segment_id, offset, length)
-            for page_digest, offset, length in pending
+            PageLocation(page_digest, segment_id, offset, len(payload))
+            for page_digest, payload, offset in pending
         )
-        temporary = None
         pending = []
-        segment_digest = None
         segment_length = 0
 
-    try:
-        for page_digest, payload in pages:
-            if not isinstance(payload, bytes) or not 0 < len(payload) <= PAGE_BYTES:
-                _q57_reject(str(page_digest), "content pages must contain at most 4 MiB")
-            if digest_bytes(payload) != page_digest:
-                _q57_reject(str(page_digest), "content page digest does not match its payload", "PAGE_CORRUPT")
-            if segment_length and segment_length + len(payload) > SEGMENT_BYTES:
-                finish()
-            if temporary is None:
-                temporary = tempfile.NamedTemporaryFile(
-                    mode="w+b", dir=directory, prefix=".pending-", delete=False
-                )
-                segment_digest = blake3()
-            offset = segment_length
-            temporary.write(payload)
-            segment_digest.update(payload)
-            pending.append((page_digest, offset, len(payload)))
-            segment_length += len(payload)
-        finish()
-    finally:
-        if temporary is not None:
-            name = Path(temporary.name)
-            temporary.close()
-            name.unlink(missing_ok=True)
+    for page_digest, payload in pages:
+        if not isinstance(payload, bytes) or not 0 < len(payload) <= PAGE_BYTES:
+            _q57_reject(str(page_digest), "content pages must contain at most 4 MiB")
+        if digest_bytes(payload) != page_digest:
+            _q57_reject(str(page_digest), "content page digest does not match its payload", "PAGE_CORRUPT")
+        if segment_length and segment_length + len(payload) > SEGMENT_BYTES:
+            finish()
+        pending.append((page_digest, payload, segment_length))
+        segment_length += len(payload)
+    finish()
     return tuple(locations)
 
 
@@ -1498,7 +2147,9 @@ def _write_index(
     root_digest: str,
     locations: tuple[PageLocation, ...],
     *,
-    durable: bool = False,
+    capacity_controller: CapacityCoordinator,
+    operation_id: str,
+    boundary_id: str,
 ) -> None:
     by_page = {location.page_digest: location for location in locations}
     if len(by_page) != len(locations):
@@ -1513,11 +2164,15 @@ def _write_index(
         for location in sorted(locations, key=lambda item: item.page_digest)
     )
     path = _index_path(cartridge, root_digest)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if durable:
-        _durable_replace(path, payload, f"index:{root_digest}")
-    else:
-        path.write_bytes(payload)
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        boundary_id,
+        path,
+        payload,
+        f"index:{root_digest}",
+        "index_bytes",
+    )
 
 
 def _decode_index(payload: bytes, root_digest: str) -> dict[str, PageLocation]:
@@ -1819,6 +2474,9 @@ def _write_cartridge_root(
     deltas: list[dict] | None = None,
     *,
     durable: bool = False,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+    boundary_id: str | None = None,
 ) -> str:
     payload, root_digest = _cartridge_root_payload(
         material,
@@ -1829,19 +2487,42 @@ def _write_cartridge_root(
         plans,
         deltas,
     )
-    _write_index(cartridge, root_digest, locations, durable=durable)
+    operation_id = operation_id or f"root-{_content_hex(root_digest, root_digest)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    boundary = boundary_id or f"root:{root_digest}"
+    indexed_locations = {location.page_digest: location for location in locations}
+    index_path = _index_path(cartridge, root_digest)
+
+    if index_path.exists() and _read_index(cartridge, root_digest) != indexed_locations:
+        _q57_reject(root_digest, "existing physical page index does not match its root")
+    index_write_required = not index_path.exists()
+
+    if index_write_required:
+        _write_index(
+            cartridge,
+            root_digest,
+            locations,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+            boundary_id=f"{boundary}:index",
+        )
     path = cartridge / "roots" / _content_hex(root_digest, root_digest)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if durable:
-        if not path.exists() or path.read_bytes() != payload:
-            _durable_replace(path, payload, f"root:{root_digest}")
-        else:
-            path.with_name(f".{path.name}.pending").unlink(missing_ok=True)
-    elif path.exists():
-        if path.read_bytes() != payload:
-            _q57_reject(root_digest, "existing root bytes do not match their name")
-    else:
-        path.write_bytes(payload)
+    if path.exists() and path.read_bytes() != payload:
+        _q57_reject(root_digest, "existing root bytes do not match their name")
+    root_write_required = not path.exists()
+
+    if root_write_required:
+        _claimed_durable_replace(
+            capacity_controller,
+            operation_id,
+            f"{boundary}:root",
+            path,
+            payload,
+            f"root:{root_digest}",
+            "root_bytes",
+        )
     load_root(cartridge, root_digest)
     return root_digest
 
@@ -1854,10 +2535,16 @@ def _import_tensor_containers(
     container_format: str,
     parser,
     codec: str,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Import one bounded tensor-container family through the single Q57 page authority."""
     identity_record = _identity_record(material)
     identity = digest_bytes(canonical_bytes(identity_record))
+    operation_id = operation_id or f"import-{_content_hex(identity, identity)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     expected_artifacts = {item["path"]: item for item in identity_record["artifacts"]}
     if not isinstance(source, Mapping) or not source:
         _q57_reject(identity, f"canonical artifact paths must map to local {container_format} files")
@@ -1938,7 +2625,13 @@ def _import_tensor_containers(
                     record["codec"] = codec
                     tensor_maps.append(record)
 
-    locations = _write_segments(cartridge, unique_pages())
+    locations = _write_segments(
+        cartridge,
+        unique_pages(),
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"{container_format}:segments",
+    )
     observed_artifacts = [
         {
             "path": artifact_path,
@@ -1963,11 +2656,19 @@ def _import_tensor_containers(
         ],
         sorted(tensor_maps, key=lambda tensor_map: tensor_map["semantic_tensor_id"]),
         locations,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"{container_format}:root",
     )
 
 
 def import_safetensors(
-    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
+    source: Mapping[str, str | Path],
+    cartridge: str | Path,
+    material: IdentityTuple,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Import SafeTensors only when their bytes prove the supplied complete Q1 material."""
 
@@ -1978,11 +2679,18 @@ def import_safetensors(
         container_format="safetensors",
         parser=_safetensors_header,
         codec="raw-little-endian",
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
 
 
 def import_gguf(
-    source: Mapping[str, str | Path], cartridge: str | Path, material: IdentityTuple
+    source: Mapping[str, str | Path],
+    cartridge: str | Path,
+    material: IdentityTuple,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Import GGUF v2/v3 only when bounded metadata and every tensor range prove Q1."""
 
@@ -1993,11 +2701,18 @@ def import_gguf(
         container_format="gguf",
         parser=_gguf_header,
         codec="gguf-block",
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
 
 
 def adopt_safetensors(
-    source: Mapping[str, int], cartridge: str | Path, material: IdentityTuple
+    source: Mapping[str, int],
+    cartridge: str | Path,
+    material: IdentityTuple,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Adopt verified SafeTensors extents as immutable pages without a second parameter copy."""
 
@@ -2007,8 +2722,10 @@ def adopt_safetensors(
     if not isinstance(source, Mapping) or set(source) != set(expected):
         _q57_reject(identity, "adoption requires every canonical SafeTensors artifact exactly once")
     cartridge = Path(cartridge)
-    segment_directory = cartridge / "segments"
-    segment_directory.mkdir(parents=True, exist_ok=True)
+    operation_id = operation_id or f"adopt-{_content_hex(identity, identity)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     tensor_names = set()
     tensor_maps = []
     containers = []
@@ -2105,6 +2822,8 @@ def adopt_safetensors(
             size,
             segment_id,
             object_id,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
         )
         page_digests = [page_digest for page_digest, _, _ in page_rows]
         for page_digest, offset, length in page_rows:
@@ -2138,6 +2857,9 @@ def adopt_safetensors(
         sorted(tensor_maps, key=lambda item: item["semantic_tensor_id"]),
         tuple(sorted(locations.values(), key=lambda item: item.page_digest)),
         durable=True,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id="adopt:root",
     )
 
 
@@ -2219,6 +2941,9 @@ def derive_root(
     parent_root_digest: str,
     material: IdentityTuple,
     plans: tuple[dict, ...],
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Publish one child revision or same-identity plan manifest over verified existing pages."""
 
@@ -2235,6 +2960,8 @@ def derive_root(
         canonical_plans,
         parent["deltas"],
         durable=True,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
 
 
@@ -2278,6 +3005,9 @@ def _write_training_delta_root(
     expected_transform: str,
     *,
     durable: bool,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+    boundary_id: str | None = None,
 ) -> str:
     identity_record = _identity_record(material)
     if (
@@ -2313,6 +3043,9 @@ def _write_training_delta_root(
         parent["plans"],
         deltas,
         durable=durable,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=boundary_id,
     )
 
 
@@ -2323,10 +3056,17 @@ def append_training_delta(
     kind: str,
     pages: tuple[bytes, ...],
     manifest_digest: str,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Append ordered immutable delta pages and publish one derived logical root."""
 
     cartridge = Path(cartridge)
+    operation_id = operation_id or f"training-delta-{uuid.uuid4().hex}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     parent = load_root(cartridge, parent_root_digest)
     if (
         not isinstance(pages, tuple)
@@ -2341,6 +3081,9 @@ def append_training_delta(
     additions = _write_segments(
         cartridge,
         zip(ordered_page_digests, pages, strict=True),
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id="training-delta:segments",
     )
     return _write_training_delta_root(
         cartridge,
@@ -2351,6 +3094,9 @@ def append_training_delta(
         deltas,
         expected_transform,
         durable=False,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id="training-delta:root",
     )
 
 
@@ -2360,6 +3106,9 @@ def append_staged_training_delta(
     kind: str,
     pages: tuple[PageLocation, ...],
     manifest_digest: str,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Bind durable staged pages into one non-callable direct child of the frozen parent."""
 
@@ -2395,7 +3144,64 @@ def append_staged_training_delta(
         deltas,
         expected_transform,
         durable=True,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
+
+
+def training_delta_shape(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    kind: str,
+    pages: tuple[PageLocation, ...],
+    manifest_digest: str,
+) -> dict[str, int | str]:
+    """Return exact root-and-index bytes before binding already staged training pages."""
+
+    cartridge = Path(cartridge)
+    parent = load_root(cartridge, parent_root_digest)
+    if (
+        not isinstance(pages, tuple)
+        or not pages
+        or any(not isinstance(location, PageLocation) for location in pages)
+    ):
+        _q57_reject(
+            parent_root_digest,
+            "staged training pages require one nonempty PageLocation tuple",
+            "INVALID_REQUEST",
+        )
+    ordered_page_digests = [location.page_digest for location in pages]
+    _, deltas, expected_transform = _training_delta_records(
+        parent, parent_root_digest, kind, ordered_page_digests, manifest_digest
+    )
+    material, _ = _material_from_provenance(parent["provenance"], parent_root_digest)
+    child_material = replace(
+        material,
+        revision_kind="tuned",
+        parent_ids=(parent["identity"],),
+        transform_manifest_digest=expected_transform,
+    )
+    current = _read_index(cartridge, parent_root_digest)
+    for location in pages:
+        _read_page(cartridge, location)
+    locations = tuple(sorted(
+        {**current, **{location.page_digest: location for location in pages}}.values(),
+        key=lambda location: location.page_digest,
+    ))
+    payload, root_digest = _cartridge_root_payload(
+        child_material,
+        _identity_record(child_material),
+        parent["provenance"]["containers"],
+        parent["tensor_maps"],
+        locations,
+        parent["plans"],
+        deltas,
+    )
+    return {
+        "root_bytes": len(payload),
+        "index_bytes": len(locations) * _INDEX_RECORD.size,
+        "root_digest": root_digest,
+    }
 
 
 def read_training_delta(
@@ -2567,7 +3373,14 @@ def page_locations(cartridge: str | Path, root_digest: str) -> tuple[PageLocatio
     return tuple(_read_index(Path(cartridge), root_digest).values())
 
 
-def stage_training_pages(cartridge: str | Path, pages) -> tuple[PageLocation, ...]:
+def stage_training_pages(
+    cartridge: str | Path,
+    pages,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
+    boundary_id: str = "training-pages",
+) -> tuple[PageLocation, ...]:
     """Durably stage unique Q23 training pages without making them callable."""
 
     if isinstance(pages, (bytes, bytearray, memoryview)):
@@ -2592,7 +3405,17 @@ def stage_training_pages(cartridge: str | Path, pages) -> tuple[PageLocation, ..
                 yield page_digest, payload
 
     cartridge = Path(cartridge)
-    locations = _write_segments(cartridge, unique_pages())
+    operation_id = operation_id or f"training-pages-{uuid.uuid4().hex}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    locations = _write_segments(
+        cartridge,
+        unique_pages(),
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=boundary_id,
+    )
     if not locations:
         _q57_reject("training-pages", "at least one training page is required", "INVALID_REQUEST")
     segments = cartridge / "segments"
@@ -2630,11 +3453,20 @@ def page_index_byte_count(cartridge: str | Path, root_digest: str) -> int:
 
 
 def repack_segments(
-    cartridge: str | Path, root_digest: str, ordered_page_digests: tuple[str, ...]
+    cartridge: str | Path,
+    root_digest: str,
+    ordered_page_digests: tuple[str, ...],
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
 ) -> str:
     """Rewrite every required page in a new physical order without changing the logical root."""
 
     cartridge = Path(cartridge)
+    operation_id = operation_id or f"repack-{_content_hex(root_digest, root_digest)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     root = load_root(cartridge, root_digest)
     current = _read_index(cartridge, root_digest)
     required = _root_page_digests(root)
@@ -2642,9 +3474,20 @@ def repack_segments(
     if len(order) != len(set(order)) or set(order) != required or set(current) != required:
         _q57_reject(root_digest, "repack order must contain every required page exactly once", "INVALID_REQUEST")
     locations = _write_segments(
-        cartridge, ((page_digest, _read_page(cartridge, current[page_digest])) for page_digest in order)
+        cartridge,
+        ((page_digest, _read_page(cartridge, current[page_digest])) for page_digest in order),
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id="repack:segments",
     )
-    _write_index(cartridge, root_digest, locations)
+    _write_index(
+        cartridge,
+        root_digest,
+        locations,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"repack:{_content_hex(root_digest, root_digest)}:index",
+    )
     return root_digest
 
 
@@ -2677,7 +3520,7 @@ _EXPORT_PLAN_FIELDS = frozenset({
     "semantic_binding", "delta_id", "adapter_rank", "adapter_scale",
 })
 _MANIFEST_EXPORT_PLAN_FIELDS = _EXPORT_PLAN_FIELDS | {"plan_id", "artifact_size"}
-_SEALED_EXPORT_PLAN_FIELDS = _MANIFEST_EXPORT_PLAN_FIELDS | {"reservation_bytes"}
+_SEALED_EXPORT_PLAN_FIELDS = _MANIFEST_EXPORT_PLAN_FIELDS | {"transition_bytes"}
 _EXPORT_TARGETS = frozenset(EXPORT_TARGETS)
 _EXPORT_MANIFEST_FIELDS = frozenset({
     "export_id", "plan", "artifact", "artifact_role", "parameter_authority",
@@ -3054,7 +3897,7 @@ def _gguf_export_layout(cartridge: Path, root: dict, plan: dict) -> dict:
 
 
 def export_shape(cartridge: str | Path, plan_body: Mapping[str, object]) -> dict:
-    """Seal one compiler-approved export plan and compute its exact streamed byte demand."""
+    """Seal one export plan and report its largest exact next transition, not its total."""
 
     if not isinstance(plan_body, Mapping) or set(plan_body) != _EXPORT_PLAN_FIELDS:
         _q57_reject("export:plan", "export plan has an incorrect field set", "INVALID_REQUEST")
@@ -3129,7 +3972,7 @@ def export_shape(cartridge: str | Path, plan_body: Mapping[str, object]) -> dict
         "size": layout["artifact_size"],
         "digest": "sha256:" + "0" * 64,
     }
-    provisional = {**sealed, "reservation_bytes": 0}
+    provisional = {**sealed, "transition_bytes": 0}
     provisional_semantics = _artifact_semantics(
         root,
         provisional,
@@ -3150,8 +3993,8 @@ def export_shape(cartridge: str | Path, plan_body: Mapping[str, object]) -> dict
         )
     return {
         **sealed,
-        "reservation_bytes": _capacity_sum(
-            (layout["artifact_size"], manifest_bytes), body["source_root"]
+        "transition_bytes": max(
+            min(layout["artifact_size"], PAGE_BYTES), manifest_bytes
         ),
     }
 
@@ -3189,7 +4032,8 @@ def _export_chunks(
         ))
     ):
         _q57_reject(root_digest, "merged export tensor set differs from its sealed layout", "INVALID_REQUEST")
-    yield layout["prefix"]
+    for start in range(0, len(layout["prefix"]), PAGE_BYTES):
+        yield layout["prefix"][start:start + PAGE_BYTES]
     cursor = 0
     locations = _read_index(cartridge, root_digest)
     for kind, value, offset, length in layout["rows"]:
@@ -3210,7 +4054,8 @@ def _export_chunks(
         observed = 0
         for payload in chunks:
             observed += len(payload)
-            yield payload
+            for start in range(0, len(payload), PAGE_BYTES):
+                yield payload[start:start + PAGE_BYTES]
         if observed != length:
             _q57_reject(root_digest, "exported row length changed during streaming", "PAGE_CORRUPT")
         cursor = offset + length
@@ -3299,9 +4144,21 @@ def _stream_export_file(
     plan: dict,
     layout: dict,
     merged_tensors: Mapping[str, bytes] | None,
+    capacity_controller: CapacityTransitionController,
 ) -> tuple[Path, int, str]:
     directory = cartridge / "exports" / "artifacts"
-    directory.mkdir(parents=True, exist_ok=True)
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject(
+            operation_id, "export requires the concrete capacity coordinator", "INVALID_REQUEST"
+        )
+    if not directory.exists():
+        _claimed_directories(
+            capacity_controller,
+            operation_id,
+            f"export:{plan['plan_id']}:artifact-directory",
+            directory,
+            operation_id,
+        )
     pending = directory / f".{operation_id}.pending"
     hasher = hashlib.sha256()
     size = 0
@@ -3317,23 +4174,43 @@ def _stream_export_file(
             )
 
     try:
-        with pending.open("wb") as handle:
-            for payload in _export_chunks(
-                cartridge, root_digest, layout, merged_tensors
-            ):
-                handle.write(payload)
-                hasher.update(payload)
-                size += len(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-            command = getattr(fcntl, "F_FULLFSYNC", None)
-            if command is not None:
-                fcntl.fcntl(handle.fileno(), command)
+        _claimed_store_write(
+            capacity_controller,
+            operation_id,
+            f"export:{plan['plan_id']}:artifact-start",
+            write=lambda: pending.open("wb").close(),
+        )
+        for chunk_index, payload in enumerate(
+            _export_chunks(cartridge, root_digest, layout, merged_tensors)
+        ):
+            if not payload:
+                continue
+
+            def append(payload=payload) -> None:
+                with pending.open("ab", buffering=0) as handle:
+                    if handle.write(payload) != len(payload):
+                        raise OSError(errno.ENOSPC, "export chunk write was incomplete")
+                    os.fsync(handle.fileno())
+                    command = getattr(fcntl, "F_FULLFSYNC", None)
+                    if command is not None:
+                        fcntl.fcntl(handle.fileno(), command)
+
+            _claimed_store_write(
+                capacity_controller,
+                operation_id,
+                f"export:{plan['plan_id']}:artifact-chunk-{chunk_index}",
+                payload_bytes=len(payload),
+                write=append,
+            )
+            hasher.update(payload)
+            size += len(payload)
     except CassetteError:
         discard_pending()
         raise
     except OSError as error:
         discard_pending()
+        if error.errno == errno.ENOSPC:
+            raise
         _q57_reject(operation_id, f"export stream failed: {error}", "DURABILITY_UNSUPPORTED")
     if size != plan["artifact_size"]:
         discard_pending()
@@ -3359,16 +4236,25 @@ def _stream_export_file(
             _q57_reject(digest, "existing export artifact bytes changed", "SOURCE_REVISION_CHANGED")
         discard_pending()
     else:
-        try:
-            os.replace(pending, destination)
-        except OSError as error:
-            discard_pending()
-            _q57_reject(
-                operation_id,
-                f"export artifact publication failed: {error}",
-                "DURABILITY_UNSUPPORTED",
-            )
-        _sync_directory(directory, operation_id)
+        def publish() -> None:
+            try:
+                os.replace(pending, destination)
+            except OSError as error:
+                if error.errno == errno.ENOSPC:
+                    raise
+                _q57_reject(
+                    operation_id,
+                    f"export artifact publication failed: {error}",
+                    "DURABILITY_UNSUPPORTED",
+                )
+            _sync_directory(directory, operation_id)
+
+        _claimed_store_write(
+            capacity_controller,
+            operation_id,
+            f"export:{plan['plan_id']}:artifact-publication",
+            write=publish,
+        )
     return destination, size, digest
 
 
@@ -3478,27 +4364,17 @@ def _export_manifest(
     }
 
 
-def export_revision(
+def _export_revision(
     cartridge: str | Path,
     operation_id: str,
     plan: dict,
-    reservation: CapacityReservation,
+    capacity_controller: CapacityTransitionController,
     merged_tensors: Mapping[str, bytes] | None = None,
 ) -> dict:
     """Stream one derivative artifact on the cartridge while retaining one root authority."""
 
     cartridge = Path(cartridge)
     plan, root, layout = _export_plan(cartridge, plan)
-    active = _active_reservation(reservation, operation_id)
-    if (
-        active.operation_id != operation_id
-        or max(active.phase_totals) != plan["reservation_bytes"]
-    ):
-        _q57_reject(
-            operation_id,
-            "export reservation differs from its exact artifact-plus-manifest demand",
-            "CAPACITY_EXCEEDED",
-        )
     artifact, size, artifact_digest = _stream_export_file(
         cartridge,
         operation_id,
@@ -3506,6 +4382,7 @@ def export_revision(
         plan,
         layout,
         merged_tensors,
+        capacity_controller,
     )
     artifact_record = {"path": artifact.name, "size": size, "digest": artifact_digest}
     contracts = (
@@ -3526,12 +4403,22 @@ def export_revision(
     )
     export_id = manifest["export_id"]
     manifest_payload = canonical_bytes(manifest)
-    if size + len(manifest_payload) != plan["reservation_bytes"]:
-        _q57_reject(operation_id, "export manifest size changed after capacity admission")
+    if max(min(size, PAGE_BYTES), len(manifest_payload)) != plan["transition_bytes"]:
+        _q57_reject(operation_id, "export transition size changed after plan sealing")
     manifests = cartridge / "exports" / "manifests"
-    manifests.mkdir(parents=True, exist_ok=True)
     path = manifests / _content_hex(export_id, export_id)
-    _durable_replace(path, manifest_payload, f"export:{export_id}")
+    if path.exists() and path.read_bytes() != manifest_payload:
+        _q57_reject(export_id, "existing export manifest bytes do not match their identity")
+    if not path.exists():
+        _claimed_durable_replace(
+            capacity_controller,
+            operation_id,
+            f"export:{export_id}:manifest",
+            path,
+            manifest_payload,
+            f"export:{export_id}",
+            "payload_bytes",
+        )
     return {
         "export_id": export_id,
         "artifact_digest": artifact_digest,
@@ -3541,6 +4428,20 @@ def export_revision(
         "manifest_path": str(path.relative_to(cartridge)),
         "artifact_path": str(artifact.relative_to(cartridge)),
     }
+
+
+def export_revision(
+    cartridge: str | Path,
+    operation_id: str,
+    plan: dict,
+    capacity_controller: CapacityTransitionController,
+    merged_tensors: Mapping[str, bytes] | None = None,
+) -> dict:
+    """Export one derivative through store-owned exact durable transitions."""
+
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject(operation_id, "export requires a next-transition controller", "INVALID_REQUEST")
+    return _export_revision(cartridge, operation_id, plan, capacity_controller, merged_tensors)
 
 
 def _load_export(cartridge: Path, export_id: str) -> dict:
@@ -4191,9 +5092,6 @@ def _revision_delta_demand(
     return {
         "candidate_bytes": candidate["stage_bytes"],
         "publication_bytes": publication_bytes,
-        "required_bytes": _capacity_sum(
-            (candidate["stage_bytes"], publication_bytes), operation_id
-        ),
     }
 
 
@@ -4204,7 +5102,7 @@ def revision_delta_shape(
     delta: object,
     payloads: Mapping[str, bytes],
 ) -> dict:
-    """Return the exact Q53 update-and-publication demand without mutating the cartridge."""
+    """Return two exact consecutive Q53 transitions without claiming either one."""
 
     cartridge = Path(cartridge)
     candidate = _revision_delta_candidate(cartridge, base_root, delta, payloads)
@@ -4213,31 +5111,25 @@ def revision_delta_shape(
     )
 
 
-def apply_revision_delta(
+def _apply_revision_delta(
     cartridge: str | Path,
     operation_id: str,
     base_root: str,
     delta: object,
     payloads: Mapping[str, bytes],
-    reservation: CapacityReservation,
+    capacity_controller: CapacityTransitionController,
 ) -> str:
     """Verify, admit, stage, and return one exact unpublished Q54 target revision."""
 
     cartridge = Path(cartridge)
     candidate = _revision_delta_candidate(cartridge, base_root, delta, payloads)
-    required = _revision_delta_demand(
-        cartridge, operation_id, base_root, delta["target_root"], candidate
-    )["required_bytes"]
-    active = _active_reservation(reservation, operation_id)
-    if (
-        active.operation_id != operation_id
-        or max(active.phase_totals) != required
-    ):
-        _capacity_reject(
-            operation_id,
-            f"revision delta needs one exact {required}-byte candidate-and-publication phase",
-        )
-    new_locations = _write_segments(cartridge, candidate["additions"])
+    new_locations = _write_segments(
+        cartridge,
+        candidate["additions"],
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"revision-delta:{delta['target_root']}:segments",
+    )
     available = {
         **candidate["base_index"],
         **{row.page_digest: row for row in new_locations},
@@ -4253,10 +5145,30 @@ def apply_revision_delta(
             key=lambda row: row.page_digest,
         )),
         durable=True,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"revision-delta:{delta['target_root']}",
     )
     if root_digest != delta["target_root"] or load_root(cartridge, root_digest)["identity"] != delta["target_identity"]:
         _q57_reject(base_root, "revision delta produced another target", "IDENTITY_MISMATCH")
     return root_digest
+
+
+def apply_revision_delta(
+    cartridge: str | Path,
+    operation_id: str,
+    base_root: str,
+    delta: object,
+    payloads: Mapping[str, bytes],
+    capacity_controller: CapacityTransitionController,
+) -> str:
+    """Apply one revision delta through store-owned exact durable transitions."""
+
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject(operation_id, "revision delta requires a next-transition controller", "INVALID_REQUEST")
+    return _apply_revision_delta(
+        cartridge, operation_id, base_root, delta, payloads, capacity_controller
+    )
 
 
 def _root_catalog(cartridge: Path) -> dict[str, dict]:
@@ -4433,12 +5345,12 @@ def revision_removal_shape(
     return {"journal_bytes": len(payload)}
 
 
-def remove_revision(
+def _remove_revision(
     cartridge: str | Path,
     operation_id: str,
     target: str,
     reachability: object,
-    reservation: CapacityReservation,
+    capacity_controller: CapacityTransitionController,
 ) -> dict:
     """Admit and remove one exact unreachable revision through a resumable tombstone."""
 
@@ -4456,20 +5368,37 @@ def remove_revision(
     else:
         record = _revision_removal_record(cartridge, target, reachability)
     _, payload = _envelope(record)
-    active = _active_reservation(reservation, operation_id)
-    if active.operation_id != operation_id or max(active.phase_totals) != len(payload):
-        _capacity_reject(
-            operation_id,
-            f"revision removal needs one exact {len(payload)}-byte journal phase",
-        )
     if tombstone.exists():
         return _finish_revision_removal(cartridge, tombstone, record)
-    tombstone.parent.mkdir(parents=True, exist_ok=True)
     digest = digest_bytes(payload)
     if not digest:
         _q57_reject(record["target_root"], "revision-removal tombstone lacks an identity")
-    _durable_replace(tombstone, payload, f"remove:{record['target_root']}")
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        f"removal:{record['target_root']}:tombstone",
+        tombstone,
+        payload,
+        f"remove:{record['target_root']}",
+        "journal_bytes",
+    )
     return _finish_revision_removal(cartridge, tombstone, record)
+
+
+def remove_revision(
+    cartridge: str | Path,
+    operation_id: str,
+    target: str,
+    reachability: object,
+    capacity_controller: CapacityTransitionController,
+) -> dict:
+    """Remove one revision through its store-owned tombstone transition."""
+
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject(operation_id, "revision removal requires a next-transition controller", "INVALID_REQUEST")
+    return _remove_revision(
+        cartridge, operation_id, target, reachability, capacity_controller
+    )
 
 
 def _transaction_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
@@ -4531,6 +5460,8 @@ def _fullsync_file(path: Path, object_id: str) -> None:
             os.fsync(handle.fileno())
             fcntl.fcntl(handle.fileno(), command)
     except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
         _transaction_reject(object_id, f"F_FULLFSYNC failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
 
 
@@ -4542,22 +5473,79 @@ def _sync_directory(path: Path, object_id: str) -> None:
         finally:
             os.close(descriptor)
     except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
         _transaction_reject(object_id, f"directory sync failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
 
 
-def _durable_replace(path: Path, payload: bytes, object_id: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _sync_directory(path.parent.parent, object_id)
+def _missing_directories(path: Path) -> tuple[Path, ...]:
+    """Return each absent directory from its existing parent to the requested path."""
+
+    missing = []
+    cursor = path
+    while not cursor.exists():
+        if cursor == cursor.parent:
+            _transaction_reject(str(path), "durable record has no existing filesystem parent")
+        missing.append(cursor)
+        cursor = cursor.parent
+    return tuple(reversed(missing))
+
+
+def _claimed_durable_replace(
+    capacity_controller: CapacityCoordinator,
+    operation_id: str,
+    boundary_id: str,
+    path: Path,
+    payload: bytes,
+    object_id: str,
+    byte_field: str,
+) -> None:
+    """Create parents, write, verify, and publish one record with every mutation observed."""
+
+    if byte_field not in _TRANSITION_BYTE_FIELDS:
+        _capacity_reject(operation_id, f"unknown durable byte field {byte_field!r}", "INVALID_REQUEST")
+    missing = _missing_directories(path.parent)
     temporary = path.with_name(f".{path.name}.pending")
-    try:
-        temporary.write_bytes(payload)
-        if temporary.read_bytes() != payload:
-            _transaction_reject(object_id, f"readback changed {temporary.name!r}")
-        _fullsync_file(temporary, object_id)
-        os.replace(temporary, path)
-    except OSError as error:
-        _transaction_reject(object_id, f"atomic record replacement failed: {error}", "DURABILITY_UNSUPPORTED")
-    _sync_directory(path.parent, object_id)
+    temporary.unlink(missing_ok=True)
+    write_bytes = (*((0,) * len(missing)), len(payload), 0)
+    transition = CapacityTransition(
+        operation_id,
+        boundary_id,
+        **{byte_field: len(payload)},
+        declared_writes=len(write_bytes),
+        write_bytes=write_bytes,
+    )
+
+    def commit(claim: CapacityClaim) -> None:
+        try:
+            for directory in missing:
+                execute_claimed_write(claim, directory.mkdir)
+                _sync_directory(directory.parent, object_id)
+
+            def write_temporary() -> None:
+                if temporary.write_bytes(payload) != len(payload):
+                    raise OSError(errno.ENOSPC, "durable record write was incomplete")
+
+            execute_claimed_write(claim, write_temporary)
+            if temporary.read_bytes() != payload:
+                _transaction_reject(object_id, f"readback changed {temporary.name!r}")
+            _fullsync_file(temporary, object_id)
+            execute_claimed_write(claim, lambda: os.replace(temporary, path))
+            _sync_directory(path.parent, object_id)
+        except CassetteError:
+            temporary.unlink(missing_ok=True)
+            raise
+        except OSError as error:
+            temporary.unlink(missing_ok=True)
+            if error.errno == errno.ENOSPC:
+                raise
+            _transaction_reject(
+                object_id,
+                f"atomic record replacement failed: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+
+    _run_claimed_writes(capacity_controller, transition, commit)
 
 
 def _transactions_path(cartridge: Path) -> Path:
@@ -4604,6 +5592,7 @@ def _generation_publication_bytes(
     candidate_root: dict,
     locations: tuple[PageLocation, ...],
     expected_parent_root: str | None,
+    context: TransactionContext | None = None,
 ) -> int:
     """Compute the exact additional Q53 bytes at the generation-publication peak."""
 
@@ -4616,20 +5605,21 @@ def _generation_publication_bytes(
             f"expected parent {expected_parent_root!r}, found {active_root!r}",
             "IDEMPOTENCY_CONFLICT",
         )
-    resume = _validate_resume({
-        "operation_version": "store-generation-v1",
-        "input_digests": [candidate_root_digest],
-        "random_seed": None,
-        "statistics_digest": None,
-        "page_results": [
-            {"page_digest": row.page_digest, "length": row.length}
-            for row in locations
-        ],
-        "optimizer_step": None,
-        "rng_state_digest": None,
-        "data_cursor": None,
-        "loss_scale": None,
-    }, f"transaction:{transaction_id}", "INVALID_REQUEST")
+    object_id = f"transaction:{transaction_id}"
+    resume = _resume_record(
+        cartridge,
+        candidate_root_digest,
+        context,
+        object_id,
+        persist_material=False,
+        locations=locations,
+    )
+    expected_pages = [
+        {"page_digest": row.page_digest, "length": row.length}
+        for row in sorted(locations, key=lambda item: item.page_digest)
+    ]
+    if resume["page_results"] != expected_pages:
+        _transaction_reject(object_id, "generation shape locations differ from the candidate index")
     generation = _next_generation(cartridge)
     parent_id = active.child_id if active else None
     candidate_id = _generation_identity(
@@ -4707,9 +5697,52 @@ def _generation_publication_bytes(
         *(left + right for left, right in zip(journal_sizes, journal_sizes[1:])),
     )
     generation_bytes = len(_envelope(_generation_body(record))[1])
-    return _capacity_sum(
-        (journal_peak, generation_bytes), transaction_id
-    )
+    material_bytes = 0
+    material_digests = set()
+    for payload, digest in (
+        (context.statistics if context is not None else None, resume["statistics_digest"]),
+        (context.rng_state if context is not None else None, resume["rng_state_digest"]),
+    ):
+        if payload is None or digest in material_digests:
+            continue
+        material_digests.add(digest)
+        path = _restart_material_path(cartridge, digest)
+        if path.exists():
+            try:
+                observed = path.read_bytes()
+            except OSError as error:
+                _transaction_reject(object_id, f"restart material is unavailable: {error}")
+            if digest_bytes(observed) != digest:
+                _transaction_reject(object_id, "restart material does not match its identity")
+        else:
+            material_bytes = _capacity_sum((material_bytes, len(payload)), transaction_id)
+    return _capacity_sum((material_bytes, journal_peak, generation_bytes), transaction_id)
+
+
+def generation_publication_shape(
+    cartridge: str | Path,
+    transaction_id: str,
+    candidate_root: str,
+    *,
+    expected_parent_root: str | None,
+    context: TransactionContext | None = None,
+) -> dict[str, int]:
+    """Return exact bytes for the next parent-to-callable generation transition."""
+
+    path = Path(cartridge)
+    root = load_root(path, candidate_root)
+    locations = tuple(_read_index(path, candidate_root).values())
+    return {
+        "publication_bytes": _generation_publication_bytes(
+            path,
+            transaction_id,
+            candidate_root,
+            root,
+            locations,
+            expected_parent_root,
+            context,
+        )
+    }
 
 
 def _validate_generation(record: object, object_id: str) -> dict:
@@ -4808,7 +5841,16 @@ def _restart_material_digest(payload: object, field: str, object_id: str) -> str
     return digest_bytes(payload)
 
 
-def _write_restart_material(cartridge: Path, payload: bytes, digest: str, object_id: str) -> None:
+def _write_restart_material(
+    cartridge: Path,
+    payload: bytes,
+    digest: str,
+    object_id: str,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+    boundary_id: str | None = None,
+) -> None:
     path = _restart_material_path(cartridge, digest)
     if path.exists():
         try:
@@ -4818,7 +5860,19 @@ def _write_restart_material(cartridge: Path, payload: bytes, digest: str, object
         if digest_bytes(observed) != digest:
             _transaction_reject(object_id, "restart material does not match its identity", "SOURCE_UNAVAILABLE")
         return
-    _durable_replace(path, payload, object_id)
+    operation_id = operation_id or f"restart-{_content_hex(digest, digest)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        boundary_id or f"{object_id}:restart:{digest}",
+        path,
+        payload,
+        object_id,
+        "payload_bytes",
+    )
 
 
 def _read_restart_material(
@@ -4843,6 +5897,9 @@ def _resume_record(
     object_id: str,
     *,
     persist_material: bool,
+    locations: tuple[PageLocation, ...] | None = None,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
 ) -> dict:
     if context is not None and not isinstance(context, TransactionContext):
         _transaction_reject(object_id, "TransactionContext required", "INVALID_REQUEST")
@@ -4853,9 +5910,29 @@ def _resume_record(
     rng_state_digest = _restart_material_digest(context.rng_state, "rng_state", object_id)
     if persist_material:
         if statistics_digest is not None:
-            _write_restart_material(cartridge, context.statistics, statistics_digest, object_id)
+            _write_restart_material(
+                cartridge,
+                context.statistics,
+                statistics_digest,
+                object_id,
+                capacity_controller=capacity_controller,
+                operation_id=operation_id,
+                boundary_id=f"{object_id}:restart:statistics",
+            )
         if rng_state_digest is not None:
-            _write_restart_material(cartridge, context.rng_state, rng_state_digest, object_id)
+            _write_restart_material(
+                cartridge,
+                context.rng_state,
+                rng_state_digest,
+                object_id,
+                capacity_controller=capacity_controller,
+                operation_id=operation_id,
+                boundary_id=f"{object_id}:restart:rng-state",
+            )
+    candidate_locations = (
+        tuple(_read_index(cartridge, candidate_root).values())
+        if locations is None else locations
+    )
     resume = {
         "operation_version": context.operation_version,
         "input_digests": list(context.input_digests),
@@ -4864,7 +5941,7 @@ def _resume_record(
         "page_results": [
             {"page_digest": location.page_digest, "length": location.length}
             for location in sorted(
-                _read_index(cartridge, candidate_root).values(), key=lambda item: item.page_digest
+                candidate_locations, key=lambda item: item.page_digest
             )
         ],
         "optimizer_step": context.optimizer_step,
@@ -4919,7 +5996,14 @@ def _load_transaction(cartridge: Path, transaction_id: str) -> dict:
     return record
 
 
-def _write_transaction(cartridge: Path, record: dict) -> None:
+def _write_transaction(
+    cartridge: Path,
+    record: dict,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+    boundary_id: str | None = None,
+) -> None:
     transaction_id = record["transaction_id"]
     object_id = f"transaction:{transaction_id}"
     _validate_transaction(record, object_id)
@@ -4930,7 +6014,19 @@ def _write_transaction(cartridge: Path, record: dict) -> None:
         cartridge, record["resume"]["rng_state_digest"], "rng_state", object_id
     )
     _, payload = _envelope(record)
-    _durable_replace(_journal_path(cartridge, transaction_id), payload, object_id)
+    operation_id = operation_id or f"generation-{transaction_id}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        boundary_id or f"{object_id}:journal:{record['step']}",
+        _journal_path(cartridge, transaction_id),
+        payload,
+        object_id,
+        "journal_bytes",
+    )
 
 
 def _public_transaction(record: dict) -> TransactionState:
@@ -5064,6 +6160,55 @@ def recover_generation(cartridge: str | Path) -> GenerationPin | None:
     return generations[0] if generations else None
 
 
+def _capacity_boundary_marker(cartridge: Path) -> tuple[GenerationPin | None, bool]:
+    """Capture the latest exact generation pointer and whether its full revision is callable."""
+
+    paths = _generation_files(cartridge)
+    if not paths:
+        return None, True
+    record = _load_generation(paths[0])
+    marker = GenerationPin(record["generation"], record["child_id"], record["root_digest"])
+    try:
+        callable_generation = recover_generation(cartridge)
+    except CassetteError:
+        callable_generation = None
+    return marker, callable_generation == marker
+
+
+def _recover_capacity_boundary(cartridge: Path, claim: CapacityClaim) -> bool:
+    """Prove this failed transition retained its parent or published its own exact child."""
+
+    try:
+        observed, callable_observed = _capacity_boundary_marker(cartridge)
+    except CassetteError:
+        return False
+    parent = claim.recovery_parent
+    if observed == parent:
+        return not claim.recovery_parent_callable or callable_observed
+    if observed is None:
+        return False
+    if parent is None:
+        expected_generation = 0
+        expected_parent = (None, None, None)
+    else:
+        expected_generation = parent.generation + 1
+        expected_parent = (parent.generation, parent.child_id, parent.root_digest)
+    if observed.generation != expected_generation or not callable_observed:
+        return False
+    try:
+        record = _load_generation(_generation_path(cartridge, observed.generation))
+    except CassetteError:
+        return False
+    return (
+        record["transaction_id"] == claim.transition.operation_id
+        and (
+            record["parent_generation"],
+            record["parent_id"],
+            record["parent_root"],
+        ) == expected_parent
+    )
+
+
 def _cartridge_identity_path(cartridge: Path) -> Path:
     return cartridge / _CARTRIDGE_IDENTITY_NAME
 
@@ -5096,7 +6241,13 @@ def _read_cartridge_uuid(cartridge: Path) -> str:
         )
 
 
-def initialize_cartridge(cartridge: str | Path, cartridge_uuid: str | None = None) -> str:
+def initialize_cartridge(
+    cartridge: str | Path,
+    cartridge_uuid: str | None = None,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str = "initialize-cartridge",
+) -> str:
     """Create one immutable logical cartridge UUID with durable readback on a writable volume."""
 
     cartridge = Path(cartridge)
@@ -5125,7 +6276,18 @@ def initialize_cartridge(cartridge: str | Path, cartridge_uuid: str | None = Non
         else _normalize_uuid(cartridge_uuid, "cartridge_uuid")
     )
     payload = canonical_bytes({"cartridge_uuid": logical_uuid})
-    _durable_replace(path, payload, f"cartridge:{logical_uuid}")
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        "cartridge:identity",
+        path,
+        payload,
+        f"cartridge:{logical_uuid}",
+        "payload_bytes",
+    )
     if _read_cartridge_uuid(cartridge) != logical_uuid:
         _lifecycle_reject(
             logical_uuid, "cartridge UUID changed during durable readback",
@@ -5167,12 +6329,18 @@ def begin_generation(
     *,
     expected_parent_root: str | None,
     context: TransactionContext | None = None,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
 ) -> TransactionState:
     """Durably prepare one idempotent Q25/Q60 transaction against an exact parent generation."""
 
     cartridge = Path(cartridge)
     transaction_id = _transaction_id(transaction_id)
     object_id = f"transaction:{transaction_id}"
+    operation_id = operation_id or f"generation-{transaction_id}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     candidate_root = _transaction_digest(candidate_root, object_id)
     candidate = load_root(cartridge, candidate_root)
     journal = _journal_path(cartridge, transaction_id)
@@ -5203,7 +6371,13 @@ def begin_generation(
             "IDEMPOTENCY_CONFLICT",
         )
     resume = _resume_record(
-        cartridge, candidate_root, context, object_id, persist_material=True
+        cartridge,
+        candidate_root,
+        context,
+        object_id,
+        persist_material=True,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
     generation = _next_generation(cartridge)
     parent_id = active.child_id if active else None
@@ -5230,7 +6404,13 @@ def begin_generation(
         "resume": resume,
     }
     record["generation_record_digest"] = digest_bytes(canonical_bytes(_generation_body(record)))
-    _write_transaction(cartridge, record)
+    _write_transaction(
+        cartridge,
+        record,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+        boundary_id=f"{object_id}:journal:begin",
+    )
     return _public_transaction(record)
 
 
@@ -5272,17 +6452,40 @@ def _candidate_payload(record: dict) -> bytes:
     return payload
 
 
-def _write_candidate(cartridge: Path, record: dict) -> Path:
+def _write_candidate(
+    cartridge: Path,
+    record: dict,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+    boundary_id: str | None = None,
+) -> Path:
     path = _candidate_path(cartridge, record["transaction_id"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_bytes(_candidate_payload(record))
-    except OSError as error:
-        _transaction_reject(f"transaction:{record['transaction_id']}", f"candidate write failed: {error}")
+    payload = _candidate_payload(record)
+    operation_id = operation_id or f"generation-{record['transaction_id']}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
+
+    _claimed_durable_replace(
+        capacity_controller,
+        operation_id,
+        boundary_id or f"transaction:{record['transaction_id']}:candidate",
+        path,
+        payload,
+        f"transaction:{record['transaction_id']}",
+        "payload_bytes",
+    )
     return path
 
 
-def _ensure_candidate(cartridge: Path, record: dict) -> Path:
+def _ensure_candidate(
+    cartridge: Path,
+    record: dict,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+) -> Path:
     path = _candidate_path(cartridge, record["transaction_id"])
     expected = _candidate_payload(record)
     try:
@@ -5290,7 +6493,13 @@ def _ensure_candidate(cartridge: Path, record: dict) -> Path:
     except OSError:
         observed = None
     if observed != expected:
-        path = _write_candidate(cartridge, record)
+        path = _write_candidate(
+            cartridge,
+            record,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+            boundary_id=f"transaction:{record['transaction_id']}:candidate-repair",
+        )
         try:
             observed = path.read_bytes()
         except OSError as error:
@@ -5300,7 +6509,18 @@ def _ensure_candidate(cartridge: Path, record: dict) -> Path:
     return path
 
 
-def _publish_candidate(cartridge: Path, record: dict, repair: bool = False) -> Path:
+def _publish_candidate(
+    cartridge: Path,
+    record: dict,
+    repair: bool = False,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+) -> Path:
+    operation_id = operation_id or f"generation-{record['transaction_id']}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     destination = _generation_path(cartridge, record["candidate_generation"])
     expected = _candidate_payload(record)
     if destination.exists():
@@ -5309,7 +6529,12 @@ def _publish_candidate(cartridge: Path, record: dict, repair: bool = False) -> P
         return destination
     candidate = _candidate_path(cartridge, record["transaction_id"])
     if repair:
-        candidate = _ensure_candidate(cartridge, record)
+        candidate = _ensure_candidate(
+            cartridge,
+            record,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+        )
         _fullsync_file(candidate, f"transaction:{record['transaction_id']}")
     else:
         try:
@@ -5322,25 +6547,61 @@ def _publish_candidate(cartridge: Path, record: dict, repair: bool = False) -> P
             _transaction_reject(
                 f"transaction:{record['transaction_id']}", "candidate changed after its durable hash"
             )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.rename(candidate, destination)
-    except OSError as error:
-        _transaction_reject(
-            f"transaction:{record['transaction_id']}",
-            f"atomic generation publication failed: {error}",
-            "DURABILITY_UNSUPPORTED",
-        )
-    return destination
+    missing = _missing_directories(destination.parent)
+    transition = CapacityTransition(
+        operation_id,
+        f"transaction:{record['transaction_id']}:generation-publication",
+        declared_writes=len(missing) + 1,
+        write_bytes=(*((0,) * len(missing)), 0),
+    )
+
+    def publish(claim: CapacityClaim) -> Path:
+        for directory in missing:
+            execute_claimed_write(claim, directory.mkdir)
+            _sync_directory(directory.parent, f"transaction:{record['transaction_id']}")
+        try:
+            execute_claimed_write(claim, lambda: os.rename(candidate, destination))
+        except OSError as error:
+            if error.errno == errno.ENOSPC:
+                raise
+            _transaction_reject(
+                f"transaction:{record['transaction_id']}",
+                f"atomic generation publication failed: {error}",
+                "DURABILITY_UNSUPPORTED",
+            )
+        _sync_directory(destination.parent, f"transaction:{record['transaction_id']}")
+        return destination
+
+    return _run_claimed_writes(capacity_controller, transition, publish)
 
 
-def advance_generation(cartridge: str | Path, transaction_id: str) -> TransactionState:
+def advance_generation(
+    cartridge: str | Path,
+    transaction_id: str,
+    *,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
+) -> TransactionState:
     """Execute one idempotent Q25 transition; a fresh process may execute the next transition."""
 
     cartridge = Path(cartridge)
     record = _load_transaction(cartridge, transaction_id)
+    operation_id = operation_id or f"generation-{record['transaction_id']}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     step = record["step"]
     object_id = f"transaction:{record['transaction_id']}"
+
+    def write_journal(next_record: dict) -> None:
+        _write_transaction(
+            cartridge,
+            next_record,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+            boundary_id=f"{object_id}:journal:{next_record['step']}",
+        )
+
     if step == len(_TRANSACTION_STATES) - 1:
         generation = _load_generation(
             _generation_path(cartridge, record["candidate_generation"])
@@ -5349,16 +6610,27 @@ def advance_generation(cartridge: str | Path, transaction_id: str) -> Transactio
         _verify_generation_binding(cartridge, generation, root)
         return _public_transaction(record)
     if step == 0:
-        _write_candidate(cartridge, record)
+        _write_candidate(
+            cartridge,
+            record,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+            boundary_id=f"{object_id}:candidate",
+        )
     elif step == 1:
-        _ensure_candidate(cartridge, record)
+        _ensure_candidate(
+            cartridge,
+            record,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+        )
     elif step == 2:
         _fullsync_file(_ensure_candidate(cartridge, record), object_id)
     elif step == 3:
         _verify_dependency_paths(cartridge, record["candidate_root"])
     elif step == 4:
         record = {**record, "step": 5, "state": _TRANSACTION_STATES[5]}
-        _write_transaction(cartridge, record)
+        write_journal(record)
         return _public_transaction(record)
     elif step == 5:
         _, paths = _verify_dependency_paths(cartridge, record["candidate_root"])
@@ -5378,17 +6650,28 @@ def advance_generation(cartridge: str | Path, transaction_id: str) -> Transactio
             if ((active.root_digest if active else None) != record["expected_parent_root"]
                     and (active is None or active.generation != record["candidate_generation"])):
                 _transaction_reject(object_id, "callable parent changed before generation publication")
-            _publish_candidate(cartridge, record)
+            _publish_candidate(
+                cartridge,
+                record,
+                capacity_controller=capacity_controller,
+                operation_id=operation_id,
+            )
             record = {**record, "step": 6, "state": _TRANSACTION_STATES[6]}
         else:
             _transaction_reject(object_id, "journal dependency cursor exceeds its verified frontier")
-        _write_transaction(cartridge, record)
+        write_journal(record)
         return _public_transaction(record)
     elif step == 6:
-        destination = _publish_candidate(cartridge, record, repair=True)
+        destination = _publish_candidate(
+            cartridge,
+            record,
+            repair=True,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+        )
         _fullsync_file(destination, object_id)
         record = {**record, "step": 7, "state": _TRANSACTION_STATES[7], "pointer_cursor": 1}
-        _write_transaction(cartridge, record)
+        write_journal(record)
         return _public_transaction(record)
     elif step == 7:
         destination = _generation_path(cartridge, record["candidate_generation"])
@@ -5403,10 +6686,10 @@ def advance_generation(cartridge: str | Path, transaction_id: str) -> Transactio
             root, _ = _verify_dependency_paths(cartridge, generation["root_digest"])
             _verify_generation_binding(cartridge, generation, root)
             record = {**record, "step": 8, "state": _TRANSACTION_STATES[8]}
-        _write_transaction(cartridge, record)
+        write_journal(record)
         return _public_transaction(record)
     record = {**record, "step": step + 1, "state": _TRANSACTION_STATES[step + 1]}
-    _write_transaction(cartridge, record)
+    write_journal(record)
     return _public_transaction(record)
 
 
@@ -5417,24 +6700,48 @@ def commit_generation(
     *,
     expected_parent_root: str | None,
     context: TransactionContext | None = None,
+    capacity_controller: CapacityTransitionController | None = None,
+    operation_id: str | None = None,
 ) -> GenerationPin:
     """Resume until the exact candidate is a fully synced immutable callable generation."""
 
+    operation_id = operation_id or f"generation-{_transaction_id(transaction_id)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     state = begin_generation(
         cartridge,
         transaction_id,
         candidate_root,
         expected_parent_root=expected_parent_root,
         context=context,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
     while state.state != "COMMITTED":
-        state = advance_generation(cartridge, transaction_id)
-    advance_generation(cartridge, transaction_id)
+        state = advance_generation(
+            cartridge,
+            transaction_id,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+        )
+    advance_generation(
+        cartridge,
+        transaction_id,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
+    )
     record = _load_transaction(Path(cartridge), transaction_id)
     return GenerationPin(record["candidate_generation"], record["candidate_id"], candidate_root)
 
 
-def rollback_generation(cartridge: str | Path, transaction_id: str) -> GenerationPin:
+def rollback_generation(
+    cartridge: str | Path,
+    transaction_id: str,
+    *,
+    capacity_controller: CapacityCoordinator | None = None,
+    operation_id: str | None = None,
+) -> GenerationPin:
     """Publish the prior valid root as a new generation while retaining both immutable revisions."""
 
     cartridge = Path(cartridge)
@@ -5445,39 +6752,107 @@ def rollback_generation(cartridge: str | Path, transaction_id: str) -> Generatio
             "INVALID_REQUEST",
         )
     current, prior = generations[:2]
+    operation_id = operation_id or f"rollback-{_transaction_id(transaction_id)}"
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, operation_id
+    )
     return commit_generation(
-        cartridge, transaction_id, prior.root_digest, expected_parent_root=current.root_digest
+        cartridge,
+        transaction_id,
+        prior.root_digest,
+        expected_parent_root=current.root_digest,
+        capacity_controller=capacity_controller,
+        operation_id=operation_id,
     )
 
 
-def collect_garbage(cartridge: str | Path) -> tuple[str, ...]:
-    """Remove only unreachable transaction temporaries; retained generations and reader pins survive."""
+def reclaim_capacity(
+    cartridge: str | Path,
+    capacity_controller: CapacityCoordinator | None = None,
+) -> tuple[str, ...]:
+    """Inventory and remove only transaction objects that satisfy every Q53 reclaim guard."""
 
     cartridge = Path(cartridge)
-    if recover_generation(cartridge) is None:
-        return ()
+    capacity_controller = _capacity_coordinator(
+        cartridge, capacity_controller, "capacity-reclamation"
+    )
+    recover_generation(cartridge)
     directory = _transactions_path(cartridge)
     if not directory.exists():
         return ()
     records = [_load_transaction(cartridge, path.stem) for path in sorted(directory.glob("*.json"))]
-    live = {
-        _candidate_path(cartridge, record["transaction_id"])
+    records_by_id = {record["transaction_id"]: record for record in records}
+    referenced_material = {
+        _restart_material_path(cartridge, digest)
         for record in records
-        if record["step"] < 6
+        for digest in (
+            record["resume"]["statistics_digest"],
+            record["resume"]["rng_state_digest"],
+        )
+        if digest is not None
     }
-    removed = []
+    any_active_claim = bool(capacity_controller.active_claims())
+    candidates: list[tuple[Path, ReclaimableObject]] = []
     for path in sorted(item for item in directory.rglob("*") if item.is_file()):
         is_atomic_temporary = path.name.startswith(".") and path.name.endswith(".pending")
         is_candidate = path.parent == directory and path.name.endswith(".generation-candidate")
-        if path not in live and (is_atomic_temporary or is_candidate):
-            try:
-                path.unlink()
-            except OSError as error:
-                _transaction_reject(f"transaction:{path.name}", f"temporary reclamation failed: {error}")
-            removed.append(path.name)
+        if not (is_atomic_temporary or is_candidate):
+            continue
+        transaction_id = None
+        if is_candidate:
+            transaction_id = path.name.removesuffix(".generation-candidate")
+        elif path.parent == directory:
+            inner = path.name.removeprefix(".").removesuffix(".pending")
+            if inner.endswith(".json"):
+                transaction_id = inner.removesuffix(".json")
+        record = records_by_id.get(transaction_id)
+        active_transaction = record is not None and record["step"] < 8
+        journal_reference = (
+            record is not None
+            or any(
+                path == material.with_name(f".{material.name}.pending")
+                for material in referenced_material
+            )
+        )
+        candidate = ReclaimableObject(
+            object_id=str(path.relative_to(cartridge)),
+            cassette_owned=True,
+            pinned=False,
+            reachable_from_retained_root=False,
+            rollback_retained=False,
+            retention_class="REPRODUCIBLE" if is_candidate else "TEMPORARY",
+            active_claim_reference=any_active_claim,
+            active_transaction_reference=active_transaction,
+            active_journal_reference=journal_reference,
+        )
+        candidates.append((path, candidate))
+    selected = {
+        candidate.object_id
+        for candidate in select_reclaimable_objects(
+            tuple(candidate for _, candidate in candidates)
+        )
+    }
+    removed = []
+    for path, candidate in candidates:
+        if candidate.object_id not in selected:
+            continue
+        try:
+            path.unlink()
+        except OSError as error:
+            _transaction_reject(f"transaction:{path.name}", f"temporary reclamation failed: {error}")
+        removed.append(path.name)
     if removed:
         _sync_directory(directory, "transactions:garbage-collection")
     return tuple(removed)
+
+
+def collect_garbage(
+    cartridge: str | Path,
+    capacity_controller: CapacityCoordinator | None = None,
+) -> tuple[str, ...]:
+    """Run the Q53 reclaim inventory without considering caller-authored eligibility flags."""
+
+    return reclaim_capacity(cartridge, capacity_controller)
 
 
 def _integrity_reject(object_id: str, detail: str, code: str = "ROOT_INVALID") -> None:
@@ -5510,53 +6885,84 @@ def _portable_directory_sync(path: Path, object_id: str) -> None:
         finally:
             os.close(descriptor)
     except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
         _integrity_reject(object_id, f"repair directory sync failed for {path.name!r}: {error}")
 
 
-def _quarantine(path: Path, object_id: str) -> None:
+def _quarantine_target(path: Path, object_id: str) -> Path | None:
+    """Return the immutable quarantine name for an existing corrupt object."""
+
     if not path.exists():
-        return
+        return None
     try:
         payload = path.read_bytes()
         observed = digest_bytes(payload)[7:]
         directory = path.parents[1] / "quarantine"
-        directory.mkdir(parents=True, exist_ok=True)
-        os.replace(path, directory / f"{path.parent.name}-{path.name}-{observed}")
-        _portable_directory_sync(directory, object_id)
+        return directory / f"{path.parent.name}-{path.name}-{observed}"
     except OSError as error:
         _integrity_reject(object_id, f"corrupt object quarantine failed: {error}")
 
 
-def _replace_exact(path: Path, payload: bytes, expected_digest: str, object_id: str) -> None:
+def _replace_exact(
+    path: Path,
+    payload: bytes,
+    expected_digest: str,
+    object_id: str,
+    *,
+    capacity_controller: CapacityCoordinator,
+    operation_id: str,
+) -> None:
     if digest_bytes(payload) != expected_digest:
         _integrity_reject(object_id, "repair candidate does not match the original digest")
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject(operation_id, "repair requires the concrete capacity coordinator", "INVALID_REQUEST")
+    if path.exists() and path.read_bytes() == payload:
+        return
+    temporary = path.with_name(f".{path.name}.repair-pending")
     try:
-        if path.exists() and path.read_bytes() == payload:
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = tempfile.NamedTemporaryFile(
-            mode="w+b", dir=path.parent, prefix=f".{path.name}.repair-", delete=False
-        )
-        temporary_path = Path(temporary.name)
-        try:
-            temporary.write(payload)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            command = getattr(fcntl, "F_FULLFSYNC", None)
-            if command is not None:
-                fcntl.fcntl(temporary.fileno(), command)
-        finally:
-            temporary.close()
-        if temporary_path.read_bytes() != payload:
+        if not temporary.exists() or temporary.read_bytes() != payload:
+            temporary.unlink(missing_ok=True)
+            _claimed_durable_replace(
+                capacity_controller,
+                operation_id,
+                f"{object_id}:repair-material",
+                temporary,
+                payload,
+                object_id,
+                "payload_bytes",
+            )
+        if temporary.read_bytes() != payload:
             _integrity_reject(object_id, "repair candidate changed during readback")
-        _quarantine(path, object_id)
-        os.replace(temporary_path, path)
-        _portable_directory_sync(path.parent, object_id)
+
+        quarantine = _quarantine_target(path, object_id)
+        missing = () if quarantine is None else _missing_directories(quarantine.parent)
+        link_required = quarantine is not None and not quarantine.exists()
+        write_bytes = (*((0,) * len(missing)), *((0,) if link_required else ()), 0)
+        transition = CapacityTransition(
+            operation_id,
+            f"{object_id}:repair-publication",
+            declared_writes=len(write_bytes),
+            write_bytes=write_bytes,
+        )
+
+        def publish(claim: CapacityClaim) -> None:
+            for directory in missing:
+                execute_claimed_write(claim, directory.mkdir)
+                _portable_directory_sync(directory.parent, object_id)
+            if link_required:
+                execute_claimed_write(claim, lambda: os.link(path, quarantine))
+                _portable_directory_sync(quarantine.parent, object_id)
+            execute_claimed_write(claim, lambda: os.replace(temporary, path))
+            _portable_directory_sync(path.parent, object_id)
+
+        _run_claimed_writes(capacity_controller, transition, publish)
+    except CassetteError:
+        raise
     except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
         _integrity_reject(object_id, f"exact repair replacement failed: {error}")
-    finally:
-        if "temporary_path" in locals():
-            temporary_path.unlink(missing_ok=True)
 
 
 def _xor_payloads(payloads: tuple[bytes, ...], length: int) -> bytes:
@@ -5679,15 +7085,11 @@ def _repair_record(
     )
 
 
-def create_repair_set(
-    cartridge: str | Path, root_digest: str, reservation: CapacityReservation
-) -> RepairSet:
-    """Create Q62 root/index replicas and one XOR parity stripe per segment after Q53 admission."""
+def _repair_set_candidate(
+    cartridge: Path, root_digest: str
+) -> tuple[dict[str, bytes], bytes, str, str, tuple[dict, ...]]:
+    """Build the exact immutable Q62 repair transition before a claim permits its writes."""
 
-    if not isinstance(reservation, CapacityReservation):
-        _capacity_reject("repair-set", "a completed CapacityReservation is required", "INVALID_REQUEST")
-    _active_reservation(reservation, reservation.operation_id)
-    cartridge = Path(cartridge)
     _verify_dependency_paths(cartridge, root_digest)
     locations = _read_index(cartridge, root_digest)
     root_payload = (cartridge / "roots" / _content_hex(root_digest, root_digest)).read_bytes()
@@ -5734,30 +7136,65 @@ def create_repair_set(
     _, manifest_payload = _envelope(record)
     manifest_digest = digest_bytes(manifest_payload)
     objects = {root_digest: root_payload, index_digest: index_payload, **parity_payloads}
-    required = _capacity_sum(
-        (*[len(payload) for payload in objects.values()], 2 * len(manifest_payload)),
-        reservation.operation_id,
-    )
-    if reservation.repair_bytes < required:
-        _capacity_reject(
-            reservation.operation_id,
-            f"repair phase reserves {reservation.repair_bytes} bytes; exact repair set needs {required}",
+    return objects, manifest_payload, manifest_digest, index_digest, tuple(stripes)
+
+
+def repair_set_shape(cartridge: str | Path, root_digest: str) -> dict[str, int]:
+    """Return the exact next-transition bytes for Q62 repair material without writing it."""
+
+    objects, manifest_payload, _, _, _ = _repair_set_candidate(Path(cartridge), root_digest)
+    return {
+        "payload_bytes": _capacity_sum(
+            (*[len(payload) for payload in objects.values()], 2 * len(manifest_payload)), root_digest
         )
+    }
+
+
+def create_repair_set(
+    cartridge: str | Path,
+    root_digest: str,
+    capacity_controller: CapacityTransitionController,
+) -> RepairSet:
+    """Create Q62 replicas through separate store-owned durable transitions."""
+
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject("repair-set", "repair set requires a next-transition controller", "INVALID_REQUEST")
+    cartridge = Path(cartridge)
+    objects, manifest_payload, manifest_digest, index_digest, stripes = _repair_set_candidate(
+        cartridge, root_digest
+    )
+    operation_id = f"repair-set-{root_digest[7:]}"
+
+    def replace(path: Path, payload: bytes, digest: str, object_id: str) -> None:
+        if path.exists() and path.read_bytes() == payload:
+            return
+        _replace_exact(
+            path,
+            payload,
+            digest,
+            object_id,
+            capacity_controller=capacity_controller,
+            operation_id=operation_id,
+        )
+
     for digest, payload in objects.items():
-        _replace_exact(_repair_object_path(cartridge, digest), payload, digest, f"repair-object:{digest}")
-    _replace_exact(
+        replace(_repair_object_path(cartridge, digest), payload, digest, f"repair-object:{digest}")
+    replace(
         _repair_manifest_replica_path(cartridge, root_digest),
         manifest_payload,
         manifest_digest,
         f"manifest-copy:{root_digest}",
     )
-    _replace_exact(
+    replace(
         _repair_manifest_path(cartridge, root_digest),
         manifest_payload,
         manifest_digest,
         f"repair:{root_digest}",
     )
     _repair_record(cartridge, root_digest)
+    required = _capacity_sum(
+        (*[len(payload) for payload in objects.values()], 2 * len(manifest_payload)), root_digest
+    )
     return RepairSet(
         root_digest,
         manifest_digest,
@@ -5798,12 +7235,28 @@ def _normalize_source_pages(source_pages: Mapping[str, bytes] | None) -> dict[st
     return normalized
 
 
+def repair_replacement_shape(cartridge: str | Path, root_digest: str) -> dict[str, int]:
+    """Return the exact next Q62 replacement transition without changing repair state."""
+
+    _, root_copy, index_copy, locations, manifest_payload, _, _ = _repair_record(
+        Path(cartridge), root_digest
+    )
+    extent = max(
+        len(root_copy),
+        len(index_copy),
+        len(manifest_payload),
+        *(sum(location.length for location in locations.values() if location.segment_id == segment_id)
+          for segment_id in {location.segment_id for location in locations.values()}),
+    )
+    return {"payload_bytes": extent}
+
+
 def _integrity_operation(
     cartridge: Path,
     root_digest: str,
     *,
     repair: bool,
-    reservation: CapacityReservation | None,
+    capacity_controller: CapacityTransitionController | None,
     source_pages: Mapping[str, bytes] | None,
 ) -> IntegrityReport:
     (
@@ -5816,23 +7269,22 @@ def _integrity_operation(
         manifest_valid,
     ) = _repair_record(cartridge, root_digest)
     if repair:
-        if not isinstance(reservation, CapacityReservation):
-            _capacity_reject("repair", "repair requires a completed CapacityReservation", "INVALID_REQUEST")
-        _active_reservation(reservation, reservation.operation_id)
-        repair_extent = max(
-            len(root_copy),
-            len(index_copy),
-            len(manifest_payload),
-            *(sum(location.length for location in locations.values()
-                  if location.segment_id == segment_id)
-              for segment_id in {location.segment_id for location in locations.values()}),
-            *(stripe["length"] for stripe in record["stripes"]),
+        if not isinstance(capacity_controller, CapacityCoordinator):
+            _capacity_reject("repair", "repair requires a next-transition controller", "INVALID_REQUEST")
+
+    def replace(path: Path, payload: bytes, digest: str, object_id: str) -> None:
+        if path.exists() and path.read_bytes() == payload:
+            return
+        if capacity_controller is None:
+            _integrity_reject(object_id, "repair controller is absent", "INVALID_REQUEST")
+        _replace_exact(
+            path,
+            payload,
+            digest,
+            object_id,
+            capacity_controller=capacity_controller,
+            operation_id=f"repair-{root_digest[7:]}",
         )
-        if reservation.repair_bytes < repair_extent:
-            _capacity_reject(
-                reservation.operation_id,
-                f"repair phase reserves {reservation.repair_bytes} bytes; one replacement extent needs {repair_extent}",
-            )
     sources = _normalize_source_pages(source_pages)
     states = {}
     transitions = []
@@ -5850,7 +7302,7 @@ def _integrity_operation(
         _mark_corrupt(states, transitions, manifest_id)
         if repair:
             _transition(states, transitions, manifest_id, "REPAIRING")
-            _replace_exact(
+            replace(
                 _repair_manifest_path(cartridge, root_digest),
                 manifest_payload,
                 manifest_digest,
@@ -5872,7 +7324,7 @@ def _integrity_operation(
             _mark_corrupt(states, transitions, object_id)
             if repair:
                 _transition(states, transitions, object_id, "REPAIRING")
-                _replace_exact(path, payload, digest, object_id)
+                replace(path, payload, digest, object_id)
                 _transition(states, transitions, object_id, "VALID")
 
     parity_payloads = {}
@@ -5962,7 +7414,7 @@ def _integrity_operation(
                     payload.extend(page_payloads[member.page_digest])
                     cursor += member.length
                 _transition(states, transitions, f"segment:{segment_id}", "REPAIRING")
-                _replace_exact(
+                replace(
                     cartridge / "segments" / _content_hex(segment_id, segment_id),
                     bytes(payload),
                     segment_id,
@@ -5986,7 +7438,7 @@ def _integrity_operation(
                     stripe["length"],
                 )
                 if digest_bytes(payload) == digest:
-                    _replace_exact(_repair_object_path(cartridge, digest), payload, digest, object_id)
+                    replace(_repair_object_path(cartridge, digest), payload, digest, object_id)
                     parity_payloads[digest] = payload
                     _transition(states, transitions, object_id, "VALID")
                     continue
@@ -6014,21 +7466,26 @@ def verify_revision(cartridge: str | Path, root_digest: str) -> IntegrityReport:
     """Run Q62 verification without changing a corrupt object."""
 
     return _integrity_operation(
-        Path(cartridge), root_digest, repair=False, reservation=None, source_pages=None
+        Path(cartridge), root_digest, repair=False, capacity_controller=None, source_pages=None
     )
 
 
 def repair_revision(
     cartridge: str | Path,
     root_digest: str,
-    reservation: CapacityReservation,
+    capacity_controller: CapacityTransitionController,
     *,
     source_pages: Mapping[str, bytes] | None = None,
 ) -> IntegrityReport:
-    """Repair exact Q62 identities from local copies, verified source pages, then declared parity."""
+    """Repair exact Q62 identities through store-owned durable transitions."""
 
+    if not isinstance(capacity_controller, CapacityCoordinator):
+        _capacity_reject("repair", "repair requires a next-transition controller", "INVALID_REQUEST")
     return _integrity_operation(
-        Path(cartridge), root_digest, repair=True, reservation=reservation,
+        Path(cartridge),
+        root_digest,
+        repair=True,
+        capacity_controller=capacity_controller,
         source_pages=source_pages,
     )
 

@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from errors import CassetteError
-from store import canonical_bytes, digest_bytes, read_training_page, release_capacity
+from store import CapacityCoordinator, canonical_bytes, digest_bytes, read_training_page
 from test_s21_trainer import (
     SFT_BATCHES,
     _manifest as training_manifest,
@@ -29,27 +30,6 @@ from trainer import (
 
 GIB = 1024**3
 MIB = 1024**2
-
-
-class ExtentPool:
-    """Record the exact reservation boundary without simulating storage behavior."""
-
-    def __init__(self, available: int) -> None:
-        self.available = available
-        self.reserved: list[int] = []
-        self.released: list[int] = []
-
-    def reserve(self, length: int) -> bool:
-        if length > self.available:
-            return False
-        self.available -= length
-        self.reserved.append(length)
-        return True
-
-    def release(self, length: int) -> bool:
-        self.available += length
-        self.released.append(length)
-        return True
 
 
 def _workload(**changes) -> TrainingWorkload:
@@ -76,7 +56,6 @@ def _workload(**changes) -> TrainingWorkload:
 def _profile(**changes) -> TrainingResourceProfile:
     values = {
         "profile_evidence_digest": digest_bytes(b"s22-cache-exhausted-mixed-training-profile"),
-        "device_bytes": 100 * GIB,
         "physical_memory_bytes": 32 * GIB,
         "recommended_max_working_set_bytes": 24 * GIB,
         "executor_memory_bytes": GIB,
@@ -103,15 +82,13 @@ def _profile(**changes) -> TrainingResourceProfile:
 def _admit(workload=None, profile=None):
     selected_workload = _workload() if workload is None else workload
     selected_profile = _profile() if profile is None else profile
-    pool = ExtentPool(20 * GIB)
+    coordinator = CapacityCoordinator(Path.cwd())
     admission = admit_training(
         selected_workload,
         selected_profile,
-        allocatable_verified_free=pool.available,
-        reserve_extent=pool.reserve,
-        release_extent=pool.release,
+        capacity_coordinator=coordinator,
     )
-    return admission, pool
+    return admission, coordinator
 
 
 def _observation(
@@ -151,7 +128,7 @@ def _observation(
 
 
 def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp_path):
-    """Q28: derive projection, admit equality, and prove every live and durable meter bound."""
+    """Q28/Q53: project endurance without turning unknown job output into a capacity gate."""
 
     logical = 512 * MIB + GIB + 256 * MIB + 128 * MIB + 64 * MIB
     physical = logical * 3 // 2
@@ -162,15 +139,12 @@ def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp
     admission, pool = _admit(profile=boundary_profile)
     estimate = admission.estimate
 
-    phase = 2 * GIB + GIB + 512 * MIB + GIB + 256 * MIB + 128 * MIB + 64 * MIB
-    required = phase + 8 * GIB
     assert estimate.logical_write_bytes == logical
     assert estimate.physical_write_p95 == physical
-    assert estimate.S_required == required
     assert estimate.M_peak == 2 * GIB
     assert estimate.duration_p95 == 10
     assert estimate.write_duty == 581_250
-    assert pool.reserved == [required]
+    assert pool.active_claims() == ()
     assert boundary_profile.lifetime_written_bytes + physical == (
         boundary_profile.declared_endurance_bytes * 4 // 5
     )
@@ -197,32 +171,24 @@ def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp
         )
     assert foreign_meter.value.code == "INVALID_REQUEST"
 
-    release_capacity(admission.reservation)
-    release_capacity(admission.reservation)
-    assert pool.released == [required]
-    assert pool.available == 20 * GIB
+    assert pool.active_claims() == ()
 
-    calls = []
     with pytest.raises(CassetteError) as beyond_boundary:
         admit_training(
             _workload(),
             replace(boundary_profile, lifetime_written_bytes=15 * physical + 1),
-            allocatable_verified_free=20 * GIB,
-            reserve_extent=lambda length: calls.append(length) or True,
-            release_extent=lambda _length: True,
+            capacity_coordinator=CapacityCoordinator(Path.cwd()),
         )
     assert beyond_boundary.value.code == "ENDURANCE_EXCEEDED"
-    assert calls == []
 
     odd_workload = _workload(journal_bytes=64 * MIB + 1)
-    odd_admission, odd_pool = _admit(odd_workload)
+    odd_admission, odd_coordinator = _admit(odd_workload)
     assert odd_admission.estimate.physical_write_p95 == (
         odd_admission.estimate.logical_write_bytes * 3 + 1
     ) // 2
-    release_capacity(odd_admission.reservation)
-    assert odd_pool.released == [odd_admission.estimate.S_required]
+    assert odd_coordinator.active_claims() == ()
 
-    metered, meter_pool = _admit()
+    metered, meter_coordinator = _admit()
     meter_estimate = metered.estimate
     for label, changes in (
         (
@@ -249,10 +215,9 @@ def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp
             )
         assert over_estimate.value.code == "ENDURANCE_EXCEEDED", label
         assert "complete admitted estimate" in over_estimate.value.detail, label
-    release_capacity(metered.reservation)
-    assert meter_pool.released == [metered.estimate.S_required]
+    assert meter_coordinator.active_claims() == ()
 
-    sequenced, sequence_pool = _admit()
+    sequenced, sequence_coordinator = _admit()
     first = _observation(
         sequenced,
         logical_write_bytes=512 * MIB,
@@ -281,8 +246,7 @@ def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp
             )
         assert decreasing.value.code == "INVALID_REQUEST", field
         assert "advance monotonically" in decreasing.value.detail, field
-    release_capacity(sequenced.reservation)
-    assert sequence_pool.released == [sequenced.estimate.S_required]
+    assert sequence_coordinator.active_claims() == ()
 
     cartridge, parent_root, parameters = _quantized_parent(tmp_path / "metered-checkpoint")
     checkpoint = prepare_paged_training(
@@ -318,7 +282,7 @@ def test_q28_projected_and_metered_writes_share_one_exact_endurance_envelope(tmp
 
 
 def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
-    """Q74: low space, false endurance, power loss, heat, slow writes, and drift all fail typed."""
+    """Q53/Q74: resource contradictions fail, while future storage demand is not pre-admitted."""
 
     with pytest.raises(CassetteError) as absent_admission:
         prepare_training(
@@ -333,10 +297,15 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
     assert absent_admission.value.code == "INVALID_REQUEST"
     assert absent_admission.value.object_id == "training:admission"
 
+    zero_space_admission = admit_training(
+        _workload(),
+        _profile(),
+        capacity_coordinator=CapacityCoordinator(Path.cwd()),
+    )
+    assert zero_space_admission.estimate.logical_write_bytes > 0
+
     projected_physical = 2_976 * MIB
     preflight = (
-        ("low space", _workload(), _profile(), 12 * GIB, "CAPACITY_EXCEEDED"),
-        ("zero space", _workload(), _profile(), 0, "CAPACITY_EXCEEDED"),
         (
             "unknown endurance",
             _workload(),
@@ -465,22 +434,18 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
             "OPERATION_CANCELLED",
         ),
     )
-    for label, workload, profile, free, code in preflight:
-        calls = []
+    for label, workload, profile, _free, code in preflight:
         with pytest.raises(CassetteError) as refused:
             admit_training(
                 workload,
                 profile,
-                allocatable_verified_free=free,
-                reserve_extent=lambda length: calls.append(length) or True,
-                release_extent=lambda _length: True,
+                capacity_coordinator=CapacityCoordinator(Path.cwd()),
             )
         assert refused.value.code == code, label
         if label == "lifetime exceeds endurance":
             assert refused.value.detail == "reported lifetime writes exceed declared endurance"
-        assert calls == [], label
 
-    admission, pool = _admit()
+    admission, coordinator = _admit()
     runtime = (
         ("thermal throttle", {"thermal_duty_ppm": 720_000}, "THERMAL_LIMIT", "retryable"),
         ("thermal stop", {"thermal_duty_ppm": 800_000}, "THERMAL_LIMIT", "terminal"),
@@ -515,7 +480,7 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
             _observation(admission, **changes)
         assert (refused.value.code, refused.value.retryability) == (code, retryability), label
     with pytest.raises(CassetteError) as forged_admission:
-        _observation(replace(admission, reservation=object()))
+        _observation(replace(admission, capacity_coordinator=None))
     assert forged_admission.value.code == "INVALID_REQUEST"
     for forged in (
         replace(
@@ -530,14 +495,10 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
         with pytest.raises(CassetteError) as detached_evidence:
             _observation(forged)
         assert detached_evidence.value.code == "ROOT_INVALID"
-    release_capacity(admission.reservation)
-    assert pool.released == [admission.estimate.S_required]
-    with pytest.raises(CassetteError) as released_admission:
-        _observation(admission)
-    assert released_admission.value.code == "INVALID_REQUEST"
+    assert coordinator.active_claims() == ()
 
     long_workload = _workload(read_bytes=2 * 1024 * GIB)
-    long_admission, long_pool = _admit(long_workload)
+    long_admission, long_coordinator = _admit(long_workload)
     assert long_admission.estimate.power_required is True
     with pytest.raises(CassetteError) as power_loss:
         _observation(
@@ -552,10 +513,9 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
         "OPERATION_CANCELLED",
         "retryable",
     )
-    release_capacity(long_admission.reservation)
-    assert long_pool.released == [long_admission.estimate.S_required]
+    assert long_coordinator.active_claims() == ()
 
-    sequenced, sequence_pool = _admit()
+    sequenced, sequence_coordinator = _admit()
     first = _observation(sequenced)
     forged = replace(first, checkpoint=2)
     with pytest.raises(CassetteError) as skipped_boundary:
@@ -567,5 +527,4 @@ def test_q74_injections_refuse_before_start_or_at_one_recoverable_boundary():
             observation=forged,
         )
     assert skipped_boundary.value.code == "INVALID_REQUEST"
-    release_capacity(sequenced.reservation)
-    assert sequence_pool.released == [sequenced.estimate.S_required]
+    assert sequence_coordinator.active_claims() == ()

@@ -25,6 +25,7 @@ from compiler_fixture import artifact as compiler_artifact
 from errors import CassetteError
 from store import (
     ArtifactIdentity,
+    CapacityCoordinator,
     IdentityTuple,
     append_staged_training_delta,
     canonical_bytes,
@@ -51,6 +52,7 @@ from trainer import (
     commit_training as _commit_training,
     load_training_artifact,
     prepare_training as _prepare_training,
+    restore_training_admission,
     training_workload,
 )
 
@@ -77,7 +79,6 @@ RECOVERY_BATCH = (1.0, 0.5, -0.5, 1.0, 0.25, -1.0, 0.0, 0.5, -0.25, 1.0)
 def _training_profile(label: str) -> TrainingResourceProfile:
     return TrainingResourceProfile(
         profile_evidence_digest=digest_bytes(f"{label}:measured-resource-profile".encode()),
-        device_bytes=200 * 1024**3,
         physical_memory_bytes=32 * 1024**3,
         recommended_max_working_set_bytes=24 * 1024**3,
         executor_memory_bytes=1024**3,
@@ -111,9 +112,7 @@ def _admission(cartridge, parent_root, operation, parameters, objectives, **opti
     return admit_training(
         workload,
         _training_profile(workload.request_digest),
-        allocatable_verified_free=100 * 1024**3,
-        reserve_extent=lambda _length: True,
-        release_extent=lambda _length: True,
+        capacity_coordinator=CapacityCoordinator(cartridge),
     )
 
 
@@ -189,15 +188,35 @@ def _observation(cartridge: Path, checkpoint: TrainingCheckpoint) -> TrainingObs
 
 
 def advance_training(cartridge, checkpoint):
-    return _advance_training(cartridge, checkpoint, _observation(cartridge, checkpoint))
+    manifest = json.loads(read_training_page(
+        cartridge, checkpoint.work_root, checkpoint.manifest_digest
+    ))
+    admission = restore_training_admission(
+        manifest["admission"],
+        capacity_coordinator=CapacityCoordinator(cartridge),
+    )
+    return _advance_training(
+        cartridge,
+        checkpoint,
+        _observation(cartridge, checkpoint),
+        admission=admission,
+    )
 
 
 def commit_training(cartridge, checkpoint, transaction_id):
+    manifest = json.loads(read_training_page(
+        cartridge, checkpoint.work_root, checkpoint.manifest_digest
+    ))
+    admission = restore_training_admission(
+        manifest["admission"],
+        capacity_coordinator=CapacityCoordinator(cartridge),
+    )
     return _commit_training(
         cartridge,
         checkpoint,
         transaction_id,
         _observation(cartridge, checkpoint),
+        admission=admission,
     )
 
 
@@ -253,7 +272,11 @@ def _quantized_parent(
     )
     cartridge = tmp_path / "quantized-cartridge"
     root = import_safetensors(
-        {path.name: path for path in sources}, cartridge, material
+        {path.name: path for path in sources},
+        cartridge,
+        material,
+        capacity_controller=CapacityCoordinator(cartridge),
+        operation_id="s21-quantized-import",
     )
     commit_generation(cartridge, "s21-quantized-parent", root, expected_parent_root=None)
     locations = sorted(page_locations(cartridge, root), key=lambda location: location.page_digest)
@@ -325,7 +348,14 @@ def _compiled_parent(tmp_path: Path) -> tuple[Path, str, tuple[tuple[str, str], 
     }
     try:
         plan_digest = plan_revision(source, extents, cartridge)
-        prepared = prepare_revision(source, extents, cartridge, plan_digest)
+        prepared = prepare_revision(
+            source,
+            extents,
+            cartridge,
+            plan_digest,
+            capacity_coordinator=CapacityCoordinator(cartridge),
+            operation_id="s21-compiled-prepare",
+        )
         verify_bundle_structure(
             cartridge,
             prepared.candidate_root,

@@ -508,11 +508,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "minimum_storage_capacity_bytes": {
-          "maximum": 18446744073709551615,
-          "minimum": 0,
-          "type": "integer"
-        },
         "minimum_sustained_read_bytes_per_second": {
           "maximum": 18446744073709551615,
           "minimum": 1,
@@ -523,7 +518,7 @@
           "minimum": 0,
           "type": "integer"
         },
-        "profile_evidence_digest": {
+        "operation_plan_profile_digest": {
           "maxLength": 71,
           "minLength": 1,
           "pattern": "^(blake3|sha256):[0-9a-f]{64}$",
@@ -559,27 +554,19 @@
         },
         "requires_writable_storage": {
           "type": "boolean"
-        },
-        "storage_class": {
-          "maxLength": 256,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-          "type": "string"
         }
       },
       "required": [
         "apple_class",
         "maximum_p99_read_latency_ns",
         "minimum_recommended_working_set_bytes",
-        "minimum_storage_capacity_bytes",
         "minimum_sustained_read_bytes_per_second",
         "minimum_unified_memory_bytes",
-        "profile_evidence_digest",
+        "operation_plan_profile_digest",
         "request_class",
         "required_apple_features",
         "required_operator_case_ids",
-        "requires_writable_storage",
-        "storage_class"
+        "requires_writable_storage"
       ],
       "title": "Certified hardware profile predicate",
       "type": "object"

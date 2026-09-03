@@ -1,10 +1,8 @@
-# test_s07_integrity_capacity.py — S07 F1 fixtures for Q53 reservation and Q62 repair; depends on errors.py, store.py.
-"""S07 proves complete storage admission and independent object repair on a scratch cartridge."""
+# test_s07_integrity_capacity.py — S07 F1 fixtures for Q53 next-transition claims and Q62 repair; depends on errors.py, store.py.
+"""S07 proves next-transition capacity control and independent object repair on a scratch cartridge."""
 
-from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
-from threading import Barrier, Lock
 
 from blake3 import blake3
 import pytest
@@ -12,44 +10,25 @@ import pytest
 from errors import CassetteError
 from store import (
     ArtifactIdentity,
-    CapacityPhase,
-    CapacityReservation,
+    CapacityCoordinator,
+    CapacityTransition,
     IdentityTuple,
+    ReclaimableObject,
+    complete_capacity_claim,
     create_repair_set,
+    execute_claimed_write,
     import_safetensors,
+    is_reclaimable_object,
     load_root,
     page_locations,
+    repair_replacement_shape,
+    repair_set_shape,
     read_tensor,
-    release_capacity,
     repair_revision,
     require_revision,
-    reserve_capacity,
+    select_reclaimable_objects,
     verify_revision,
 )
-
-GIB = 1024**3
-
-
-class _ExtentPool:
-    """A true storage-boundary fixture whose lock makes one extent admission atomic."""
-
-    def __init__(self, available: int) -> None:
-        self.available = available
-        self.releases = 0
-        self._lock = Lock()
-
-    def reserve(self, length: int) -> bool:
-        with self._lock:
-            if length > self.available:
-                return False
-            self.available -= length
-            return True
-
-    def release(self, length: int) -> bool:
-        with self._lock:
-            self.available += length
-            self.releases += 1
-            return True
 
 
 def _blake3(payload: bytes) -> str:
@@ -112,237 +91,56 @@ def _states(report, object_id: str) -> list[str]:
     return [state for subject, _, state in report.transitions if subject == object_id]
 
 
-def test_q53_exact_fragmented_concurrent_growing_training_and_repair_capacity(tmp_path):
-    """Q53 acceptance: every named lifecycle case owns one exact extent until terminal cleanup."""
+def test_q53_next_transition_claims_observations_concurrency_recovery_and_reclaim(tmp_path):
+    """Q53 acceptance: only exact next transitions claim, pause, resume, or become reclaimable."""
 
-    requested = []
-    released = []
-    exact_required = 10 * GIB + 1_300
-    exact = reserve_capacity(
-        "s07-exact",
-        device_bytes=200 * GIB,
-        allocatable_verified_free=exact_required,
-        phases=(
-            CapacityPhase(committed=100, inflight=700),
-            CapacityPhase(committed=400, candidate=900),
-        ),
-        reserve_extent=lambda length: requested.append(length) is None,
-        release_extent=lambda length: released.append(length) is None,
+    coordinator = CapacityCoordinator(tmp_path)
+    tiny = coordinator(CapacityTransition("s07-tiny", "parent-a", payload_bytes=7, journal_bytes=10))
+    assert tiny.active
+    assert tiny.transition.total_bytes == 17
+    assert tiny.history[:2] == ("MEASURE", "PLAN_NEXT")
+    execute_claimed_write(tiny, lambda: b"durable")
+    complete_capacity_claim(tiny)
+    assert tiny.history[-2:] == ("DURABLE_BOUNDARY", "OBSERVE")
+    assert tiny.state == "COMPLETED"
+
+    growing = coordinator(CapacityTransition(
+        "s07-growing", "checkpoint-4",
+        payload_bytes=7,
+        journal_bytes=3,
+        declared_writes=2,
+        write_bytes=(7, 3),
+    ))
+    execute_claimed_write(growing, lambda: None)
+    execute_claimed_write(growing, lambda: None)
+    complete_capacity_claim(growing)
+    assert growing.state == "COMPLETED"
+
+    future_total = 2**64 - 1
+    assert future_total > tiny.transition.total_bytes
+
+    first = coordinator(CapacityTransition("s07-concurrent", "same-parent", payload_bytes=17))
+    with pytest.raises(CassetteError) as duplicate:
+        coordinator(CapacityTransition("s07-concurrent", "same-parent", payload_bytes=17))
+    assert duplicate.value.code == "INVALID_REQUEST"
+    execute_claimed_write(first, lambda: None)
+    complete_capacity_claim(first)
+
+    candidates = (
+        ReclaimableObject("eligible", True, False, False, False, "TEMPORARY", False, False, False),
+        ReclaimableObject("reproducible", True, False, False, False, "REPRODUCIBLE", False, False, False),
+        ReclaimableObject("user", False, False, False, False, "TEMPORARY", False, False, False),
+        ReclaimableObject("pinned", True, True, False, False, "TEMPORARY", False, False, False),
+        ReclaimableObject("root", True, False, True, False, "TEMPORARY", False, False, False),
+        ReclaimableObject("rollback", True, False, False, True, "TEMPORARY", False, False, False),
+        ReclaimableObject("claim", True, False, False, False, "TEMPORARY", True, False, False),
+        ReclaimableObject("transaction", True, False, False, False, "TEMPORARY", False, True, False),
+        ReclaimableObject("journal", True, False, False, False, "TEMPORARY", False, False, True),
+        ReclaimableObject("durable", True, False, False, False, "DURABLE", False, False, False),
+        ReclaimableObject("user-owned", True, False, False, False, "USER_OWNED", False, False, False),
     )
-    assert exact.phase_totals == (800, 1_300)
-    assert exact.safety_bytes == 10 * GIB
-    assert exact.required_bytes == exact_required
-    assert requested == [exact_required]
-    assert exact.active
-
-    allocator_called = False
-
-    def forbidden_allocator(_length: int) -> bool:
-        nonlocal allocator_called
-        allocator_called = True
-        return True
-
-    with pytest.raises(CassetteError) as below_boundary:
-        reserve_capacity(
-            "s07-below-boundary",
-            device_bytes=200 * GIB,
-            allocatable_verified_free=exact_required - 1,
-            phases=(CapacityPhase(committed=400, candidate=900),),
-            reserve_extent=forbidden_allocator,
-            release_extent=lambda _: True,
-        )
-    assert below_boundary.value.code == "CAPACITY_EXCEEDED"
-    assert allocator_called is False
-
-    small_device_required = 8 * GIB + 17
-    small_device = reserve_capacity(
-        "s07-eight-gib-safety",
-        device_bytes=100 * GIB,
-        allocatable_verified_free=small_device_required,
-        phases=(CapacityPhase(journal=17),),
-        reserve_extent=lambda length: length == small_device_required,
-        release_extent=lambda _: True,
-    )
-    assert small_device.safety_bytes == 8 * GIB
-
-    fragments = (exact_required - 1, 1)
-    with pytest.raises(CassetteError) as fragmented:
-        reserve_capacity(
-            "s07-fragmented",
-            device_bytes=200 * GIB,
-            allocatable_verified_free=exact_required,
-            phases=(CapacityPhase(committed=400, candidate=900),),
-            reserve_extent=lambda length: any(fragment >= length for fragment in fragments),
-            release_extent=lambda _: True,
-        )
-    assert fragmented.value.code == "CAPACITY_EXCEEDED"
-    assert "preallocate" in fragmented.value.detail
-
-    concurrent_required = 8 * GIB + 17
-    pool = _ExtentPool(concurrent_required)
-    barrier = Barrier(2)
-
-    def compete(number: int) -> CapacityReservation | CassetteError:
-        barrier.wait()
-        try:
-            return reserve_capacity(
-                f"s07-concurrent-{number}",
-                device_bytes=100 * GIB,
-                allocatable_verified_free=concurrent_required,
-                phases=(CapacityPhase(journal=17),),
-                reserve_extent=pool.reserve,
-                release_extent=pool.release,
-            )
-        except CassetteError as error:
-            return error
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        concurrent = tuple(executor.map(compete, (1, 2)))
-    winners = [item for item in concurrent if isinstance(item, CapacityReservation)]
-    losers = [item for item in concurrent if isinstance(item, CassetteError)]
-    assert len(winners) == 1
-    assert len(losers) == 1
-    assert losers[0].code == "CAPACITY_EXCEEDED"
-    assert pool.available == 0
-    release_capacity(winners[0])
-    release_capacity(winners[0])
-    assert pool.available == concurrent_required
-    assert pool.releases == 1
-    assert winners[0].active is False
-
-    transform_required = 33 * GIB + 1
-    transform = reserve_capacity(
-        "s07-growing-transform",
-        device_bytes=400 * GIB,
-        allocatable_verified_free=transform_required,
-        phases=(
-            CapacityPhase(committed=4 * GIB, inflight=1 * GIB, journal=1),
-            CapacityPhase(
-                committed=4 * GIB,
-                candidate=3 * GIB,
-                rollback=4 * GIB,
-                precision=2 * GIB,
-                journal=1,
-            ),
-        ),
-        reserve_extent=lambda length: length == transform_required,
-        release_extent=lambda _: True,
-    )
-    assert transform.phase_totals == (5 * GIB + 1, 13 * GIB + 1)
-    transform_bytes = b"unmodified transform source"
-    with pytest.raises(CassetteError):
-        reserve_capacity(
-            "s07-growing-transform-short",
-            device_bytes=400 * GIB,
-            allocatable_verified_free=transform_required - 1,
-            phases=(
-                CapacityPhase(committed=4 * GIB, inflight=1 * GIB, journal=1),
-                CapacityPhase(
-                    committed=4 * GIB,
-                    candidate=3 * GIB,
-                    rollback=4 * GIB,
-                    precision=2 * GIB,
-                    journal=1,
-                ),
-            ),
-            reserve_extent=forbidden_allocator,
-            release_extent=lambda _: True,
-        )
-    assert transform_bytes == b"unmodified transform source"
-    assert allocator_called is False
-
-    training_required = 40 * GIB + 17
-    training = reserve_capacity(
-        "s07-training",
-        device_bytes=400 * GIB,
-        allocatable_verified_free=training_required,
-        phases=(CapacityPhase(
-            committed=2 * GIB,
-            candidate=1 * GIB,
-            rollback=2 * GIB,
-            optimizer=3 * GIB,
-            master=4 * GIB,
-            dataset=5 * GIB,
-            precision=3 * GIB,
-            journal=17,
-        ),),
-        reserve_extent=lambda length: length == training_required,
-        release_extent=lambda _: True,
-    )
-    assert training.phase_totals == (20 * GIB + 17,)
-    training_bytes = b"unmodified training revision"
-    with pytest.raises(CassetteError):
-        reserve_capacity(
-            "s07-training-short",
-            device_bytes=400 * GIB,
-            allocatable_verified_free=training_required - 1,
-            phases=(CapacityPhase(
-                committed=2 * GIB,
-                candidate=1 * GIB,
-                rollback=2 * GIB,
-                optimizer=3 * GIB,
-                master=4 * GIB,
-                dataset=5 * GIB,
-                precision=3 * GIB,
-                journal=17,
-            ),),
-            reserve_extent=forbidden_allocator,
-            release_extent=lambda _: True,
-        )
-    assert training_bytes == b"unmodified training revision"
-    assert allocator_called is False
-
-    allocator_called = False
-    with pytest.raises(CassetteError) as overflow:
-        reserve_capacity(
-            "s07-overflow",
-            device_bytes=2**64 - 1,
-            allocatable_verified_free=2**64 - 1,
-            phases=(CapacityPhase(committed=2**64 - 1, inflight=1),),
-            reserve_extent=forbidden_allocator,
-            release_extent=lambda _: True,
-        )
-    assert overflow.value.code == "CAPACITY_EXCEEDED"
-    assert "unsigned 64-bit" in overflow.value.detail
-    assert allocator_called is False
-
-    source = tmp_path / "repair.safetensors"
-    _write_safetensors(source, "repair", b"repair-capacity-page")
-    cartridge = tmp_path / "repair-cartridge"
-    root_digest = import_safetensors({source.name: source}, cartridge, _identity(source))
-    insufficient = reserve_capacity(
-        "s07-insufficient-repair",
-        device_bytes=200 * GIB,
-        allocatable_verified_free=10 * GIB + 1,
-        phases=(CapacityPhase(repair=1),),
-        reserve_extent=lambda _: True,
-        release_extent=lambda _: True,
-    )
-    with pytest.raises(CassetteError) as repair_capacity:
-        create_repair_set(cartridge, root_digest, insufficient)
-    assert repair_capacity.value.code == "CAPACITY_EXCEEDED"
-    assert not (cartridge / "repair").exists()
-    release_capacity(insufficient)
-
-    repair_reservation = reserve_capacity(
-        "s07-repair",
-        device_bytes=200 * GIB,
-        allocatable_verified_free=10 * GIB + 1 * GIB,
-        phases=(CapacityPhase(repair=1 * GIB),),
-        reserve_extent=lambda _: True,
-        release_extent=lambda _: True,
-    )
-    create_repair_set(cartridge, root_digest, repair_reservation)
-    release_capacity(repair_reservation)
-    with pytest.raises(CassetteError) as released_repair:
-        repair_revision(cartridge, root_digest, repair_reservation)
-    assert released_repair.value.code == "INVALID_REQUEST"
-
-    release_capacity(exact)
-    release_capacity(small_device)
-    release_capacity(transform)
-    release_capacity(training)
-    assert released == [exact_required]
+    assert is_reclaimable_object(candidates[0])
+    assert [item.object_id for item in select_reclaimable_objects(candidates)] == ["eligible", "reproducible"]
 
 
 def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
@@ -358,15 +156,12 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     root_digest = import_safetensors(
         {first.name: first, second.name: second}, cartridge, _identity(first, second)
     )
-    reservation = reserve_capacity(
-        "s07-integrity-repair",
-        device_bytes=200 * GIB,
-        allocatable_verified_free=11 * GIB,
-        phases=(CapacityPhase(repair=1 * GIB),),
-        reserve_extent=lambda _: True,
-        release_extent=lambda _: True,
+    repair_set = create_repair_set(
+        cartridge,
+        root_digest,
+        CapacityCoordinator(cartridge),
     )
-    repair_set = create_repair_set(cartridge, root_digest, reservation)
+
     root = load_root(cartridge, root_digest)
     locations = {location.page_digest: location for location in page_locations(cartridge, root_digest)}
     alpha_digest = _blake3(alpha)
@@ -412,7 +207,7 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
         require_revision(cartridge, root_digest)
     assert manifest_use.value.code == "PAGE_CORRUPT"
     assert all(digest in manifest_use.value.detail for digest in required_pages)
-    manifest_repair = repair_revision(cartridge, root_digest, reservation)
+    manifest_repair = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert _states(manifest_repair, manifest_id) == [
         "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "VALID",
     ]
@@ -426,7 +221,7 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     page_report = verify_revision(cartridge, root_digest)
     assert page_report.unavailable_pages == (alpha_digest,)
     assert _states(page_report, f"page:{alpha_digest}") == ["SUSPECT", "VERIFYING", "CORRUPT"]
-    page_repair = repair_revision(cartridge, root_digest, reservation)
+    page_repair = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert _states(page_repair, f"page:{alpha_digest}") == [
         "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "VALID",
     ]
@@ -438,7 +233,7 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     with pytest.raises(CassetteError) as index_use:
         load_root(cartridge, root_digest)
     assert index_use.value.code == "ROOT_INVALID"
-    index_repair = repair_revision(cartridge, root_digest, reservation)
+    index_repair = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert _states(index_repair, f"index:{root_digest}") == [
         "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "VALID",
     ]
@@ -449,7 +244,7 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     with pytest.raises(CassetteError) as root_use:
         load_root(cartridge, root_digest)
     assert root_use.value.code == "ROOT_INVALID"
-    root_repair = repair_revision(cartridge, root_digest, reservation)
+    root_repair = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert _states(root_repair, f"root:{root_digest}") == [
         "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "VALID",
     ]
@@ -461,7 +256,7 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     parity_report = verify_revision(cartridge, root_digest)
     assert parity_report.available
     assert dict(parity_report.states)[f"parity:{parity_digest}"] == "CORRUPT"
-    parity_repair = repair_revision(cartridge, root_digest, reservation)
+    parity_repair = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert _states(parity_repair, f"parity:{parity_digest}") == [
         "SUSPECT", "VERIFYING", "CORRUPT", "REPAIRING", "VALID",
     ]
@@ -476,14 +271,14 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
         repair_revision(
             cartridge,
             root_digest,
-            reservation,
+            CapacityCoordinator(cartridge),
             source_pages={alpha_digest: b"not the declared page"},
         )
     assert invalid_source.value.code == "INVALID_REQUEST"
     assert segment_path.read_bytes() == corrupt_segment_bytes
     assert parity_path.read_bytes() == corrupt_parity_bytes
 
-    unavailable = repair_revision(cartridge, root_digest, reservation)
+    unavailable = repair_revision(cartridge, root_digest, CapacityCoordinator(cartridge))
     assert unavailable.available is False
     assert unavailable.unavailable_pages == (alpha_digest,)
     assert dict(unavailable.states)[f"page:{alpha_digest}"] == "UNAVAILABLE"
@@ -494,11 +289,10 @@ def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     assert alpha_digest in blocked.value.detail
 
     restored = repair_revision(
-        cartridge, root_digest, reservation, source_pages={alpha_digest: alpha}
+        cartridge, root_digest, CapacityCoordinator(cartridge), source_pages={alpha_digest: alpha}
     )
     assert restored.available
     assert read_tensor(cartridge, root_digest, "alpha") == alpha
     assert _blake3(parity_path.read_bytes()) == parity_digest
     assert load_root(cartridge, root_digest) == root
     assert any((cartridge / "quarantine").iterdir())
-    release_capacity(reservation)

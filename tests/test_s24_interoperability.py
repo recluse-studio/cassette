@@ -25,11 +25,12 @@ from errors import CassetteError
 import fixture_server
 from fixture_server import source_fixture_server
 import pager
+import store as store_module
 from schema.tables import ADAPTER_PROTOCOLS, DISPATCH_ROWS
 from sources import SourceAdapter, TransferExtent, transfer_state_bytes
 from store import (
     ArtifactIdentity,
-    CapacityPhase,
+    CapacityCoordinator,
     IdentityTuple,
     apply_revision_delta,
     canonical_bytes,
@@ -47,9 +48,8 @@ from store import (
     pin_generation,
     read_tensor,
     read_training_page,
-    release_capacity,
+    repair_set_shape,
     remove_revision,
-    reserve_capacity,
     revision_delta_shape,
     revision_reachability,
     revision_removal_shape,
@@ -75,7 +75,6 @@ pytestmark = pytest.mark.skipif(
 
 REPO = Path(__file__).resolve().parent.parent
 TRACE_PATH = REPO / "tests" / "fixtures" / "s24_teacher_trace.json"
-GIB = 1024**3
 _EXPORT_PLAN_BODY_FIELDS = (
     "version", "source_root", "source_identity", "target_schema", "mode",
     "semantic_binding", "delta_id", "adapter_rank", "adapter_scale",
@@ -149,26 +148,21 @@ def _extent(path: Path, length: int, operation_id: str) -> tuple[int, TransferEx
     return descriptor, TransferExtent(descriptor, 0, length, operation_id)
 
 
-def _capacity(operation_id: str, amount: int):
-    return reserve_capacity(
-        operation_id,
-        device_bytes=100 * GIB,
-        allocatable_verified_free=100 * GIB,
-        phases=(CapacityPhase(candidate=amount),),
-        reserve_extent=lambda _length: True,
-        release_extent=lambda _length: True,
-    )
+def _limit_available_bytes(monkeypatch, cartridge: Path, available_bytes: int) -> None:
+    """Force the real coordinator's next statvfs measurement to one exact low-space value."""
 
+    original = store_module.os.statvfs
+    snapshot = original(cartridge)
+    fragments = snapshot.f_frsize
+    values = list(snapshot)
+    values[3] = values[4] = available_bytes // fragments
 
-def _repair_capacity(operation_id: str, amount: int):
-    return reserve_capacity(
-        operation_id,
-        device_bytes=100 * GIB,
-        allocatable_verified_free=100 * GIB,
-        phases=(CapacityPhase(repair=amount),),
-        reserve_extent=lambda _length: True,
-        release_extent=lambda _length: True,
-    )
+    def limited(path):
+        if Path(path).resolve() == cartridge.resolve():
+            return os.statvfs_result(values)
+        return original(path)
+
+    monkeypatch.setattr(store_module.os, "statvfs", limited)
 
 
 def _operation_id(label: str) -> str:
@@ -236,7 +230,6 @@ def _machine_replay(
     data_fd, data_extent = _extent(artifact_path, len(payload), operation_id)
     state_length = transfer_state_bytes(len(payload))
     state_fd, state_extent = _extent(state_path, state_length, operation_id)
-    reservation = _capacity(operation_id, len(payload) + state_length)
     try:
         with source_fixture_server(
             artifact_overrides={kind: ((material.artifacts[0].path, payload, '"s24-v1"'),)}
@@ -247,7 +240,7 @@ def _machine_replay(
                     server.base_url,
                     {f"keychain:s24/{kind}": fixture_server._SECRET}.get,
                 ),
-                reservation,
+                CapacityCoordinator(cartridge),
                 {material.artifacts[0].path: (data_extent, state_extent)},
                 cartridge,
             )
@@ -255,7 +248,6 @@ def _machine_replay(
     finally:
         os.close(data_fd)
         os.close(state_fd)
-        release_capacity(reservation)
     return operation, cartridge, broker
 
 
@@ -438,7 +430,14 @@ def test_q18_q19_q30_q40_protected_teacher_trace_is_immutable_and_executable(tmp
         try:
             plan = plan_revision(source, extents, cartridge)
             with pytest.raises(CassetteError) as refused:
-                prepare_revision(source, extents, cartridge, plan)
+                prepare_revision(
+                    source,
+                    extents,
+                    cartridge,
+                    plan,
+                    capacity_coordinator=CapacityCoordinator(cartridge),
+                    operation_id=f"s24-hostile-{ordinal}",
+                )
             assert refused.value.code in {"CAPABILITY_MISMATCH", "INVALID_REQUEST"}
             assert pin_generation(cartridge) is None
         finally:
@@ -496,28 +495,25 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
         if target_schema == "safetensors-v1":
             short_request = {
                 **export_request,
-                "idempotency_key": "s24-export-short-reservation",
+                "idempotency_key": "s24-export-short-claim",
             }
             short_plan = plan_export(cartridge, compiled_root, target_schema)
-            short_reservation = _capacity(
-                broker.operation_id(short_request),
-                short_plan["reservation_bytes"] - 1,
-            )
+            short_claim = CapacityCoordinator(cartridge)
             before_export = _store_snapshot(cartridge)
-            short_export = asyncio.run(broker.export_revision(
-                short_request, cartridge, short_reservation
-            ))
+            with monkeypatch.context() as capacity_patch:
+                _limit_available_bytes(
+                    capacity_patch, cartridge, short_plan["artifact_size"] - 1
+                )
+                short_export = asyncio.run(broker.export_revision(
+                    short_request, cartridge, short_claim
+                ))
             assert short_export["state"] == "FAILED"
             assert short_export["error"]["code"] == "CAPACITY_EXCEEDED"
             assert _store_snapshot(cartridge) == before_export
-            release_capacity(short_reservation)
-        export_reservation = _capacity(
-            broker.operation_id(export_request), plan["reservation_bytes"]
-        )
+        export_claim = CapacityCoordinator(cartridge)
         operation = asyncio.run(broker.export_revision(
-            export_request, cartridge, export_reservation
+            export_request, cartridge, export_claim
         ))
-        release_capacity(export_reservation)
         assert operation["state"] == "SUCCEEDED", operation
         exported[target_schema] = operation["result"]
         portable_export = tmp_path / f"portable-{target_schema}"
@@ -626,23 +622,23 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     short_shape = revision_delta_shape(
         direct_cartridge, short_operation, base_root, delta, payloads
     )
-    short_reservation = _capacity(
-        short_operation, short_shape["required_bytes"] - 1
-    )
+    short_claim = CapacityCoordinator(direct_cartridge)
     pre_admission = _store_snapshot(direct_cartridge)
-    with pytest.raises(CassetteError) as short_delta:
-        apply_revision_delta(
-            direct_cartridge,
-            short_operation,
-            base_root,
-            delta,
-            payloads,
-            short_reservation,
+    with monkeypatch.context() as capacity_patch:
+        _limit_available_bytes(
+            capacity_patch, direct_cartridge, len(next(iter(payloads.values()))) - 1
         )
+        with pytest.raises(CassetteError) as short_delta:
+            apply_revision_delta(
+                direct_cartridge,
+                short_operation,
+                base_root,
+                delta,
+                payloads,
+                short_claim,
+            )
     assert short_delta.value.code == "CAPACITY_EXCEEDED"
     assert _store_snapshot(direct_cartridge) == pre_admission
-    release_capacity(short_reservation)
-    direct_reservation = _capacity(direct_operation, direct_shape["required_bytes"])
     delta_contract_attacks = (
         (
             "base_identity",
@@ -676,6 +672,7 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
                 if name != "delta_digest"
             }))
         guard_snapshot = _store_snapshot(direct_cartridge)
+        attack_claim = CapacityCoordinator(direct_cartridge)
         with pytest.raises(CassetteError) as refused_delta:
             apply_revision_delta(
                 direct_cartridge,
@@ -683,11 +680,12 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
                 base_root,
                 attacked_delta,
                 payloads,
-                direct_reservation,
+                attack_claim,
             )
         assert refused_delta.value.code == code
         assert refused_delta.value.detail == detail
         assert _store_snapshot(direct_cartridge) == guard_snapshot
+    wrong_base_claim = CapacityCoordinator(direct_cartridge)
     with pytest.raises(CassetteError) as wrong_base:
         apply_revision_delta(
             direct_cartridge,
@@ -695,9 +693,10 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
             digest_bytes(b"foreign-base"),
             delta,
             payloads,
-            direct_reservation,
+            wrong_base_claim,
         )
     assert wrong_base.value.code == "DELTA_BASE_MISMATCH"
+    corrupt_claim = CapacityCoordinator(direct_cartridge)
     with pytest.raises(CassetteError) as corrupt:
         apply_revision_delta(
             direct_cartridge,
@@ -705,23 +704,24 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
             base_root,
             delta,
             {next(iter(payloads)): b"x" * len(changed)},
-            direct_reservation,
+            corrupt_claim,
         )
     assert corrupt.value.code == "PAGE_CORRUPT"
+    interrupted_claim = CapacityCoordinator(direct_cartridge)
     with pytest.raises(CassetteError) as interrupted:
         apply_revision_delta(
-            direct_cartridge, direct_operation, base_root, delta, {}, direct_reservation
+            direct_cartridge, direct_operation, base_root, delta, {}, interrupted_claim
         )
     assert interrupted.value.code == "SOURCE_UNAVAILABLE"
+    direct_claim = CapacityCoordinator(direct_cartridge)
     candidate = apply_revision_delta(
         direct_cartridge,
         direct_operation,
         base_root,
         delta,
         payloads,
-        direct_reservation,
+        direct_claim,
     )
-    release_capacity(direct_reservation)
     assert pin_generation(direct_cartridge) == before
     target_locations = {
         row.page_digest: row for row in page_locations(direct_cartridge, candidate)
@@ -745,11 +745,15 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     apply_shape = revision_delta_shape(
         update_cartridge, apply_operation, base_root, delta, payloads
     )
-    apply_reservation = _capacity(apply_operation, apply_shape["required_bytes"])
+    apply_claim = CapacityCoordinator(update_cartridge)
     applied = asyncio.run(update_broker.apply_delta(
-        apply_request, update_cartridge, delta, payloads, apply_reservation
+        apply_request,
+        update_cartridge,
+        delta,
+        payloads,
+        apply_claim,
+        CapacityCoordinator(update_cartridge),
     ))
-    release_capacity(apply_reservation)
     assert applied["state"] == "SUCCEEDED", applied
     assert applied["result"]["root_digest"] == candidate
     fork_request = {
@@ -760,15 +764,15 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
         "arguments": {"delta_digest": fork["delta_digest"]},
     }
     fork_operation = update_broker.operation_id(fork_request)
-    fork_reservation = _capacity(fork_operation, 1)
+    fork_claim = CapacityCoordinator(update_cartridge)
     forked = asyncio.run(update_broker.apply_delta(
         fork_request,
         update_cartridge,
         fork,
         {fork["replacements"][0]["new_page_digest"]: bytes(reversed(changed))},
-        fork_reservation,
+        fork_claim,
+        CapacityCoordinator(update_cartridge),
     ))
-    release_capacity(fork_reservation)
     assert forked["state"] == "FAILED"
     assert forked["error"]["code"] == "DELTA_BASE_MISMATCH"
     rolled_back = rollback_generation(update_cartridge, "s24-update-rollback")
@@ -777,32 +781,32 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     current_proof = revision_reachability(update_cartridge, base_root)
     refusal_snapshot = _store_snapshot(update_cartridge)
     removal_refusal_operation = _operation_id("s24-removal-refusals")
-    removal_refusal_reservation = _capacity(removal_refusal_operation, 1)
+    current_refusal_claim = CapacityCoordinator(update_cartridge)
     with pytest.raises(CassetteError) as current_refusal:
         remove_revision(
             update_cartridge,
             removal_refusal_operation,
             base_root,
             current_proof,
-            removal_refusal_reservation,
+            current_refusal_claim,
         )
     assert current_refusal.value.code == "INVALID_REQUEST"
     assert _store_snapshot(update_cartridge) == refusal_snapshot
     target_proof = revision_reachability(update_cartridge, candidate)
+    reachable_refusal_claim = CapacityCoordinator(update_cartridge)
     with pytest.raises(CassetteError) as reachable_refusal:
         remove_revision(
             update_cartridge,
             removal_refusal_operation,
             candidate,
             target_proof,
-            removal_refusal_reservation,
+            reachable_refusal_claim,
         )
     assert reachable_refusal.value.code == "INVALID_REQUEST"
     assert _store_snapshot(update_cartridge) == refusal_snapshot
     with pytest.raises(CassetteError):
         revision_reachability(update_cartridge, "malformed")
     assert _store_snapshot(update_cartridge) == refusal_snapshot
-    release_capacity(removal_refusal_reservation)
 
     orphan_source = tmp_path / "orphan.safetensors"
     orphan_payload = b"unreachable-s24-revision"
@@ -874,11 +878,11 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
         == "GGUF target cannot represent one or more required operators"
     )
 
-    repair_reservation = _repair_capacity("s24-orphan-repair", 16 * 1024 * 1024)
+    repair_shape = repair_set_shape(update_cartridge, orphan_root)
+    repair_claim = CapacityCoordinator(update_cartridge)
     repair_set = create_repair_set(
-        update_cartridge, orphan_root, repair_reservation
+        update_cartridge, orphan_root, repair_claim
     )
-    release_capacity(repair_reservation)
     orphan_proof = revision_reachability(update_cartridge, orphan_root)
     forged_proof = deepcopy(orphan_proof)
     forged_proof["catalog_digest"] = digest_bytes(b"forged-reachability-catalog")
@@ -889,7 +893,7 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     }
     forged_proof["reachability_digest"] = digest_bytes(canonical_bytes(forged_body))
     forged_operation = _operation_id("s24-forged-reachability")
-    forged_reservation = _capacity(forged_operation, 1)
+    forged_claim = CapacityCoordinator(update_cartridge)
     before_forged_removal = _store_snapshot(update_cartridge)
     with pytest.raises(CassetteError) as forged_reachability:
         remove_revision(
@@ -897,11 +901,10 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
             forged_operation,
             orphan_root,
             forged_proof,
-            forged_reservation,
+            forged_claim,
         )
     assert forged_reachability.value.code == "INVALID_REQUEST"
     assert _store_snapshot(update_cartridge) == before_forged_removal
-    release_capacity(forged_reservation)
     expected_repair_paths = {
         f"repair/{orphan_root[7:]}.json",
         f"repair/manifests/{orphan_root[7:]}",
@@ -923,32 +926,32 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     remove_operation = update_broker.operation_id(remove_request)
     remove_shape = revision_removal_shape(update_cartridge, orphan_root, orphan_proof)
     short_remove_operation = _operation_id("s24-short-removal")
-    short_remove_reservation = _capacity(
-        short_remove_operation, remove_shape["journal_bytes"] - 1
-    )
+    short_remove_claim = CapacityCoordinator(update_cartridge)
     pre_remove_admission = _store_snapshot(update_cartridge)
-    with pytest.raises(CassetteError) as short_removal:
-        remove_revision(
-            update_cartridge,
-            short_remove_operation,
-            orphan_root,
-            orphan_proof,
-            short_remove_reservation,
+    with monkeypatch.context() as capacity_patch:
+        _limit_available_bytes(
+            capacity_patch, update_cartridge, remove_shape["journal_bytes"] - 1
         )
+        with pytest.raises(CassetteError) as short_removal:
+            remove_revision(
+                update_cartridge,
+                short_remove_operation,
+                orphan_root,
+                orphan_proof,
+                short_remove_claim,
+            )
     assert short_removal.value.code == "CAPACITY_EXCEEDED"
     assert _store_snapshot(update_cartridge) == pre_remove_admission
-    release_capacity(short_remove_reservation)
-    remove_reservation = _capacity(remove_operation, remove_shape["journal_bytes"])
+    remove_claim = CapacityCoordinator(update_cartridge)
     removed = asyncio.run(update_broker.remove_revision(
-        remove_request, update_cartridge, orphan_proof, remove_reservation
+        remove_request, update_cartridge, orphan_proof, remove_claim
     ))
     assert removed["state"] == "SUCCEEDED", removed
     assert removed["result"]["removed_root"] == orphan_root
     repeated_removal = asyncio.run(update_broker.remove_revision(
-        remove_request, update_cartridge, orphan_proof, remove_reservation
+        remove_request, update_cartridge, orphan_proof, remove_claim
     ))
     assert repeated_removal == removed
-    release_capacity(remove_reservation)
     with pytest.raises(CassetteError):
         load_root(update_cartridge, orphan_root)
     assert not any((update_cartridge / path).exists() for path in expected_repair_paths)
@@ -1009,13 +1012,10 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
     assert detached_delta.value.detail == (
         "adapter export or merge is detached from its ordered delta"
     )
-    adapter_reservation = _capacity(
-        adapter_broker.operation_id(adapter_request), adapter_plan["reservation_bytes"]
-    )
+    adapter_claim = CapacityCoordinator(tier_a)
     adapter_export = asyncio.run(adapter_broker.export_revision(
-        adapter_request, tier_a, adapter_reservation
+        adapter_request, tier_a, adapter_claim
     ))
-    release_capacity(adapter_reservation)
     assert adapter_export["state"] == "SUCCEEDED", adapter_export
     portable_adapter = tmp_path / "portable-adapter"
     shutil.copytree(tier_a / "exports", portable_adapter / "exports")
@@ -1136,14 +1136,10 @@ def test_q5_q6_q26_q51_q54_q57_q58_machine_interoperability_update_and_removal(
             1,
             "1",
         )
-        merged_reservation = _capacity(
-            adapter_broker.operation_id(merged_request),
-            merged_plan["reservation_bytes"],
-        )
+        merged_claim = CapacityCoordinator(tier_a)
         merged_export = asyncio.run(adapter_broker.export_revision(
-            merged_request, tier_a, merged_reservation
+            merged_request, tier_a, merged_claim
         ))
-        release_capacity(merged_reservation)
         assert merged_export["state"] == "SUCCEEDED", merged_export
         portable_merged = tmp_path / f"portable-merged-{target_schema}"
         shutil.copytree(tier_a / "exports", portable_merged / "exports")

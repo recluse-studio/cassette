@@ -27,6 +27,7 @@ from errors import CassetteError
 import pager
 from schema.tables import DISPATCH_ROWS
 from store import (
+    CapacityCoordinator,
     IdentityTuple,
     canonical_bytes,
     commit_generation,
@@ -86,15 +87,12 @@ EXPECTED = {
 }
 
 
-def _compiler_capacity(label: str) -> dict:
-    """Supply one simulated device whose exact compiler reservation always succeeds."""
+def _compiler_capacity(cartridge: Path, label: str) -> dict:
+    """Supply one concrete store coordinator for the complete compiler operation."""
 
     return {
         "operation_id": f"s25-{label}",
-        "device_bytes": 100 * 1024**3,
-        "allocatable_verified_free": 100 * 1024**3,
-        "reserve_extent": lambda _length: True,
-        "release_extent": lambda _length: True,
+        "capacity_coordinator": CapacityCoordinator(cartridge),
     }
 
 
@@ -158,7 +156,13 @@ def _compile(cartridge: Path, payload: bytes, material: IdentityTuple, name: str
             }
         }
         plan = plan_revision(source, extents, cartridge)
-        return prepare_revision(source, extents, cartridge, plan)
+        return prepare_revision(
+            source,
+            extents,
+            cartridge,
+            plan,
+            **_compiler_capacity(cartridge, name),
+        )
     finally:
         os.close(descriptor)
 
@@ -177,7 +181,7 @@ def _base(tmp_path: Path):
         cartridge,
         compilation_specification(cartridge, legacy.candidate_root),
         legacy.candidate_root,
-        **_compiler_capacity("base-recompile"),
+        **_compiler_capacity(cartridge, "base-recompile"),
     )
     commit_generation(
         cartridge,
@@ -285,12 +289,12 @@ def test_q19_q27_q61_q75_each_input_has_one_exact_incremental_closure_and_clean_
             cartridge,
             candidate_specification,
             prepared.candidate_root,
-            **_compiler_capacity(f"axis-{axis}-incremental"),
+            **_compiler_capacity(cartridge, f"axis-{axis}-incremental"),
         )
         clean = recompile_revision(
             cartridge,
             candidate_specification,
-            **_compiler_capacity(f"axis-{axis}-clean"),
+            **_compiler_capacity(cartridge, f"axis-{axis}-clean"),
         )
         expected = tuple(EXPECTED[axis])
         assert incremental.changed_inputs == (axis,)
@@ -330,14 +334,14 @@ def test_q19_q27_q61_q75_each_input_has_one_exact_incremental_closure_and_clean_
             cartridge,
             candidate_specification,
             prepared.candidate_root,
-            **_compiler_capacity(f"complete-{axis}-incremental"),
+            **_compiler_capacity(cartridge, f"complete-{axis}-incremental"),
         )
         assert incremental.changed_inputs == (axis,)
         assert incremental.invalidated_artifacts == tuple(EXPECTED[axis])
         assert incremental.candidate_root == recompile_revision(
             cartridge,
             candidate_specification,
-            **_compiler_capacity(f"complete-{axis}-clean"),
+            **_compiler_capacity(cartridge, f"complete-{axis}-clean"),
         ).candidate_root
         assert pin_generation(cartridge).root_digest == prepared.candidate_root
 
@@ -348,7 +352,7 @@ def test_q19_q27_q61_q75_each_input_has_one_exact_incremental_closure_and_clean_
             cartridge,
             malformed,
             prepared.candidate_root,
-            **_compiler_capacity("malformed"),
+            **_compiler_capacity(cartridge, "malformed"),
         )
     assert missing.value.code == "INVALID_REQUEST"
 
@@ -389,7 +393,11 @@ def test_q19_q20_q37_q64_exact_and_fresh_replay_emit_only_simulated_machine_curv
         _write_safetensors(path, ((name, "U8", (len(payload),), payload),))
         sources[path.name] = path
     fresh_root = import_safetensors(
-        sources, fresh_cartridge, _identity(*sources.values())
+        sources,
+        fresh_cartridge,
+        _identity(*sources.values()),
+        capacity_controller=CapacityCoordinator(fresh_cartridge),
+        operation_id="s25-fresh-import",
     )
     pages = {
         row["semantic_tensor_id"]: row["spans"][0]["page_digest"]
@@ -465,7 +473,7 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
         cartridge,
         specification,
         compiled_v1,
-        **_compiler_capacity("tier-b-parent"),
+        **_compiler_capacity(cartridge, "tier-b-parent"),
     )
     commit_generation(
         cartridge,
@@ -507,7 +515,7 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
             hostile,
             hostile_training_root,
             compiled_v2.candidate_root,
-            **_compiler_capacity("hostile-recovery"),
+            **_compiler_capacity(hostile, "hostile-recovery"),
         )
     assert detached.value.code == "CAPABILITY_MISMATCH"
 
@@ -526,7 +534,7 @@ def test_q70_q73_q75_tier_a_and_tier_b_recovery_publish_only_clean_certified_chi
         cartridge,
         training_root,
         compiled_v2.candidate_root,
-        **_compiler_capacity("tier-b-recovery"),
+        **_compiler_capacity(cartridge, "tier-b-recovery"),
     )
     expected_changes = tuple(name for name in AXES if name in set(axes))
     expected_invalidated = tuple(

@@ -17,6 +17,7 @@ from errors import CassetteError
 from schema.validator import validate
 from store import (
     ArtifactIdentity,
+    CapacityCoordinator,
     IdentityTuple,
     PAGE_BYTES,
     PageLocation,
@@ -38,6 +39,18 @@ GIB = 1024**3
 
 def _digest(value: object) -> str:
     return digest_bytes(canonical_bytes(value))
+
+
+def _prepare_hardware(cartridge, root_digest, source_identity, plan_digest, specifications, label):
+    return prepare_hardware_plans(
+        cartridge,
+        root_digest,
+        source_identity,
+        plan_digest,
+        specifications,
+        capacity_coordinator=CapacityCoordinator(cartridge),
+        operation_id=f"s20-{label}",
+    )
 
 
 def _seal(document: dict, field: str) -> None:
@@ -112,7 +125,13 @@ def _compiled_fixture(tmp_path: Path):
         parent_ids=(),
         transform_manifest_digest=None,
     )
-    source_root_digest = import_safetensors({artifact_path: path}, cartridge, material)
+    source_root_digest = import_safetensors(
+        {artifact_path: path},
+        cartridge,
+        material,
+        capacity_controller=CapacityCoordinator(cartridge),
+        operation_id="s20-source-import",
+    )
     source_root = load_root(cartridge, source_root_digest)
     inspected = inspect_safetensors(path, material.artifacts[0].digest)
     tensors = sorted(
@@ -191,7 +210,14 @@ def _compiled_fixture(tmp_path: Path):
         parent_ids=(source_identity,),
         transform_manifest_digest=_digest(bundle),
     )
-    compiled_root = derive_root(cartridge, source_root_digest, compiled_material, (bundle,))
+    compiled_root = derive_root(
+        cartridge,
+        source_root_digest,
+        compiled_material,
+        (bundle,),
+        capacity_controller=CapacityCoordinator(cartridge),
+        operation_id="s20-compiled-root",
+    )
     compiler.verify_bundle_structure(cartridge, compiled_root, source_identity, plan_digest)
     return cartridge, compiled_root, source_identity, plan_digest, certificate
 
@@ -209,28 +235,26 @@ def _specifications(cartridge: Path, root_digest: str, certificate: dict) -> lis
     })
     assert cases
     classes = (
-        ("c1-air-32", "c1_air_32", "s1_usb4_nvme_2tb", 32 * GIB, 500_000_000, 2_000_000, 2_000_000_000_000, False, 1, 1),
-        ("c2-max-128", "c2_max_128", "s2_tb5_nvme_2tb", 128 * GIB, 1_000_000_000, 1_000_000, 2_000_000_000_000, False, 2, 2),
-        ("c3-ultra-512", "c3_ultra_512", "s3_tb5_nvme_4tb_writable", 512 * GIB, 2_000_000_000, 500_000, 4_000_000_000_000, True, 8, 4),
+        ("c1-air-32", "c1_air_32", 32 * GIB, 500_000_000, 2_000_000, False, 1, 1),
+        ("c2-max-128", "c2_max_128", 128 * GIB, 1_000_000_000, 1_000_000, False, 2, 2),
+        ("c3-ultra-512", "c3_ultra_512", 512 * GIB, 2_000_000_000, 500_000, True, 8, 4),
     )
     result = []
-    for name, apple, storage, memory, bandwidth, latency, capacity, writable, group_size, depth in classes:
+    for name, apple, memory, bandwidth, latency, writable, group_size, depth in classes:
         result.append({
             "plan_name": name,
             "profile_predicate": {
                 "apple_class": apple,
-                "storage_class": storage,
                 "request_class": "INFERENCE",
                 "minimum_unified_memory_bytes": memory,
                 "minimum_recommended_working_set_bytes": memory,
                 "minimum_sustained_read_bytes_per_second": bandwidth,
                 "maximum_p99_read_latency_ns": latency,
-                "minimum_storage_capacity_bytes": capacity,
                 "requires_writable_storage": writable,
-                "profile_evidence_digest": _digest({
+                "operation_plan_profile_digest": _digest({
                     "apple_class": apple,
-                    "storage_class": storage,
-                    "qualification": "Q42-fixture",
+                    "plan_name": name,
+                    "qualification": "Q41-Q44-fixture",
                 }),
             },
             "page_order": pages,
@@ -248,13 +272,12 @@ def _measured(spec: dict, certificate: dict) -> dict:
     predicate = spec["profile_predicate"]
     return {
         "apple_class": predicate["apple_class"],
-        "storage_class": predicate["storage_class"],
         "request_class": predicate["request_class"],
+        "operation_plan_profile_digest": predicate["operation_plan_profile_digest"],
         "unified_memory_bytes": predicate["minimum_unified_memory_bytes"],
         "recommended_max_working_set_bytes": predicate["minimum_recommended_working_set_bytes"],
         "sustained_read_bytes_per_second": predicate["minimum_sustained_read_bytes_per_second"],
         "p99_read_latency_ns": predicate["maximum_p99_read_latency_ns"],
-        "storage_capacity_bytes": predicate["minimum_storage_capacity_bytes"],
         "operator_case_ids": sorted({
             row["operator_case_id"] for row in certificate["execution_contract"]["operations"]
         }),
@@ -282,17 +305,17 @@ def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(
         for path in (cartridge / "segments").iterdir()
     }
 
-    one_plan_root = prepare_hardware_plans(
-        cartridge, compiled_root, source_identity, plan_digest, specifications[:1]
+    one_plan_root = _prepare_hardware(
+        cartridge, compiled_root, source_identity, plan_digest, specifications[:1], "one"
     )
-    all_plan_root = prepare_hardware_plans(
-        cartridge, one_plan_root, source_identity, plan_digest, specifications
+    all_plan_root = _prepare_hardware(
+        cartridge, one_plan_root, source_identity, plan_digest, specifications, "all"
     )
-    assert prepare_hardware_plans(
-        cartridge, compiled_root, source_identity, plan_digest, list(reversed(specifications))
+    assert _prepare_hardware(
+        cartridge, compiled_root, source_identity, plan_digest, list(reversed(specifications)), "reversed"
     ) == all_plan_root
-    two_plan_root = prepare_hardware_plans(
-        cartridge, all_plan_root, source_identity, plan_digest, specifications[1:]
+    two_plan_root = _prepare_hardware(
+        cartridge, all_plan_root, source_identity, plan_digest, specifications[1:], "two"
     )
     for root_digest in (one_plan_root, all_plan_root, two_plan_root):
         root = load_root(cartridge, root_digest)
@@ -379,17 +402,63 @@ def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(
         assert selected.plan["plan_name"] == spec["plan_name"]
         assert selected.certificate_id == certificate["certificate_id"]
         assert selected.predicted_total_latency_ns > 0
+
+    non_nvme_profile = _measured(specifications[0], certificate)
+    assert not {
+        "storage_class", "storage_capacity_bytes",
+    } & compiler._MEASURED_PROFILE_FIELDS
+    assert {
+        "media", "connector", "brand", "advertised_speed", "nominal_capacity_bytes",
+    } == compiler._MEASURED_PROFILE_DESCRIPTIVE_FIELDS
+    unlabeled_selection = select_hardware_plan(
+        cartridge,
+        all_plan_root,
+        source_identity,
+        plan_digest,
+        non_nvme_profile,
+    )
+    assert unlabeled_selection.plan["plan_name"] == "c1-air-32"
+    labeled_thumb_drive_profile = {
+        **non_nvme_profile,
+        "media": "USB_THUMB_DRIVE",
+        "connector": "USB_A",
+        "brand": "fixture-brand",
+        "advertised_speed": "USB_2_480Mbps",
+        "nominal_capacity_bytes": 16 * GIB,
+    }
+    labeled_selection = select_hardware_plan(
+        cartridge,
+        all_plan_root,
+        source_identity,
+        plan_digest,
+        labeled_thumb_drive_profile,
+    )
+    assert labeled_selection.plan == unlabeled_selection.plan
+    assert labeled_selection.predicted_total_latency_ns == unlabeled_selection.predicted_total_latency_ns
+    assert labeled_selection.measured_profile_digest != unlabeled_selection.measured_profile_digest
+    mismatched_profile = dict(non_nvme_profile)
+    mismatched_profile["operation_plan_profile_digest"] = _digest("different-operation-plan-profile")
+    with pytest.raises(CassetteError) as mismatched_profile_error:
+        select_hardware_plan(
+            cartridge,
+            all_plan_root,
+            source_identity,
+            plan_digest,
+            mismatched_profile,
+        )
+    assert mismatched_profile_error.value.code == "CAPABILITY_MISMATCH"
     faster_c1 = copy.deepcopy(specifications[0])
     faster_c1["plan_name"] = "c1-air-32-coalesced"
     pages = faster_c1["page_order"]
     faster_c1["read_groups"] = [pages[index:index + 8] for index in range(0, len(pages), 8)]
     faster_c1["io_queue_depth"] = 4
-    choice_root = prepare_hardware_plans(
+    choice_root = _prepare_hardware(
         cartridge,
         compiled_root,
         source_identity,
         plan_digest,
         [specifications[0], faster_c1],
+        "choice",
     )
     assert select_hardware_plan(
         cartridge,
@@ -405,20 +474,27 @@ def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(
             cartridge, all_plan_root, source_identity, plan_digest, insufficient
         )
     assert no_plan.value.code == "CAPABILITY_MISMATCH"
+    readonly = _measured(specifications[2], certificate)
+    readonly["writable_storage"] = False
+    with pytest.raises(CassetteError) as readonly_error:
+        select_hardware_plan(
+            cartridge, all_plan_root, source_identity, plan_digest, readonly
+        )
+    assert readonly_error.value.code == "CAPABILITY_MISMATCH"
 
     hostile_spec = copy.deepcopy(specifications[0])
     hostile_spec["weight_payload"] = "copied parameter bytes"
     with pytest.raises(CassetteError) as copied_input:
-        prepare_hardware_plans(
-            cartridge, compiled_root, source_identity, plan_digest, [hostile_spec]
+        _prepare_hardware(
+            cartridge, compiled_root, source_identity, plan_digest, [hostile_spec], "hostile"
         )
     assert copied_input.value.code == "INVALID_REQUEST"
     noncontiguous = copy.deepcopy(specifications[1])
     noncontiguous["page_order"][:2] = reversed(noncontiguous["page_order"][:2])
     noncontiguous["read_groups"][0][:2] = reversed(noncontiguous["read_groups"][0][:2])
     with pytest.raises(CassetteError) as false_coalescing:
-        prepare_hardware_plans(
-            cartridge, compiled_root, source_identity, plan_digest, [noncontiguous]
+        _prepare_hardware(
+            cartridge, compiled_root, source_identity, plan_digest, [noncontiguous], "noncontiguous"
         )
     assert false_coalescing.value.code == "CAPABILITY_MISMATCH"
 
@@ -443,6 +519,8 @@ def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(
             all_plan_root,
             compiler._compiled_identity_material(planned_root),
             (planned_root["plans"][0], attacked),
+            capacity_controller=CapacityCoordinator(cartridge),
+            operation_id=f"s20-forged-{member}",
         )
         assert page_locations(cartridge, forged) == mapping
         with pytest.raises(CassetteError) as detached:
@@ -456,7 +534,7 @@ def test_q11_q33_q59_certified_hardware_plans_switch_without_weight_duplication(
         spec["plan_name"] = f"metadata-overflow-{index:03d}"
         excessive.append(spec)
     with pytest.raises(CassetteError) as metadata_overflow:
-        prepare_hardware_plans(
-            cartridge, compiled_root, source_identity, plan_digest, excessive
+        _prepare_hardware(
+            cartridge, compiled_root, source_identity, plan_digest, excessive, "excessive"
         )
     assert metadata_overflow.value.code == "CAPACITY_EXCEEDED"

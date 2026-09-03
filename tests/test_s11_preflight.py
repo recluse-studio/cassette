@@ -158,8 +158,6 @@ def _requirements(revision):
 
 def _profile():
     return CompatibilityProfile(
-        100 * GIB,
-        20 * GIB,
         2 * GIB,
         frozenset({"attention", "matmul"}),
         frozenset({"text"}),
@@ -256,33 +254,12 @@ def test_q8_q50_q56_trust_conflicts_four_outcomes_and_no_silent_weakening():
     assert supported.peak_bytes == total_bytes + 128 * MIB
     assert supported.architecture == "fixture-architecture"
     assert supported.operators == ("attention", "matmul")
-    transfer_state = (128 * 1024 + 257 * 33) + (128 * 1024 + 33)
-    exact_capacity = total_bytes + len(assets[0][1]) + transfer_state + 8 * GIB
-    assert supported.required_bytes == exact_capacity
     assert supported.memory_bound == total_bytes + 128 * MIB
-    assert supported.storage_bound == 20 * GIB
     assert supported.training_tiers == ("A", "B")
     assert supported.mode_candidates == ("NATIVE",)
     assert supported.reasons == ("NATIVE_STATIC_PREDICATES_PASS",)
     assert supported.deferred_checks == ()
     assert supported.record()["class"] == "SUPPORTED"
-
-    assert preflight(
-        revision,
-        (metadata,),
-        requirements,
-        replace(_profile(), allocatable_verified_free=exact_capacity),
-        verified_assets=assets,
-    ).classification == "SUPPORTED"
-    one_byte_short = preflight(
-        revision,
-        (metadata,),
-        requirements,
-        replace(_profile(), allocatable_verified_free=exact_capacity - 1),
-        verified_assets=assets,
-    )
-    assert one_byte_short.classification == "UNSUPPORTED"
-    assert "CAPACITY_EXCEEDED" in one_byte_short.reasons
 
     prepared = preflight(
         revision,

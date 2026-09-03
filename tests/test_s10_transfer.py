@@ -16,7 +16,7 @@ from errors import CassetteError
 from fixture_server import source_fixture_server
 import sources as sources_module
 from sources import SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
-from store import CapacityPhase, release_capacity, reserve_capacity, resume_artifact_hasher
+from store import CapacityCoordinator, grant_transfer_extent, resume_artifact_hasher
 
 CHUNK = 4 * 1024 * 1024
 HEADER_BYTES = 2 * 64 * 1024
@@ -35,22 +35,117 @@ def _chunk_digests(payload: bytes) -> tuple[str, ...]:
     )
 
 
-def _extent(path: Path, length: int) -> tuple[int, TransferExtent]:
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
-    os.ftruncate(descriptor, length)
-    return descriptor, TransferExtent(descriptor, 0, length, "s10-multi-shard")
+def _extent(
+    cartridge: Path,
+    capacity_coordinator: CapacityCoordinator,
+    extent_id: str,
+    length: int,
+) -> tuple[int, TransferExtent]:
+    extent = grant_transfer_extent(
+        cartridge,
+        "s10-multi-shard",
+        extent_id,
+        length,
+        capacity_controller=capacity_coordinator,
+    )
+    return extent.fd, extent
 
 
-def _run(adapter, revision, artifact, extents, reservation, chunk_digests=None):
+def _run(adapter, revision, artifact, extents, capacity_coordinator, chunk_digests=None):
     return asyncio.run(transfer_artifact(
         adapter,
         revision,
         artifact,
         extents[artifact.path][0],
         extents[artifact.path][1],
-        reservation,
+        capacity_coordinator,
         authoritative_chunk_digests=chunk_digests,
     ))
+
+
+def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
+    """Q51/Q53: each transfer transition uses the cartridge's concrete coordinator."""
+
+    payload = _payload(b"cassette-s10-capacity/", 2 * CHUNK + 17)
+    artifact_name = "model.safetensors"
+    cartridge = tmp_path / "scratch-cartridge"
+    cartridge.mkdir()
+    capacity_coordinator = CapacityCoordinator(cartridge)
+    data_fd, data_extent = _extent(
+        cartridge, capacity_coordinator, f"{artifact_name}.data", len(payload)
+    )
+    state_fd, state_extent = _extent(
+        cartridge,
+        capacity_coordinator,
+        f"{artifact_name}.state",
+        transfer_state_bytes(len(payload)),
+    )
+    extents = {artifact_name: (data_extent, state_extent)}
+
+    descriptor = {
+        "kind": "huggingface",
+        "locator": "fixture/huggingface-model",
+        "revision": "main",
+        "credential_ref": "keychain:s10/capacity",
+        "license_acceptance_ref": "license:s10/capacity",
+        "expected_identity": "blake3:" + "a" * 64,
+    }
+    try:
+        with source_fixture_server(
+            artifact_overrides={"huggingface": ((artifact_name, payload, '"s10-capacity-v1"'),)}
+        ) as server:
+            adapter = SourceAdapter(
+                "huggingface", server.base_url, {descriptor["credential_ref"]: SECRET}.get
+            )
+            revision = asyncio.run(adapter.resolve(descriptor))
+            artifact = revision.artifacts[0]
+            completed = _run(adapter, revision, artifact, extents, capacity_coordinator)
+            assert completed.completed_interval_set == ((0, len(payload)),)
+            assert completed.chunk_digests == _chunk_digests(payload)
+            assert os.pread(data_fd, len(payload), 0) == payload
+
+            transfer_claims = tuple(
+                claim for claim in capacity_coordinator.claims()
+                if ("checkpoint-initial" in claim.transition.boundary_id
+                    or ":chunk-" in claim.transition.boundary_id)
+            )
+            assert [(claim.transition.declared_writes, claim.writes_started) for claim in transfer_claims] == [
+                (2, 2),
+                (5, 5),
+                (5, 5),
+                (5, 5),
+            ]
+            assert all(claim.state == "COMPLETED" for claim in transfer_claims)
+
+            changed_revision = replace(
+                revision,
+                immutable_revision="git-sha1:" + "2" * 40,
+            )
+            claims_before_reset = len(capacity_coordinator.claims())
+            with pytest.raises(CassetteError) as reset:
+                _run(adapter, changed_revision, artifact, extents, capacity_coordinator)
+            assert reset.value.code == "SOURCE_REVISION_CHANGED"
+            reset_claim = capacity_coordinator.claims()[claims_before_reset]
+            assert "checkpoint-reset-" in reset_claim.transition.boundary_id
+            assert (reset_claim.transition.declared_writes, reset_claim.writes_started) == (2, 2)
+            assert reset_claim.state == "COMPLETED"
+
+            for slot in range(2):
+                os.pwrite(state_fd, b"\xff" * 4, state_extent.offset + slot * HEADER_BYTES)
+            os.fsync(state_fd)
+            claims_before_clear = len(capacity_coordinator.claims())
+            with pytest.raises(CassetteError) as clear:
+                _run(adapter, revision, artifact, extents, capacity_coordinator)
+            assert clear.value.code == "IDENTITY_MISMATCH"
+            clear_claim = capacity_coordinator.claims()[claims_before_clear]
+            assert ":checkpoint-clear:" in clear_claim.transition.boundary_id
+            assert clear_claim.transition.write_bytes == (HEADER_BYTES, 0)
+            assert (clear_claim.transition.declared_writes, clear_claim.writes_started) == (2, 2)
+            assert clear_claim.state == "COMPLETED"
+    finally:
+        os.close(data_fd)
+        os.close(state_fd)
+    assert capacity_coordinator.active_claims() == ()
 
 
 def test_q51_random_interruption_corruption_validator_resume_without_final_reread(tmp_path, monkeypatch):
@@ -71,26 +166,18 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
 
     cartridge = tmp_path / "scratch-cartridge"
     cartridge.mkdir()
+    capacity_coordinator = CapacityCoordinator(cartridge)
     descriptors = []
     extents = {}
     for name, payload, _ in shards:
-        data_fd, data_extent = _extent(cartridge / f"{name}.partial", len(payload))
-        state_fd, state_extent = _extent(cartridge / f"{name}.transfer", expected_state_bytes[name])
+        data_fd, data_extent = _extent(
+            cartridge, capacity_coordinator, f"{name}.data", len(payload)
+        )
+        state_fd, state_extent = _extent(
+            cartridge, capacity_coordinator, f"{name}.state", expected_state_bytes[name]
+        )
         descriptors.extend((data_fd, state_fd))
         extents[name] = (data_extent, state_extent)
-    transfer_bytes = sum(len(payload) + expected_state_bytes[name] for name, payload, _ in shards)
-    safety = 20 * 1024**3
-    reserved = []
-    released = []
-    reservation = reserve_capacity(
-        "s10-multi-shard",
-        device_bytes=400 * 1024**3,
-        allocatable_verified_free=transfer_bytes + safety,
-        phases=(CapacityPhase(inflight=transfer_bytes),),
-        reserve_extent=lambda length: reserved.append(length) is None,
-        release_extent=lambda length: released.append(length) is None,
-    )
-    assert reserved == [transfer_bytes + safety]
 
     descriptor = {
         "kind": "huggingface",
@@ -121,7 +208,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", changed_checkpoint_read)
                 with pytest.raises(CassetteError) as header_readback_fault:
-                    _run(adapter, revision, first, extents, reservation)
+                    _run(adapter, revision, first, extents, capacity_coordinator)
             assert header_readback_fault.value.code == "DURABILITY_UNSUPPORTED"
             assert len(server.requests) == requests_before_header_fault
 
@@ -134,13 +221,13 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", changed_record_read)
                 with pytest.raises(CassetteError) as record_readback_fault:
-                    _run(adapter, revision, first, extents, reservation)
+                    _run(adapter, revision, first, extents, capacity_coordinator)
             assert record_readback_fault.value.code == "DURABILITY_UNSUPPORTED"
 
             first_tail = 2 * CHUNK
             server.corrupt_ranges[("huggingface", first.path, first_tail)] = rng.randrange(len(first_payload) - first_tail)
             with pytest.raises(CassetteError) as corrupt_without_chunk_manifest:
-                _run(adapter, revision, first, extents, reservation)
+                _run(adapter, revision, first, extents, capacity_coordinator)
             assert corrupt_without_chunk_manifest.value.code == "IDENTITY_MISMATCH"
             assert "whole source digest" in corrupt_without_chunk_manifest.value.detail
             server.corrupt_ranges.clear()
@@ -149,7 +236,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             request_start = len(server.requests)
             server.interrupt_ranges[("huggingface", first.path, first_tail)] = interruption_cut
             with pytest.raises(CassetteError) as interrupted:
-                _run(adapter, revision, first, extents, reservation)
+                _run(adapter, revision, first, extents, capacity_coordinator)
             assert interrupted.value.code == "SOURCE_UNAVAILABLE"
             assert interrupted.value.retryability == "retryable"
             data_extent = extents[first.path][0]
@@ -172,7 +259,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", tracked_pread)
                 patcher.setattr(sources_module, "resume_artifact_hasher", tracked_resume)
-                first_result = _run(adapter, revision, first, extents, reservation)
+                first_result = _run(adapter, revision, first, extents, capacity_coordinator)
             assert data_reads == [(0, CHUNK), (CHUNK, CHUNK), (2 * CHUNK, len(first_payload) - 2 * CHUNK)]
             assert restored_offsets == [2 * CHUNK]
             assert first_result.completed_interval_set == ((0, len(first_payload)),)
@@ -208,7 +295,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             data_reads.clear()
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", tracked_pread)
-                repeated = _run(adapter, revision, first, extents, reservation)
+                repeated = _run(adapter, revision, first, extents, capacity_coordinator)
             assert repeated == first_result
             assert data_reads == []
 
@@ -221,7 +308,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", tracked_pread)
                 with pytest.raises(CassetteError) as corrupt_checkpoint_record:
-                    _run(adapter, revision, first, extents, reservation)
+                    _run(adapter, revision, first, extents, capacity_coordinator)
             assert corrupt_checkpoint_record.value.code == "IDENTITY_MISMATCH"
             assert "chunk records" in corrupt_checkpoint_record.value.detail
             assert data_reads == []
@@ -230,7 +317,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             second_data = extents[second.path][0]
             server.corrupt_ranges[("huggingface", second.path, 0)] = rng.randrange(CHUNK)
             with pytest.raises(CassetteError) as corrupt_with_chunk_manifest:
-                _run(adapter, revision, second, extents, reservation, second_digests)
+                _run(adapter, revision, second, extents, capacity_coordinator, second_digests)
             assert corrupt_with_chunk_manifest.value.code == "IDENTITY_MISMATCH"
             assert "source chunk 0" in corrupt_with_chunk_manifest.value.detail
             assert os.pread(second_data.fd, CHUNK, second_data.offset) == bytes(CHUNK)
@@ -239,7 +326,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             def seed_second_partial():
                 server.interrupt_ranges[("huggingface", second.path, 2 * CHUNK)] = rng.randrange(1, len(second_payload) - 2 * CHUNK)
                 with pytest.raises(CassetteError) as stopped:
-                    _run(adapter, revision, second, extents, reservation, second_digests)
+                    _run(adapter, revision, second, extents, capacity_coordinator, second_digests)
                 assert stopped.value.code == "SOURCE_UNAVAILABLE"
                 assert os.pread(second_data.fd, 2 * CHUNK, second_data.offset) == second_payload[:2 * CHUNK]
 
@@ -249,7 +336,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             os.fsync(second_data.fd)
             requests_before_local_check = len(server.requests)
             with pytest.raises(CassetteError) as corrupt_local:
-                _run(adapter, revision, second, extents, reservation, second_digests)
+                _run(adapter, revision, second, extents, capacity_coordinator, second_digests)
             assert corrupt_local.value.code == "IDENTITY_MISMATCH"
             assert "local transfer chunk" in corrupt_local.value.detail
             assert len(server.requests) == requests_before_local_check
@@ -273,7 +360,7 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
                 seed_second_partial()
                 changed_artifact = next(item for item in changed_revision.artifacts if item.path == second.path)
                 with pytest.raises(CassetteError) as changed_checkpoint:
-                    _run(adapter, changed_revision, changed_artifact, extents, reservation, second_digests)
+                    _run(adapter, changed_revision, changed_artifact, extents, capacity_coordinator, second_digests)
                 assert changed_checkpoint.value.code == "SOURCE_REVISION_CHANGED"
                 assert "checkpoint identity" in changed_checkpoint.value.detail
 
@@ -281,18 +368,18 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             changed_manifest = list(second_digests)
             changed_manifest[0] = "blake3:" + "0" * 64
             with pytest.raises(CassetteError) as changed_chunk_manifest:
-                _run(adapter, revision, second, extents, reservation, tuple(changed_manifest))
+                _run(adapter, revision, second, extents, capacity_coordinator, tuple(changed_manifest))
             assert changed_chunk_manifest.value.code == "SOURCE_REVISION_CHANGED"
             assert "checkpoint identity" in changed_chunk_manifest.value.detail
 
             seed_second_partial()
             server.validator_overrides[("huggingface", second.path)] = '"s10-second-v2"'
             with pytest.raises(CassetteError) as changed_live_validator:
-                _run(adapter, revision, second, extents, reservation, second_digests)
+                _run(adapter, revision, second, extents, capacity_coordinator, second_digests)
             assert changed_live_validator.value.code == "SOURCE_REVISION_CHANGED"
             revised = asyncio.run(adapter.resolve(descriptor))
             revised_second = next(item for item in revised.artifacts if item.path == second.path)
-            second_result = _run(adapter, revised, revised_second, extents, reservation, second_digests)
+            second_result = _run(adapter, revised, revised_second, extents, capacity_coordinator, second_digests)
             assert second_result.completed_interval_set == ((0, len(second_payload)),)
             assert second_result.validator == '"s10-second-v2"'
             assert os.pread(second_data.fd, len(second_payload), second_data.offset) == second_payload
@@ -302,17 +389,17 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             third_revision = asyncio.run(adapter.resolve(descriptor))
             third_second = next(item for item in third_revision.artifacts if item.path == second.path)
             with pytest.raises(CassetteError) as completed_identity_change:
-                _run(adapter, third_revision, third_second, extents, reservation, second_digests)
+                _run(adapter, third_revision, third_second, extents, capacity_coordinator, second_digests)
             assert completed_identity_change.value.code == "SOURCE_REVISION_CHANGED"
 
             server.interrupt_ranges[("huggingface", second.path, 2 * CHUNK)] = rng.randrange(1, CHUNK)
             server.range_validator_overrides[("huggingface", second.path, 3 * CHUNK)] = '"s10-second-v4"'
             with pytest.raises(CassetteError) as concurrent_revision_change:
-                _run(adapter, third_revision, third_second, extents, reservation, second_digests)
+                _run(adapter, third_revision, third_second, extents, capacity_coordinator, second_digests)
             assert concurrent_revision_change.value.code == "SOURCE_REVISION_CHANGED"
             server.range_validator_overrides.clear()
             requests_before_concurrent_resume = len(server.requests)
-            _run(adapter, third_revision, third_second, extents, reservation, second_digests)
+            _run(adapter, third_revision, third_second, extents, capacity_coordinator, second_digests)
             resumed_ranges = [
                 request["range"] for request in server.requests[requests_before_concurrent_resume:]
                 if request["path"].endswith(second.path)
@@ -324,27 +411,14 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
                 f"bytes={3 * CHUNK}-{len(second_payload) - 1}",
             ])
 
-            assert all(path.parent == cartridge for path in cartridge.iterdir())
-            assert not any(SECRET.encode() in path.read_bytes() for path in cartridge.iterdir())
-
-            release_capacity(reservation)
-            requests_before_release_check = len(server.requests)
-            state_before_release_check = os.pread(
-                extents[second.path][1].fd,
-                expected_state_bytes[second.path],
-                extents[second.path][1].offset,
+            assert (cartridge / "transfers" / "s10-multi-shard").is_dir()
+            assert not any(
+                SECRET.encode() in path.read_bytes()
+                for path in cartridge.rglob("*")
+                if path.is_file()
             )
-            with pytest.raises(CassetteError) as released_reservation:
-                _run(adapter, revised, revised_second, extents, reservation, second_digests)
-            assert released_reservation.value.code == "CAPACITY_EXCEEDED"
-            assert len(server.requests) == requests_before_release_check
-            assert os.pread(
-                extents[second.path][1].fd,
-                expected_state_bytes[second.path],
-                extents[second.path][1].offset,
-            ) == state_before_release_check
+
     finally:
-        release_capacity(reservation)
         for descriptor_fd in descriptors:
             os.close(descriptor_fd)
-    assert released == [transfer_bytes + safety]
+    assert capacity_coordinator.active_claims() == ()

@@ -1,4 +1,4 @@
-# test_s26_phase_machine.py — S26 concrete-operation failure gate (Q49); depends on broker.py, compiler.py, errors.py, pager.py, sources.py, store.py, trainer.py, tests/fixture_server.py, tests/test_s07_integrity_capacity.py, tests/test_s15_pager.py, tests/test_s21_trainer.py, tests/test_s23_failure_rows.py, tests/test_s24_interoperability.py, tests/test_s25_invalidation.py.
+# test_s26_phase_machine.py — S26 concrete-operation failure gate (Q49); depends on broker.py, compiler.py, errors.py, pager.py, sources.py, store.py, trainer.py, tests/fixture_server.py, tests/test_s07_integrity_capacity.py, tests/test_s15_pager.py, tests/test_s21_trainer.py, tests/test_s23_failure_rows.py, tests/test_s24_interoperability.py.
 """Execute every generated failure coordinate through one concrete product entrypoint."""
 
 from __future__ import annotations
@@ -21,8 +21,9 @@ from compiler import compilation_specification, recompile_revision
 from errors import CassetteError
 import fixture_server
 import pager
-from sources import SourceAdapter, TransferExtent, transfer_state_bytes
+from sources import SourceAdapter, grant_transfer_extent, transfer_state_bytes
 from store import (
+    CapacityCoordinator,
     CartridgeLifecycle,
     commit_generation,
     create_repair_set,
@@ -33,10 +34,8 @@ from store import (
     model_identity,
     page_locations,
     pin_generation,
-    release_capacity,
     repair_revision,
     revision_reachability,
-    revision_removal_shape,
 )
 import store as store_module
 import trainer
@@ -67,8 +66,8 @@ from test_s15_pager import (
 )
 from test_s21_trainer import (
     SFT_BATCHES,
-    _admission,
     _quantized_parent,
+    _training_profile,
     advance_training as _advance_training,
 )
 from test_s23_failure_rows import (
@@ -80,13 +79,7 @@ from test_s23_failure_rows import (
     _Cartridge as _S23Cartridge,
     _process_death_outcome,
 )
-from test_s24_interoperability import (
-    GIB,
-    _capacity,
-    _repair_capacity,
-    _s24_artifact,
-)
-from test_s25_invalidation import _base as _compiled_base
+from test_s24_interoperability import _machine_replay, _s24_artifact
 
 
 pytestmark = pytest.mark.skipif(
@@ -137,6 +130,32 @@ class _Route:
     arm: object = lambda _path: None
     corrupt_page: str | None = None
     source_files: tuple[Path, ...] = ()
+
+
+def _capacity_coordinator(cartridge: Path, injection: str, monkeypatch) -> CapacityCoordinator:
+    """Use store-owned coordination while making only Q53 free-space observations deterministic."""
+
+    coordinator = CapacityCoordinator(cartridge)
+    if injection not in {
+        "insufficient_capacity_before_start",
+        "insufficient_capacity_during_candidate_write",
+    }:
+        return coordinator
+    observed = store_module.os.statvfs
+    reads = 0
+
+    def measured(path):
+        nonlocal reads
+        snapshot = observed(path)
+        reads += 1
+        if injection == "insufficient_capacity_before_start" or reads > 1:
+            values = list(snapshot)
+            values[4] = 0
+            return os.statvfs_result(values)
+        return snapshot
+
+    monkeypatch.setattr(store_module.os, "statvfs", measured)
+    return coordinator
 
 
 @dataclass(frozen=True)
@@ -192,6 +211,13 @@ def _capture(entrypoint, invocation, receipt):
             result["error"]["code"],
             {},
         )
+    if isinstance(result, dict) and result.get("state") == "PAUSED":
+        return _Call(
+            f"{entrypoint.__module__}.{entrypoint.__qualname__}",
+            hit,
+            "CAPACITY_EXCEEDED",
+            {},
+        )
     return _Call(
         f"{entrypoint.__module__}.{entrypoint.__qualname__}",
         hit,
@@ -200,11 +226,21 @@ def _capture(entrypoint, invocation, receipt):
     )
 
 
-def _extent(path: Path, length: int, operation_id: str):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
-    os.ftruncate(descriptor, length)
-    return descriptor, TransferExtent(descriptor, 0, length, operation_id)
+def _extent(
+    cartridge: Path,
+    operation_id: str,
+    extent_id: str,
+    length: int,
+    capacity_coordinator: CapacityCoordinator,
+):
+    extent = grant_transfer_extent(
+        cartridge,
+        operation_id,
+        extent_id,
+        length,
+        capacity_controller=capacity_coordinator,
+    )
+    return extent.fd, extent
 
 
 def _initialize(cartridge: Path) -> None:
@@ -315,24 +351,23 @@ def _acquisition_route(directory: Path, monkeypatch) -> _Route:
             extent_cartridge = Path(pathlike)
         except CassetteError:
             extent_cartridge = cartridge
+        grant_coordinator = CapacityCoordinator(extent_cartridge)
         data_fd, data_extent = _extent(
-            extent_cartridge / "incoming" / f"run-{counter}" / material.artifacts[0].path,
-            len(payload),
+            extent_cartridge,
             operation_id,
+            f"s26-acquisition-{counter}-data",
+            len(payload),
+            grant_coordinator,
         )
         state_length = transfer_state_bytes(len(payload))
         state_fd, state_extent = _extent(
-            extent_cartridge / "incoming" / f"run-{counter}" / "transfer.state",
-            state_length,
+            extent_cartridge,
             operation_id,
+            f"s26-acquisition-{counter}-state",
+            state_length,
+            grant_coordinator,
         )
-        amount = len(payload) + state_length
-        if injection in {
-            "insufficient_capacity_before_start",
-            "insufficient_capacity_during_candidate_write",
-        }:
-            amount -= 1
-        reservation = _capacity(operation_id, amount)
+        capacity = _capacity_coordinator(extent_cartridge, injection, monkeypatch)
         if injection == "source_revision_change_during_transfer":
             server.range_validator_overrides[("huggingface", material.artifacts[0].path, 0)] = '"s26-v2"'
         if injection == "cancellation":
@@ -344,7 +379,7 @@ def _acquisition_route(directory: Path, monkeypatch) -> _Route:
                 server.base_url,
                 {"keychain:s26/acquisition": fixture_server._SECRET}.get,
             ),
-            reservation,
+            capacity,
             {material.artifacts[0].path: (data_extent, state_extent)},
             pathlike,
         )
@@ -360,10 +395,10 @@ def _acquisition_route(directory: Path, monkeypatch) -> _Route:
                 },
             )
         finally:
-            release_capacity(reservation)
             os.close(data_fd)
             os.close(state_fd)
             broker.close()
+            assert capacity.active_claims() == ()
 
     return _Route(
         "acquisition", cartridge, parent, True, invoke, stack.close,
@@ -379,60 +414,55 @@ def source_fixture_server_with_material(material, payload):
     )
 
 
-def _compilation_route(directory: Path, _monkeypatch) -> _Route:
-    cartridge, prepared = _compiled_base(directory)
+def _compilation_route(directory: Path, monkeypatch) -> _Route:
+    directory.mkdir(parents=True)
+    payload, material, _ = _s24_artifact()
+    acquired, cartridge, broker = _machine_replay(
+        directory, monkeypatch, "huggingface", payload, material
+    )
+    assert acquired["state"] == "SUCCEEDED", acquired
     _initialize(cartridge)
-    specification = compilation_specification(cartridge, prepared.candidate_root)
+    compiled_root = acquired["result"]["root_digest"]
+    specification = compilation_specification(cartridge, compiled_root)
     counter = 0
 
     def invoke(pathlike, injection, _armed=None):
         nonlocal counter
         counter += 1
         before = _store_snapshot(cartridge)
-        reserved = []
-        released = []
         candidate = deepcopy(specification)
         if injection == "source_revision_change_during_transfer":
             candidate["source_root"] = digest_bytes(b"s26-foreign-source-root")
-        free = 0 if injection == "insufficient_capacity_before_start" else 100 * GIB
-
-        def reserve(length):
-            reserved.append(length)
-            return injection != "insufficient_capacity_during_candidate_write"
+        if injection in {
+            "insufficient_capacity_before_start",
+            "insufficient_capacity_during_candidate_write",
+        }:
+            candidate["profile"]["other_observed_bytes"] += 1
+        capacity = _capacity_coordinator(cartridge, injection, monkeypatch)
 
         call = _capture(
             recompile_revision,
             lambda: recompile_revision(
                 pathlike,
                 candidate,
-                prepared.candidate_root,
+                compiled_root,
                 operation_id=f"s26-compilation-{counter}",
-                device_bytes=100 * GIB,
-                allocatable_verified_free=free,
-                reserve_extent=reserve,
-                release_extent=lambda length: released.append(length) is None,
+                capacity_coordinator=capacity,
             ),
             lambda result: {"candidate_root": result.candidate_root},
         )
         if injection == "insufficient_capacity_before_start":
-            assert reserved == released == []
+            assert capacity.active_claims() == ()
             assert _store_snapshot(cartridge) == before
         elif injection == "insufficient_capacity_during_candidate_write":
-            assert len(reserved) == 1 and released == []
+            assert capacity.active_claims() == ()
             assert _store_snapshot(cartridge) == before
-        elif call.error is None:
-            assert len(reserved) == len(released) == 1
-            assert reserved == released
-            candidate_root = call.receipt["candidate_root"]
-            written = sum(
-                (cartridge / directory / candidate_root[7:]).stat().st_size
-                for directory in ("indexes", "roots")
-            )
-            assert reserved == [8 * GIB + written]
+        else:
+            assert capacity.active_claims() == ()
         return _cancel_after_concrete(directory, call, injection, "compilation")
 
     return _Route(
-        "compilation", cartridge, prepared.candidate_root, True, invoke, lambda: None
+        "compilation", cartridge, compiled_root, True, invoke, broker.close
     )
 
 
@@ -537,7 +567,7 @@ def _transformer_route(directory: Path, operation: str) -> _Route:
     )
 
 
-def _training_route(directory: Path, _monkeypatch) -> _Route:
+def _training_route(directory: Path, monkeypatch) -> _Route:
     cartridge, parent, parameters, sources = _storage_base(directory)
     options = {
         "random_seed": 17,
@@ -545,54 +575,59 @@ def _training_route(directory: Path, _monkeypatch) -> _Route:
         "calibration_records": (),
         "delta_precision": "FP32",
     }
-    admission = _admission(
-        cartridge, parent, "ADAPTER_SFT", parameters, (SFT_BATCHES[0],), **options
-    )
+    def training_admission(objectives, injection: str):
+        workload = trainer.training_workload(
+            cartridge, parent, "ADAPTER_SFT", parameters, objectives, **options
+        )
+        capacity = _capacity_coordinator(cartridge, injection, monkeypatch)
+        return trainer.admit_training(
+            workload,
+            _training_profile(workload.request_digest),
+            capacity_coordinator=capacity,
+        ), capacity
+
+    admission, admitted_capacity = training_admission((SFT_BATCHES[0],), "training")
 
     def invoke(pathlike, injection, _armed=None):
         if injection in {
             "insufficient_capacity_before_start",
             "insufficient_capacity_during_candidate_write",
         }:
-            workload = trainer.training_workload(
-                cartridge, parent, "ADAPTER_SFT", parameters, (SFT_BATCHES[0],), **options
-            )
-            profile = admission.profile
+            hostile_admission, capacity = training_admission((SFT_BATCHES[0],), injection)
             call = _capture(
-                trainer.admit_training,
-                lambda: trainer.admit_training(
-                    workload,
-                    profile,
-                    allocatable_verified_free=admission.estimate.S_required - 1,
-                    reserve_extent=lambda _length: True,
-                    release_extent=lambda _length: True,
-                ),
-                lambda _result: {"work_root": "unexpected"},
-            )
-            return call
-        objectives = (SFT_BATCHES[0],)
-        if injection == "invalid_gradient_nan_inf":
-            objectives = ((3.0e38,) * 10,)
-            hostile_admission = _admission(
-                cartridge, parent, "ADAPTER_SFT", parameters, objectives, **options
-            )
-            try:
-                checkpoint = trainer.prepare_training(
+                trainer.prepare_training,
+                lambda: trainer.prepare_training(
                     pathlike,
                     parent,
                     "ADAPTER_SFT",
                     parameters,
-                    objectives,
+                    (SFT_BATCHES[0],),
                     admission=hostile_admission,
                     **options,
-                )
-                call = _capture(
-                    trainer.advance_training,
-                    lambda: _advance_training(pathlike, checkpoint),
-                    lambda result: {"work_root": result.work_root},
-                )
-            finally:
-                release_capacity(hostile_admission.reservation)
+                ),
+                lambda _result: {"work_root": "unexpected"},
+            )
+            assert capacity.active_claims() == ()
+            return call
+        objectives = (SFT_BATCHES[0],)
+        if injection == "invalid_gradient_nan_inf":
+            objectives = ((3.0e38,) * 10,)
+            hostile_admission, hostile_capacity = training_admission(objectives, injection)
+            checkpoint = trainer.prepare_training(
+                pathlike,
+                parent,
+                "ADAPTER_SFT",
+                parameters,
+                objectives,
+                admission=hostile_admission,
+                **options,
+            )
+            call = _capture(
+                trainer.advance_training,
+                lambda: _advance_training(pathlike, checkpoint),
+                lambda result: {"work_root": result.work_root},
+            )
+            assert hostile_capacity.active_claims() == ()
         else:
             call = _capture(
                 trainer.prepare_training,
@@ -607,11 +642,11 @@ def _training_route(directory: Path, _monkeypatch) -> _Route:
                 ),
                 lambda result: {"work_root": result.work_root},
             )
+        assert admitted_capacity.active_claims() == ()
         return _cancel_after_concrete(directory, call, injection, "training")
 
     def close():
-        if admission.reservation.active:
-            release_capacity(admission.reservation)
+        return None
 
     return _Route(
         "training", cartridge, parent, True, invoke, close,
@@ -619,10 +654,8 @@ def _training_route(directory: Path, _monkeypatch) -> _Route:
     )
 
 
-def _export_route(directory: Path, _monkeypatch) -> _Route:
+def _export_route(directory: Path, monkeypatch) -> _Route:
     cartridge, root, _, sources = _storage_base(directory)
-    from compiler import plan_export
-    plan = plan_export(cartridge, root, "safetensors-v1")
     counter = 0
 
     def invoke(pathlike, injection, _armed=None):
@@ -637,28 +670,22 @@ def _export_route(directory: Path, _monkeypatch) -> _Route:
             "arguments": {"target_schema": "safetensors-v1"},
         }
         operation_id = broker.operation_id(request)
-        amount = plan["reservation_bytes"]
-        if injection in {
-            "insufficient_capacity_before_start",
-            "insufficient_capacity_during_candidate_write",
-        }:
-            amount -= 1
-        reservation = _capacity(operation_id, amount)
+        capacity = _capacity_coordinator(cartridge, injection, monkeypatch)
         if injection == "cancellation":
             broker.issue(request)
             broker.cancel(operation_id)
         try:
             return _capture(
                 CanonicalBroker.export_revision,
-                lambda: asyncio.run(broker.export_revision(request, pathlike, reservation)),
+                lambda: asyncio.run(broker.export_revision(request, pathlike, capacity)),
                 lambda result: {
                     "export_id": result["result"]["export_id"],
                     "artifact_digest": result["result"]["artifact_digest"],
                 },
             )
         finally:
-            release_capacity(reservation)
             broker.close()
+            assert capacity.active_claims() == ()
 
     return _Route(
         "export", cartridge, root, True, invoke, lambda: None,
@@ -666,29 +693,29 @@ def _export_route(directory: Path, _monkeypatch) -> _Route:
     )
 
 
-def _repair_route(directory: Path, _monkeypatch) -> _Route:
+def _repair_route(directory: Path, monkeypatch) -> _Route:
     cartridge, root, _, sources = _storage_base(directory)
-    setup = _repair_capacity("s26-repair-set", 16 * 1024 * 1024)
-    create_repair_set(cartridge, root, setup)
-    release_capacity(setup)
+    setup_capacity = _capacity_coordinator(cartridge, "setup", monkeypatch)
+    repair_set = create_repair_set(cartridge, root, setup_capacity)
+    assert setup_capacity.active_claims() == ()
 
     def invoke(pathlike, injection, _armed=None):
-        amount = 16 * 1024 * 1024
+        capacity = _capacity_coordinator(cartridge, injection, monkeypatch)
         if injection in {
             "insufficient_capacity_before_start",
             "insufficient_capacity_during_candidate_write",
         }:
-            amount = 1
-        reservation = _repair_capacity("s26-repair", amount)
+            parity = repair_set.parity_digests[0]
+            (cartridge / "repair" / "objects" / parity[7:]).unlink()
         try:
             call = _capture(
                 repair_revision,
-                lambda: repair_revision(pathlike, root, reservation),
+                lambda: repair_revision(pathlike, root, capacity),
                 lambda result: {"root_digest": result.root_digest, "available": result.available},
             )
             return _cancel_after_concrete(directory, call, injection, "repair")
         finally:
-            release_capacity(reservation)
+            assert capacity.active_claims() == ()
 
     return _Route(
         "repair", cartridge, root, True, invoke, lambda: None,
@@ -696,7 +723,7 @@ def _repair_route(directory: Path, _monkeypatch) -> _Route:
     )
 
 
-def _removal_route(directory: Path, _monkeypatch) -> _Route:
+def _removal_route(directory: Path, monkeypatch) -> _Route:
     cartridge, root, _, sources = _storage_base(directory / "base")
     orphan_source = directory / "orphan.safetensors"
     _write_storage_source(orphan_source, "orphan", b"s26-unreachable-revision")
@@ -706,7 +733,6 @@ def _removal_route(directory: Path, _monkeypatch) -> _Route:
     orphan_source.unlink()
     sources = (*sources, orphan_source)
     proof = revision_reachability(cartridge, orphan)
-    shape = revision_removal_shape(cartridge, orphan, proof)
     counter = 0
 
     def invoke(pathlike, injection, _armed=None):
@@ -721,13 +747,7 @@ def _removal_route(directory: Path, _monkeypatch) -> _Route:
             "arguments": {"reachability_digest": proof["reachability_digest"]},
         }
         operation_id = broker.operation_id(request)
-        amount = shape["journal_bytes"]
-        if injection in {
-            "insufficient_capacity_before_start",
-            "insufficient_capacity_during_candidate_write",
-        }:
-            amount -= 1
-        reservation = _capacity(operation_id, amount)
+        capacity = _capacity_coordinator(cartridge, injection, monkeypatch)
         if injection == "cancellation":
             broker.issue(request)
             broker.cancel(operation_id)
@@ -735,13 +755,13 @@ def _removal_route(directory: Path, _monkeypatch) -> _Route:
             return _capture(
                 CanonicalBroker.remove_revision,
                 lambda: asyncio.run(
-                    broker.remove_revision(request, pathlike, proof, reservation)
+                    broker.remove_revision(request, pathlike, proof, capacity)
                 ),
                 lambda result: {"removed_root": result["result"]["removed_root"]},
             )
         finally:
-            release_capacity(reservation)
             broker.close()
+            assert capacity.active_claims() == ()
 
     return _Route(
         "removal", cartridge, root, True, invoke, lambda: None,

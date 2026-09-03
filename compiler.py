@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import struct
-from typing import Callable, Mapping
+from typing import Mapping
 
 from errors import CassetteError
 from schema.tables import (
@@ -27,8 +27,7 @@ from schema.tables import (
 from schema.validator import validate
 from store import (
     ArtifactIdentity,
-    CapacityPhase,
-    CapacityReservation,
+    CapacityCoordinator,
     IdentityTuple,
     PAGE_BYTES,
     adapter_export_fields,
@@ -47,9 +46,6 @@ from store import (
     page_locations,
     read_training_page,
     read_tensor,
-    release_capacity,
-    require_capacity_demand,
-    reserve_capacity,
 )
 
 _MANIFEST_KEY = "cassette.compiler.v1"
@@ -221,19 +217,22 @@ _HARDWARE_SPEC_FIELDS = frozenset({
     "prefetch_policy",
 })
 _PROFILE_SPEC_FIELDS = frozenset({
-    "apple_class", "storage_class", "request_class", "minimum_unified_memory_bytes",
+    "apple_class", "request_class", "minimum_unified_memory_bytes",
     "minimum_recommended_working_set_bytes", "minimum_sustained_read_bytes_per_second",
-    "maximum_p99_read_latency_ns", "minimum_storage_capacity_bytes",
-    "requires_writable_storage", "profile_evidence_digest",
+    "maximum_p99_read_latency_ns", "requires_writable_storage",
+    "operation_plan_profile_digest",
 })
 _PROFILE_PREDICATE_FIELDS = _PROFILE_SPEC_FIELDS | {
     "required_operator_case_ids", "required_apple_features",
 }
 _MEASURED_PROFILE_FIELDS = frozenset({
-    "apple_class", "storage_class", "request_class", "unified_memory_bytes",
+    "apple_class", "request_class", "operation_plan_profile_digest", "unified_memory_bytes",
     "recommended_max_working_set_bytes", "sustained_read_bytes_per_second",
-    "p99_read_latency_ns", "storage_capacity_bytes", "operator_case_ids", "apple_features",
+    "p99_read_latency_ns", "operator_case_ids", "apple_features",
     "writable_storage",
+})
+_MEASURED_PROFILE_DESCRIPTIVE_FIELDS = frozenset({
+    "media", "connector", "brand", "advertised_speed", "nominal_capacity_bytes",
 })
 _READ_GROUP_FIELDS = frozenset({"ordinal", "page_digests", "bytes"})
 _PREFETCH_FIELDS = frozenset({"kind", "lookahead_pages"})
@@ -1816,6 +1815,30 @@ def _hardware_record(
     return value
 
 
+def _hardware_record_with_descriptions(
+    value: object,
+    required_fields: frozenset[str],
+    object_id: str,
+    label: str,
+) -> dict:
+    """Accept required measured facts plus optional descriptive evidence facts."""
+
+    allowed_fields = required_fields | _MEASURED_PROFILE_DESCRIPTIVE_FIELDS
+    if (
+        not isinstance(value, dict)
+        or not required_fields <= set(value)
+        or not set(value) <= allowed_fields
+    ):
+        observed = sorted(value) if isinstance(value, dict) else type(value).__name__
+        _hardware_reject(
+            "INVALID_REQUEST",
+            object_id,
+            f"{label} requires {sorted(required_fields)} and permits only "
+            f"{sorted(_MEASURED_PROFILE_DESCRIPTIVE_FIELDS)} as descriptions; received {observed}",
+        )
+    return value
+
+
 def _hardware_items(
     value: object, object_id: str, label: str, *, empty: bool = False
 ) -> list:
@@ -1831,6 +1854,12 @@ def _hardware_items(
 def _hardware_identifier(value: object, object_id: str, label: str) -> str:
     if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
         _hardware_reject("INVALID_REQUEST", object_id, f"{label} is not a canonical identifier")
+    return value
+
+
+def _hardware_description(value: object, object_id: str, label: str) -> str:
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > 256:
+        _hardware_reject("INVALID_REQUEST", object_id, f"{label} is not bounded descriptive text")
     return value
 
 
@@ -1913,10 +1942,9 @@ def _profile_predicate(
     source = _hardware_record(value, _PROFILE_SPEC_FIELDS, object_id, "profile predicate")
     result = {
         "apple_class": _hardware_identifier(source["apple_class"], object_id, "Apple class"),
-        "storage_class": _hardware_identifier(source["storage_class"], object_id, "storage class"),
         "request_class": _hardware_identifier(source["request_class"], object_id, "request class"),
-        "profile_evidence_digest": _hardware_digest(
-            source["profile_evidence_digest"], object_id, "profile evidence digest"
+        "operation_plan_profile_digest": _hardware_digest(
+            source["operation_plan_profile_digest"], object_id, "operation-plan profile digest"
         ),
         **{
             name: _hardware_u64(source[name], object_id, name)
@@ -1925,7 +1953,6 @@ def _profile_predicate(
                 "minimum_recommended_working_set_bytes",
                 "minimum_sustained_read_bytes_per_second",
                 "maximum_p99_read_latency_ns",
-                "minimum_storage_capacity_bytes",
             )
         },
         "required_operator_case_ids": required_case_ids,
@@ -2073,8 +2100,6 @@ def _hardware_plan(
     working_set = max(group_memory, fresh_memory_peak)
     if predicate["minimum_recommended_working_set_bytes"] < working_set:
         _hardware_reject("CAPABILITY_MISMATCH", name, "profile predicate cannot hold the certified working set")
-    if predicate["minimum_storage_capacity_bytes"] < executable_bytes:
-        _hardware_reject("CAPABILITY_MISMATCH", name, "profile predicate cannot hold the executable pages")
     setup_latency = _hardware_io_latency(
         executable_bytes,
         len(groups),
@@ -2256,11 +2281,15 @@ def _verified_hardware_catalog(
 
 
 def _measured_hardware_profile(value: object) -> dict:
-    profile = _hardware_record(value, _MEASURED_PROFILE_FIELDS, "hardware:select", "measured hardware profile")
+    profile = _hardware_record_with_descriptions(
+        value, _MEASURED_PROFILE_FIELDS, "hardware:select", "measured hardware profile"
+    )
     result = {
         "apple_class": _hardware_identifier(profile["apple_class"], "hardware:select", "Apple class"),
-        "storage_class": _hardware_identifier(profile["storage_class"], "hardware:select", "storage class"),
         "request_class": _hardware_identifier(profile["request_class"], "hardware:select", "request class"),
+        "operation_plan_profile_digest": _hardware_digest(
+            profile["operation_plan_profile_digest"], "hardware:select", "operation-plan profile digest"
+        ),
         **{
             name: _hardware_u64(profile[name], "hardware:select", name)
             for name in (
@@ -2268,7 +2297,6 @@ def _measured_hardware_profile(value: object) -> dict:
                 "recommended_max_working_set_bytes",
                 "sustained_read_bytes_per_second",
                 "p99_read_latency_ns",
-                "storage_capacity_bytes",
             )
         },
         "operator_case_ids": _hardware_identifiers(
@@ -2285,6 +2313,12 @@ def _measured_hardware_profile(value: object) -> dict:
         _hardware_reject("INVALID_REQUEST", "hardware:select", "measured read bandwidth must be positive")
     if result["recommended_max_working_set_bytes"] > result["unified_memory_bytes"]:
         _hardware_reject("INVALID_REQUEST", "hardware:select", "recommended working set exceeds unified memory")
+    for name in sorted(_MEASURED_PROFILE_DESCRIPTIVE_FIELDS & set(profile)):
+        result[name] = (
+            _hardware_u64(profile[name], "hardware:select", name)
+            if name == "nominal_capacity_bytes"
+            else _hardware_description(profile[name], "hardware:select", name)
+        )
     return result
 
 
@@ -2292,13 +2326,12 @@ def _profile_matches(plan: dict, profile: dict) -> bool:
     predicate = plan["profile_predicate"]
     return (
         profile["apple_class"] == predicate["apple_class"]
-        and profile["storage_class"] == predicate["storage_class"]
         and profile["request_class"] == predicate["request_class"]
+        and profile["operation_plan_profile_digest"] == predicate["operation_plan_profile_digest"]
         and profile["unified_memory_bytes"] >= predicate["minimum_unified_memory_bytes"]
         and profile["recommended_max_working_set_bytes"] >= predicate["minimum_recommended_working_set_bytes"]
         and profile["sustained_read_bytes_per_second"] >= predicate["minimum_sustained_read_bytes_per_second"]
         and profile["p99_read_latency_ns"] <= predicate["maximum_p99_read_latency_ns"]
-        and profile["storage_capacity_bytes"] >= predicate["minimum_storage_capacity_bytes"]
         and set(profile["operator_case_ids"]) >= set(predicate["required_operator_case_ids"])
         and set(profile["apple_features"]) >= set(predicate["required_apple_features"])
         and (not predicate["requires_writable_storage"] or profile["writable_storage"])
@@ -2875,7 +2908,8 @@ def _recompile_revision(
     specification_value: object,
     previous_root_digest: str | None,
     require_recovery: bool,
-    admit_capacity: Callable[[int], None],
+    operation_id: str,
+    capacity_coordinator: CapacityCoordinator,
 ) -> RecompiledRevision:
     specification = _specification_record(
         _canonical_copy(specification_value), "compiler:recompile"
@@ -2980,9 +3014,13 @@ def _recompile_revision(
     shape = derived_root_shape(
         cartridge, specification["source_root"], material, (bundle,)
     )
-    admit_capacity(shape["candidate_bytes"])
     candidate = derive_root(
-        cartridge, specification["source_root"], material, (bundle,)
+        cartridge,
+        specification["source_root"],
+        material,
+        (bundle,),
+        capacity_controller=capacity_coordinator,
+        operation_id=operation_id,
     )
     if candidate != shape["root_digest"]:
         _reject(
@@ -3016,6 +3054,8 @@ def _prepare_revision(
     extents: object,
     cartridge: str | Path,
     expected_plan_digest: str,
+    capacity_coordinator: CapacityCoordinator,
+    operation_id: str,
 ) -> PreparedRevision:
     expected_plan_digest = _exact_digest(
         expected_plan_digest, "compiler:prepare", "expected preparation plan digest"
@@ -3027,7 +3067,13 @@ def _prepare_revision(
     if observed_plan_digest != expected_plan_digest:
         _reject("SOURCE_REVISION_CHANGED", source_record["identity"], "compiler inputs changed after durable planning")
     try:
-        source_root_digest = adopt_safetensors(descriptors, cartridge, source_material)
+        source_root_digest = adopt_safetensors(
+            descriptors,
+            cartridge,
+            source_material,
+            capacity_controller=capacity_coordinator,
+            operation_id=operation_id,
+        )
     except CassetteError as error:
         if error.code == "IDENTITY_MISMATCH":
             _reject(
@@ -3131,7 +3177,14 @@ def _prepare_revision(
         parent_ids=(source_record["identity"],),
         transform_manifest_digest=transform_digest,
     )
-    candidate = derive_root(cartridge, source_root_digest, compiled_material, (bundle,))
+    candidate = derive_root(
+        cartridge,
+        source_root_digest,
+        compiled_material,
+        (bundle,),
+        capacity_controller=capacity_coordinator,
+        operation_id=operation_id,
+    )
     _verify_bundle_structure(
         cartridge,
         candidate,
@@ -3315,6 +3368,8 @@ def _prepare_hardware_plans(
     source_identity: str,
     preparation_plan_digest: str,
     specifications: object,
+    capacity_coordinator: CapacityCoordinator,
+    operation_id: str,
 ) -> str:
     _verify_bundle_structure(
         cartridge, compiled_root_digest, source_identity, preparation_plan_digest
@@ -3333,6 +3388,8 @@ def _prepare_hardware_plans(
         compiled_root_digest,
         _compiled_identity_material(root),
         (bundle, catalog),
+        capacity_controller=capacity_coordinator,
+        operation_id=operation_id,
     )
     _verify_bundle_structure(
         cartridge, candidate, source_identity, preparation_plan_digest
@@ -3482,9 +3539,24 @@ def prepare_revision(
     extents: object,
     cartridge: str | Path,
     expected_plan_digest: str,
+    *,
+    capacity_coordinator: CapacityCoordinator,
+    operation_id: str,
 ) -> PreparedRevision:
     """Consume verified bytes once, derive every proof object, and return one unpublished candidate."""
 
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            "compiler:prepare",
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    if not capacity_coordinator.owns(cartridge):
+        _reject(
+            "INVALID_REQUEST",
+            "compiler:prepare",
+            "capacity coordinator does not own the target cartridge filesystem",
+        )
     return _boundary(
         "prepare",
         source,
@@ -3493,6 +3565,8 @@ def prepare_revision(
         extents,
         cartridge,
         expected_plan_digest,
+        capacity_coordinator,
+        operation_id,
     )
 
 
@@ -3514,67 +3588,37 @@ def compilation_specification(
     )
 
 
-def _compilation_capacity(
-    operation_id: str | None,
-    device_bytes: int | None,
-    allocatable_verified_free: int | None,
-    reserve_extent: Callable[[int], bool] | None,
-    release_extent: Callable[[int], bool] | None,
-):
-    """Reserve one exact Q53 compiler phase before its first candidate write."""
-
-    reservation: CapacityReservation | None = None
-
-    def admit(exact_phase_total: int) -> None:
-        nonlocal reservation
-        if reservation is None:
-            reservation = reserve_capacity(
-                operation_id,
-                device_bytes=device_bytes,
-                allocatable_verified_free=allocatable_verified_free,
-                phases=(CapacityPhase(candidate=exact_phase_total),),
-                reserve_extent=reserve_extent,
-                release_extent=release_extent,
-            )
-        else:
-            require_capacity_demand(reservation, operation_id, exact_phase_total)
-
-    def close() -> None:
-        if reservation is not None:
-            release_capacity(reservation)
-
-    return admit, close
-
-
 def recompile_revision(
     cartridge: str | Path,
     specification: object,
     previous_root_digest: str | None = None,
     *,
-    operation_id: str | None = None,
-    device_bytes: int | None = None,
-    allocatable_verified_free: int | None = None,
-    reserve_extent: Callable[[int], bool] | None = None,
-    release_extent: Callable[[int], bool] | None = None,
+    operation_id: str,
+    capacity_coordinator: CapacityCoordinator,
 ) -> RecompiledRevision:
     """Build one deterministic unpublished child and report exact Q27 reuse against its predecessor."""
 
-    admit_capacity, close_capacity = _compilation_capacity(
-        operation_id,
-        device_bytes,
-        allocatable_verified_free,
-        reserve_extent,
-        release_extent,
-    )
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            operation_id,
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    if not capacity_coordinator.owns(cartridge):
+        _reject(
+            "INVALID_REQUEST",
+            operation_id,
+            "capacity coordinator does not own the target cartridge filesystem",
+        )
 
     def recompile() -> RecompiledRevision:
         incremental = _recompile_revision(
-            cartridge, specification, previous_root_digest, False, admit_capacity
+            cartridge, specification, previous_root_digest, False, operation_id, capacity_coordinator
         )
         if previous_root_digest is None:
             return incremental
         clean = _recompile_revision(
-            cartridge, specification, None, False, admit_capacity
+            cartridge, specification, None, False, operation_id, capacity_coordinator
         )
         if (
             incremental.candidate_root != clean.candidate_root
@@ -3589,14 +3633,11 @@ def recompile_revision(
             )
         return incremental
 
-    try:
-        return _boundary(
-            "recompile",
-            {"identity": previous_root_digest or "compiler:clean-recompile"},
-            recompile,
-        )
-    finally:
-        close_capacity()
+    return _boundary(
+        "recompile",
+        {"identity": previous_root_digest or "compiler:clean-recompile"},
+        recompile,
+    )
 
 
 def prepare_recovered_revision(
@@ -3604,21 +3645,23 @@ def prepare_recovered_revision(
     training_root_digest: str,
     compiled_parent_root_digest: str,
     *,
-    operation_id: str | None = None,
-    device_bytes: int | None = None,
-    allocatable_verified_free: int | None = None,
-    reserve_extent: Callable[[int], bool] | None = None,
-    release_extent: Callable[[int], bool] | None = None,
+    operation_id: str,
+    capacity_coordinator: CapacityCoordinator,
 ) -> RecompiledRevision:
     """Consume one committed Tier-B artifact and return its independently regenerated Q19 child."""
 
-    admit_capacity, close_capacity = _compilation_capacity(
-        operation_id,
-        device_bytes,
-        allocatable_verified_free,
-        reserve_extent,
-        release_extent,
-    )
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            operation_id,
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    if not capacity_coordinator.owns(cartridge):
+        _reject(
+            "INVALID_REQUEST",
+            operation_id,
+            "capacity coordinator does not own the target cartridge filesystem",
+        )
 
     def recover() -> RecompiledRevision:
         _exact_digest(training_root_digest, "compiler:recover", "training root")
@@ -3643,14 +3686,16 @@ def prepare_recovered_revision(
             specification,
             compiled_parent_root_digest,
             True,
-            admit_capacity,
+            operation_id,
+            capacity_coordinator,
         )
         clean = _recompile_revision(
             cartridge,
             specification,
             None,
             True,
-            admit_capacity,
+            operation_id,
+            capacity_coordinator,
         )
         if (
             incremental.candidate_root != clean.candidate_root
@@ -3665,14 +3710,11 @@ def prepare_recovered_revision(
             )
         return incremental
 
-    try:
-        return _boundary(
-            "recover",
-            {"identity": training_root_digest},
-            recover,
-        )
-    finally:
-        close_capacity()
+    return _boundary(
+        "recover",
+        {"identity": training_root_digest},
+        recover,
+    )
 
 
 def verify_bundle_structure(
@@ -3702,9 +3744,24 @@ def prepare_hardware_plans(
     source_identity: str,
     preparation_plan_digest: str,
     specifications: object,
+    *,
+    capacity_coordinator: CapacityCoordinator,
+    operation_id: str,
 ) -> str:
     """Attach replaceable hardware metadata without changing executable identity or page capacity."""
 
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            "compiler:hardware-plan-prepare",
+            "the concrete store-owned CapacityCoordinator is required",
+        )
+    if not capacity_coordinator.owns(cartridge):
+        _reject(
+            "INVALID_REQUEST",
+            "compiler:hardware-plan-prepare",
+            "capacity coordinator does not own the target cartridge filesystem",
+        )
     return _boundary(
         "hardware-plan-prepare",
         {"identity": source_identity},
@@ -3714,6 +3771,8 @@ def prepare_hardware_plans(
         source_identity,
         preparation_plan_digest,
         specifications,
+        capacity_coordinator,
+        operation_id,
     )
 
 

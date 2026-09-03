@@ -1,5 +1,5 @@
-# test_s26_machine_gate.py — S26 successful machine integration and PHASE LIVE deferral (Q36); depends on broker.py, compiler.py, pager.py, store.py, tests/test_s21_trainer.py, tests/test_s23_failure_rows.py, tests/test_s24_interoperability.py, tools/resource_frontier.py.
-"""Prove fixture-scale machine closure while withholding every live-model and hardware claim."""
+# test_s26_machine_gate.py — machine baseline, L01.25 proof, and remaining live deferral (Q36/Q53); depends on broker.py, compiler.py, pager.py, store.py, tests/test_l01_25_capacity.py, tests/test_s21_trainer.py, tests/test_s23_failure_rows.py, tests/test_s24_interoperability.py, tools/resource_frontier.py.
+"""Bind the L01.25 fixture proof while leaving every physical and model-bearing claim NOT_RUN."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from compiler import (
 )
 from pager import admit_schedule
 from store import (
+    CapacityCoordinator,
     canonical_bytes,
     commit_generation,
     digest_bytes,
@@ -29,8 +30,8 @@ from store import (
     load_root,
     pin_generation,
     read_tensor,
-    release_capacity,
 )
+from test_l01_25_capacity import l01_25_capacity_proof
 from test_s21_trainer import (
     RECOVERY_BATCH,
     SFT_BATCHES,
@@ -40,7 +41,6 @@ from test_s21_trainer import (
 )
 from test_s23_failure_rows import MATRIX
 from test_s24_interoperability import (
-    _capacity,
     _machine_replay,
     _s24_artifact,
 )
@@ -56,6 +56,7 @@ REPO = Path(__file__).resolve().parent.parent
 MATRIX_PATH = REPO / "research" / "ACCEPTANCE_MATRIX.yaml"
 GATE_PATH = REPO / "tests" / "fixtures" / "s26_machine_gate.json"
 LIVE_ROWS_PATH = REPO / "tests" / "fixtures" / "s26_deferred_live_rows.json"
+RUNBOOK_PATH = REPO / "PHASE_LIVE_RUNBOOK.md"
 CURVES_PATH = REPO / "tools" / "generated" / "s25_resource_curves.json"
 EXPECTED_RECOVERY_INPUTS = (
     "condition_metric", "atom", "observation", "description", "residual_estimator", "precision",
@@ -170,12 +171,32 @@ def _validate_deferred_manifest(deferred: dict) -> None:
     assert deferred["prohibited_evidence"] == boundary["prohibited_evidence"]
     assert list(deferred["phases"]) == boundary["phases"]
 
-    l01 = deferred["phases"]["L01"]
-    storage = _mapping_records("storage_classes")
-    assert l01 == {
+    capacity = _direct_fields("adaptive_capacity_control")
+    eligibility = _direct_fields("storage_eligibility_control")
+    physical = _direct_fields("physical_storage_qualification")
+    profiles = _mapping_records("storage_profile_families")
+    assert deferred["phases"]["L01.25"] == {
+        "adaptive_capacity": {
+            "contract": capacity["contract"],
+            "evidence_level": capacity["evidence_level"],
+            "principal_presence": capacity["principal_presence"],
+            "required_assertions": capacity["required_assertions"],
+            "status": capacity["status"],
+        },
+        "storage_eligibility": {
+            "contract": eligibility["contract"],
+            "evidence_level": eligibility["evidence_level"],
+            "principal_presence": eligibility["principal_presence"],
+            "required_assertions": eligibility["required_assertions"],
+            "status": eligibility["status"],
+        },
+    }
+    assert deferred["phases"]["L01.5"] == {
         "apple_classes": list(_mapping_records("apple_classes")),
-        "qualification": sorted({record["profile_contract"] for record in storage.values()}),
-        "storage_classes": list(storage),
+        "principal_presence": physical["principal_presence"],
+        "profile_families": list(profiles),
+        "qualification": sorted({record["profile_contract"] for record in profiles.values()}),
+        "required_assertions": physical["required_assertions"],
     }
     assert deferred["phases"]["L02"] == {
         "immutable_models": [
@@ -205,16 +226,19 @@ def _validate_deferred_manifest(deferred: dict) -> None:
     }
 
 
-def _compiler_capacity(label: str) -> dict:
-    """Supply one simulated device to the compiler's exact candidate reservation."""
+def _validate_runbook_projection(deferred: dict) -> None:
+    """Require the human runbook to retain the current phase projection (Q36)."""
 
-    return {
-        "operation_id": f"s26-{label}",
-        "device_bytes": 100 * 1024**3,
-        "allocatable_verified_free": 100 * 1024**3,
-        "reserve_extent": lambda _length: True,
-        "release_extent": lambda _length: True,
-    }
+    runbook = RUNBOOK_PATH.read_text(encoding="utf-8")
+    headings = [
+        line.removeprefix("## ").split(" —", 1)[0]
+        for line in runbook.splitlines()
+        if line.startswith("## L")
+    ]
+    assert headings == list(deferred["phases"])
+    assert deferred["acceptance_matrix_digest"] in runbook
+    assert digest_bytes(LIVE_ROWS_PATH.read_bytes()) in runbook
+    assert deferred["phase_machine_outcome"] in runbook
 
 
 def _export(
@@ -234,15 +258,11 @@ def _export(
         "arguments": {"target_schema": target_schema},
     }
     plan = plan_export(cartridge, root_digest, target_schema)
-    reservation = _capacity(
-        broker.operation_id(request), plan["reservation_bytes"]
+    capacity_coordinator = CapacityCoordinator(cartridge)
+    operation = asyncio.run(
+        broker.export_revision(request, cartridge, capacity_coordinator)
     )
-    try:
-        operation = asyncio.run(
-            broker.export_revision(request, cartridge, reservation)
-        )
-    finally:
-        release_capacity(reservation)
+    assert capacity_coordinator.active_claims() == ()
     assert operation["state"] == "SUCCEEDED"
     return operation["result"]
 
@@ -350,7 +370,8 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
         tier_b,
         compilation_specification(tier_b, compiled_v1),
         compiled_v1,
-        **_compiler_capacity("tier-b-parent"),
+        operation_id="s26-tier-b-parent",
+        capacity_coordinator=CapacityCoordinator(tier_b),
     )
     commit_generation(
         tier_b,
@@ -384,7 +405,8 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
         tier_b,
         training_root,
         compiled_v2.candidate_root,
-        **_compiler_capacity("tier-b-recovery"),
+        operation_id="s26-tier-b-recovery",
+        capacity_coordinator=CapacityCoordinator(tier_b),
     )
     assert tier_b_artifact["tier"] == "B"
     assert recovered.changed_inputs == EXPECTED_RECOVERY_INPUTS
@@ -414,9 +436,18 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
     }
     assert frontier["claim"] == "PREDICTION_ONLY_NO_F4_F5_OR_PHYSICAL_QUALIFICATION"
 
+    l01_25_proof = l01_25_capacity_proof(tmp_path / "l01-25-proof", monkeypatch)
+    assert l01_25_proof["adaptive_capacity_control"] == _direct_fields(
+        "adaptive_capacity_control"
+    )["required_assertions"]
+    assert l01_25_proof["storage_eligibility_control"] == _direct_fields(
+        "storage_eligibility_control"
+    )["required_assertions"]
+
     deferred = json.loads(LIVE_ROWS_PATH.read_bytes())
     assert canonical_bytes(deferred) + b"\n" == LIVE_ROWS_PATH.read_bytes()
     _validate_deferred_manifest(deferred)
+    _validate_runbook_projection(deferred)
     for replacement in ("physical_usb_c_detach_and_reattach", "cancellation"):
         unsupported = deepcopy(deferred)
         unsupported["phases"]["L04"]["remaining_failure_injections"][0] = replacement
@@ -429,10 +460,11 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
 
     outcome = {
         "version": 1,
-        "claim": "PHASE_MACHINE_PASS_READY_FOR_LIVE_FALSIFICATION_ONLY",
+        "claim": _direct_fields("phase_machine_deferral")["machine_baseline_claim"],
         "acceptance_matrix_digest": digest_bytes(MATRIX_PATH.read_bytes()),
         "deferred_live_manifest_digest": digest_bytes(LIVE_ROWS_PATH.read_bytes()),
         "evidence": {
+            "l01_25_capacity": l01_25_proof,
             "acquisition_compilation": {
                 "state": acquired["state"],
                 "compiled_root": compiled_root,

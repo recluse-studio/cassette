@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 import importlib.metadata
 import json
@@ -15,12 +15,10 @@ from errors import CassetteError
 from schema.tables import DISPATCH_ROWS, MLX_RUNTIME
 from store import (
     PAGE_BYTES,
-    CapacityPhase,
-    CapacityReservation,
+    CapacityCoordinator,
     PageLocation,
     TransactionContext,
     append_staged_training_delta,
-    capacity_requirement,
     canonical_bytes,
     commit_generation,
     digest_bytes,
@@ -28,8 +26,8 @@ from store import (
     page_locations,
     pin_generation,
     read_training_page,
-    reserve_capacity,
     stage_training_pages,
+    training_delta_shape,
 )
 
 _VERSION = "cassette-training-v1"
@@ -78,7 +76,7 @@ _MAX_UPDATES = 32768
 _MAX_SAFE_INTEGER = 2**53 - 1
 _PPM = 1_000_000
 _GIB = 1024**3
-_RESOURCE_VERSION = "cassette-training-resource-v1"
+_RESOURCE_VERSION = "cassette-training-resource-v2"
 _RESOURCE_INVARIANT = "Q28/Q74: measured training writes and complete resource admission"
 _MANIFEST_FIELDS = frozenset({
     "format", "job_id", "tier", "operation", "parent_root", "parent_identity",
@@ -96,7 +94,7 @@ _WORKLOAD_FIELDS = frozenset({
     "weight_bytes_per_parameter", "checkpoint_interval",
 })
 _PROFILE_FIELDS = frozenset({
-    "profile_evidence_digest", "device_bytes", "physical_memory_bytes",
+    "profile_evidence_digest", "physical_memory_bytes",
     "recommended_max_working_set_bytes", "executor_memory_bytes", "other_memory_bytes",
     "sustained_read_bytes_per_second", "sustained_write_bytes_per_second",
     "minimum_sustained_read_bytes_per_second", "minimum_sustained_write_bytes_per_second",
@@ -106,13 +104,12 @@ _PROFILE_FIELDS = frozenset({
     "job_limit_seconds", "compute_nanoseconds_per_update_p95",
 })
 _ESTIMATE_FIELDS = frozenset({
-    "S_required", "M_peak", "read_bytes", "logical_write_bytes", "physical_write_p95",
+    "M_peak", "read_bytes", "logical_write_bytes", "physical_write_p95",
     "duration_p95", "checkpoint_interval", "power_required", "thermal_duty",
-    "write_duty", "safety_bytes",
+    "write_duty",
 })
 _ADMISSION_FIELDS = frozenset({
-    "format", "workload", "profile", "profile_digest", "allocatable_verified_free",
-    "estimate",
+    "format", "workload", "profile", "profile_digest", "estimate",
 })
 _OBSERVATION_FIELDS = frozenset({
     "checkpoint", "logical_write_bytes", "read_bytes", "physical_write_bytes", "elapsed_nanoseconds",
@@ -194,7 +191,6 @@ class TrainingResourceProfile:
     """One measured Apple and cartridge class record used for Q74 admission."""
 
     profile_evidence_digest: str
-    device_bytes: int
     physical_memory_bytes: int
     recommended_max_working_set_bytes: int
     executor_memory_bytes: int
@@ -224,7 +220,6 @@ class TrainingResourceProfile:
 class TrainingEstimate:
     """The complete Q74 JobEstimate plus its endurance and duty boundaries."""
 
-    S_required: int
     M_peak: int
     read_bytes: int
     logical_write_bytes: int
@@ -234,7 +229,6 @@ class TrainingEstimate:
     power_required: bool
     thermal_duty: int
     write_duty: int
-    safety_bytes: int
 
     def record(self) -> dict:
         """Return the machine-readable estimate with the Q74 field names intact."""
@@ -244,24 +238,22 @@ class TrainingEstimate:
 
 @dataclass(frozen=True, slots=True)
 class TrainingAdmission:
-    """One active Q53 reservation bound to one workload and measured profile."""
+    """One resource admission plus the live controller for each later storage transition."""
 
     workload: TrainingWorkload
     profile: TrainingResourceProfile
     profile_digest: str
-    allocatable_verified_free: int
     estimate: TrainingEstimate
-    reservation: CapacityReservation
+    capacity_coordinator: CapacityCoordinator = field(repr=False, compare=False)
 
     def record(self) -> dict:
-        """Persist the admission evidence; the live reservation remains with the operation owner."""
+        """Persist resource evidence; live capacity is measured afresh at each transition."""
 
         return {
             "format": _RESOURCE_VERSION,
             "workload": self.workload.record(),
             "profile": self.profile.record(),
             "profile_digest": self.profile_digest,
-            "allocatable_verified_free": self.allocatable_verified_free,
             "estimate": self.estimate.record(),
         }
 
@@ -443,7 +435,7 @@ def _validate_profile(profile: object, object_id: str) -> TrainingResourceProfil
             object_id,
             field,
             positive=field in {
-                "device_bytes", "physical_memory_bytes", "recommended_max_working_set_bytes",
+                "physical_memory_bytes", "recommended_max_working_set_bytes",
                 "sustained_read_bytes_per_second", "sustained_write_bytes_per_second",
                 "minimum_sustained_read_bytes_per_second", "minimum_sustained_write_bytes_per_second",
                 "write_amplification_p95_numerator", "write_amplification_p95_denominator",
@@ -489,18 +481,6 @@ def _validate_profile(profile: object, object_id: str) -> TrainingResourceProfil
             _RESOURCE_INVARIANT,
         )
     return profile
-
-
-def _training_phase(workload: TrainingWorkload) -> CapacityPhase:
-    return CapacityPhase(
-        committed=workload.committed_bytes,
-        candidate=workload.candidate_bytes,
-        rollback=workload.rollback_bytes,
-        optimizer=workload.optimizer_bytes,
-        master=workload.master_bytes,
-        dataset=workload.dataset_bytes,
-        journal=workload.journal_bytes,
-    )
 
 
 def _estimate_training(
@@ -586,11 +566,6 @@ def _estimate_training(
             f"projected {physical} physical bytes exceed the Q28 lifetime or per-job endurance budget",
             _RESOURCE_INVARIANT,
         )
-    requirement = capacity_requirement(
-        f"training-{workload.request_digest[7:]}",
-        device_bytes=profile.device_bytes,
-        phases=(_training_phase(workload),),
-    )
     read_ns = _ceil_ratio(
         workload.read_bytes,
         1_000_000_000,
@@ -653,7 +628,6 @@ def _estimate_training(
             "retryable",
         )
     return TrainingEstimate(
-        requirement.required_bytes,
         workload.memory_peak_bytes,
         workload.read_bytes,
         logical,
@@ -663,7 +637,6 @@ def _estimate_training(
         power_required,
         profile.predicted_thermal_duty_ppm,
         write_duty,
-        requirement.safety_bytes,
     )
 
 
@@ -671,29 +644,86 @@ def admit_training(
     workload: TrainingWorkload,
     profile: TrainingResourceProfile,
     *,
-    allocatable_verified_free: int,
-    reserve_extent,
-    release_extent,
+    capacity_coordinator: CapacityCoordinator,
 ) -> TrainingAdmission:
-    """Reserve every Q74 resource before one training byte can mutate the cartridge."""
+    """Admit measurable Q74 resources without predicting or reserving the complete job."""
 
     object_id = "training:admission"
     estimate = _estimate_training(workload, profile, object_id)
-    free = _resource_counter(
-        allocatable_verified_free,
-        object_id,
-        "allocatable_verified_free",
-    )
-    reservation = reserve_capacity(
-        f"training-{workload.request_digest[7:]}",
-        device_bytes=profile.device_bytes,
-        allocatable_verified_free=free,
-        phases=(_training_phase(workload),),
-        reserve_extent=reserve_extent,
-        release_extent=release_extent,
-    )
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            object_id,
+            "the concrete store-owned CapacityCoordinator is required",
+            _RESOURCE_INVARIANT,
+        )
     profile_digest = digest_bytes(canonical_bytes(profile.record()))
-    return TrainingAdmission(workload, profile, profile_digest, free, estimate, reservation)
+    return TrainingAdmission(
+        workload,
+        profile,
+        profile_digest,
+        estimate,
+        capacity_coordinator,
+    )
+
+
+def restore_training_admission(
+    record: object,
+    *,
+    capacity_coordinator: CapacityCoordinator,
+) -> TrainingAdmission:
+    """Restore live capacity control around one verified durable resource admission."""
+
+    workload, profile, estimate = _admission_from_record(record, "training:resume")
+    if not isinstance(capacity_coordinator, CapacityCoordinator):
+        _reject(
+            "INVALID_REQUEST",
+            "training:resume",
+            "the concrete store-owned CapacityCoordinator is required",
+            _RESOURCE_INVARIANT,
+        )
+    return TrainingAdmission(
+        workload,
+        profile,
+        digest_bytes(canonical_bytes(profile.record())),
+        estimate,
+        capacity_coordinator,
+    )
+
+
+def _training_transition_controller(
+    admission: TrainingAdmission,
+) -> CapacityCoordinator:
+    """Return the one live controller used by store-owned training writes."""
+
+    return admission.capacity_coordinator
+
+
+def _stage_training_payloads(
+    cartridge,
+    payloads,
+    admission: TrainingAdmission,
+    boundary_id: str,
+) -> tuple[PageLocation, ...]:
+    """Stage each immutable page as one exact, independently recoverable transition."""
+
+    locations = []
+    for payload in payloads:
+        if not isinstance(payload, bytes):
+            _reject(
+                "INVALID_REQUEST",
+                admission.workload.request_digest,
+                "training transition payload must be bytes",
+            )
+        staged = stage_training_pages(
+            cartridge,
+            (payload,),
+            capacity_controller=admission.capacity_coordinator,
+            operation_id=f"training-{admission.workload.request_digest[7:]}",
+            boundary_id=f"{boundary_id}:page-{digest_bytes(payload)[7:]}",
+        )
+        locations.extend(staged)
+    return tuple(locations)
 
 
 def _active_admission(
@@ -705,34 +735,31 @@ def _active_admission(
         or not isinstance(value.workload, TrainingWorkload)
         or not isinstance(value.profile, TrainingResourceProfile)
         or not isinstance(value.estimate, TrainingEstimate)
-        or not isinstance(value.reservation, CapacityReservation)
-        or not value.reservation.active
+        or not isinstance(value.capacity_coordinator, CapacityCoordinator)
     ):
         _reject(
             "INVALID_REQUEST",
             object_id,
-            "one active complete TrainingAdmission is required",
+            "one complete TrainingAdmission with a live capacity controller is required",
             _RESOURCE_INVARIANT,
         )
     record = value.record()
-    workload, profile, estimate = _admission_from_record(record, object_id)
-    reservation = value.reservation
-    if (
-        reservation.operation_id != f"training-{workload.request_digest[7:]}"
-        or reservation.device_bytes != profile.device_bytes
-        or reservation.safety_bytes != estimate.safety_bytes
-        or reservation.phase_totals != (_training_phase(workload).total,)
-        or reservation.repair_bytes != 0
-        or reservation.required_bytes != estimate.S_required
-        or not callable(reservation._release_extent)
-    ):
+    workload, _, _ = _admission_from_record(record, object_id)
+    return record, workload
+
+
+def _require_cartridge_coordinator(
+    admission: TrainingAdmission, cartridge, object_id: str
+) -> None:
+    """Reject a training write path whose coordinator measures another filesystem."""
+
+    if not admission.capacity_coordinator.owns(cartridge):
         _reject(
             "INVALID_REQUEST",
             object_id,
-            "the live capacity reservation does not match its training estimate",
+            "training capacity coordinator does not own the target cartridge filesystem",
             _RESOURCE_INVARIANT,
         )
-    return record, workload
 
 
 def _workload_from_record(value: object, object_id: str) -> TrainingWorkload:
@@ -762,12 +789,11 @@ def _admission_from_record(value: object, object_id: str) -> tuple[TrainingWorkl
     profile_digest = _digest(row["profile_digest"], object_id, "training profile digest")
     if profile_digest != digest_bytes(canonical_bytes(profile.record())):
         _reject("ROOT_INVALID", object_id, "training profile digest does not bind the measured fields")
-    free = _counter(row["allocatable_verified_free"], object_id, "allocatable verified free", positive=True)
     estimate = _estimate_training(workload, profile, f"operation:{workload.request_digest[:32]}")
     expected = estimate.record()
     observed = _record(row["estimate"], _ESTIMATE_FIELDS, object_id, "training estimate")
-    if observed != expected or free < estimate.S_required:
-        _reject("ROOT_INVALID", object_id, "training estimate or capacity admission was resealed inconsistently")
+    if observed != expected:
+        _reject("ROOT_INVALID", object_id, "training resource estimate was resealed inconsistently")
     return workload, profile, estimate
 
 
@@ -1799,6 +1825,8 @@ def _write_checkpoint(
     manifest: dict,
     available_locations: tuple[PageLocation, ...],
     new_logical_bytes: int,
+    admission: TrainingAdmission,
+    boundary_id: str,
 ) -> TrainingCheckpoint:
     new_bytes = _counter(new_logical_bytes, manifest["job_id"], "new logical writes")
     prior = _counter(
@@ -1830,18 +1858,36 @@ def _write_checkpoint(
     if len(payload) > PAGE_BYTES:
         _reject("CAPACITY_EXCEEDED", manifest["job_id"], "training manifest exceeds one content page")
     manifest_digest = digest_bytes(payload)
-    manifest_location = stage_training_pages(cartridge, (payload,))[0]
+    manifest_location = _stage_training_payloads(
+        cartridge,
+        (payload,),
+        admission,
+        boundary_id,
+    )[0]
     by_digest = {location.page_digest: location for location in (*available_locations, manifest_location)}
     ordered = _ordered_pages(manifest, manifest_digest)
     if len(ordered) != len(set(ordered)) or any(page_digest not in by_digest for page_digest in ordered):
         _reject("ROOT_INVALID", manifest["job_id"], "checkpoint page catalog is incomplete or duplicated")
+    kind = "adapter" if manifest["tier"] == "A" else "certificate_recovery"
+    locations = tuple(by_digest[page_digest] for page_digest in ordered)
+    shape = training_delta_shape(
+        cartridge,
+        manifest["parent_root"],
+        kind,
+        locations,
+        manifest_digest,
+    )
     root_digest = append_staged_training_delta(
         cartridge,
         manifest["parent_root"],
-        "adapter" if manifest["tier"] == "A" else "certificate_recovery",
-        tuple(by_digest[page_digest] for page_digest in ordered),
+        kind,
+        locations,
         manifest_digest,
+        capacity_controller=_training_transition_controller(admission),
+        operation_id=f"training-{admission.workload.request_digest[7:]}",
     )
+    if root_digest != shape["root_digest"]:
+        _reject("ROOT_INVALID", manifest["job_id"], "training root changed after capacity planning")
     checkpoint = _checkpoint(manifest, root_digest, manifest_digest)
     _load_manifest(cartridge, root_digest, manifest_digest, expected_checkpoint=checkpoint)
     return checkpoint
@@ -2112,6 +2158,7 @@ def prepare_training(
         admission,
         "training:admission",
     )
+    _require_cartridge_coordinator(admission, cartridge, "training:admission")
     material = _training_material(
         cartridge,
         parent_root,
@@ -2132,10 +2179,20 @@ def prepare_training(
             _RESOURCE_INVARIANT,
         )
     input_payloads = (*material["objective_payloads"], *material["calibration_payloads"])
-    durable_inputs = stage_training_pages(cartridge, input_payloads)
+    durable_inputs = _stage_training_payloads(
+        cartridge,
+        input_payloads,
+        admission,
+        parent_root,
+    )
     input_locations = {location.page_digest: location for location in durable_inputs}
     generated_payloads = (*material["delta_payloads"], *material["state_payloads"])
-    generated = stage_training_pages(cartridge, generated_payloads)
+    generated = _stage_training_payloads(
+        cartridge,
+        generated_payloads,
+        admission,
+        parent_root,
+    )
     generated_locations = {location.page_digest: location for location in generated}
     manifest = {
         "format": _VERSION,
@@ -2174,6 +2231,8 @@ def prepare_training(
         manifest,
         tuple({**input_locations, **generated_locations}.values()),
         sum(map(len, (*input_payloads, *generated_payloads))),
+        admission,
+        parent_root,
     )
 
 
@@ -2181,6 +2240,8 @@ def advance_training(
     cartridge,
     checkpoint: TrainingCheckpoint,
     observation: TrainingObservation | None = None,
+    *,
+    admission: TrainingAdmission | None = None,
 ) -> TrainingCheckpoint:
     """Execute one deterministic global step and durably retire every live tensor window."""
 
@@ -2192,6 +2253,15 @@ def advance_training(
         checkpoint.manifest_digest,
         expected_checkpoint=checkpoint,
     )
+    admission_record, _ = _active_admission(admission, manifest["job_id"])
+    _require_cartridge_coordinator(admission, cartridge, manifest["job_id"])
+    if admission_record != manifest["admission"]:
+        _reject(
+            "INVALID_REQUEST",
+            manifest["job_id"],
+            "live training admission differs from the durable checkpoint admission",
+            _RESOURCE_INVARIANT,
+        )
     if manifest["step"] == manifest["total_steps"]:
         _reject("INVALID_REQUEST", manifest["job_id"], "training is complete; commit the child")
     if not isinstance(observation, TrainingObservation):
@@ -2380,7 +2450,14 @@ def advance_training(
             event("RETIRE", f"delta:{parameter_id}", len(delta_payload), "UM", delta["page_digest"])
             event("RETIRE", base_tensor_id, base_page_bytes, "UM", base["page_digest"])
 
-    output_locations = stage_training_pages(cartridge, outputs())
+    output_locations = []
+    for output_payload in outputs():
+        output_locations.extend(_stage_training_payloads(
+            cartridge,
+            (output_payload,),
+            admission,
+            checkpoint.work_root,
+        ))
     for row, payload in reversed(calibration_payloads):
         event("RETIRE", f"calibration:{row['kind']}", len(payload), "UM", row["page_digest"])
     event("RETIRE", f"batch:{manifest['step']}", len(objective_payload), "UM", objective_row["page_digest"])
@@ -2412,7 +2489,12 @@ def advance_training(
         output_rows,
         manifest["operator_cases"][1],
     )
-    support_locations = stage_training_pages(cartridge, (trace_payload, *state_payloads))
+    support_locations = _stage_training_payloads(
+        cartridge,
+        (trace_payload, *state_payloads),
+        admission,
+        checkpoint.work_root,
+    )
     trace_digest = digest_bytes(trace_payload)
     state_rows = {
         name: digest_bytes(payload)
@@ -2452,6 +2534,8 @@ def advance_training(
         next_manifest,
         available,
         output_payload_bytes + len(trace_payload) + sum(map(len, state_payloads)),
+        admission,
+        checkpoint.work_root,
     )
 
 
@@ -2460,6 +2544,8 @@ def commit_training(
     checkpoint: TrainingCheckpoint,
     transaction_id: str,
     observation: TrainingObservation | None = None,
+    *,
+    admission: TrainingAdmission | None = None,
 ) -> TrainingResult:
     """Commit one completed training artifact through the sole Q73 generation authority."""
 
@@ -2471,6 +2557,15 @@ def commit_training(
         checkpoint.manifest_digest,
         expected_checkpoint=checkpoint,
     )
+    admission_record, _ = _active_admission(admission, manifest["job_id"])
+    _require_cartridge_coordinator(admission, cartridge, manifest["job_id"])
+    if admission_record != manifest["admission"]:
+        _reject(
+            "INVALID_REQUEST",
+            manifest["job_id"],
+            "live training admission differs from the durable checkpoint admission",
+            _RESOURCE_INVARIANT,
+        )
     if manifest["step"] != manifest["total_steps"]:
         _reject("INVALID_REQUEST", manifest["job_id"], "incomplete training cannot become callable")
     if not isinstance(observation, TrainingObservation):
@@ -2502,6 +2597,8 @@ def commit_training(
         final_manifest,
         page_locations(cartridge, checkpoint.work_root),
         0,
+        admission,
+        checkpoint.work_root,
     )
     manifest = _load_manifest(
         cartridge,
@@ -2540,6 +2637,8 @@ def commit_training(
         checkpoint.work_root,
         expected_parent_root=manifest["parent_root"],
         context=context,
+        capacity_controller=_training_transition_controller(admission),
+        operation_id=f"training-{admission.workload.request_digest[7:]}",
     )
     root = load_root(cartridge, pin.root_digest)
     delta = root["deltas"][-1]

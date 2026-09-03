@@ -17,6 +17,7 @@ import store as store_module
 from errors import CassetteError
 from store import (
     ArtifactIdentity,
+    CapacityCoordinator,
     IdentityTuple,
     TransactionContext,
     advance_generation,
@@ -536,7 +537,7 @@ def _install_boundary(
         phase = boundary
     pending = target.with_name(f".{target.name}.pending")
     if phase == "before_journal":
-        def stop_before_journal(_cartridge, _record):
+        def stop_before_journal(_cartridge, _record, **_capacity_kwargs):
             _pause_at_boundary(boundary)
 
         store_module._write_transaction = stop_before_journal
@@ -611,6 +612,7 @@ def _boundary_main() -> None:
     ) = sys.argv[2:]
     restart_bytes = bytes.fromhex(restart_hex)
     _install_boundary(boundary, Path(cartridge_text), transaction_id, restart_bytes)
+    coordinator = CapacityCoordinator(cartridge_text)
     if action in {"begin", "begin_context"}:
         begin_generation(
             cartridge_text,
@@ -623,9 +625,16 @@ def _boundary_main() -> None:
                 )
                 if action == "begin_context" else None
             ),
+            capacity_controller=coordinator,
+            operation_id=transaction_id,
         )
     else:
-        advance_generation(cartridge_text, transaction_id)
+        advance_generation(
+            cartridge_text,
+            transaction_id,
+            capacity_controller=coordinator,
+            operation_id=transaction_id,
+        )
     raise AssertionError(f"S06 boundary {boundary!r} was not reached")
 
 

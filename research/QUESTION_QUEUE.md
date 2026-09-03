@@ -1,8 +1,8 @@
 ---
 artifact_id: cassette-build-directed-question-queue
-version: 3
-amended: 2026-08-09
-amendment_authority: ORIGINAL_REMIT.md and MATHS.md (mathematical cutover after S11)
+version: 4
+amended: 2026-09-02
+amendment_authority: ORIGINAL_REMIT.md, MATHS.md (mathematical cutover after S11), and the principal's 2026-09-02 Phase Live ruling
 scope_mode: GENERAL_PRODUCT
 question_count: 80
 producer: research-agent
@@ -23,13 +23,19 @@ high-capability implementation agent can consume without repeating the research.
 The 2026-08-09 amendment replaces “prompt-persistent working set” as a general compiled premise.
 MATHS.md now requires separate compatibility, atom, description, execution-risk, composition, and
 observation questions. Historical source questions remain finite; their resolved packets in
-RESEARCH.md v3 carry the amended answers.
+RESEARCH.md v4 carry the amended answers.
+
+The 2026-09-02 amendment makes locally attached APFS drives eligible by measurement rather than
+media, storage-class, connector, brand, speed, or nominal-capacity labels. It binds qualification to
+the exact drive, operation, and plan; replaces fixed whole-operation storage reservation with
+adaptive next-transition capacity control; and uses a coarse top-level byte inventory only as a
+broad-change benchmark, not as content-integrity proof.
 
 ## Binding result
 
 Cassette accepts an agent-issued source descriptor for a selected downloadable model from sources
-such as Hugging Face, Ollama, or Tinker; writes the authoritative model directly to external USB-C
-flash or SSD storage; prepares and executes the model through macOS and Apple Silicon without
+such as Hugging Face, Ollama, or Tinker; writes the authoritative model directly to a locally
+attached external drive; prepares and executes the model through macOS and Apple Silicon without
 relocating the full authoritative model to internal storage; permits compatible fine-tuning and
 post-training against the model where it resides; and exposes the resulting capability to Codex,
 Ollama, OpenClaw, Hermes, and custom agents through machine-readable protocols.
@@ -48,8 +54,8 @@ system as a conventional Mac-resident model deployment.
 
 ## Scope controls
 
-- Treat Apple Silicon Macs, macOS storage and compute paths, USB-C flash and SSD devices, model
-  architectures, source services, and agent protocols as general product classes.
+- Treat Apple Silicon Macs, macOS storage and compute paths, locally attached external drives,
+  model architectures, source services, and agent protocols as general product classes.
 - Use public, reproducible, controlled reference configurations when measurements are required.
 - Do not inspect or infer facts from the current Mac, attached volumes, installed runtimes, local
   model caches, signed-in accounts, current directory, or personal client settings.
@@ -99,7 +105,9 @@ without translating an agent answer into a human decision.
 | \(C(t)\) | Reusable parameter-page cache at step \(t\). |
 | \(K(r,t)\) | KV and recurrent context state for request \(r\) at step \(t\). |
 | \(M\) | Unified-memory budget available to Cassette after operating-system and agent reserves. |
-| \(S_{peak}\) | Maximum cartridge capacity consumed during download, preparation, inference, or training. |
+| \(S_{peak}\) | Derived or observed maximum live Cassette-owned storage for a bounded operation; not a reservation requirement. |
+| \(A_t\) | Verified cartridge space available to a new Cassette claim at durable boundary \(t\). |
+| \(E_n\) | Exact additional bytes needed to finish the next atomic storage transition and preserve recovery. |
 | \(B_s\) | Sustained external-storage bandwidth under the declared access pattern. |
 | \(B_m\) | Sustained Apple unified-memory bandwidth available to model execution. |
 | \(L_a\) | Request admission and cartridge assembly latency. |
@@ -135,9 +143,9 @@ Resolve the macOS and Apple Silicon data path, unified-memory budget, CPU, GPU, 
 execution eligibility, copy boundaries, synchronization, and sustained thermal envelope across
 supported hardware classes.
 
-### D4 — External storage and USB transport
+### D4 — External storage and local transport
 
-Resolve USB-C transport classes, bridge behavior, filesystem effects, block access, sustained
+Resolve local transport paths, bridge behavior, filesystem effects, block access, sustained
 bandwidth, latency, power, thermal behavior, and removable-media lifecycle.
 
 ### D5 — Model acquisition and compatibility
@@ -291,7 +299,7 @@ model operations. Emit a semantic compatibility manifest bound to the model iden
 
 Directions: D5, D7, D11.
 
-### Q11 — Cartridge portability across Apple and storage classes
+### Q11 — Cartridge portability across Apple and measured drive profiles
 
 Determine whether one cartridge representation can carry multiple execution plans for different
 Apple memory budgets and external-storage envelopes without duplicating \(P\). Emit the portable
@@ -439,7 +447,7 @@ Directions: D6, D8, D9.
 
 Derive bytes written, write amplification, random-write rate, checkpoint overhead, thermal load, and
 expected storage lifetime for every supported training mode. Emit admission thresholds and scheduling
-constraints by storage class.
+constraints by measured drive-operation-plan profile.
 
 Directions: D4, D9, D10.
 
@@ -532,8 +540,9 @@ Directions: D2, D14, D15.
 ### Q39 — Binding controlled-reference matrix
 
 Select a reproducible matrix of frontier-scale model classes, Apple-compute classes, unified-memory
-budgets, USB-C storage classes, model source services, and agent clients for the first complete
-release. Emit representative boundaries and no personal-device assumptions.
+budgets, operation-bound locally attached drive profiles, model source services, and agent clients
+for the first complete release. Emit representative boundaries and no personal-device assumptions;
+named high-performance drives may appear only as optional comparison references.
 
 Directions: D3, D4, D14, D15.
 
@@ -546,20 +555,20 @@ least invasive transformation that satisfies Q12–Q20 without prescribing one c
 
 Directions: D2, D6, D8.
 
-### Q41 — Supported physical cartridge classes
+### Q41 — Supported physical cartridges and operation profiles
 
-Determine which removable flash, SATA SSD, and NVMe SSD media exposed through USB 3.x, USB4, or
-Thunderbolt over USB-C satisfy Cassette's capacity, sustained I/O, durability, removability, and
-protocol requirements. Emit predicates over media, transport, bridge, and enclosure classes rather
-than brand-specific endorsements.
+Determine whether any locally attached drive mounted by macOS can attempt Cassette, then determine
+which operations its measured filesystem, capacity, sustained I/O, durability, identity, power, and
+thermal behavior can support. Emit operation-bound predicates over the assembled path rather than
+media, connector, capacity, or brand eligibility gates.
 
 Directions: D4, D15.
 
 ### Q42 — Sustained storage qualification
 
 Define the cold, warm, sequential, random, mixed, queued, and long-duration measurements that produce
-\(B_s\), latency distributions, and write limits for a storage class. Emit pass conditions tied to
-model access patterns rather than advertised peak bandwidth.
+\(B_s\), latency distributions, and write limits for one drive, operation, and plan. Emit pass
+conditions tied to the plan's access patterns rather than advertised peak bandwidth.
 
 Directions: D4, D14.
 
@@ -606,9 +615,9 @@ Directions: D3, D7, D8.
 
 ### Q48 — Sustained Apple and storage thermal envelope
 
-Determine how fanless and actively cooled Apple-compute classes and external-storage classes change
-\(B_m\), \(B_s\), compute throughput, and training writes over long sessions. Emit sustained operating
-curves and throttling-aware scheduling rules.
+Determine how fanless and actively cooled Apple-compute classes change \(B_m\), and how measured
+external-drive operation profiles change \(B_s\), compute throughput, and training writes over long
+sessions. Emit sustained operating curves and throttling-aware scheduling rules.
 
 Directions: D3, D4, D14.
 
@@ -646,9 +655,10 @@ Directions: D5, D11, D12.
 
 ### Q53 — Cartridge capacity admission
 
-Derive required free space before download, transformation, rollback, precision refinement, training,
-optimizer state, and updates. Emit an admission equation over \(S_{peak}\) and a no-overcommit rule
-that remains valid across lifecycle transitions.
+Derive the exact additional space needed to finish the next atomic download, transformation,
+rollback, precision, training, optimizer, update, repair, export, or removal transition and preserve
+a recoverable committed state. Emit an adaptive measurement, claim, reclamation, pause, and resume
+rule that never requires a fixed device fraction, byte floor, user ceiling, or whole-job peak.
 
 Directions: D4, D5, D6, D9.
 
@@ -696,8 +706,9 @@ Directions: D1, D2, D6.
 ### Q59 — Multiple hardware plans without weight duplication
 
 Determine how one cartridge stores layouts, page orders, Q19 certificate references, description
-and fresh-read budgets, precision budgets, and kernel plans for several Apple and storage classes
-while sharing the same parameter bytes. Emit the selection function and metadata-size bound.
+and fresh-read budgets, precision budgets, and kernel plans for several Apple classes and measured
+drive-operation-plan profiles while sharing the same parameter bytes. Emit the selection function
+and metadata-size bound.
 
 Directions: D3, D6, D8.
 
@@ -821,9 +832,9 @@ Directions: D1, D9, D10.
 
 ### Q74 — Training endurance and resource admission
 
-Define model- and storage-class admission from projected bytes written, write amplification, free
-space, temperature, power, duration, and checkpoint cadence. Emit rejection and throttling rules that
-protect cartridge integrity while completing admitted jobs.
+Define model- and operation-plan-profile resource admission from projected bytes written, write
+amplification, free space, temperature, power, duration, and checkpoint cadence. Emit rejection and
+throttling rules that protect cartridge integrity while completing admitted jobs.
 
 Directions: D4, D9, D10.
 
@@ -873,10 +884,10 @@ Directions: D1, D3, D4, D5, D13.
 
 ### Q80 — Non-negotiable complete-system acceptance matrix
 
-Define the exact frontier-scale model classes, Apple-compute classes, USB-C storage classes, source
-services, inference workloads, training operations, agent clients, lifecycle failures, quality
-thresholds, latency thresholds, code-minimum proof, offline conditions, and recovery cases whose live
-pass marks Cassette complete. Emit a machine-executable acceptance matrix; no paper, prototype,
+Define the exact frontier-scale model classes, Apple-compute classes, operation-bound locally
+attached drive profiles, source services, inference workloads, training operations, agent clients,
+lifecycle failures, quality thresholds, latency thresholds, code-minimum proof, offline conditions,
+and recovery cases whose live pass marks Cassette complete. Emit a machine-executable acceptance matrix; no paper, prototype,
 simulator, personal-device anecdote, remote-model substitution, or human-facing demonstration may
 replace any required row.
 

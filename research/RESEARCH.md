@@ -1,8 +1,8 @@
 ---
 artifact_id: cassette-build-directed-research
-version: 3
-amended: 2026-08-09
-amendment_authority: ORIGINAL_REMIT.md and MATHS.md (mathematical cutover after S11)
+version: 4
+amended: 2026-09-02
+amendment_authority: ORIGINAL_REMIT.md, MATHS.md (mathematical cutover after S11), and the principal's 2026-09-02 Phase Live ruling
 scope_mode: GENERAL_PRODUCT
 source_queue: research/QUESTION_QUEUE.md
 research_status: COMPLETE
@@ -19,7 +19,7 @@ communication_mode: agent-to-agent
 ## Binding result
 
 Cassette must accept an agent-issued descriptor for a downloadable model, write the authoritative
-model and its mutable training history directly to an external USB-C flash or SSD cartridge, execute
+model and its mutable training history directly to a locally attached external cartridge, execute
 and update compatible models through macOS and Apple Silicon without moving the full authoritative
 checkpoint to internal storage, and expose inference and training operations to Codex, Ollama,
 OpenClaw, Hermes, and custom agents through machine protocols.
@@ -45,10 +45,20 @@ composition, and observation-adequacy records. Fresh residual sampling is admitt
 upper bound, not as a universal optimum or rate-distortion equality. Revised packets: Q7, Q11-Q12,
 Q14, Q17-Q21, Q27, Q33-Q40, Q47, Q58-Q64, Q68-Q70, Q75, Q78, Q80. E-012 records the proof boundary.
 
+Amended 2026-09-02 before Phase Live: any locally attached APFS drive is eligible to be measured,
+and qualification belongs to the exact drive, operation, and plan. Media, storage class, connector,
+brand, advertised speed, and nominal capacity are descriptive labels, not code or schema admission
+gates; named NVMe configurations are optional reference profiles. Q53 admits only the next atomic
+storage transition through an adaptive claim; it has no fixed device fraction, byte floor, user
+ceiling, or whole-job reservation, and a feasible next step does not need whole-campaign fit. The
+physical-drive benchmark inventories each pre-existing top-level entry's name, type, and aggregate
+logical bytes outside the drive; it detects broad size changes and is not content-integrity proof.
+Revised packets: Q4-Q5, Q11, Q19, Q21, Q23, Q28, Q38-Q44, Q48, Q51, Q53, Q59-Q60, Q70-Q74, Q80.
+
 ## Scope and authority
 
-- Product scope is `GENERAL_PRODUCT`: Apple Silicon and macOS classes, removable flash and SSD media
-  carried over USB-C transports, downloadable model families, source services, and agent protocols.
+- Product scope is `GENERAL_PRODUCT`: Apple Silicon and macOS classes, locally attached external
+  drives mounted on APFS, downloadable model families, source services, and agent protocols.
 - Evidence may use governing source code and contracts, official versioned specifications, published
   model artifacts, and deliberately identified reproducible reference configurations.
 - Evidence must not inspect or infer from the current Mac, attached volumes, installed software,
@@ -167,16 +177,17 @@ reopen_only_if: "A source license requires byte retention or a transform cannot 
 ```yaml
 question_id: Q4
 state: CLOSED
+revised: 2026-09-02 for adaptive capacity claims; bounded streaming is unchanged
 decision: "Cassette compiles by bounded streaming and extent reclamation; no algorithm may require simultaneous full source and full target checkpoints."
 formal_contract:
-  symbols: "S_peak <= max(S_source,S_target)+S_window+S_journal+S_integrity+S_rollback_delta+S_precision+S_reserve, where S_window is a declared bounded transform window, not Theta(|P|). In-place permutation uses cycle decomposition and O(page_size) scratch; shrinking transforms compact forward; growing transforms reserve only S_target-S_source additional bytes."
+  symbols: "S_peak <= max(S_source,S_target)+S_window+S_journal+S_integrity+S_rollback_delta+S_precision+E_next, where S_window is a declared bounded transform window, not Theta(|P|), and E_next is only the active Q53 claim. In-place permutation uses cycle decomposition and O(page_size) scratch; shrinking transforms compact forward; growing transforms claim output increments at successive durable boundaries."
   applicability: "Transforms with global statistics may make read-only analysis passes but must store only bounded statistics. A transform requiring two full random-access copies is unsupported."
 evidence:
   - status: OBSERVED
     result: "E-001 fixes a 1.560936 TB source example for exact admission tests."
   - status: INFERRED
     result: "Content-addressed committed output units can replace source extents once no future dependency uses them; missing source units remain reacquirable by Q1 identity."
-build_instruction: "Plan dependency order before mutation, reserve the bound, write and hash one output unit, journal it, release only dead source extents, and atomically publish the final root."
+build_instruction: "Plan dependency order before mutation, claim each next bounded output unit through Q53, write and hash it, journal it, release only dead source extents, and atomically publish the final root."
 acceptance_check: "Instrument allocated cartridge extents for identity, shrink, grow, interruption, and resume cases; fail if measured peak exceeds the declared equation or if recovery requires a second complete checkpoint."
 depends_on: [Q1, Q3]
 reopen_only_if: "A newly supported transformation has an unbounded dependency window."
@@ -187,14 +198,15 @@ reopen_only_if: "A newly supported transformation has an unbounded dependency wi
 ```yaml
 question_id: Q5
 state: CLOSED
+revised: 2026-09-02 for adaptive capacity claims; lifecycle authority is unchanged
 decision: "Preparation is an idempotent durable state machine whose only callable state is a verified published revision."
 formal_contract:
-  symbols: "EMPTY -> RESOLVED -> RESERVED -> ACQUIRING -> SOURCE_VERIFIED -> PLANNED -> PREPARING -> EXEC_VERIFIED -> PUBLISHED -> ACTIVE; any mutable state may enter PAUSED, CANCELLED, or FAILED and resume from its last hashed commit; PUBLISHED is created by one durable root-pointer commit."
+  symbols: "EMPTY -> RESOLVED -> NEXT_CLAIMED -> ACQUIRING -> SOURCE_VERIFIED -> PLANNED -> PREPARING -> EXEC_VERIFIED -> PUBLISHED -> ACTIVE; mutable acquisition and preparation repeat MEASURE -> NEXT_CLAIMED at each Q53 durable boundary; any mutable state may enter PAUSED, CANCELLED, or FAILED and resume from its last hashed commit; PUBLISHED is created by one durable root-pointer commit."
   applicability: "Download, import, native preparation, compiled preparation, and revision update."
 evidence:
   - status: SPECIFIED
     result: "E-002 provides source validators and range transfer; E-005 provides durable storage semantics; E-008 provides operation/status protocol requirements."
-build_instruction: "Persist operation ID, idempotency key, source lock, capacity reservation, completed ranges, page hashes, plan hash, and candidate root. Repeated requests return the same operation or terminal result."
+build_instruction: "Persist operation ID, idempotency key, source lock, active next-step capacity claim, completed ranges, page hashes, plan hash, and candidate root. Repeated requests return the same operation or terminal result."
 acceptance_check: "Interrupt every transition, restart and remount, replay the same idempotency key, and obtain either the same published identity or one typed terminal error; no partial revision may be discoverable or callable."
 depends_on: [Q1, Q3, Q4]
 reopen_only_if: "A source cannot lock revision identity or the selected filesystem cannot durably commit the root."
@@ -296,7 +308,7 @@ depends_on: [Q1, Q7, Q9]
 reopen_only_if: "A supported model introduces a semantic operation not representable in S."
 ```
 
-## Q11 — Cartridge portability across Apple and storage classes
+## Q11 — Cartridge portability across Apple and measured drive profiles
 
 ```yaml
 question_id: Q11
@@ -307,9 +319,9 @@ formal_contract:
   applicability: "Plans may differ in read grouping, description budget, fresh-sampling budget, precision layers, kernel dispatch, and concurrency while retaining one mathematical certificate. Different atom values, condition metrics, description reconstruction, or trained selector semantics create a new executable revision, not merely a plan."
 evidence:
   - status: SPECIFIED
-    result: "E-003 and E-005 define compute and storage-class inputs; E-006 supports runtime plan variation over shared weights."
-build_instruction: "Store hardware-neutral semantic pages once, profile the current declared class at activation, validate its measured envelope and Q19 resource certificate, and choose only a plan whose recorded assumptions hold."
-acceptance_check: "Move the same cartridge among all Q39 classes, select the expected plan without rewriting weight pages, and reject or recompile when no plan satisfies the measured class."
+    result: "E-003 and E-005 define compute and assembled-drive profile inputs; E-006 supports runtime plan variation over shared weights."
+build_instruction: "Store hardware-neutral semantic pages once, profile the current assembled path for the intended operation and plan, validate its measured envelope and Q19 resource certificate, and choose only a plan whose recorded assumptions hold."
+acceptance_check: "Move the same cartridge among all Q39 Apple classes and measured drive profiles, select the expected plan without rewriting weight pages, and reject or recompile when no plan satisfies the measured operation profile."
 depends_on: [Q1, Q3, Q7]
 reopen_only_if: "A required kernel layout cannot reference shared semantic pages without material weight duplication."
 ```
@@ -453,7 +465,7 @@ state: CLOSED
 decision: "A compiled revision is callable only through a MATHS.md certificate that separately proves condition compatibility, atom capacity, description distortion, stochastic or deterministic execution error, observation adequacy, and the physical conversion to resident bytes and fresh traffic. A prompt-fixed page set is one optional description class, not the general mechanism."
 formal_contract:
   symbols: "For every declared flattening and target T, certificate={field,shape,T_digest,conditions V,metric_digests C_v,eta_rep,rank r,atoms A_i,service_faces F_i,minimal_nonfaces,atom_cover,observation_contract,description_class,B_i,residual_relation,epsilon_exec,delta_exec_total,sampling_law?,per_atom_resource_tables,per_step_resource_tables,description_bytes_peak,description_bytes_total,metadata_bytes_peak,metadata_bytes_total,fresh_samples_max,fresh_samples_total,fresh_bytes_max,fresh_bytes_total,composition_maps,certified_horizon}. Require V=union_i F_i; rank(A_i)<=r; ell_v([A_i])<=eta_rep for v in F_i; every evaluated but excluded condition has a causal record; every stochastic estimator states fresh/private-coin and adversary hypotheses. For the MATHS.md residual sampler, E||Y-A_i x||^2<=||A_i-B_i||_F^2||x||^2/s and Pr(||Y-A_i x||>epsilon_exec||A_i||_F||x||)<=delta_exec under its declared sufficient sample bound, with operation-level risk composed into delta_exec_total. The physical schedule must satisfy Q47/Q68."
-  applicability: "Certified separately by immutable revision, plan, Apple/storage class, protected condition and trace family, context range, and observation experiment. Native source routing remains semantic authority and does not require a compiled atom cover."
+  applicability: "Certified separately by immutable revision, plan, Apple class, operation-bound drive profile, protected condition and trace family, context range, and observation experiment. Native source routing remains semantic authority and does not require a compiled atom cover."
 evidence:
   - status: INFERRED
     result: "E-012 proves that arbitrary higher-order compatibility obstructions can occur inside one orbit of ambient unitaries commuting with the declared coordinate projections. The compatibility complex is therefore not determined by an invariant constant on that orbit; examples with the same 1-skeleton also show that pairwise feasibility is insufficient. E-012 proves only an upper bound for fresh residual sampling; no rate-distortion converse is available."
@@ -489,7 +501,7 @@ state: CLOSED
 decision: "Training support is tiered by persistent state and operator proof: Tier A requires adapter/LoRA SFT, adapter continued pretraining, and offline adapter DPO; Tier B adds recovery of the compiled compatibility, description, estimator, observation, and precision certificate; Tier C permits full-weight updates only for tuples whose exact state, I/O, endurance, and quality bounds pass admission."
 formal_contract:
   symbols: "trainable(op,I,h,s) = gradients_supported(op,I) and state_bytes(op,I)<=capacity_free and peak_UM(op,I)<=M and projected_writes<=endurance_budget and exact_restart=true. Tier A has trainable parameter count N_a << |P|; Tier B restricts updates to atom/selector/description/estimator/observation calibration and precision-recovery tensors declared by the compiled revision; Tier C has N_train=|P_trainable|."
-  applicability: "A compatible inference tuple need not qualify for Tier C. Every published training capability names model revision, operation, precision, optimizer, dataset bound, and storage class."
+  applicability: "A compatible inference tuple need not qualify for Tier C. Every published training capability names model revision, operation, precision, optimizer, dataset bound, and measured drive-operation-plan profile."
 evidence:
   - status: INFERRED
     result: "E-007 proves that Kimi K3-scale full Adam state is tens of terabytes while LoRA state scales with adapter rank."
@@ -522,9 +534,10 @@ reopen_only_if: "A supported optimizer requires semantically in-place updates th
 ```yaml
 question_id: Q23
 state: CLOSED
+revised: 2026-09-02 for adaptive capacity claims; placement is unchanged
 decision: "All persistent model-bearing training state resides on D; unified memory holds only the current bounded training window; internal storage holds no dataset, gradient spill, optimizer, master, checkpoint, journal, or training cache."
 formal_contract:
-  symbols: "place(dataset,base,delta,optimizer,master,checkpoint,journal,RNG,data_cursor)=D; place(current_batch,current_page,current_grad,current_optimizer_slice,activations)=UM while live; peak_D=S_model+S_data+S_state+S_candidate+S_journal+S_reserve; peak_UM=M_exec+batch+active_pages+grad_slices+optimizer_slices+activations+runtime <= M."
+  symbols: "place(dataset,base,delta,optimizer,master,checkpoint,journal,RNG,data_cursor)=D; place(current_batch,current_page,current_grad,current_optimizer_slice,activations)=UM while live; owned_D(t)=S_committed(t)+S_live_state(t)+S_candidate(t)+S_journal(t)+E_next(t), with no fixed reserve term; peak_UM=M_exec+batch+active_pages+grad_slices+optimizer_slices+activations+runtime <= M."
   applicability: "Memory pressure may reduce microbatch, checkpoint activations to D, or reject the job; it may not redirect spills to internal storage."
 evidence:
   - status: INFERRED
@@ -615,14 +628,14 @@ state: CLOSED
 decision: "Training is admitted from projected physical writes and sustained thermal behavior, not free capacity alone."
 formal_contract:
   symbols: "For N_t trainable parameters and U optimizer steps, W_logical >= U*N_t*(b_weight+b_m+b_v+b_master)+W_journal+W_checkpoints+W_deltas; Adam with 2-byte weight and FP32 moments is >=10*U*N_t B, or >=14*U*N_t B with FP32 master. W_physical=p95_write_amplification*W_logical. Admit only if lifetime_written+W_physical<=0.80*declared_endurance, W_physical<=0.20*remaining_endurance, capacity Q53 passes, and Q48 thermal floor holds."
-  applicability: "If endurance or health telemetry is unavailable, writable training is unqualified for that storage class; read-only inference may still qualify."
+  applicability: "If endurance or health telemetry is unavailable, writable training is unqualified for that drive-operation-plan tuple; read-only inference may still qualify."
 evidence:
   - status: INFERRED
     result: "E-007 derives persistent byte floors; E-005 requires measured assembled-device behavior."
 build_instruction: "Estimate before admission, meter actual host writes, include filesystem amplification and checkpoints, throttle at the qualified thermal curve, and stop before the reserved endurance bound is crossed."
 acceptance_check: "Run synthetic and real declared training patterns past cache exhaustion, compare projected and measured physical writes, and fail if p95 amplification or temperature exceeds the admitted envelope."
 depends_on: [Q21, Q23, Q25]
-reopen_only_if: "A storage class exposes a stronger endurance contract or an optimizer changes the byte equation."
+reopen_only_if: "A measured drive profile exposes a stronger endurance contract or an optimizer changes the byte equation."
 ```
 
 ## Q29 — Binding minimum-code metric
@@ -794,38 +807,39 @@ reopen_only_if: "A full-scale row exposes an unmodeled breakpoint or nonlinearit
 ```yaml
 question_id: Q38
 state: CLOSED
-decision: "A tuple is incompatible when any physical lower bound, mathematical-certificate requirement, or measured hard gate fails; the failure excludes only that tuple and mechanism."
+revised: 2026-09-02 under the principal's Phase Live ruling
+decision: "A tuple is incompatible when a persistent physical lower bound, mathematical-certificate requirement, or measured hard gate fails; transient capacity pressure pauses one operation and is not a drive failure."
 formal_contract:
-  symbols: "INCOMPATIBLE if S_peak>free_reserved_capacity or minimum_live_state>M or max(Dfresh/Bs,Hmem/Bm,F/Ccompute)>Q68 latency bound or Q17/Q18 quality fails or Q19 certificate coverage/error/risk/observation/physical conversion fails or unsupported_operator exists or training_state/endurance exceeds Q28/Q53/Q74. Record={tuple,mode,bound,measured,evidence,cause,next_mode_or_tuple}."
-  applicability: "A failed native mode may proceed to compiled mode; a failed storage class may move upward; a failed training tier does not erase eligible inference. No failure makes a paper, simulator, or smaller fixture the product."
+  symbols: "INCOMPATIBLE if minimum_unsplittable_atomic_live_state>measured_capacity_envelope or minimum_live_state>M or max(Dfresh/Bs,Hmem/Bm,F/Ccompute)>Q68 latency bound or Q17/Q18 quality fails or Q19 certificate coverage/error/risk/observation/physical conversion fails or unsupported_operator exists or training endurance exceeds Q28/Q74. E_next>A_t for a splittable or later transition is PAUSED_CAPACITY until space or the next-step plan changes. Record={drive_profile,operation,plan,mode,bound,measured,evidence,cause,next_mode_or_tuple}."
+  applicability: "A failed native mode may proceed to compiled mode. A failed assembled drive, operation, and plan tuple excludes only that tuple; other operations on the same drive and the same operation on another drive remain eligible. A failed training tier does not erase eligible inference. No failure makes a paper, simulator, or smaller fixture the product."
 evidence:
   - status: INFERRED
     result: "E-009 supplies service lower bounds; E-001 supplies a concrete native K3 memory falsification for the 32 GB class."
-build_instruction: "Evaluate cheap static bounds before transfer, mathematical feasibility and measured class bounds before compilation, and quality/certificate validity after preparation; persist the first decisive causal failure and continue the matrix."
+build_instruction: "Evaluate cheap static bounds before transfer, mathematical feasibility and measured operation-plan profile bounds before compilation, and quality/certificate validity after preparation; persist the first decisive causal failure and continue the matrix."
 acceptance_check: "Construct one failure for each predicate and verify deterministic exclusion, exact causal record, no silent threshold relaxation, and continued execution of independent Q80 rows."
 depends_on: [Q7, Q17, Q18, Q19, Q28, Q37]
 reopen_only_if: "The failed mechanism changes enough to alter its decisive bound."
 ```
 
-## Q39 — Binding controlled-reference matrix
+## Q39 — Binding Apple, model, and measured-storage matrix
 
 ```yaml
 question_id: Q39
 state: CLOSED
-revised: 2026-08-05 under the amended remit
-decision: "The first release uses three public Apple classes in declared roles — C1 consumer thesis target, C2 consumer-pro target, C3 build-and-teacher infrastructure — and three pinned frontier model boundaries with Kimi K3 as the level exemplar. The headline row is the frontier compiled cartridge on C1. The former native-parity row on C3 is reclassified TEACHER_CORRECTNESS after E-011's static falsification. All storage is qualified as an assembled class, never a brand or connector."
+revised: 2026-09-02 under the principal's Phase Live ruling
+decision: "The first release uses three public Apple classes in declared roles — C1 consumer thesis target, C2 consumer-pro target, C3 build-and-teacher infrastructure — and three pinned frontier model boundaries with Kimi K3 as the level exemplar. The headline row is the frontier compiled cartridge on C1. The former native-parity row on C3 is reclassified TEACHER_CORRECTNESS after E-011's static falsification. Every row binds the actual locally attached APFS drive profile measured for that operation and plan; named NVMe paths are optional comparison references, not eligibility or completion requirements."
 formal_contract:
-  symbols: "C1={M5 MacBook Air,32GB,153GB/s,fanless,role=THESIS}; C2={M5 Max MacBook Pro,128GB,614GB/s,active cooling,role=CONSUMER_PRO}; C3={M3 Ultra Mac Studio,512GB,819GB/s,active cooling,role=INFRASTRUCTURE}. S1={APFS NVMe,USB4 40Gb/s,>=2TB}; S2={APFS NVMe,Thunderbolt5,>=2TB}; S3={APFS NVMe,Thunderbolt5,>=4TB,writable endurance qualified}. Models: K3=moonshotai/Kimi-K3@9f62e4e9fffbd0a83ddd60e1c209d828994b3569 (level exemplar); Scout=meta-llama/Llama-4-Scout-17B-16E-Instruct@92f3b1597a195b523d8d9e5700e57e4fbb8f20d3; Qwen=Qwen/Qwen3-235B-A22B-Instruct-2507@ac9c66cc9b46af7306746a9250f23d47083d689e. frontier_reference(class)={revision: open_downloadable(revision) and total_bytes(revision)>=1e12 and native_active_state(revision)>M_ceiling(class)}; substituting an equal-or-greater-level model with a smaller fixed-path fraction is a recorded remit-level decision. Mandatory rows={C1/S1/FRONTIER-COMPILED-CERTIFIED+TierA+B (thesis headline, Q68 FRONTIER_CLASS, Q19 certificate, precondition F5 gate), C1/S1/Scout-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C2/S2/Qwen-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C3/S2/K3-NATIVE (TEACHER_CORRECTNESS: routing and declared-capability correctness including 1,048,576-token context, absolute service report, teacher trace generation; no parity or value gate), C3/S3/K3-COMPILED-CERTIFIED+TierA+B (portability, certificate recovery, and training row, usability floors)}."
+  symbols: "C1={M5 MacBook Air,32GB,153GB/s,fanless,role=THESIS}; C2={M5 Max MacBook Pro,128GB,614GB/s,active cooling,role=CONSUMER_PRO}; C3={M3 Ultra Mac Studio,512GB,819GB/s,active cooling,role=INFRASTRUCTURE}. S={locally_attached=true,filesystem=APFS,media=unrestricted,connector=unrestricted,nominal_capacity=unrestricted,profile=Q41-Q44_measured_for_operation_and_plan}. Optional comparison references are R1={APFS NVMe,USB4 40Gb/s,>=2TB}, R2={APFS NVMe,Thunderbolt5,>=2TB}, and R3={APFS NVMe,Thunderbolt5,>=4TB,writable endurance qualified}; no R profile is required. Models: K3=moonshotai/Kimi-K3@9f62e4e9fffbd0a83ddd60e1c209d828994b3569 (level exemplar); Scout=meta-llama/Llama-4-Scout-17B-16E-Instruct@92f3b1597a195b523d8d9e5700e57e4fbb8f20d3; Qwen=Qwen/Qwen3-235B-A22B-Instruct-2507@ac9c66cc9b46af7306746a9250f23d47083d689e. frontier_reference(class)={revision: open_downloadable(revision) and total_bytes(revision)>=1e12 and native_active_state(revision)>M_ceiling(class)}; substituting an equal-or-greater-level model with a smaller fixed-path fraction is a recorded remit-level decision. Mandatory rows={C1/S/FRONTIER-COMPILED-CERTIFIED+TierA+B (thesis headline, Q68 FRONTIER_CLASS, Q19 certificate, precondition F5 gate), C1/S/Scout-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C2/S/Qwen-least-invasive-Q40-modes-1-to-3-else-Q38-fail, C3/S/K3-NATIVE (TEACHER_CORRECTNESS: routing and declared-capability correctness including 1,048,576-token context, absolute service report, teacher trace generation; no parity or value gate), C3/S/K3-COMPILED-CERTIFIED+TierA+B (portability, certificate recovery, and training row, usability floors)}."
   applicability: "Source acquisition uses exact Hugging Face revisions; the same immutable artifacts are re-exposed as pinned Ollama blobs and Tinker-export descriptors for adapter conformance. Every named client runs against each callable capability tier through Q76. B_native for each consumer class is pinned at matrix freeze under Q13."
 evidence:
   - status: OBSERVED
     result: "E-001 fixes K3; public Hugging Face APIs fixed Scout and Qwen revisions and reported 217,315,712,145 B and 470,211,497,053 B repository artifact totals respectively."
   - status: SPECIFIED
-    result: "E-003 fixes Apple class ceilings; E-005 requires measured storage qualification."
+    result: "E-003 fixes Apple class ceilings; E-005 requires measured storage qualification without making media or connector identity a capability proxy."
   - status: INFERRED
     result: "E-011 falsifies native K3 service parity on C3 (5.87 tok/s ceiling against the 10 tok/s floor) and fixes the C1 compiled decode budget (15.3 GB touched per token at 100% utilization)."
-build_instruction: "Encode the matrix in machine data, bind every compiled row to one Q19 certificate, measure each exact assembled storage path with Q42, pin source and runtime commits, pin B_native per consumer class at freeze, refuse frontier compiled rows before their F5 gate, and execute every mandatory row without substituting personal hardware anecdotes."
-acceptance_check: "A clean runner enumerates exactly the mandatory rows, roles, source digests, baselines, clients, training tiers, gates, and preconditions; release fails if any row is absent, substituted, measured under an unqualified class, or executed with an unpassed gate; the TEACHER_CORRECTNESS row must be structurally unable to emit a parity or value label."
+build_instruction: "Encode the matrix in machine data, bind every compiled row to one Q19 certificate, measure each actual assembled APFS storage path with Q42 for its intended operation and plan, pin source and runtime commits, pin B_native per consumer class at freeze, refuse frontier compiled rows before their F5 gate, and execute every mandatory row without substituting an optional reference profile or personal hardware anecdote."
+acceptance_check: "A clean runner enumerates exactly the mandatory rows, roles, source digests, baselines, clients, training tiers, gates, and preconditions; release fails if any row is absent, substituted, bound to an unqualified operation-plan profile, or executed with an unpassed gate. A non-NVMe drive that passes the same operation-and-plan predicate must be admissible. The TEACHER_CORRECTNESS row must be structurally unable to emit a parity or value label."
 depends_on: [Q7, Q13, Q15, Q21, Q36, Q37, Q38]
 reopen_only_if: "A named public artifact becomes unavailable, an Apple class leaves support, a superior frontier_reference is adopted by remit-level decision, or a static bound proves a row impossible and Q38 records the replacement mechanism rather than lowering the boundary."
 ```
@@ -848,20 +862,21 @@ depends_on: [Q7, Q17, Q18, Q19, Q20, Q30, Q38, Q39]
 reopen_only_if: "A less invasive mode gains a qualified plan, a certificate theorem fails, or the selected compiled representation fails Q17/Q18/Q19."
 ```
 
-## Q41 — Supported physical cartridge classes
+## Q41 — Supported physical cartridges and operation profiles
 
 ```yaml
 question_id: Q41
 state: CLOSED
-decision: "A cartridge class is the measured tuple of media, controller, bridge, enclosure, transport, filesystem, capacity, power, thermal behavior, and durability; USB-C alone carries no compatibility meaning."
+revised: 2026-09-02 under the principal's Phase Live ruling
+decision: "Any locally attached external drive mounted by macOS on APFS is eligible to attempt Cassette; qualification belongs to one measured assembled path, operation, and plan, never to a media, connector, brand, speed label, or nominal capacity."
 formal_contract:
-  symbols: "eligible(s,mode)=capacity(s)>=Q53 and p05_sustained_Bs(s,pattern)>=required_Bs and p99_latency<=plan_limit and durable_flush(s)>=required(mode) and disconnect_identity=true and thermal_floor=true and, for training, endurance_known=true. Bs_service<=min(B_link_payload,B_bridge,B_media_steady,B_filesystem_cache)."
-  applicability: "Removable flash, SATA SSD, and NVMe SSD may qualify. Low-end flash commonly remains acquisition/cold-store or read-only unless it passes the same predicate. Connector shape, brand, and advertised peak never qualify a class."
+  symbols: "eligible_to_measure(s)=locally_attached_external(s) and filesystem(s)=APFS. qualified(s,operation,plan)=Q42_profile(s,operation,plan) satisfies required_Bs(plan), p99_latency(plan), Q44 durability(plan), Q49 identity, thermal_floor(plan), and, when the operation writes training state, Q28/Q74 endurance; each transition is then separately admitted by dynamic Q53 capacity control. Bs_service<=min(B_link_payload,B_bridge,B_media_steady,B_filesystem_cache)."
+  applicability: "Thumb drives, hard drives, removable flash, SATA SSDs, NVMe SSDs, and future locally attached media may enter measurement. The same drive may qualify for one operation and fail another. Connector shape, media family, brand, advertised peak, and nominal capacity are recorded facts, never eligibility evidence."
 evidence:
   - status: SPECIFIED
     result: "E-005 separates transport, bridge, media, filesystem, and durability authorities."
-build_instruction: "Create a signed profile from Q42 measurements and immutable class descriptors; bind each execution/training plan to minimum profile predicates, not product names."
-acceptance_check: "Test devices sharing a USB-C connector but differing in bridge/media behavior; each must classify independently and a failed component must disqualify only the affected mode."
+build_instruction: "Create a signed operation-plan profile from Q42 measurements and immutable assembled-path descriptors; bind each execution or training plan to that exact measured profile, not a product category or reference-drive name."
+acceptance_check: "Run the same operation on different media and different operations on the same drive. Each drive-operation-plan tuple must classify independently; a non-NVMe path that passes must be admitted, and one failed tuple must not disqualify the drive from other work."
 depends_on: [Q28, Q38]
 reopen_only_if: "A new transport or media class exposes equivalent measurable and durable semantics."
 ```
@@ -871,15 +886,16 @@ reopen_only_if: "A new transport or media class exposes equivalent measurable an
 ```yaml
 question_id: Q42
 state: CLOSED
-decision: "Storage qualification replays Cassette page patterns through cold, warm, queue-depth, cache-exhaustion, and long-duration phases and uses lower-tail sustained results."
+revised: 2026-09-02 under the principal's Phase Live ruling
+decision: "Storage qualification replays the actual intended operation's Cassette page patterns and uses lower-tail sustained results; an optional reference suite may compare broader paths but cannot gate unrelated work."
 formal_contract:
-  symbols: "Measure read/write sizes {4KiB,64KiB,1MiB,4MiB,16MiB,32MiB}, alignments {4KiB,page}, patterns {sequential,uniform-random,Zipf-random,Q19-trace,mixed-training}, QD {1,2,4,8}, states {cold,warm}, and durations {until >=2*declared device cache or 30min, sustained >=60min}. Record throughput p05/p50/p95, latency p50/p95/p99/max, IOPS, host/device writes, errors, thermal-state events, and flush latency. Pass iff the p05 throughput and p99 latency satisfy every bound of the bound plan for the full sustained interval."
-  applicability: "Measurements use files larger than host RAM for cold tests and verified uncached reads where supported; warm results are reported separately and never substitute for cold."
+  symbols: "For operation o and plan p, derive sizes, alignments, access patterns, queue depths, cold/warm states, cache-crossing behavior, write duty, and duration from p; record throughput p05/p50/p95, latency p50/p95/p99/max, IOPS, host/device writes, errors, thermal-state events, and flush latency. Pass(s,o,p) iff the measured p05 throughput, p99 latency, durability, and sustained interval satisfy every bound actually used by p. The optional reference suite retains sizes {4KiB,64KiB,1MiB,4MiB,16MiB,32MiB}, QD {1,2,4,8}, and broad sequential/random/Q19/training patterns for comparison only."
+  applicability: "Cold measurements use verified uncached reads where supported and exceed host memory or the bound plan's reusable cache when the operation can cross that boundary. Warm results are reported separately. A small operation does not inherit a larger operation's duration, write volume, or cache-exhaustion gate."
 evidence:
   - status: INFERRED
     result: "E-005 requires assembled-path measurement; E-009 converts measured values into service bounds."
-build_instruction: "Ship one bounded profiler that emits a content-addressed profile and uses captured native/compiled page traces, not a generic peak-only disk benchmark."
-acceptance_check: "Throttle or exhaust a qualifying device's cache and require classification to follow sustained p05/p99 values; advertised link rate must never appear as measured Bs."
+build_instruction: "Ship one bounded profiler that emits a content-addressed operation profile from captured native or compiled page traces. Keep the optional broad reference comparison separate from admission."
+acceptance_check: "Qualify a small operation and a demanding operation on the same path, then throttle or exhaust the cache only where the bound plan can do so. Classification must follow the operation's sustained p05/p99 values; an advertised link rate or reference-profile result must never substitute for measured Bs."
 depends_on: [Q12, Q19, Q41]
 reopen_only_if: "Live traces introduce a materially different I/O distribution."
 ```
@@ -891,13 +907,13 @@ question_id: Q43
 state: CLOSED
 decision: "The storage profile records every variable that can change the service or durability envelope and invalidates itself when the negotiated path changes."
 formal_contract:
-  symbols: "Profile inputs={media_type,capacity,logical_block,physical_block,controller,bridge_id,bridge_firmware,enclosure_id,transport_protocol,negotiated_rate,port_path,hub_path,cable_capability,power_contract,queue_depth,alignment,TRIM_support,write_cache,flush_result,encryption,filesystem,free_extents,SLC_cache_breakpoint,thermal_curve,SMART_or_health}; profile_id=H(inputs,measurements,OS_build,profiler_version)."
+  symbols: "Profile inputs={media_type,capacity,logical_block,physical_block,controller,bridge_id,bridge_firmware,enclosure_id,transport_protocol,negotiated_rate,port_path,hub_path,cable_capability,power_contract,queue_depth,alignment,TRIM_support,write_cache,flush_result,encryption,filesystem,SLC_cache_breakpoint,thermal_curve,SMART_or_health}; profile_id=H(inputs,operation,plan,measurements,OS_build,profiler_version). Dynamic capacity snapshot={profile_id,timestamp,A_t,fragmentation_observations,active_claims}."
   applicability: "Unavailable telemetry is UNKNOWN, never an assumed pass. A port, hub, cable, firmware, filesystem, or OS change requires at least the dependent Q42 subset again."
 evidence:
   - status: SPECIFIED
     result: "E-005 identifies transport and durability layers."
 build_instruction: "Obtain public system descriptors where available, measure the rest, and feed only validated values to Q41/Q47/Q53/Q74."
-acceptance_check: "Change cable, hub, port, bridge firmware, encryption, queue depth, or free-space fragmentation and verify the profile identity changes and dependent plans revalidate."
+acceptance_check: "Change cable, hub, port, bridge firmware, encryption, or queue depth and verify the operation-plan profile identity changes and dependent plans revalidate. Change available space or fragmentation and verify Q53 produces a new capacity snapshot without changing the stable physical-path profile identity."
 depends_on: [Q41, Q42]
 reopen_only_if: "A new variable measurably alters service while absent from the profile."
 ```
@@ -907,9 +923,10 @@ reopen_only_if: "A new variable measurably alters service while absent from the 
 ```yaml
 question_id: Q44
 state: CLOSED
+revised: 2026-09-02 for adaptive capacity claims; APFS durability is unchanged
 decision: "Writable first-release cartridges use locally attached APFS with verified durable synchronization; other filesystems are import/export or read-only until they pass an equivalent transaction qualification."
 formal_contract:
-  symbols: "Paths use lowercase digest names and never depend on case behavior. Physical page objects are 4 MiB canonical chunks aligned to >=4 KiB; read coalescing may form 1-32 MiB runs. Preallocate committed extents. Sparse files and clones are optional space optimizations, never correctness authorities. Commit requires data write -> readback hash -> fsync/F_FULLFSYNC -> root write -> atomic generation pointer -> fsync/F_FULLFSYNC -> remount verification."
+  symbols: "Paths use lowercase digest names and never depend on case behavior. Physical page objects are 4 MiB canonical chunks aligned to >=4 KiB; read coalescing may form 1-32 MiB runs. Each atomic storage transition obtains its exact Q53 claim; whole-operation and device-fraction preallocation are forbidden as admission requirements. Physical preallocation, sparse files, and clones are optional space optimizations, never correctness authorities. Commit requires data write -> readback hash -> fsync/F_FULLFSYNC -> root write -> atomic generation pointer -> fsync/F_FULLFSYNC -> remount verification."
   applicability: "APFS encryption is allowed only when Q42 passes. exFAT and network filesystems cannot host mutable authority in the first release."
 evidence:
   - status: SPECIFIED
@@ -1033,14 +1050,15 @@ reopen_only_if: "A source exposes signed semantic metadata that changes the trus
 ```yaml
 question_id: Q51
 state: CLOSED
-decision: "Acquisition writes fixed chunks directly to reserved cartridge extents, verifies immutable source identity throughout, and commits only after both chunk-local and source-object integrity pass."
+revised: 2026-09-02 for adaptive transfer claims; identity and integrity are unchanged
+decision: "Acquisition writes fixed chunks directly to the cartridge under adaptive Q53 claims, verifies immutable source identity throughout, and commits only after both chunk-local and source-object integrity pass."
 formal_contract:
   symbols: "TransferChunk={artifact_id,offset,length,BLAKE3_digest,state}; default length=4MiB except tail. PartialState={source_revision,object_size,validator,completed_interval_set,chunk_digests,contiguous_source_hash_offset,serialized_hash_state}. If authoritative chunk hashes exist, verify independently; otherwise advance the authoritative whole-object hash only over the contiguous completed prefix and checkpoint hash state. Final proof={all intervals covered,source validator unchanged,whole digest equal,all local chunk digests equal}; no post-completion full reread is required."
   applicability: "HTTP ranges, Ollama blobs, and equivalent immutable range sources. If neither a stable validator nor digest exists, transfer cannot become authoritative."
 evidence:
   - status: SPECIFIED
     result: "E-002 provides range and immutable-source contracts."
-build_instruction: "Preallocate D extents, schedule bounded parallel ranges, hash network bytes before write, read back each chunk once, checkpoint interval/hash state durably, and discard all progress if revision, size, validator, or expected digest changes."
+build_instruction: "Claim the next bounded range batch and its durable PartialState under Q53, schedule only ranges covered by that claim, hash network bytes before write, read back each chunk once, checkpoint interval/hash state durably, and discard all progress if revision, size, validator, or expected digest changes. Whole-artifact preallocation is optional when exact size is known; it is never an admission gate."
 acceptance_check: "Interrupt a multi-shard transfer at random byte ranges, corrupt network and local chunks, change the source validator, and resume; final commit must need no whole-artifact reread after completion and must reject every mismatch."
 depends_on: [Q1, Q5, Q44, Q50]
 reopen_only_if: "A source forbids ranges or supplies only mutable unverified objects."
@@ -1069,17 +1087,18 @@ reopen_only_if: "A source requires a sixth semantic operation that cannot be exp
 ```yaml
 question_id: Q53
 state: CLOSED
-decision: "Cassette reserves the maximum exact extent demand of the requested lifecycle transition before transferring or mutating any model byte and never overcommits that reservation."
+revised: 2026-09-02 under the principal's Phase Live ruling
+decision: "Cassette admits and claims only the next atomic storage transition. It never requires a fixed device fraction, byte floor, user ceiling, or whole-job or campaign peak."
 formal_contract:
-  symbols: "S_required=max_over_operation_phases(S_committed+S_inflight+S_candidate+S_rollback+S_optimizer+S_master+S_dataset+S_precision+S_journal+S_repair)+S_safety; S_safety=max(8GiB,0.05*S_device). Admit iff allocatable_verified_free>=S_required and every required extent can be preallocated; checked unsigned arithmetic is mandatory."
-  applicability: "Download, transform, inference cache persistence, precision refinement, training, update, repair, export, rollback, and garbage collection each emit their phase vector. Filesystem-reported free bytes without successful reservation are insufficient."
+  symbols: "At durable boundary t, A_t=verified allocatable bytes not already claimed by Cassette. For next atomic transition n, E_n=new bytes required to finish n through its next durable boundary, including journal, candidate data, root/index/pointer, and any additional bytes required to preserve or recover the current valid generation. Admit(n,t) iff E_n is exact under checked unsigned arithmetic, A_t>=E_n, and one atomic Cassette claim for E_n succeeds. Cassette claims serialize Cassette writers; they do not reserve bytes against unrelated macOS writers. State=MEASURE->PLAN_NEXT->CLAIM_NEXT->EXECUTE->DURABLE_BOUNDARY->OBSERVE->{PLAN_NEXT|RECLAIM_THEN_MEASURE|PAUSED_RECOVERABLE}."
+  applicability: "Download, transform, inference-cache persistence, precision refinement, training, update, repair, export, rollback, and garbage collection declare their next atomic transition. If E_n is not exact, the planner splits n before mutation. Cassette remeasures immediately before each write, after every claim, and after every durable boundary; learns actual checkpoint growth and write amplification for later plans; and may adjust its concurrency, cache, or checkpoint timing without changing model or training semantics. It may reclaim only Cassette-owned objects that are unpinned, unreachable from every retained root, explicitly TEMPORARY or REPRODUCIBLE under declared retention rules, outside rollback retention, and unreferenced by any active Q53 claim, Q25 transaction, or Q60 journal. It never reclaims pre-existing or user-owned data. If another writer reduces available space after a claim or a write returns ENOSPC, Q25 recovers the exact parent or committed child and Q53 pauses before another durable transition."
 evidence:
-  - status: OBSERVED
-    result: "E-001 fixes K3 source bytes; E-007 fixes optimizer lower bounds; E-005 fixes filesystem effects."
-build_instruction: "Compute the phase maximum from immutable manifests and operation parameters, reserve it, expose the byte ledger, and release reservation only at terminal cleanup."
-acceptance_check: "Test exact-boundary, fragmented, concurrent-reservation, growing-transform, training, and repair cases; fail before network or mutation when any phase exceeds available reserved capacity."
+  - status: CHOSEN
+    result: "The principal rejected fixed whole-job and device-percentage reservation on 2026-09-02 because open-ended fine-tuning cannot know its final storage demand before it begins. Q25/Q44/Q60/Q73 supply the durable boundaries and recoverable parent-or-child state."
+build_instruction: "Implement one live capacity controller in store.py. Before each atomic transition, measure A_t, derive and claim exact E_n, remeasure before each write, execute through one durable boundary, observe actual growth, then continue, reclaim eligible Cassette objects, or pause recoverably. Treat claims as coordination among Cassette writers, not as filesystem reservation against other applications. A whole fine-tune fails capacity only when its minimum splittable live transition cannot fit; unknown future output is not an admission failure."
+acceptance_check: "Prove that a short next step does not require the campaign peak; variable checkpoint growth is remeasured; concurrent Cassette claims do not overcommit; a crash yields the exact parent or child; active-claim, active-transaction, journal, user-owned, pinned, retained-root, and rollback-retained objects survive reclamation; only eligible Cassette-owned objects are reclaimed; a post-claim external free-space reduction or ENOSPC recovers parent or committed child and pauses before the next durable transition; no feasible next step pauses with no model-bearing write; and newly available capacity resumes from the same committed boundary."
 depends_on: [Q4, Q21, Q23, Q28, Q44]
-reopen_only_if: "A lifecycle phase owns storage absent from the equation."
+reopen_only_if: "A supported operation cannot expose an exact splittable next transition or needs recovery state not represented by E_n."
 ```
 
 ## Q54 — Revision and delta acquisition
@@ -1199,7 +1218,7 @@ question_id: Q60
 state: CLOSED
 decision: "Compilation is a resumable content transaction whose incomplete objects are never trusted by name, size, or prior process state—only by readback digest and a committed journal record."
 formal_contract:
-  symbols: "For each output page: PLAN -> ALLOCATE_TEMP -> WRITE -> READBACK_HASH -> COMMIT_PAGE_RECORD -> RELEASE_DEAD_SOURCE_EXTENT. Then WRITE_INDEX -> VERIFY_TOTAL_MAP -> WRITE_CANDIDATE_ROOT -> FULLFSYNC -> ATOMIC_GENERATION -> FULLFSYNC. Resume scans journal, rehashes only uncommitted or suspect pages, and reconstructs the remaining dependency frontier. GC deletes only unreachable temp extents after a valid root exists."
+  symbols: "For each output page: PLAN -> Q53_CLAIM -> ALLOCATE_TEMP -> WRITE -> READBACK_HASH -> COMMIT_PAGE_RECORD -> RELEASE_DEAD_SOURCE_EXTENT. The final claimed transition is Q53_CLAIM -> WRITE_INDEX -> VERIFY_TOTAL_MAP -> WRITE_CANDIDATE_ROOT -> FULLFSYNC -> ATOMIC_GENERATION -> FULLFSYNC. Every temporary allocation, release, index, root, and pointer publication is covered by its active next-step claim. Resume scans journal, rehashes only uncommitted or suspect pages, and reconstructs the remaining dependency frontier. GC deletes only unreachable temp extents after a valid root exists and never deletes an object referenced by an active claim, transaction, or journal."
   applicability: "Native layout, deterministic conversion, quantization, Q19-certified compilation, and incremental recompilation."
 evidence:
   - status: SPECIFIED
@@ -1396,15 +1415,16 @@ reopen_only_if: "A mandatory operation is mathematically inapplicable to a model
 ```yaml
 question_id: Q71
 state: CLOSED
+revised: 2026-09-02 for adaptive capacity claims; training dataflow is unchanged
 decision: "Training streams one deterministic parameter/state window at a time from D, keeps only the live forward/backward frontier in unified memory, and returns every persistent result to a candidate branch on D."
 formal_contract:
   symbols: "For accumulation window b: (1) read batch/token state D->UM; (2) for layers 1..L load validated parameter pages, forward, retain bounded activation checkpoint in UM or D, retire page unless backward-pinned; (3) for layers L..1 reload page and activation checkpoint, compute gradient slice, reduce in fixed order, write gradient slice D; (4) after all microbatches freeze-complete, join page gradient+optimizer+master from D, update once, write candidate page/state+journal to D, retire UM; (5) commit Q73. At all t, live_batch+live_pages+activations+gradient_slice+state_slice<=M."
-  applicability: "Activation checkpointing to D is allowed training state; internal storage is forbidden. I/O overlap may prefetch only a page whose reservation cannot evict the current dependency frontier."
+  applicability: "Activation checkpointing to D is allowed training state; internal storage is forbidden. I/O overlap may prefetch only a page covered by the active Q53 claim and may not evict the current dependency frontier."
 evidence:
   - status: INFERRED
     result: "E-007 supplies persistent state; E-004/E-005 supply asynchronous read and durable write boundaries."
 build_instruction: "Generate the schedule from graph dependencies, microbatch, optimizer, and Q47; trace every tensor production, location, consumer, retirement, and durable commit."
-acceptance_check: "Replay the trace into a byte-accurate simulator and live fixture, then assert no tensor exists outside its declared interval/location, no page is updated before full accumulation, and peak bounds match within allocator reserve."
+acceptance_check: "Replay the trace into a byte-accurate simulator and live fixture, then assert no tensor exists outside its declared interval or location, no page is updated before full accumulation, and each measured next-step claim covers its exact live writes and recovery state."
 depends_on: [Q23, Q25, Q47, Q60, Q70]
 reopen_only_if: "A supported training algorithm has a dependency that cannot be represented by a bounded layer/page frontier."
 ```
@@ -1434,13 +1454,13 @@ question_id: Q73
 state: CLOSED
 decision: "Training commits immutable child pages or deltas behind a candidate root and changes callability with one durable generation pointer; readers never observe a mixed revision."
 formal_contract:
-  symbols: "child_id=H(parent_id,training_manifest,ordered_page_or_delta_digests,semantic_manifest); dependency order={payloads -> indexes -> child root -> verification -> generation pointer}. Reader pins {generation,child_id,root_digest}. Rollback selects prior valid generation. GC may reclaim an object iff reachability from all retained roots and active reader pins is zero and rollback retention has expired."
+  symbols: "child_id=H(parent_id,training_manifest,ordered_page_or_delta_digests,semantic_manifest); dependency order={payloads -> indexes -> child root -> verification -> generation pointer}. Reader pins {generation,child_id,root_digest}. Rollback selects prior valid generation. GC may reclaim an object iff reachability from all retained roots and active reader pins is zero, rollback retention has expired, and no active Q53 claim, Q25 transaction, or Q60 journal references it."
   applicability: "Adapters, replacement pages, compiled-certificate/precision recovery, and consolidated revisions. Callable roots are immutable."
 evidence:
   - status: SPECIFIED
     result: "E-005 provides durable ordering; Q22/Q25 define version and transaction semantics."
 build_instruction: "Read back and hash every dependency, full-sync root and pointer in order, retain at least the previous valid generation, and isolate readers by pinned root."
-acceptance_check: "Crash at every dependency and pointer boundary while readers run; every reader must see all-parent or all-child bytes, remount must choose one valid generation, and GC must preserve pinned/rollback roots."
+acceptance_check: "Crash at every dependency and pointer boundary while readers run; every reader must see all-parent or all-child bytes, remount must choose one valid generation, and GC must preserve retained roots, active reader pins, rollback-retained objects, and every object referenced by an active Q53 claim, Q25 transaction, or Q60 journal."
 depends_on: [Q22, Q25, Q44, Q62, Q72]
 reopen_only_if: "The filesystem cannot sustain atomic generation replacement under the tested failure model."
 ```
@@ -1450,17 +1470,18 @@ reopen_only_if: "The filesystem cannot sustain atomic generation replacement und
 ```yaml
 question_id: Q74
 state: CLOSED
-decision: "A training job starts only after reserving capacity, memory, sustained bandwidth, write endurance, thermal duty cycle, power state, and completion time from measured class data."
+revised: 2026-09-02 for adaptive capacity only; endurance and other resource predicates are unchanged
+decision: "Training advances only while its next durable unit passes adaptive capacity control and its measured memory, bandwidth, endurance, thermal, power, and time predicates remain valid."
 formal_contract:
-  symbols: "JobEstimate={S_required,M_peak,read_bytes,logical_write_bytes,physical_write_p95,duration_p95,checkpoint_interval,power_required,thermal_duty}; admit iff Q47,Q53,Q28,Q42,Q48 all pass, external power is present for jobs >30min, free_after_job>=S_safety, projected lifetime<=0.80 endurance, and duration_p95<=declared job limit. Runtime throttles at 90% of thermal/write envelope and cancels safely at 100% before integrity risk."
-  applicability: "Unknown endurance rejects mutable training for that class. User cancellation is always allowed at a Q25 boundary; resource exhaustion is not allowed to discover itself through partial writes."
+  symbols: "JobEstimate={M_peak,read_bytes,logical_write_bytes,physical_write_p95,duration_p95,checkpoint_interval,power_required,thermal_duty}; NextStorage_t={A_t,E_next,active_claim,observed_checkpoint_growth,observed_write_amplification,recovery_boundary}. Admit each next durable unit iff Q47,Q53,Q28,Q42,Q48 pass for that unit, external power is present for jobs >30min, projected lifetime<=0.80 endurance, and duration_p95<=declared job limit. Runtime throttles at 90% of thermal/write envelope and cancels safely at 100% before integrity risk."
+  applicability: "Unknown endurance rejects mutable training for that measured drive-operation profile. User cancellation is always allowed at a Q25 boundary. Capacity pressure invokes Q53 reclamation or PAUSED_RECOVERABLE at the current committed boundary; it is not allowed to discover itself through an uncommitted partial write."
 evidence:
   - status: INFERRED
     result: "Q28/Q42/Q48/Q53 supply measured inputs and hard floors."
-build_instruction: "Emit estimate and reservation before acceptance, meter actual values per checkpoint, revise remaining estimate, and pause or rollback if any hard bound would be crossed."
-acceptance_check: "Inject low space, false endurance, power loss, thermal throttling, slow writes, and estimate drift; reject before start or stop at a recoverable boundary without crossing the reserved limit."
+build_instruction: "Emit the non-capacity job estimate before acceptance, apply Q53 to each next durable unit, meter actual values per checkpoint, revise later estimates and scheduling, and pause or rollback before any measured physical-resource predicate would be crossed."
+acceptance_check: "Inject low and newly available space, variable checkpoint growth, false endurance, power loss, thermal throttling, slow writes, and estimate drift; each next unit must proceed, reclaim, or pause at a recoverable boundary without crossing its active claim or another measured physical-resource predicate."
 depends_on: [Q28, Q42, Q47, Q48, Q53, Q70]
-reopen_only_if: "A supported storage class lacks a measurable resource needed by the predicate."
+reopen_only_if: "A supported drive-operation-plan profile lacks a measurable resource needed by the predicate."
 ```
 
 ## Q75 — Incremental recompilation after tuning
@@ -1558,15 +1579,16 @@ reopen_only_if: "A runtime or OS path prevents auditable local-only enforcement.
 ```yaml
 question_id: Q80
 state: CLOSED
-decision: "Cassette is complete only when every REQUIRED row in research/ACCEPTANCE_MATRIX.yaml (v3) is LIVE-PROVEN under its declared role and gate tier — Q68 FRONTIER_CLASS for thesis rows, floors plus the Q17 PARITY tier for mild-transform rows, correctness for TEACHER_CORRECTNESS rows, with the F4/F5 gates passed before any frontier compiled row ran — against its exact immutable model, Apple class, measured cartridge class, source, workload, training, protocol, failure, privacy, and code identity; no partial substitute changes the result."
+revised: 2026-09-02 under acceptance-matrix schema version 5
+decision: "Cassette is complete only when every REQUIRED row in research/ACCEPTANCE_MATRIX.yaml (v5) is LIVE-PROVEN under its declared role and gate tier — Q68 FRONTIER_CLASS for thesis rows, floors plus the Q17 PARITY tier for mild-transform rows, correctness for TEACHER_CORRECTNESS rows, with the F4/F5 gates passed before any frontier compiled row ran — against its exact immutable model, Apple class, operation-bound measured cartridge profile, source, workload, training, protocol, failure, privacy, and code identity; no partial substitute changes the result."
 formal_contract:
   symbols: "complete = all(row.status==PASS for row in matrix where row.required) and all(evidence(row)==LIVE_PROVEN) and Q78_exact_accounting_pass and Q79_offline_pass. Any NOT_RUN, BLOCKED, SKIPPED, SUBSTITUTED, SIMULATED, REMOTE, or FAIL required row implies complete=false. Thresholds are Q17/Q18/Q19/Q48/Q68/Q69/Q70."
-  applicability: "The matrix binds exact Q39 rows, all five named agent surfaces, source adapters, Tier-A/Tier-B training, long context/vision/reasoning/tools, disconnect/corruption/power/capacity failures, recovery, offline execution, provenance, and minimum-code proof."
+  applicability: "The matrix binds exact Q39 rows without requiring a media or connector class, all five named agent surfaces, source adapters, Tier-A/Tier-B training, long context/vision/reasoning/tools, disconnect/corruption/power/capacity failures, recovery, offline execution, provenance, and minimum-code proof."
 evidence:
   - status: CHOSEN
     result: "The matrix file encodes the full release boundary derived by Q1-Q79; all rows begin NOT_RUN because this research operation did not implement Cassette."
 build_instruction: "Make the matrix the release executable's sole completion authority, attach raw traces and immutable evidence IDs to each row, and prevent any UI, paper, diagnostic fixture, or manual override from setting PASS."
-acceptance_check: "From a clean source checkout and blank qualified cartridges, execute the complete matrix; delete or fail any single required row and require complete=false; restore all live passes and require one reproducible completion digest."
+acceptance_check: "From a clean source checkout and clean Cassette campaign roots on qualified APFS external drives, execute the complete matrix while preserving inventoried pre-existing content outside those roots; delete or fail any single required row and require complete=false; restore all live passes and require one reproducible completion digest."
 depends_on: [Q1, Q5, Q10, Q12, Q17, Q18, Q19, Q21, Q25, Q29, Q39, Q48, Q51, Q58, Q62, Q68, Q69, Q70, Q73, Q76, Q78, Q79]
 reopen_only_if: "The binding product result changes, a required public reference disappears, or live evidence exposes an omitted complete-system dimension."
 ```

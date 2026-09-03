@@ -1,8 +1,9 @@
 # Cassette — Remit
 
 Originally written as the project's opening statement. Amended 2026-08-05 to record my
-clarifications of intent, given in direct conversation. The amended text below is authoritative
-and governs every other document in this repository.
+clarifications of intent, then amended 2026-09-02 to make drive eligibility independent of media,
+connector, advertised speed, and nominal capacity. The text below is authoritative and governs
+every other document in this repository.
 
 ## Purpose
 
@@ -36,7 +37,11 @@ PHILOSOPHY.md.
 Cassette begins with these components:
 
 - macOS and an Apple architecture or device;
-- an external USB-C drive using flash or SSD storage;
+- a locally attached external drive that macOS can mount. Writable first-release cartridges use
+  APFS, but media type, storage class, connector, enclosure, brand, advertised speed, and nominal
+  capacity are descriptive labels, not eligibility requirements. A thumb drive, hard drive, SATA
+  SSD, NVMe SSD, or another locally attached medium may enter qualification; Cassette decides only
+  whether the measured drive can support the requested operation;
 - a very large yet downloadable large language model. Kimi K3 names the level of model I want
   Cassette to enable a consumer to run — a level, not a binding artifact. A pinned K3 revision
   remains the working exemplar and evidence anchor, and substituting a different open
@@ -129,12 +134,15 @@ model fixtures, loopback source fixtures, scratch cartridge images, and simulate
 classes. A fixture proves the machine behavior assigned to it; it is never presented as the final
 product or as live hardware evidence.
 
-S28 closes the agent-buildable machine and emits the live campaign runbook. Only the PHASE LIVE
-campaign after S28 may acquire the selected real model from a live source, write it to a real
-external drive, qualify that drive, and execute the real model, performance, training, protocol,
-and completion matrix with me present. This boundary is non-negotiable. A research obligation,
-audit finding, or dependency correction may not move live inputs or physical participation into an
-earlier step.
+S28 closes the agent-buildable machine and emits the live campaign runbook. L01.25 is the first
+PHASE LIVE step, but it remains fixture-only: it implements and deterministically proves adaptive
+capacity behavior without inspecting a physical drive, requesting a live source, moving a model
+byte, or requiring my participation. L01.5 begins physical qualification with me present. Only
+after L01.5 passes may L02 acquire the selected real model from a live source and write it to a
+qualified real external drive. Real-model execution, performance, training, protocol, and the
+completion matrix remain later PHASE LIVE work. This boundary is non-negotiable. A research
+obligation, audit finding, or dependency correction may not move live inputs or physical
+participation into an earlier step.
 
 ## Completion boundary
 
@@ -189,7 +197,7 @@ Do not replace those with product copy, a human tutorial, a recommendation menu,
 for a person to decide routine engineering details.
 
 Work remains within this remit only while it is directed toward the complete sequence described
-above: a selected full downloadable model, written directly to an external USB-C flash or SSD,
+above: a selected full downloadable model, written directly to a locally attached external drive,
 made usable through consumer Apple hardware at frontier-class capability as defined above,
 trainable there when the model permits it, available to the named agent systems, open source, and
 implemented with no more original executable code than the complete result actually requires.

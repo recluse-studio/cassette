@@ -7,22 +7,25 @@ drive can hold those bytes. Ordinary offloading cannot make the Mac consume them
 
 Cassette is an open-source system for changing that relationship. A user selects a complete model
 from Hugging Face, Ollama, Tinker, or another supported source; Cassette writes the authoritative
-model directly to an external USB-C flash or SSD cartridge, prepares the least invasive usable
+model directly to a locally attached external cartridge, prepares the least invasive usable
 representation, executes it through Apple Silicon with a mathematically certified bounded frontier
 in unified memory, and serves it to Codex, Ollama, OpenClaw, Hermes, or a custom agent endpoint.
 Compatible models can be fine-tuned or post-trained where they sit. The full checkpoint does not
 move onto internal storage, and no hosted model answers behind the curtain.
 
 > [!IMPORTANT]
-> Cassette is being built in public. The research and governance foundation and S01–S24 are
-> complete. The repository now executes its storage, acquisition, compilation, paging, inference,
-> broker, adapter, training, export, update, repair, and revision-removal paths against deterministic
-> generated or checked-in fixtures on scratch cartridges. The latest S24 closeout passed all 172
-> repository tests and the structural ledger with no violation.
+> Cassette is being built in public. The research and governance foundation and S01–S28 are
+> complete as historical machine evidence. The S28 revision passed 307 deterministic tests and the
+> structural ledger before live work began.
 >
-> S25 is next. No PHASE MACHINE step has downloaded a live model, contacted a live model service,
-> touched a physical external drive, or established F4/F5 quality, scale, or service performance.
-> Cassette is not yet a user-ready release, and the complete release matrix remains `NOT_RUN`.
+> On 2026-09-02, the storage contract changed before any live model write. L01.25 must now
+> implement and prove adaptive next-transition capacity control and remove storage-media, class,
+> connector, and nominal-capacity admission gates using fixtures only; L01.5 then qualifies
+> operation-bound physical-drive paths with the principal present. The prior
+> S28 proof does not prove that amendment. No PHASE MACHINE step downloaded a live model, contacted
+> a live model service, touched a physical external drive, or established F4/F5 quality, scale, or
+> service performance. Cassette is not yet a user-ready release, and every live row remains
+> `NOT_RUN`.
 
 ## The complete product operation
 
@@ -59,7 +62,7 @@ and proof machinery underneath it.
 | Runtime inference and training are local to Apple hardware and the cartridge. | A remote API whose answer is presented as local execution. |
 | Model structure and physical access are changed when the hardware hierarchy requires it. | Ordinary memory mapping, swap, or layer-by-layer offload presented as the contribution. |
 | Kimi K3 names the frontier level and supplies a pinned evidence anchor. | A conveniently smaller model substituted for the stated achievement. |
-| Hardware support is expressed as measured Apple, storage, transport, filesystem, and thermal classes. | A product hard-coded to Drew's Mac, one LaCie drive, or the words “USB-C.” |
+| Any locally attached APFS drive may be measured; support binds the exact drive, operation, and plan. | A product hard-coded to Drew's Mac, one LaCie drive, NVMe, or one connector class. |
 | A complete source-to-agent operation, including compatible on-cartridge training. | A paper, simulator, benchmark harness, small-model demonstration, or UI standing in for the product. |
 | Minimum original executable code after correctness is satisfied. | Missing functionality renamed as simplicity. |
 
@@ -213,7 +216,7 @@ there is no partially callable model and no hidden full master on internal stora
 
 ## Current implementation
 
-The numbered implementation queue is complete through S24. The repository contains an executable
+The numbered implementation queue is complete through S28. The repository contains an executable
 machine scaffold and a deterministic interoperability system, not a user-facing Cassette release.
 Every result below is fixture-scale unless the row says otherwise.
 
@@ -243,19 +246,23 @@ Every result below is fixture-scale unless the row says otherwise.
 | S22 | Done | Training preflight, exact reservation, endurance and thermal admission, checkpoint metering, pause, recovery, and typed terminal refusal. |
 | S23 | Done | Generated 128-coordinate failure authority with durable-frontier and lifecycle preflight proof; concrete eight-operation replay remains assigned to S26. |
 | S24 | Done | Deterministic source-to-compiler replay, protected teacher traces, full and adapter export/re-import, named-adapter calls, exact revision deltas and rollback, and independently proved revision removal. |
+| S25 | Done | Deterministic invalidation closure, certified fixture compilation, both training tiers, and predicted resource-frontier curves. |
+| S26 | Done | Concrete replay of every matrix failure coordinate through the eight product operations, with the live rows retained as `NOT_RUN`. |
+| S27 | Done | Complete $J$ accounting and removal proof for the schema-version-4 machine baseline. |
+| S28 | Done | Historical machine closeout and the original PHASE LIVE handoff; the 2026-09-02 amendment now requires renewed L01.25 proof. |
 
 The remediated S24 tree passed all 172 tests on arm64 macOS. The clean ledger reported 9,439
 product lines, 6,949 test lines, 615 tool lines, and 109 generated lines, with five exact direct
 dependency pins, one process, and one authored language. Ten Q26 and Q54 refusal guards were also
 removed one at a time; each removal failed the fixture that names its contract.
 
-The boundary remains physical and explicit. PHASE MACHINE has used deterministic model fixtures,
-loopback source servers, scratch cartridge images, and simulated recorded storage classes. It has
-not made a live source request, downloaded a selected model, inspected attached storage or a local
-model cache, touched a physical external drive, or measured a real model against its laboratory
-reference. S25 must now prove invalidation, deterministic certified compilation, Tier-A and Tier-B
-integration, and resource-frontier curves on fixture material. S26–S28 close the machine before
-PHASE LIVE begins. No UI has been built.
+The boundary remains physical and explicit. PHASE MACHINE used deterministic model fixtures,
+loopback source servers, scratch cartridge images, and simulated drive profiles. It made no live
+source request, downloaded no selected model, inspected no attached storage or local model cache,
+touched no physical external drive, and measured no real model against its laboratory reference.
+S25–S28 closed that historical machine baseline. The 2026-09-02 contract amendment now requires a
+new L01.25 machine proof and L01.5 physical qualification before PHASE LIVE may move a model byte.
+No UI has been built.
 
 ## Build path
 
@@ -277,11 +284,13 @@ release:
    certificate recovery, metering, resource admission, checkpoints, interruption, and recovery.
 7. **S23–S24 — failure authority and machine interchange, done:** generated failure coordinates,
    protected teacher traces, export/re-import, agent calls, revision deltas, and exact removal.
-8. **S25 — next:** deterministic invalidation closure, independently certified end-to-end fixture
+8. **S25 — done:** deterministic invalidation closure, independently certified end-to-end fixture
    compilation, both training tiers, and mathematical resource-frontier curves.
-9. **S26–S28 — machine closeout:** concrete failure replay through all eight operations, final $J$
-   and removal proof, and the generated PHASE LIVE runbook.
-10. **L01–L05 — one live campaign after S28:** qualify real storage classes, acquire real pinned
+9. **S26–S28 — machine closeout, done:** concrete failure replay through all eight operations, final
+   $J$ and removal proof, and the generated PHASE LIVE runbook.
+10. **L01.25–L05 — next live campaign:** implement and prove adaptive capacity and liberal
+    APFS-drive admission with fixtures, qualify each exact drive-operation-plan profile with the
+    principal present, acquire real pinned
     models, execute the 3–8B and 20–120B gates, run frontier training, protocol, failure, offline,
     and privacy rows, and produce one reproducible Q80 completion digest.
 
@@ -308,7 +317,7 @@ Twelve evidence records separate public artifact observations, specifications, m
 inferences, and choices. The research used reproducible product classes and immutable public
 artifacts; it did not inspect Drew's current Mac, attached drives, model cache, accounts, or client
 configuration and call that general evidence. The acceptance matrix expands the final claim across
-source services, Apple classes, storage classes, model revisions, workloads, training operations,
+source services, Apple classes, operation-bound drive profiles, model revisions, workloads, training operations,
 named agent protocols, failures, offline execution, privacy, and exact code accounting. Its result
 remains `NOT_RUN` until every required live row passes.
 
@@ -324,7 +333,7 @@ remains `NOT_RUN` until every required live row passes.
 | [research/EVIDENCE.md](research/EVIDENCE.md) | Immutable model observations, hardware and format contracts, derived bounds, and falsified claims. |
 | [research/ACCEPTANCE_MATRIX.yaml](research/ACCEPTANCE_MATRIX.yaml) | The machine-readable definition of a complete first release; currently `NOT_RUN`. |
 | [AGENTS.md](AGENTS.md) | The only repository instruction authority: architecture, minimum-code objective, tests, writes, and commit law. |
-| [IMPLEMENTATION.md](IMPLEMENTATION.md) | The ordered and resumable S00–S28 machine phase and L01–L05 live campaign. |
+| [IMPLEMENTATION.md](IMPLEMENTATION.md) | The ordered and resumable S00–S28 machine phase and L01.25–L05 live campaign. |
 | [BUILD_STORY.md](BUILD_STORY.md) | The attributed human–agent exchange that produced and corrected the specification and build. It is testimony, not a changelog. |
 | [errors.py](errors.py) | Canonical typed error vocabulary. |
 | [sources.py](sources.py) | Source resolution, credentials, metadata trust, preflight, and resumable direct-to-cartridge transfer. |

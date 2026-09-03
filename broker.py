@@ -30,17 +30,22 @@ from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
 from store import (
     ArtifactIdentity,
-    CapacityReservation,
+    CapacityClaim,
+    CapacityCoordinator,
+    CapacityTransition,
     GenerationPin,
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     commit_generation,
+    complete_capacity_claim,
     digest_bytes,
+    execute_claimed_write,
     export_revision as export_store_revision,
     load_root,
     page_locations,
     recover_generation,
     remove_revision as remove_store_revision,
+    pause_capacity_claim,
     verify_root_content,
 )
 from trainer import adapter_merge_material
@@ -50,7 +55,6 @@ PREPARE_OPERATION = "prepare"
 PHASES = (
     "EMPTY",
     "RESOLVED",
-    "RESERVED",
     "ACQUIRING",
     "SOURCE_VERIFIED",
     "PLANNED",
@@ -59,7 +63,7 @@ PHASES = (
     "PUBLISHED",
     "ACTIVE",
 )
-_MUTABLE_PHASES = frozenset(PHASES[:8])
+_MUTABLE_PHASES = frozenset(PHASES[:PHASES.index("PUBLISHED")])
 _TERMINAL_STATES = frozenset({"SUCCEEDED", "CANCELLED", "FAILED"})
 _TERMINAL_EVENTS = frozenset({"completed", "cancelled", "failed"})
 _OPERATION_ID = re.compile(r"op-[0-9a-f]{64}")
@@ -90,35 +94,32 @@ _CHECKPOINT_FIELDS = {
     "RESOLVED": frozenset({
         "source_lock", "parent_root", "metadata_digest", "requirements_digest",
     }),
-    "RESERVED": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
-    }),
     "ACQUIRING": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
     }),
     "SOURCE_VERIFIED": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials",
     }),
     "PLANNED": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials", "plan_digest",
     }),
     "PREPARING": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials", "plan_digest",
     }),
     "EXEC_VERIFIED": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials", "plan_digest", "source_verification", "candidate_root", "page_digests",
     }),
     "PUBLISHED": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials", "plan_digest", "source_verification", "candidate_root", "page_digests",
         "generation",
     }),
     "ACTIVE": frozenset({
-        "source_lock", "parent_root", "metadata_digest", "requirements_digest", "capacity",
+        "source_lock", "parent_root", "metadata_digest", "requirements_digest",
         "partials", "plan_digest", "source_verification", "candidate_root", "page_digests",
         "generation",
     }),
@@ -130,9 +131,25 @@ class AcquisitionContext:
     """Live authorities required to resume one Q5 preparation from its durable checkpoint."""
 
     adapter: SourceAdapter
-    reservation: CapacityReservation
+    capacity_controller: CapacityCoordinator
     transfers: Mapping[str, tuple[TransferExtent, TransferExtent]]
     cartridge: str | Path
+
+    def __post_init__(self) -> None:
+        """Bind acquisition writes to one concrete coordinator for this cartridge filesystem."""
+
+        if not isinstance(self.capacity_controller, CapacityCoordinator):
+            _reject(
+                "INVALID_REQUEST",
+                "acquisition:context",
+                "a concrete CapacityCoordinator is required",
+            )
+        if not self.capacity_controller.owns(self.cartridge):
+            _reject(
+                "INVALID_REQUEST",
+                "acquisition:context",
+                "capacity coordinator does not own the acquisition cartridge filesystem",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,8 +484,42 @@ class CanonicalBroker:
     def __init__(self, operation_log: str | Path):
         self.operation_log = Path(operation_log)
         self._owner_fd: int | None = None
+        self._capacity_coordinator = CapacityCoordinator(self.operation_log)
         try:
-            self.operation_log.mkdir(parents=True, exist_ok=True)
+            missing = []
+            directory = self.operation_log
+            while not directory.exists():
+                if directory == directory.parent:
+                    _reject(
+                        "DURABILITY_UNSUPPORTED",
+                        "broker:operation-log",
+                        "operation log has no existing filesystem parent",
+                    )
+                missing.append(directory)
+                directory = directory.parent
+            for directory in reversed(missing):
+                transition = CapacityTransition(
+                    "broker-operation-log",
+                    f"operation-log-directory:{directory.name}",
+                    pointer_bytes=0,
+                    declared_writes=1,
+                    write_bytes=(0,),
+                )
+                claim = self._claim_log_transition(transition)
+                try:
+                    execute_claimed_write(
+                        claim, lambda directory=directory: directory.mkdir(exist_ok=True)
+                    )
+                    descriptor = os.open(directory.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(descriptor)
+                    finally:
+                        os.close(descriptor)
+                    complete_capacity_claim(claim)
+                except Exception:
+                    if claim.active:
+                        pause_capacity_claim(claim, "operation-log directory did not reach its durable boundary")
+                    raise
         except OSError as error:
             _reject("DURABILITY_UNSUPPORTED", "broker:operation-log", f"operation-log creation failed: {error}")
         self.operation_log = self.operation_log.resolve()
@@ -1358,7 +1409,7 @@ class CanonicalBroker:
         self,
         request: dict,
         cartridge: str | Path,
-        reservation: CapacityReservation,
+        capacity_controller: CapacityCoordinator,
     ) -> dict:
         """Execute one Q26 export whose request binds the exact root and target schema."""
 
@@ -1381,7 +1432,7 @@ class CanonicalBroker:
                 else None
             )
             return export_store_revision(
-                cartridge, operation_id, plan, reservation, merged
+                cartridge, operation_id, plan, capacity_controller, merged
             )
 
         return await self.execute(
@@ -1394,7 +1445,8 @@ class CanonicalBroker:
         cartridge: str | Path,
         delta: dict,
         payloads: Mapping[str, bytes],
-        reservation: CapacityReservation,
+        capacity_controller: CapacityCoordinator,
+        publication_controller: CapacityCoordinator,
     ) -> dict:
         """Publish only the exact Q54 target whose request binds its base and delta digest."""
 
@@ -1420,13 +1472,15 @@ class CanonicalBroker:
                     invariant="Q54: exact callable base before delta publication",
                 )
             candidate = apply_store_delta(
-                cartridge, operation_id, base_root, delta, payloads, reservation
+                cartridge, operation_id, base_root, delta, payloads, capacity_controller
             )
             pin = commit_generation(
                 cartridge,
                 operation_id,
                 candidate,
                 expected_parent_root=base_root,
+                capacity_controller=publication_controller,
+                operation_id=operation_id,
             )
             return {
                 "generation": pin.generation,
@@ -1444,7 +1498,7 @@ class CanonicalBroker:
         request: dict,
         cartridge: str | Path,
         reachability: dict,
-        reservation: CapacityReservation,
+        capacity_controller: CapacityCoordinator,
     ) -> dict:
         """Execute exact revision removal only through its request-bound reachability proof."""
 
@@ -1460,13 +1514,14 @@ class CanonicalBroker:
                 or arguments.get("reachability_digest") != reachability.get("reachability_digest")
             ):
                 _reject("INVALID_REQUEST", operation_id, "removal request is detached from its reachability proof")
-            return remove_store_revision(
+            result = remove_store_revision(
                 cartridge,
                 operation_id,
                 request.get("target"),
                 reachability,
-                reservation,
+                capacity_controller,
             )
+            return result
 
         return await self.execute(
             request, lambda: asyncio.to_thread(remove), cancellable=False
@@ -1494,6 +1549,8 @@ class CanonicalBroker:
             except asyncio.CancelledError:
                 raise
             except CassetteError as error:
+                if error.code == "CAPACITY_EXCEEDED" and error.retryability == "retryable":
+                    return self._operation(self._paused(self._load(operation_id)))
                 return self._operation(self._failed(self._load(operation_id), error))
 
     async def run_acquisition(self, request: dict, context: AcquisitionContext) -> dict:
@@ -1554,18 +1611,7 @@ class CanonicalBroker:
         revision = _source_from(checkpoint["source_lock"], operation_id)
         if context.adapter.kind != revision.source_kind:
             _reject("INVALID_REQUEST", operation_id, "adapter differs from the durable source lock")
-        if phase != "RESOLVED":
-            observed_capacity = self._capacity(context.reservation, operation_id)
-            if observed_capacity != checkpoint["capacity"]:
-                _reject(
-                    "IDEMPOTENCY_CONFLICT",
-                    operation_id,
-                    "live reservation differs from the durable capacity commitment",
-                )
         if phase == "RESOLVED":
-            checkpoint["capacity"] = self._capacity(context.reservation, operation_id)
-            return self._phase(record, "RESERVED", checkpoint)
-        if phase == "RESERVED":
             return self._phase(record, "ACQUIRING", checkpoint)
         if phase == "ACQUIRING":
             async def acquire():
@@ -1584,7 +1630,7 @@ class CanonicalBroker:
                         artifact,
                         extents[0],
                         extents[1],
-                        context.reservation,
+                        context.capacity_controller,
                     ))
                 return [
                     _partial_record(artifact.path, partial)
@@ -1619,6 +1665,8 @@ class CanonicalBroker:
                     _compiler_extents(revision, context.transfers, operation_id),
                     context.cartridge,
                     checkpoint["plan_digest"],
+                    capacity_coordinator=context.capacity_controller,
+                    operation_id=operation_id,
                 ),
                 cancellable=True,
             )
@@ -1640,6 +1688,8 @@ class CanonicalBroker:
                     operation_id,
                     checkpoint["candidate_root"],
                     expected_parent_root=checkpoint["parent_root"],
+                    capacity_controller=context.capacity_controller,
+                    operation_id=operation_id,
                 ),
                 cancellable=False,
             )
@@ -1889,23 +1939,6 @@ class CanonicalBroker:
             _exact_digest(checkpoint["parent_root"], object_id, "parent root")
         _exact_digest(checkpoint["metadata_digest"], object_id, "metadata digest")
         _exact_digest(checkpoint["requirements_digest"], object_id, "requirements digest")
-        if phase >= PHASES.index("RESERVED"):
-            capacity = checkpoint["capacity"]
-            if not isinstance(capacity, dict) or set(capacity) != {
-                "device_bytes", "safety_bytes", "phase_totals", "repair_bytes", "required_bytes",
-            }:
-                _reject("ROOT_INVALID", object_id, "capacity checkpoint has an incorrect field set")
-            values = [
-                capacity["device_bytes"], capacity["safety_bytes"], capacity["repair_bytes"],
-                capacity["required_bytes"],
-            ]
-            if (
-                any(type(value) is not int or value < 0 for value in values)
-                or not isinstance(capacity["phase_totals"], list)
-                or not capacity["phase_totals"]
-                or any(type(value) is not int or value < 0 for value in capacity["phase_totals"])
-            ):
-                _reject("ROOT_INVALID", object_id, "capacity checkpoint contains invalid byte counts")
         if phase >= PHASES.index("SOURCE_VERIFIED"):
             _partials_from(checkpoint["partials"], revision, object_id)
         if phase >= PHASES.index("PLANNED"):
@@ -1940,21 +1973,27 @@ class CanonicalBroker:
             _exact_digest(generation["child_id"], object_id, "published revision identity")
             _exact_digest(generation["root_digest"], object_id, "published root")
 
-    @staticmethod
-    def _capacity(reservation: object, operation_id: str) -> dict:
+    def _claim_log_transition(self, transition: CapacityTransition) -> CapacityClaim:
+        """Claim one exact broker-log transition through its own filesystem coordinator."""
+
         if (
-            not isinstance(reservation, CapacityReservation)
-            or not reservation.active
-            or reservation.operation_id != operation_id
+            not isinstance(self._capacity_coordinator, CapacityCoordinator)
+            or not self._capacity_coordinator.owns(self.operation_log)
         ):
-            _reject("CAPACITY_EXCEEDED", operation_id, "active reservation is not bound to this operation")
-        return {
-            "device_bytes": reservation.device_bytes,
-            "safety_bytes": reservation.safety_bytes,
-            "phase_totals": list(reservation.phase_totals),
-            "repair_bytes": reservation.repair_bytes,
-            "required_bytes": reservation.required_bytes,
-        }
+            _reject(
+                "INVALID_REQUEST",
+                transition.operation_id,
+                "operation-log capacity coordinator does not own the log filesystem",
+            )
+        claim = self._capacity_coordinator(transition)
+        if not claim.active:
+            _reject(
+                "CAPACITY_EXCEEDED",
+                transition.operation_id,
+                "operation-log next transition is paused for recoverable capacity",
+                retryability="retryable",
+            )
+        return claim
 
     def _operation(self, record: dict, *, validate_record: bool = True) -> dict:
         if validate_record:
@@ -2120,25 +2159,43 @@ class CanonicalBroker:
             _reject("OVERLOADED", operation_id, "operation record exceeds its fixed byte bound")
         path = self._path(operation_id)
         temporary = path.with_name(f".{path.name}.pending")
+        transition = CapacityTransition(
+            operation_id,
+            f"operation-log:{operation_id}",
+            journal_bytes=len(payload),
+            declared_writes=2,
+            write_bytes=(len(payload), 0),
+        )
+        claim = self._claim_log_transition(transition)
         try:
-            with temporary.open("wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-                command = getattr(fcntl, "F_FULLFSYNC", None)
-                if command is not None:
-                    fcntl.fcntl(handle.fileno(), command)
+            def write_temporary() -> None:
+                with temporary.open("wb") as handle:
+                    if handle.write(payload) != len(payload):
+                        raise OSError("operation-log temporary write was incomplete")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                    command = getattr(fcntl, "F_FULLFSYNC", None)
+                    if command is not None:
+                        fcntl.fcntl(handle.fileno(), command)
+
+            execute_claimed_write(claim, write_temporary)
             if temporary.read_bytes() != payload:
                 _reject("DURABILITY_UNSUPPORTED", operation_id, "operation-log readback changed")
-            os.replace(temporary, path)
+
+            execute_claimed_write(claim, lambda: os.replace(temporary, path))
             descriptor = os.open(self.operation_log, os.O_RDONLY)
             try:
                 os.fsync(descriptor)
             finally:
                 os.close(descriptor)
+            complete_capacity_claim(claim)
         except CassetteError:
+            if claim.active:
+                pause_capacity_claim(claim, "operation-log record did not reach its durable boundary")
             raise
         except OSError as error:
+            if claim.active:
+                pause_capacity_claim(claim, "operation-log record did not reach its durable boundary")
             _reject("DURABILITY_UNSUPPORTED", operation_id, f"operation-log commit failed: {error}")
 
     def _lock(self, operation_id: str) -> asyncio.Lock:

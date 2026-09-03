@@ -20,24 +20,24 @@ import pytest
 from broker import CanonicalBroker
 from errors import CassetteError
 from fixture_server import _FIXTURES, _SECRET, source_fixture_server
-from sources import SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
+from sources import SourceAdapter, transfer_artifact, transfer_state_bytes
 import sources as sources_module
 from store import (
     ArtifactIdentity,
-    CapacityPhase,
+    CapacityCoordinator,
+    CapacityTransition,
     CartridgeLifecycle,
     IdentityTuple,
     canonical_bytes,
     commit_generation,
     digest_bytes,
+    grant_transfer_extent,
     import_safetensors,
     initialize_cartridge,
     load_root,
     page_locations,
     pin_generation,
     read_tensor,
-    release_capacity,
-    reserve_capacity,
 )
 import store as store_module
 import trainer as trainer_module
@@ -49,7 +49,6 @@ CARTRIDGE_UUID = "23000000-0000-4000-8000-000000000023"
 FILESYSTEM_UUID = "23000000-0000-4000-8000-000000000024"
 WRONG_FILESYSTEM_UUID = "23000000-0000-4000-8000-000000000025"
 MODEL_PAYLOAD = b"cassette-s23-generated-model-payload"
-GIB = 1024**3
 
 EXPECTED_OPERATIONS = (
     "acquisition",
@@ -136,7 +135,17 @@ class _Outcome:
 def _failure_matrix() -> _Matrix:
     """Read the bounded failure_rows lists without admitting another YAML dependency."""
 
+    list_fields = {
+        "expand_over_operations", "injections", "phase_live_injections", "assertions",
+    }
+    required_fields = {"required", *list_fields}
+    metadata_fields = {
+        "approval_contract", "requalification_after_recovery",
+        "phase_live_operation_bindings", "operation_binding_rule",
+    }
+    expected_fields = required_fields | metadata_fields
     rows: dict[str, object] = {}
+    seen_fields: set[str] = set()
     current: str | None = None
     inside = False
     for line in MATRIX_PATH.read_text(encoding="utf-8").splitlines():
@@ -149,6 +158,12 @@ def _failure_matrix() -> _Matrix:
             continue
         if line.startswith("  ") and not line.startswith("    ") and ":" in line:
             name, value = line.strip().split(":", 1)
+            if name not in expected_fields or name in seen_fields:
+                raise AssertionError(f"failure_rows has an unsupported or duplicate field: {name}")
+            seen_fields.add(name)
+            if name in metadata_fields:
+                current = None
+                continue
             current = name
             if value.strip():
                 rows[name] = value.strip() == "true"
@@ -161,12 +176,13 @@ def _failure_matrix() -> _Matrix:
                 raise AssertionError(f"failure_rows.{current} mixes scalar and list values")
             value.append(line.removeprefix("    - "))
             continue
+        if current is None:
+            continue
         raise AssertionError(f"failure_rows contains unsupported syntax: {line!r}")
-    if set(rows) != {
-        "required", "expand_over_operations", "injections", "phase_live_injections",
-        "assertions",
-    }:
-        raise AssertionError(f"failure_rows has an incorrect field set: {sorted(rows)}")
+    if set(rows) != required_fields or seen_fields != expected_fields:
+        raise AssertionError(
+            f"failure_rows has an incorrect field set: rows={sorted(rows)}, seen={sorted(seen_fields)}"
+        )
     return _Matrix(
         required=rows["required"] is True,
         operations=tuple(rows["expand_over_operations"]),
@@ -480,27 +496,38 @@ os._exit(75)
     )
 
 
-def _capacity_before_outcome(operation: str, injection: str) -> _Outcome:
-    allocator_calls = []
-    code = _captured(lambda: reserve_capacity(
-        f"s23-{operation}-capacity-before",
-        device_bytes=100 * GIB,
-        allocatable_verified_free=8 * GIB,
-        phases=(CapacityPhase(candidate=1),),
-        reserve_extent=lambda length: allocator_calls.append(length) is None,
-        release_extent=lambda _: True,
+def _capacity_before_outcome(
+    operation: str, injection: str, cartridge: _Cartridge, monkeypatch
+) -> _Outcome:
+    coordinator = CapacityCoordinator(cartridge.path)
+    original = store_module.os.statvfs
+
+    def no_free(path):
+        snapshot = original(path)
+        values = list(snapshot)
+        values[4] = 0
+        return os.statvfs_result(values)
+
+    monkeypatch.setattr(store_module.os, "statvfs", no_free)
+    claim = coordinator(CapacityTransition(
+        f"s23-{operation}-capacity-before", "committed-parent", payload_bytes=1
     ))
-    assert allocator_calls == []
-    return _Outcome("CAPACITY_EXCEEDED", code)
+    assert claim.state == "PAUSED_RECOVERABLE"
+    return _Outcome("CAPACITY_EXCEEDED", "CAPACITY_EXCEEDED")
 
 
 def _capacity_during_outcome(operation: str, injection: str, cartridge: _Cartridge, monkeypatch) -> _Outcome:
     partials = cartridge.workspace / "partials"
     partials.mkdir(exist_ok=True)
-    path = partials / f"{operation}-{injection}"
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
-    os.ftruncate(descriptor, 4)
-    extent = TransferExtent(descriptor, 0, 4, f"s23-{operation}-capacity-during")
+    operation_id = f"s23-{operation}-capacity-during"
+    coordinator = CapacityCoordinator(cartridge.path)
+    extent = grant_transfer_extent(
+        cartridge.path,
+        operation_id,
+        "candidate",
+        4,
+        capacity_controller=coordinator,
+    )
     real_pwrite = os.pwrite
     writes = 0
 
@@ -513,13 +540,17 @@ def _capacity_during_outcome(operation: str, injection: str, cartridge: _Cartrid
 
     monkeypatch.setattr(sources_module.os, "pwrite", exhausted_pwrite)
     try:
+        claim = coordinator(CapacityTransition(
+            operation_id,
+            "transfer-payload",
+            payload_bytes=4,
+        ))
         code = _captured(
-            lambda: sources_module._pwrite_all(extent, 0, b"four", extent.operation_id)
+            lambda: sources_module._pwrite_all(extent, 0, b"four", extent.operation_id, claim)
         )
         assert writes == 2
     finally:
-        os.close(descriptor)
-        path.unlink(missing_ok=True)
+        os.close(extent.fd)
     return _Outcome("CAPACITY_EXCEEDED", code)
 
 
@@ -574,23 +605,15 @@ def _source_revision_outcome(
         operation_id = f"s23-{operation}-source-change"
         partials = cartridge.workspace / "partials"
         partials.mkdir(exist_ok=True)
-        data_path = partials / f"{operation}-{injection}.partial"
-        state_path = partials / f"{operation}-{injection}.transfer"
-        data_fd = os.open(data_path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
-        state_fd = os.open(state_path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
         state_bytes = transfer_state_bytes(artifact.size)
-        os.ftruncate(data_fd, artifact.size)
-        os.ftruncate(state_fd, state_bytes)
-        data_extent = TransferExtent(data_fd, 0, artifact.size, operation_id)
-        state_extent = TransferExtent(state_fd, 0, state_bytes, operation_id)
-        transfer_bytes = artifact.size + state_bytes
-        reservation = reserve_capacity(
-            operation_id,
-            device_bytes=100 * GIB,
-            allocatable_verified_free=8 * GIB + transfer_bytes,
-            phases=(CapacityPhase(inflight=transfer_bytes),),
-            reserve_extent=lambda length: length == 8 * GIB + transfer_bytes,
-            release_extent=lambda _: True,
+        coordinator = CapacityCoordinator(cartridge.path)
+        data_extent = grant_transfer_extent(
+            cartridge.path, operation_id, "data", artifact.size,
+            capacity_controller=coordinator,
+        )
+        state_extent = grant_transfer_extent(
+            cartridge.path, operation_id, "state", state_bytes,
+            capacity_controller=coordinator,
         )
         server.range_validator_overrides[("huggingface", artifact.path, 0)] = '"s23-v2"'
         try:
@@ -600,15 +623,12 @@ def _source_revision_outcome(
                 artifact,
                 data_extent,
                 state_extent,
-                reservation,
+                coordinator,
             )))
-            assert os.pread(data_fd, artifact.size, 0) == bytes(artifact.size)
+            assert os.pread(data_extent.fd, artifact.size, 0) == bytes(artifact.size)
         finally:
-            release_capacity(reservation)
-            os.close(data_fd)
-            os.close(state_fd)
-            data_path.unlink(missing_ok=True)
-            state_path.unlink(missing_ok=True)
+            os.close(data_extent.fd)
+            os.close(state_extent.fd)
     return _Outcome("SOURCE_REVISION_CHANGED", code)
 
 
@@ -676,7 +696,7 @@ def _inject(operation: str, injection: str, cartridge: _Cartridge, monkeypatch) 
     }:
         return _lifecycle_outcome(operation, injection, cartridge, monkeypatch)
     if injection == "insufficient_capacity_before_start":
-        return _capacity_before_outcome(operation, injection)
+        return _capacity_before_outcome(operation, injection, cartridge, monkeypatch)
     if injection == "insufficient_capacity_during_candidate_write":
         return _capacity_during_outcome(operation, injection, cartridge, monkeypatch)
     if injection in {"corrupt_page", "corrupt_index", "corrupt_root"}:

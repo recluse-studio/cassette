@@ -3,7 +3,6 @@
 
 import ast
 import asyncio
-from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -17,22 +16,21 @@ from broker import AcquisitionContext, CanonicalBroker, PHASES
 from compiler_fixture import artifact as compiler_artifact
 from errors import CODES, CassetteError
 import fixture_server as source_fixture
+import sources as source_module
+import store as store_module
 from fixture_server import source_fixture_server
 from sources import SourceAdapter, TransferExtent, transfer_state_bytes
 from store import (
-    CapacityPhase,
-    CapacityReservation,
+    CapacityCoordinator,
     canonical_bytes,
     digest_bytes,
+    grant_transfer_extent,
     model_identity,
-    release_capacity,
-    reserve_capacity,
 )
 
 SECRET = "s09-fixture-secret-never-serialize"
-GIB = 1024**3
 EXPECTED_PHASES = (
-    "EMPTY", "RESOLVED", "RESERVED", "ACQUIRING", "SOURCE_VERIFIED",
+    "EMPTY", "RESOLVED", "ACQUIRING", "SOURCE_VERIFIED",
     "PLANNED", "PREPARING", "EXEC_VERIFIED", "PUBLISHED", "ACTIVE",
 )
 
@@ -57,10 +55,63 @@ def _request(kind: str, identity: str, key: str) -> dict:
     }
 
 
-def _extent(path: Path, length: int, operation_id: str) -> tuple[int, TransferExtent]:
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
-    os.ftruncate(descriptor, length)
-    return descriptor, TransferExtent(descriptor, 0, length, operation_id)
+def _extent(
+    cartridge: Path,
+    extent_id: str,
+    length: int,
+    operation_id: str,
+    coordinator: CapacityCoordinator,
+) -> tuple[int, TransferExtent]:
+    """Obtain one store-owned transfer extent for the current cartridge path."""
+
+    extent = grant_transfer_extent(
+        cartridge,
+        operation_id,
+        extent_id,
+        length,
+        capacity_controller=coordinator,
+    )
+    return extent.fd, extent
+
+
+def test_q5_q53_broker_log_claims_directory_and_record_subwrites(tmp_path):
+    """Q5/Q53: broker-log creation and record publication use completed exact claims."""
+
+    log = tmp_path / "logs" / "nested" / "broker-log"
+    broker = CanonicalBroker(log)
+    try:
+        directory_claims = broker._capacity_coordinator.claims()
+        assert tuple(claim.transition.boundary_id for claim in directory_claims) == (
+            "operation-log-directory:logs",
+            "operation-log-directory:nested",
+            "operation-log-directory:broker-log",
+        )
+        for directory_claim in directory_claims:
+            assert directory_claim.transition.operation_id == "broker-operation-log"
+            assert directory_claim.transition.write_bytes == (0,)
+            assert directory_claim.history == (
+                "MEASURE", "PLAN_NEXT", "CLAIM_NEXT", "MEASURE", "MEASURE", "EXECUTE",
+                "DURABLE_BOUNDARY", "OBSERVE",
+            )
+            assert not directory_claim.active
+
+        request = _request("huggingface", digest_bytes(b"s16-broker-log"), "s16-broker-log")
+        issued = broker.issue(request)
+        record_path = log / f"{issued['operation_id']}.json"
+        record_bytes = record_path.read_bytes()
+        record_claim = broker._capacity_coordinator.claims()[-1]
+
+        assert record_claim.transition.operation_id == issued["operation_id"]
+        assert record_claim.transition.boundary_id == f"operation-log:{issued['operation_id']}"
+        assert record_claim.transition.journal_bytes == len(record_bytes)
+        assert record_claim.transition.write_bytes == (len(record_bytes), 0)
+        assert record_claim.history == (
+            "MEASURE", "PLAN_NEXT", "CLAIM_NEXT", "MEASURE", "MEASURE", "EXECUTE", "MEASURE",
+            "EXECUTE", "DURABLE_BOUNDARY", "OBSERVE",
+        )
+        assert not record_claim.active
+    finally:
+        broker.close()
 
 
 def _terminal_events(events: tuple[dict, ...]) -> list[dict]:
@@ -106,28 +157,20 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
             issued = broker.issue(request)
             assert broker.issue(request) == issued
             operation_id = issued["operation_id"]
-            artifact_path = incoming / names[kind]
-            state_path = incoming / f"{names[kind]}.transfer"
-            data_fd, data_extent = _extent(artifact_path, len(payloads[kind]), operation_id)
-            state_bytes = transfer_state_bytes(len(payloads[kind]))
-            state_fd, state_extent = _extent(state_path, state_bytes, operation_id)
-            reserved = []
-            released = []
-            reservation = reserve_capacity(
-                operation_id,
-                device_bytes=100 * GIB,
-                allocatable_verified_free=8 * GIB + len(payloads[kind]) + state_bytes,
-                phases=(CapacityPhase(inflight=len(payloads[kind]) + state_bytes),),
-                reserve_extent=lambda length: reserved.append(length) is None,
-                release_extent=lambda length: released.append(length) is None,
+            coordinator = CapacityCoordinator(cartridge)
+            data_fd, data_extent = _extent(
+                cartridge, "data", len(payloads[kind]), operation_id, coordinator
             )
-            assert reserved == [reservation.required_bytes]
+            state_bytes = transfer_state_bytes(len(payloads[kind]))
+            state_fd, state_extent = _extent(
+                cartridge, "state", state_bytes, operation_id, coordinator
+            )
             location = {"cartridge": cartridge}
 
             def context():
                 return AcquisitionContext(
                     SourceAdapter(kind, server.base_url, {f"keychain:s16/{kind}": SECRET}.get),
-                    reservation,
+                    CapacityCoordinator(location["cartridge"]),
                     {names[kind]: (data_extent, state_extent)},
                     location["cartridge"],
                 )
@@ -204,7 +247,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                 ]
                 assert phase_traces[kind] == list(EXPECTED_PHASES)
 
-                for phase in EXPECTED_PHASES[:8]:
+                for phase in EXPECTED_PHASES[:EXPECTED_PHASES.index("PUBLISHED")]:
                     cancelled = CanonicalBroker(clone(phase, "cancelled"))
                     result = cancelled.cancel(operation_id)
                     assert result["state"] == "CANCELLED"
@@ -215,7 +258,7 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     assert len(_terminal_events(cancel_events)) == 1
                     cancelled.close()
 
-                for phase in EXPECTED_PHASES[:8]:
+                for phase in EXPECTED_PHASES[:EXPECTED_PHASES.index("PUBLISHED")]:
                     paused_log = clone(phase, "paused")
                     paused = CanonicalBroker(paused_log)
                     paused_operation = paused.pause(operation_id)
@@ -249,43 +292,24 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                     paused.close()
 
                 assert tuple(AcquisitionContext.__dataclass_fields__) == (
-                    "adapter", "reservation", "transfers", "cartridge",
+                    "adapter", "capacity_controller", "transfers", "cartridge",
                 )
                 with pytest.raises(TypeError):
                     AcquisitionContext(
                         context().adapter,
-                        reservation,
+                        context().capacity_controller,
                         context().transfers,
                         location["cartridge"],
                         lambda: "caller-authored preparation",
                     )
-
-                changed_capacity = CapacityReservation(
-                    operation_id,
-                    reservation.device_bytes,
-                    reservation.safety_bytes,
-                    (reservation.phase_totals[0] + 1,),
-                    reservation.repair_bytes,
-                    reservation.required_bytes + 1,
-                    lambda _length: True,
-                )
-                changed = CanonicalBroker(clone("RESERVED", "changed-capacity"))
-                changed_result = asyncio.run(changed.advance_acquisition(
-                    request, replace(context(), reservation=changed_capacity)
-                ))
-                assert changed_result["state"] == "FAILED"
-                assert changed_result["error"]["code"] == "IDEMPOTENCY_CONFLICT"
-                changed.close()
 
                 assert not any(
                     SECRET.encode() in path.read_bytes() for path in log.iterdir() if path.is_file()
                 )
             finally:
                 broker.close()
-                release_capacity(reservation)
                 os.close(data_fd)
                 os.close(state_fd)
-            assert released == [reservation.required_bytes]
             request_traces[kind] = [
                 request_record["path"].split("/")[-1]
                 if request_record["path"].startswith(f"/source/{kind}/")
@@ -296,6 +320,72 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
 
     assert len({tuple(trace) for trace in phase_traces.values()}) == 1
     assert all(trace == ["resolve", "artifacts", "metadata", "requirements", "range"] for trace in request_traces.values())
+
+
+def test_q5_capacity_pause_resumes_from_the_exact_transfer_boundary(tmp_path, monkeypatch):
+    """Q5/Q53: a feasible first transition need not fit the whole transfer and resumes exactly."""
+
+    kind = "huggingface"
+    fixture = source_fixture._FIXTURES[kind]
+    name = f"{kind}-resume.safetensors"
+    payload, material, _ = compiler_artifact(
+        kind, fixture["locator"], fixture["revision"], fixture["license"], name
+    )
+    identity = model_identity(material)
+    monkeypatch.setitem(source_fixture._FIXTURES[kind], "identity", identity)
+    monkeypatch.setattr(source_module, "_TRANSFER_CHUNK_BYTES", max(1, len(payload) // 3))
+
+    with source_fixture_server(
+        artifact_overrides={kind: ((name, payload, '"s16-resume-v1"'),)}
+    ) as server:
+        log = tmp_path / "resume-log"
+        cartridge = tmp_path / "resume-cartridge"
+        cartridge.mkdir()
+        incoming = cartridge / "incoming"
+        incoming.mkdir()
+        broker = CanonicalBroker(log)
+        request = _request(kind, identity, "s16-capacity-resume")
+        operation_id = broker.issue(request)["operation_id"]
+        coordinator = CapacityCoordinator(cartridge)
+        data_fd, data_extent = _extent(cartridge, "data", len(payload), operation_id, coordinator)
+        state_bytes = transfer_state_bytes(len(payload))
+        state_fd, state_extent = _extent(cartridge, "state", state_bytes, operation_id, coordinator)
+        context = AcquisitionContext(
+            SourceAdapter(kind, server.base_url, {f"keychain:s16/{kind}": SECRET}.get),
+            CapacityCoordinator(cartridge),
+            {name: (data_extent, state_extent)},
+            cartridge,
+        )
+        try:
+            async def exercise_capacity_pause():
+                assert (await broker.advance_acquisition(request, context))["state"] == "RUNNING"
+                assert broker.events(operation_id)[-1]["payload"]["phase"] == "RESOLVED"
+                assert (await broker.advance_acquisition(request, context))["state"] == "RUNNING"
+                assert broker.events(operation_id)[-1]["payload"]["phase"] == "ACQUIRING"
+                original_statvfs = store_module.os.statvfs
+
+                def no_free(path):
+                    snapshot = original_statvfs(path)
+                    values = list(snapshot)
+                    if Path(path).resolve().is_relative_to(cartridge.resolve()):
+                        values[4] = 0
+                    return os.statvfs_result(values)
+
+                monkeypatch.setattr(store_module.os, "statvfs", no_free)
+                paused_operation = await broker.advance_acquisition(request, context)
+                monkeypatch.setattr(store_module.os, "statvfs", original_statvfs)
+                assert paused_operation["state"] == "PAUSED"
+                assert broker.resume(operation_id)["state"] == "RUNNING"
+                completed_operation = await broker.run_acquisition(request, context)
+                return paused_operation, completed_operation
+
+            paused, completed = asyncio.run(exercise_capacity_pause())
+            assert paused["state"] == "PAUSED"
+            assert completed["state"] == "SUCCEEDED"
+        finally:
+            broker.close()
+            os.close(data_fd)
+            os.close(state_fd)
 
     ownership_log = tmp_path / "ownership-log"
     owner = CanonicalBroker(ownership_log)
