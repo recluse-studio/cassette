@@ -10,7 +10,7 @@ the source-entry L01.5 gate; they make no live header request and move no model 
 row remains `NOT_RUN`.
 
 IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
-stages, L05-L10. L01 is in progress; the previously completed recovery proof is retained inside it.
+stages, L05-L10. L01 is DONE and L02 is next; the completed recovery proof remains retained.
 Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
 F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
 separate from the matrix phase labels used below. Consolidated preparation has no verified duration
@@ -28,14 +28,19 @@ physical drive.
 |---|---|
 | Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
 | Deferred-live projection, `s26-deferred-live-v4` | `blake3:21a64f61e1c68a444c6b8ef5903caf2d9451ad1ba652d33820fac3e0e4a19f6c` |
-| S26 machine baseline, amendment pending | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
-| S27 complete J report | `sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343` |
+| Amended S26 machine fixture | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
+| S27 complete J report | `sha256:f53067994cfda7c568b2e02747bd470af6c45b9d1913008b00186017b5871200` |
 
-The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The current machine outcome is
+The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The matrix-declared deferral outcome is
 `CONTRACT_AMENDMENT_REQUIRES_L01_25_MACHINE_PROOF`; the retained machine-baseline claim is
 `PHASE_MACHINE_BASELINE_CONTRACT_AMENDMENT_PENDING`. Its exact prohibited-evidence labels are
 `F4_PASS`, `F5_PASS`, `frontier_capability`, `hosted_comparison`, and
 `physical_drive_performance`. Those labels require the live evidence named below.
+
+Consolidated L01 supplies the current machine proof for the amended capacity and eligibility
+controls: 315 tests passed with zero skips, all twelve removal/bypass triples passed, and the ledger
+reported zero violations. Its exact source, artifact and review identities are in IMPLEMENTATION.md.
+The matrix retains its deferral declarations; every physical and real-model claim remains NOT_RUN.
 
 ## Coding time and independent verification
 

@@ -9,8 +9,8 @@ dependency-ordered, machine-checkable, resumable.
 
 The principal authorized repairs for the six findings in the repository-wide review. These
 repairs apply to the existing S07/S10/S13/S14/S16/S19 authorities. They do not execute or close a
-live session. Current machine acceptance remains open; historical DONE records do not certify
-the amended tree.
+live session. The figures below record the review baseline; the consolidated L01 closeout below records
+current acceptance of the repaired tree.
 
 | Finding and authority | Changed behavior | Discriminating fixture and observed result |
 |---|---|---|
@@ -1534,7 +1534,7 @@ steps:
 
 ## PREPARATION AND LIVE PROOF — four non-drive stages, then the drive campaign
 
-**L01 is in progress. There are four non-drive stages, L01-L04, followed by six drive/live
+**L01 is DONE; L02 is next. There are four non-drive stages, L01-L04, followed by six drive/live
 stages, L05-L10.** This grouping follows the principal's instruction to consolidate preparation.
 The previous count of 31 coding stages is superseded. The larger groups have no verified
 15–20-minute duration estimate.
@@ -1571,7 +1571,8 @@ Historical S01-S28 records remain unchanged. The completed recovery repair from 
 retained verbatim below with its source revision and review evidence. Its completed assertions do
 not become undone because the new L01 contains additional work. The attempted guard repair from
 former L02 remains incomplete: its failing probe and unaccepted candidate are retained off-tree;
-the checkout preserves the preceding source. New L02 names native execution, so requests referring
+the checkout then preserved the preceding source. Consolidated L01 subsequently completed the repair.
+New L02 names native execution, so requests referring
 to the earlier guard repair resolve to new L01, not to new L02.
 
 Matrix phase labels L01.25, L01.5 and L02-L05 remain unchanged and are separate from execution-stage
@@ -1617,7 +1618,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L01
+  next_step: L02
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -1669,38 +1670,111 @@ phase_live_queue:
         corrupt-root recovery produces the exact Q60/Q62 outcome without accepting corrupt bytes.
     - title: Enforce exact certificate and runtime boundaries
       inspected_code: pager.py:_expect_number; tools/ledger.py:_imports
-      work: Compare the rational certificate value before float conversion and detect computed acquisition
-        of MLX outside pager/trainer.
+      work: Compare the rational certificate value before float conversion and detect computed acquisition of
+        MLX outside pager/trainer.
       done_when: Unequal rationals that collide as floats are rejected; computed MLX imports outside the two
         owners fail the ledger. Each disabled guard makes its discriminator fail.
     - title: Close the capacity amendment and its projections
       inspected_code: store.py:claim_next_transition; store.py:resume_capacity_claim; store.py:select_reclaimable_objects;
         tools/genschema.py; tools/ledger.py
-      work: Use the existing adaptive claim/reclamation implementation, repair any failing matrix control,
-        regenerate schema-v5 deferrals and restore exact J/removal evidence.
+      work: Use the existing adaptive claim/reclamation implementation, repair any failing matrix control, regenerate
+        schema-v5 deferrals and restore exact J/removal evidence.
       done_when: Adaptive claims, concurrent capacity loss, reclamation exclusions, ENOSPC/resume and descriptive
         drive eligibility pass. Full suite and ledger pass with regenerated current projections.
-    done_when: Existing recovery proof remains valid; exact certificate/runtime guards and amended capacity
-      behavior pass; generated projections, full suite, ledger and J match the candidate.
+    done_when: Existing recovery proof remains valid; exact certificate/runtime guards and amended capacity behavior
+      pass; generated projections, full suite, ledger and J match the candidate.
     acceptance_boundary: Machine evidence from fixtures and real internal components. Physical drive and real-model
       results are owned by L05-L10.
     execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
       outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
-    timing_evidence: NOT_RUN
+    timing_evidence: Active coding duration was not measured continuously; the recorded 417.17 seconds is full-suite
+      execution time only.
     review_profile: bootstrap
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: IN_PROGRESS
-    attempts: []
+    status: DONE
+    attempts:
+    - id: L01-consolidated-1
+      source_commit: 0a413b7bb5b36f019c85130be2bec78ff336eb2d
+      outcome: FAIL
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated/full-proof.txt
+    - id: L01-consolidated-2
+      source_commit: db798bf3cfcf20ff9a768462ccd732bbf8c1e793
+      outcome: INCOMPLETE
+      cause: 900-second runner timeout
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated/full-proof-2.txt
+    - id: L01-consolidated-3
+      source_commit: f2dae08978f081eb5d8a1ae1d8b181d7d1257035
+      outcome: PASS
+      evidence_level: INTEGRATION
+      review_route: PASS_READY
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated/full-proof-3.txt
     retained_proof: The former 37-stage queue L01 recovery closeout is retained under retained_machine_evidence.
       Its passing work is not reopened by grouping.
-    next_action: 'Resolve exact certificate serialization and validation together: the interrupted former L02
-      candidate rejected the valid existing witness loss 401/100300 after float serialization. Then finish
-      both guard discriminators and the amended capacity/full-gate proof.'
-    discovered_scope: compiler.py:_number is the producer coupled to pager.py:_expect_number and generated
-      mathematical-certificate fields. The reproduced rounded-witness failure requires considering all three
-      together.
+    execution_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated
+    candidate_history:
+    - source_commit: 0a413b7bb5b36f019c85130be2bec78ff336eb2d
+      result: Full suite returned 313 passed and two coupled fixture failures; both were repaired.
+    - source_commit: db798bf3cfcf20ff9a768462ccd732bbf8c1e793
+      result: Four focused coupled checks passed; the full-suite runner reached its 900-second timeout.
+    - source_commit: f2dae08978f081eb5d8a1ae1d8b181d7d1257035
+      result: 'Complete proof passed: 315 tests, zero failures/skips and all twelve control/deletion/bypass triples.'
+    discovered_scope: Generated certificate/schema and S26/J artifacts follow their source changes. PHASE_LIVE_RUNBOOK.md
+      and IMPLEMENTATION.md record current identities and closure. Coupled S12/S14 fixture expectations follow
+      the exact certificate representation. tools/ledger.py raises only the proof-runner timeout and retains
+      completed suite output.
+    closed_utc: '2026-09-05T03:59:35.508304+00:00'
+    source_step_commit: f2dae08978f081eb5d8a1ae1d8b181d7d1257035
+    artifact_commit: 86aba00815b67b4a55733590fa6607fc67b740ff
+    review_envelope_sha256: b41e89fdbd3de4584f81f9fe918c50c331c96fc6b8c0c5e1d24ccd2f3d4feb61
+    closeout:
+    - clause: Q49/Q60/Q62 acquisition lifecycle and corrupt-root recovery remain valid.
+      test_or_probe: 'Full suite: tests/test_s26_phase_machine.py and tests/test_s19_compiler.py; retained predecessor
+        recovery controls.'
+      input: All 128 operation/failure coordinates, source-bound compiler recovery, truncated immutable roots/indexes
+        and interrupted pending roots.
+      expected: Broker records typed outcomes; recovery preserves exact parent/child and refuses corrupt immutable
+        bytes.
+      observed: All current cases pass. Broker/store hashes match the accepted predecessor; its 21 focused checks
+        and guard-removal results remain retained.
+    - clause: Q19 exact certificate claims survive derivation, storage and admission.
+      test_or_probe: tests/test_s19_compiler.py and tests/test_s13_pager.py; certificate-control.txt; review-replay.txt.
+      input: Identity target and diag(1,4) witness with independent loss 9/17; two rational confidence values
+        that both round to 0.95; nonfinite values and exact-scalar bounds.
+      expected: Preserve exact claims and reject unequal claims before float conversion; retain finite/bounded
+        admission.
+      observed: Compiler stores 9/17 exactly and pager admits it. Both float collisions reject, exact encodings
+        pass, and disabling exact comparison fails the discriminator. Nonfinite cases pass their rejection checks.
+    - clause: Q30 computed runtime acquisitions stay within pager.py and trainer.py.
+      test_or_probe: tests/test_s01_ledger.py::test_q30_computed_runtime_acquisition_stays_with_exact_owner_paths;
+        runtime-control.txt; control-reuse-check.json.
+      input: Eight direct/computed/aliased forms at compiler.py and tools/pager.py, two permitted owner controls
+        and three literal stdlib controls.
+      expected: Reject forbidden acquisitions and preserve permitted imports; the disabled guard must fail the
+        discriminator.
+      observed: Sixteen forbidden cases reject and five permitted cases pass. Disabling the guard fails; its
+        AST matches the reviewed implementation.
+    - clause: Q53 adaptive capacity and Q39-Q44 descriptive storage eligibility pass.
+      test_or_probe: tests/test_l01_25_capacity.py, tests/test_s07_integrity_capacity.py and regenerated tests/test_s26_machine_gate.py.
+      input: All ten adaptive-capacity and three storage-eligibility assertions, including concurrent claims,
+        space loss, ENOSPC, recovery and reclamation exclusions.
+      expected: Exact next-transition measurements govern admission; retained/user-owned objects survive; descriptive
+        media labels do not gate operations.
+      observed: All assertions pass through real store-owned paths with fixture boundary measurements. No physical-drive
+        performance claim is made.
+    - clause: Generated projections, complete suite, ledger and J match the frozen candidate.
+      test_or_probe: tools/ledger.py --prove-j; ledger-review.json; source-bound generated-schema and S26 fixture
+        comparisons.
+      input: Current schema/matrix, all 315 tests and each of the twelve mapped components under control, deletion
+        and executable bypass.
+      expected: Zero failures/skips/ledger violations, exact current projections and consequential removal proofs.
+      observed: 315 passed, zero skipped in 417.17 seconds. All 36 removal experiments have their expected outcomes.
+        Ledger reports zero violations and J=(0,0,11454,1,1,5,0,0,0). Same-agent read-only bootstrap review returned
+        PASS_READY.
+    proof_limit: Machine evidence only. No external drive qualification, source account, real-model download,
+      F4/F5 or release proof ran. Full suite executed on the source step commit; the artifact commit adds only
+      its generated J report.
   - id: L02
     title: Complete ordinary-source native model execution
     phase: NON_DRIVE_PREPARATION
