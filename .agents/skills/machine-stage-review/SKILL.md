@@ -14,14 +14,14 @@ redefine a stage.
 
 - Apply only to STATIC, FIXTURE, INTEGRATION, or PLATFORM evidence. Never mount a physical drive,
   use a credential, contact a live service, download a model, or claim `LIVE`.
-- L01-L11 alone use the bootstrap profile. Freeze an off-tree immutable manifest containing stage
+- L01-L26 and construction of L27 use the bootstrap profile under the queue. Evidence records inherit the target profile. Freeze an off-tree immutable manifest containing stage
   and attempt IDs, source commit and tree, lock, matrix, runbook, assertion-set and predecessor
   bootstrap-manifest digests, declared commands, raw outputs, and every inspected file digest. Do
   not require a campaign namespace, review lease, expansion registry, or dependency graph before the
   owning stage creates it. Use one off-tree atomic bootstrap-review head keyed by stage, attempt, and
   manifest digest. Each immutable review record names the current head and may compare and swap it
   once; reject a stale head or fork. Bootstrap review is read-only and permits no remediation.
-- L12, L13, L15, and later eligible machine work use the normal profile. Freeze stage ID, attempt
+- The integrated L27 candidate uses the normal profile once its bootstrap proof establishes the required machinery. L28-L31, POST-SELECTION-MACHINE-PASS within L32, and later eligible machine repairs use the normal profile. Resolve membership from the current queue; never apply this profile to live or reference-service work. Freeze stage ID, attempt
   ID, parent revision, tree, lock, matrix, runbook, expansion-registry, active dependency-graph,
   assertion-set, required-level, machine-attempt-manifest, and prior-review-envelope digests before
   inspection.

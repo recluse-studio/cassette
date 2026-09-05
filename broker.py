@@ -136,19 +136,13 @@ class AcquisitionContext:
     cartridge: str | Path
 
     def __post_init__(self) -> None:
-        """Bind acquisition writes to one concrete coordinator for this cartridge filesystem."""
+        """Require the concrete authority without resolving operation-bound paths yet."""
 
         if not isinstance(self.capacity_controller, CapacityCoordinator):
             _reject(
                 "INVALID_REQUEST",
                 "acquisition:context",
                 "a concrete CapacityCoordinator is required",
-            )
-        if not self.capacity_controller.owns(self.cartridge):
-            _reject(
-                "INVALID_REQUEST",
-                "acquisition:context",
-                "capacity coordinator does not own the acquisition cartridge filesystem",
             )
 
 
@@ -197,6 +191,23 @@ class _CacheAuthority:
 class _ControlStop(Exception):
     def __init__(self, action: str):
         self.action = action
+
+
+async def _await_completion(value):
+    """Acknowledge cancellation only after an executor-backed awaitable releases its work."""
+    pending = asyncio.ensure_future(value)
+    cancelled = False
+    while True:
+        try:
+            result = await asyncio.shield(pending)
+            break
+        except asyncio.CancelledError:
+            if pending.cancelled():
+                raise
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
 
 
 def _json_copy(value: object, object_id: str, field: str) -> object:
@@ -582,11 +593,11 @@ class CanonicalBroker:
         descriptor = self._owner_fd
         if descriptor is None:
             return
-        if self._scheduler_task is not None or self._leases or any(self._queues.values()):
+        if self._active or self._scheduler_task is not None or self._leases or any(self._queues.values()):
             _reject(
                 "OVERLOADED",
                 f"broker:{self.operation_log}",
-                "broker cannot close while scheduled work or a lease remains live",
+                "broker cannot close while an operation, scheduled work, or a lease remains live",
                 invariant="Q65: leases end before broker ownership",
                 retryability="retryable",
             )
@@ -1377,7 +1388,11 @@ class CanonicalBroker:
         *,
         cancellable: bool = True,
     ) -> dict:
-        """Run one non-preparation Q6 operation through the same error, event, and cancellation log."""
+        """Run one non-preparation Q6 operation through the canonical operation log.
+
+        Coroutine workers own their cancellation cleanup. Awaitables returned by synchronous
+        factories finish before the broker acknowledges cancellation or pause.
+        """
 
         operation = self.issue(request)
         operation_id = operation["operation_id"]
@@ -1583,6 +1598,12 @@ class CanonicalBroker:
         operation_id = record["operation_id"]
         if not isinstance(context, AcquisitionContext):
             _reject("INVALID_REQUEST", operation_id, "AcquisitionContext is required")
+        if not context.capacity_controller.owns(context.cartridge):
+            _reject(
+                "INVALID_REQUEST",
+                operation_id,
+                "capacity coordinator does not own the acquisition cartridge filesystem",
+            )
         descriptor = request["arguments"].get("source") if isinstance(request["arguments"], dict) else None
         defects = validate("source_descriptor", descriptor)
         if defects:
@@ -1596,7 +1617,7 @@ class CanonicalBroker:
                     _reject("SOURCE_REVISION_CHANGED", revision.locator, "enumeration changed after resolution")
                 metadata = await context.adapter.read_metadata(revision)
                 requirements = await context.adapter.license_and_auth(revision)
-                parent = await asyncio.to_thread(recover_generation, context.cartridge)
+                parent = await _await_completion(asyncio.to_thread(recover_generation, context.cartridge))
                 return {
                     "source_lock": _source_record(revision),
                     "parent_root": None if parent is None else parent.root_digest,
@@ -1670,14 +1691,18 @@ class CanonicalBroker:
                 ),
                 cancellable=True,
             )
-            checkpoint.update(await asyncio.to_thread(
-                self._verify_prepared,
+            checkpoint.update(await self._controlled(
                 operation_id,
-                context.cartridge,
-                revision,
-                checkpoint["plan_digest"],
-                prepared,
-                _compiler_extents(revision, context.transfers, operation_id),
+                lambda: asyncio.to_thread(
+                    self._verify_prepared,
+                    operation_id,
+                    context.cartridge,
+                    revision,
+                    checkpoint["plan_digest"],
+                    prepared,
+                    _compiler_extents(revision, context.transfers, operation_id),
+                ),
+                cancellable=True,
             ))
             return self._phase(record, "EXEC_VERIFIED", checkpoint)
         if phase == "EXEC_VERIFIED":
@@ -1794,7 +1819,9 @@ class CanonicalBroker:
             if inspect.iscoroutinefunction(worker):
                 return await worker()
             value = worker()
-            return await value if inspect.isawaitable(value) else value
+            if not inspect.isawaitable(value):
+                return value
+            return await _await_completion(value)
 
         signal = self._signal(operation_id)
         signal.clear()

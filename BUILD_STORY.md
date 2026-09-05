@@ -7114,3 +7114,28 @@ not claim that Codex authored or reworked that product code in this pass.
 Entry 78's claim that twenty-seven was “the right count” is superseded. The queue now names L01 as
 the next record, and L01 remains `TODO`. No physical or live-source record can become eligible before
 the integrated L12 proof and L13 machine gate pass; later record-specific prerequisites still govern it.
+
+#### Entry 80 — 2026-09-04, the review that stopped at the document gate
+
+Disquiet now carries the first shape of the Cassette method: one `IMPLEMENTATION.md`, a finite stage
+queue, imported skills, and a separate reviewer using the same Codex harness. The submitted S00 record
+names Astra as builder and Luna as reviewer. The migration changes documents and review material only;
+the game source remains frozen.
+
+The static inventory is substantial: 46 Swift files and 15,005 source lines, 13 scenes, 14 prefabs,
+833 approved raster assets, 144 animation states, 21 atlases, 11 mechanics, 13 audio recipes, and
+three ending records. The migration checker and four package validators pass. Those results are
+`STATIC`; no build, launch, playthrough, device observation, or audible review ran.
+
+The independent S00 review returned `CHANGES_REQUIRED`. The deprecated official plan still calls itself
+canonical and authorizes repository work, while its README still says to continue executing it. The
+declared G-DOC gate promises source-to-stage coverage, but the checker does not test that predicate;
+`game.json`, `save-schema.json`, and 15 prefab records have no explicit stage owner. The checker also
+never reads the submitted `candidateFiles` list, so this attempt's hashes were manually verified while
+the automated identity claim remained non-load-bearing.
+
+The imported reviewer entrypoints and preserved Cassette originals match their recorded snapshot. The
+mutable Cassette machine-review source has since changed, so that provenance is snapshot-bound. S00
+remains `IN_PROGRESS`. Astra must neutralize the stale route, make the two document checks load-bearing,
+submit a fresh attempt, and obtain a new review. No product defect was identified, and no downstream
+stage was closed.

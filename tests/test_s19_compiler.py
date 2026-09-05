@@ -24,6 +24,7 @@ import pager
 from sources import Artifact, ResolvedSource
 from store import (
     ArtifactIdentity,
+    CapacityCoordinator,
     IdentityTuple,
     PAGE_BYTES,
     canonical_bytes,
@@ -271,7 +272,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
     assert forbidden_calls == set()
     assert forbidden_imports == set()
     assert tuple(AcquisitionContext.__dataclass_fields__) == (
-        "adapter", "reservation", "transfers", "cartridge",
+        "adapter", "capacity_controller", "transfers", "cartridge",
     )
 
     # Q19: compiler derivation and pager admission use different elimination, determinant,
@@ -406,7 +407,8 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         shard_source = _source(shard_material)
         shard_plan = plan_revision(shard_source, shard_extents, sharded_cartridge)
         shard_prepared = prepare_revision(
-            shard_source, shard_extents, sharded_cartridge, shard_plan
+            shard_source, shard_extents, sharded_cartridge, shard_plan,
+            capacity_coordinator=CapacityCoordinator(sharded_cartridge), operation_id="s19-review",
         )
         shard_root = load_root(sharded_cartridge, shard_prepared.candidate_root)
         shard_bundle = shard_root["plans"][0]
@@ -444,7 +446,7 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         changed_plan = plan_revision(changed_source, changed_extents, changed_cartridge)
         os.pwrite(changed_fd, bytes([changed_payload[-1] ^ 1]), len(changed_payload) - 1)
         with pytest.raises(CassetteError) as changed:
-            prepare_revision(changed_source, changed_extents, changed_cartridge, changed_plan)
+            prepare_revision(changed_source, changed_extents, changed_cartridge, changed_plan, capacity_coordinator=CapacityCoordinator(changed_cartridge), operation_id="s19-review")
         assert changed.value.code == "SOURCE_REVISION_CHANGED"
         assert recover_generation(changed_cartridge) is None
         assert not (changed_cartridge / "roots").exists()
@@ -454,13 +456,13 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
 
     # Q4/Q19/Q40/Q58/Q62: the valid case derives its target from tensor bytes, accounts every
     # contribution, binds every proof object, and verifies every page before publication.
-    cartridge, source_path, descriptor, valid_payload, source, extents, _ = _case(tmp_path, "valid")
+    cartridge, source_path, descriptor, valid_payload, source, extents, manifest = _case(tmp_path, "valid")
     try:
         plan_digest = plan_revision(source, extents, cartridge)
         retained_source_path = source_path.with_name("descriptor-bound.safetensors")
         source_path.rename(retained_source_path)
         source_path.write_bytes(b"P" * len(valid_payload))
-        prepared = prepare_revision(source, extents, cartridge, plan_digest)
+        prepared = prepare_revision(source, extents, cartridge, plan_digest, capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-review")
         root = load_root(cartridge, prepared.candidate_root)
         plan, certificate, evidence, profile, compiled_identity = verify_bundle_structure(
             cartridge,
@@ -498,20 +500,15 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         assert contribution["certificate_id"] == certificate["certificate_id"]
 
         # Q5/Q19/Q62: a structurally valid root can still carry a false mathematical claim.
-        # The broker must invoke the pager's independent recomputation before generation exists.
+        # Source binding and broker verification must refuse the claim before publication.
         false_certificate = copy.deepcopy(bundle)
         false_certificate["certificate"]["condition_metrics"][0]["metric_digest"] = digest_bytes(
             b"schema-valid but mathematically false metric"
         )
         false_root = _forge(cartridge, root, false_certificate)
-        structurally_valid = verify_bundle_structure(
-            cartridge,
-            false_root,
-            source["identity"],
-            plan_digest,
-            {name: row["fd"] for name, row in extents.items()},
-        )
-        assert structurally_valid[1] == false_certificate["certificate"]
+        with pytest.raises(CassetteError) as source_mismatch:
+            verify_bundle_structure(cartridge, false_root, source["identity"], plan_digest)
+        assert source_mismatch.value.code == "CAPABILITY_MISMATCH"
         with pytest.raises(CassetteError) as false_claim:
             CanonicalBroker._verify_prepared(
                 "op-" + "f" * 64,
@@ -625,8 +622,8 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
         assert corrupt_root.value.code == "ROOT_INVALID"
         root_path.write_bytes(root_bytes)
 
-        # Q60: each deterministic content-addressed prefix can be left partial or absent. A
-        # repeated preparation repairs only uncommitted metadata and returns the exact root.
+        # Q60/Q62: corrupt immutable metadata must be refused. Missing uncommitted metadata
+        # and interrupted temporary writes can be reconstructed from the verified source.
         source_root_path = _content_path(cartridge, "roots", source_root_digest)
         source_index_path = _content_path(cartridge, "indexes", source_root_digest)
         resume_targets = (
@@ -636,17 +633,25 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
             (source_index_path, source_index_path.read_bytes()),
         )
         for path, payload in resume_targets:
-            path.write_bytes(payload[: max(1, len(payload) // 2)])
-            resumed = prepare_revision(source, extents, cartridge, plan_digest)
+            corrupt_payload = payload[: max(1, len(payload) // 2)]
+            path.write_bytes(corrupt_payload)
+            with pytest.raises(CassetteError) as corrupt_resume:
+                prepare_revision(source, extents, cartridge, plan_digest, capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-review")
+            assert corrupt_resume.value.code == "ROOT_INVALID"
+            assert path.read_bytes() == corrupt_payload
+            assert recover_generation(cartridge) is None
+            path.unlink()
+            resumed = prepare_revision(source, extents, cartridge, plan_digest, capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-review")
             assert resumed == prepared
             assert path.read_bytes() == payload
         segment_path.unlink()
-        resumed = prepare_revision(source, extents, cartridge, plan_digest)
+        resumed = prepare_revision(source, extents, cartridge, plan_digest, capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-review")
         assert resumed == prepared
         assert segment_path.read_bytes() == segment_bytes
         pending = root_path.with_name(f".{root_path.name}.pending")
+        root_path.unlink()
         pending.write_bytes(b"interrupted temporary")
-        assert prepare_revision(source, extents, cartridge, plan_digest) == prepared
+        assert prepare_revision(source, extents, cartridge, plan_digest, capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-review") == prepared
         assert not pending.exists()
         assert recover_generation(cartridge) is None
 
@@ -656,5 +661,73 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
 
         secret = b"credential-that-must-never-reach-the-compiler"
         assert not any(secret in path.read_bytes() for path in cartridge.rglob("*") if path.is_file())
+    finally:
+        os.close(descriptor)
+
+
+def test_q1_q19_q60_initial_proof_binds_source_values_and_composes_risk(tmp_path):
+    """Q1/Q19/Q60: initial proof binds verified source values and cannot assert an unproved joint risk."""
+    cartridge, _, descriptor, _, source, extents, manifest = _case(tmp_path, "source-proof")
+    try:
+        plan_digest = plan_revision(source, extents, cartridge)
+        prepared = prepare_revision(
+            source, extents, cartridge, plan_digest,
+            capacity_coordinator=CapacityCoordinator(cartridge), operation_id="s19-source-proof",
+        )
+        root = load_root(cartridge, prepared.candidate_root)
+        plan, certificate, evidence, profile, _ = verify_bundle_structure(
+            cartridge, prepared.candidate_root, source["identity"], plan_digest,
+        )
+        admit_schedule(plan, certificate, evidence, profile)
+        bundle = root["plans"][0]
+        # Q1/Q19/Q58/Q60: a self-consistent proof for different values must fail source binding.
+        substituted = copy.deepcopy(bundle)
+        substituted["evidence"]["target"]["source_values"] = [2, 0, 0, 1]
+        atom = substituted["evidence"]["atoms"][0]
+        atom["matrix"] = [[2, 0], [0, 1]]
+        atom["description"]["reconstruction"] = [[2, 0], [0, 1]]
+        atom["description"]["estimator_calibration"]["atom_norm_squared"] = "5"
+        substituted["certificate"] = compiler._certificate(
+            substituted["evidence"], manifest["eta_rep"], manifest["rank_budget"], manifest["operation_bounds"]
+        )
+        source_root = load_root(cartridge, bundle["source_root"])
+        substituted["contribution_map"] = compiler._contribution_map(
+            source_root, bundle["source_root"], substituted["certificate"],
+            manifest["target_tensor"], bundle["operator_inventory"], bundle["tensor_inventory"],
+        )
+        substituted["execution_plan"] = compiler._execution_plan(
+            source_root, bundle["source_root"], substituted["certificate"], profile,
+            substituted["contribution_map"], bundle["operator_inventory"], manifest["prior_mode_failures"], cartridge,
+        )
+        proof = {key: substituted[key] for key in (
+            "operator_inventory", "tensor_inventory", "evidence", "certificate", "profile", "contribution_map", "execution_plan",
+        )}
+        substituted["extent_metrics"] = compiler._extent_metrics(
+            source_root, proof, sum(location.length for location in page_locations(cartridge, bundle["source_root"]))
+        )
+        admit_schedule(substituted["execution_plan"], substituted["certificate"], substituted["evidence"], profile)
+        substituted_root = _forge(cartridge, root, substituted)
+        with pytest.raises(CassetteError) as substituted_source:
+            verify_bundle_structure(cartridge, substituted_root, source["identity"], plan_digest)
+        assert substituted_source.value.code == "CAPABILITY_MISMATCH"
+
+        # Q19: one declared number cannot prove dependence among three repeated events.
+        for bound, accepted in (("1/4", False), ("3/4", True)):
+            risk_evidence = copy.deepcopy(evidence)
+            risk_evidence["trace_contract"]["steps"] = [
+                {**risk_evidence["trace_contract"]["steps"][0], "step": step} for step in range(3)
+            ]
+            risk_evidence["execution_contract"]["risk_composition"] = {
+                "kind": "DECLARED_DEPENDENCE", "proof": {"total_bound": bound},
+            }
+            bounds = [{**row, "delta_exec": "1/4"} for row in manifest["operation_bounds"]]
+            if accepted:
+                derived = compiler._certificate(risk_evidence, manifest["eta_rep"], manifest["rank_budget"], bounds)
+                assert derived["resources"]["delta_exec_total"] == 0.75
+            else:
+                with pytest.raises(CassetteError) as unproved:
+                    compiler._certificate(risk_evidence, manifest["eta_rep"], manifest["rank_budget"], bounds)
+                assert unproved.value.code == "CAPABILITY_MISMATCH"
+
     finally:
         os.close(descriptor)

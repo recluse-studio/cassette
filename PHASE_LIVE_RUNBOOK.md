@@ -9,10 +9,10 @@ F4 selection and baseline metadata may establish the exact profile requests afte
 the source-entry L01.5 gate; they make no live header request and move no model payload. Every live
 row remains `NOT_RUN`.
 
-The six names L01.25, L01.5, and L02-L05 are matrix phase labels, not working-session IDs.
-`IMPLEMENTATION.md` expands them into flat session records. One record is one bounded agent
-session. A long broker operation has separate start and terminal-verification records; each
-matrix row, client mapping, training row, and physical injection receives its own record.
+IMPLEMENTATION.md contains L01-L31 coding stages and L32-L37 live-proof stages; L01 is next.
+The 15-20-minute target counts active agent coding only. Source qualification/acquisition belongs
+to L32, measured baselines to L33, F4 to L34, F5 to L35, the full runtime matrix to L36 and clean
+replay to L37. Operation receipts and matrix phases retain their exact meanings within those stages.
 
 ## Authority and identity
 
@@ -24,7 +24,7 @@ physical drive.
 
 | Record | Immutable identity |
 |---|---|
-| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:7fa655f3576e14749104e0fbb3d45d2527d66998dbaae83bbab84ba0086a94ca` |
+| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
 | Deferred-live projection, `s26-deferred-live-v4` | `blake3:7e2aad2c92504b7ed01ccac73961c9cc5b75f1a91dd386ce0335139b97e56efb` |
 | S26 machine baseline, amendment pending | `blake3:cfb70c3c29988a575fdf6d2e9ff79da93137d74fdf57129ce40174a8e3ce3993` |
 | S27 complete J report | `sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343` |
@@ -34,6 +34,19 @@ The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The current machine outcome 
 `PHASE_MACHINE_BASELINE_CONTRACT_AMENDMENT_PENDING`. Its exact prohibited-evidence labels are
 `F4_PASS`, `F5_PASS`, `frontier_capability`, `hosted_comparison`, and
 `physical_drive_performance`. Those labels require the live evidence named below.
+
+## Coding time and independent verification
+
+The coding budget and overrun rule are owned by IMPLEMENTATION.md. Test runs, downloads,
+compilation, training, physical measurements, review, evidence capture and waiting are outside
+the agent coding budget. Keep their owner stage IN_PROGRESS until its required proof completes.
+A long operation retains its durable receipt and recovery boundary; it does not require a new
+build stage for each checkpoint or result.
+
+Independent verification still recomputes every declared assertion from raw inputs. Use the
+existing broker and store paths for live work, and resumable verification where the evidence
+size requires it. Retain complete coverage and exact input identities. No timing limit permits
+a sample, copied digest or partial result to replace the required proof.
 
 ## Campaign controls
 
@@ -140,97 +153,39 @@ record only when every required raw byte was already sealed and no physical obse
 repeated. Automatic remediation uses the versioned ledger diff counter, commits the isolated child
 first, and runs every green probe, mutation, suite, and ledger check on that exact commit.
 
-The dependency graph is an append-only chain under one atomic head. L10 proves the builder and emits
-only a provisional preselection graph. L15 seals the first execution-eligible post-F4-selection
+The dependency graph is an append-only chain under one atomic head. L26 proves the builder and emits
+only a provisional preselection graph. POST-SELECTION-MACHINE-PASS seals the first execution-eligible post-F4-selection
 revision; every later materializer names and atomically succeeds the current head before its records
 can run. A successor preserves every inherited node, literal edge, evidence level, assertion owner,
 permission binding, and terminal-state meaning byte-for-byte; it may add only materializer-authorized
 nodes and edges. Any deletion, rewrite, or retargeting fails. Each attempt binds the active digest.
-Invalidation uses the latest sealed successor whose ancestry contains that attempt digest. L33 seals
-the final source graph; L34 may only mirror its LIVE induced subgraph for Q80.
+Invalidation uses the latest sealed successor whose ancestry contains that attempt digest. FINAL-PROVENANCE seals
+the final source graph; Q80-MATERIALIZE preserves LIVE predecessor reachability through intermediate frozen nodes, binding their exact machine/reference proofs in Q80.
 
-Before L01.25 machine implementation, perform these checks and retain their raw output:
+L01-L03 repair and close the amended baseline. L31 requires the
+complete green machine gate, J reproduction and Q78 proof before physical participation.
+POST-SELECTION-MACHINE-PASS refreshes the matrix/runbook identities and repeats the named
+machine checks after F4 selection. Retained S26/S28 artifacts remain historical evidence.
 
-1. Resolve the S28 close commit named in `IMPLEMENTATION.md` without checking it out. Record that
-   historical commit and lockfile digest, then verify that the amended working revision descends
-   from it and contains the current schema-version-5 contract.
-2. Run `.venv/bin/python -B -m pytest -q -p no:cacheprovider` and
-   `.venv/bin/python tools/ledger.py`. The recorded stale S27 J digest is the expected amendment
-   marker before L01.25; any other failure blocks the starting point. After L01.25 implementation,
-   both commands must pass on the amended revision before L01.5 begins or any live evidence exists.
-3. Verify the current acceptance-matrix and runbook identities above. Retain the schema-version-4
-   S26/S28 artifacts as historical evidence only. They do not prove the amended operation-plan profile or
-   adaptive-capacity behavior; L01.25 supplies that machine proof before any L01.5 write.
-
-After every machine-only change and before the first L01.5 write, run the complete suite and
-`tools/ledger.py` from the exact clean revision. Record the Q78 removal map, complete J report, and
-immutable source, tree, lock, matrix, and runbook digests. This pre-live Q78 checkpoint must be
-`PASS`. Q78 runs again after the live rows; the early checkpoint does not satisfy Q80 by itself.
-
-Before L01.5 physical qualification, perform these checks and retain their raw output:
-
-1. Record the principal's presence and authorization for the Apple machine and physical cartridge
-   used in qualification. Account credentials remain opaque references and must not enter
-   cartridge metadata, logs, or evidence payloads.
-2. Record the Apple class, OS build, physical cartridge identity, filesystem, transport path,
-   controller, bridge, enclosure, cable, port, capacity, health telemetry, power state, and free
-   capacity. Do not infer operation eligibility from a connector or product name.
-3. Check free space on the Mac's internal system data volume. This separate workstation-protection
-   rule is not a cartridge reservation or eligibility ceiling. If internal free space is below 10
-   percent, stop growth, close the campaign processes, and choose a lower-internal-storage route
-   before continuing.
-
-Before the first L01.5 campaign-root write, create one append-only campaign manifest containing the campaign ID, source commit, dependency
-lock, matrix identity, runbook identity, principal-presence record, clocks and time zone, Apple and
-operation-plan profile identities, model identities, baseline identities, operation IDs, evidence paths,
-row status, and terminal completion digest. Every raw trace must resolve from that manifest.
-
-Freeze each Q13 baseline after its model revision is pinned and before any teacher-trace capture or
-Q17, Q18, or Q68 comparison. The freeze records the clean source/tree, lock, matrix, runbook, and
-pre-live Q78 identities; the complete B_native candidate sets and deterministic C1/C2 selections;
-and one B_teacher plus B_hosted manifest for every applicable model. A hidden or unavailable hosted
-field makes that baseline `NON_EQUIVALENT`; it does not make the baseline disappear and cannot enter
-a ratio or parity gate.
-
-Use only these row states: `NOT_RUN`, `RUNNING`, `PASS`, `FAIL`, or `BLOCKED`. `NOT_RUN` means no
-qualifying execution began. `RUNNING` means a durable background operation is active. `PASS`
-requires every declared assertion at its required evidence level. `FAIL` includes an executed
-Q38-falsified gate or row. `BLOCKED` means an authority, approval, account, hardware, environment,
-or prerequisite is unavailable. `Q38_FALSIFIED` is a recorded outcome attached to `FAIL`; it never
-satisfies a PASS dependency. `SIMULATED`, `REMOTE`, `SUBSTITUTED`, and `SKIPPED` cannot satisfy a
-required row.
-
-The campaign result uses a separate vocabulary. `NOT_RUN` means no qualifying live campaign work
-began. `RUNNING` means a durable operation is active. `INCOMPLETE` means live work began, no
-operation is active, and required work remains without a terminal failure or campaign-wide block.
-`FAIL` means an executed required row failed, including Q38 falsification. `BLOCKED` means no
-eligible route to completion remains because a required prerequisite is unavailable. `PASS` means
-Q80 passed every required live replay and issued the completion digest. Every executed terminal or
-paused result has a sealed campaign bundle; only `NOT_RUN` may retain a null bundle.
+For each live attempt retain the exact source, tree, lock, matrix, runbook, expansion and graph
+identities with the approved templates, fresh operation ID, raw output and independent review.
+Only complete qualifying evidence closes an assertion. Missing inputs remain NOT_RUN or BLOCKED.
 
 ## L01.25 — implement and prove adaptive capacity
 
 First replace the superseded whole-operation reservation path with Q53's adaptive next-transition
-controller, including a feasible next step that begins without whole-campaign fit. In the same
-machine-only change, remove storage-media, storage-class, connector, and nominal-capacity admission
+controller, including a feasible next step that begins without whole-campaign fit. In separately named
+machine-only records, remove storage-media, storage-class, connector, and nominal-capacity admission
 gates from product code and generated schema inputs. Prove the claim, observation, safe reclamation,
 pause, resume, and gate removal with deterministic machine fixtures. This step requires no principal
 participation and may not inspect, mount, inventory, or write a physical drive; request a live source;
 or move a model byte.
 
-L01.25 passes only when its deterministic Q53 and storage-eligibility proofs pass and the amended
-source revision passes the full suite, ledger, and pre-live Q78 checkpoint. Exact certificate
-comparison, runtime-confinement detection, plan-derived tensor shapes, and the campaign evidence
-collector are completed before that checkpoint so no later machine change silently invalidates a
-physical profile. Collector construction is split into templates and bindings, inventory and
-telemetry, namespace sealing and capture failure, review history and leases, expansion and graph,
-invalidation and diff accounting, and one integrated hostile scratch-APFS proof. Machine attempts
-L01-L11 use its read-only bootstrap profile, whose off-tree manifests require only identities and
-artifacts available at that step; they require no not-yet-built namespace, campaign lease, registry,
-or graph and permit no remediation. A separate atomic bootstrap-review head admits at most five
-immutable review records for each stage, attempt, and manifest; stale heads and forks fail, and the
-fifth incomplete review returns to the queue. L12 is the first normal machine review and proves the
-bootstrap bytes through the completed machinery. Machine attempts create no physical-drive evidence.
+L01.25 passes only after L01-L31 establish the amended capacity and complete source, runtime,
+compiler, training, endpoint and campaign paths. The final machine gate runs the full suite,
+ledger, J and pre-live Q78 proof. Use the bootstrap machine-review profile while constructing
+L27, then verify that frozen integrated candidate under the normal profile. L28-L31 and
+POST-SELECTION-MACHINE-PASS use normal machine review. Physical proof begins afterward.
 
 ## L01.5 — qualify actual storage paths
 
@@ -253,7 +208,10 @@ atomic generation, a second `F_FULLFSYNC`, and remount.
 
 Qualification is repeated for every exact drive, assembled path, Apple host, operation, and plan
 used later. The initial L01.5 gate qualifies each selected model's header and acquisition plans plus
-the Ollama plan before any payload moves. Later compile, inference, training, execution, failure,
+the Ollama plan before any payload moves. F4-COMPILE-PLAN/F5-COMPILE-PLAN qualify intended compilation plans only. After F4-CERTIFICATE/F5-CERTIFICATE publishes a verified certificate,
+model_inference_qualification qualifies that exact F4/F5 runtime plan before any inference.
+Execution rows likewise qualify preparation before PREPARE_START and the actual runtime after
+PREPARE_VERIFY through RUN_QUALIFY_START/VERIFY. Training, execution, failure,
 export, repair, and removal records each materialize their own exact profiles. A later concrete plan or path must revalidate its dependent Q42 subset
 before that operation begins. Missing qualification blocks only that operation; changing a cable,
 port, host, plan, or mechanism never inherits an earlier profile by name.
@@ -270,10 +228,11 @@ model byte.
 
 Satisfy the three required source rows in their dependency order. First select the exact F4 model
 and immutable revision, amend the matrix, refresh the runbook identity, and repeat the machine gate
-before any header or payload byte moves. Then freeze every Q13 and Q67 baseline. Those metadata-only
-records establish the exact source plans; the source-entry L01.5 profiles then pass before the first
-live header call. This ordering is deliberate: selection defines the plan, qualification proves its
-physical path, and only then does L02 contact the source for headers or payload.
+before any header or payload byte moves. Then freeze Q13/Q67 reference and candidate inputs and the executable workload manifests.
+Source-entry profiles use the exact bounded header/acquisition wire plans and pass before source
+headers or payload. Candidate measurement and native selection follow acquisition; teacher capture
+then supplies the named compilation and comparison inputs. No certified inference plan is assumed
+before compilation. This order is defined by the literal queue dependencies.
 
 - `source_huggingface_all_immutable_models`
 - `source_ollama_content_addressed_reimport`
@@ -303,7 +262,8 @@ byte moves. The immutable Hugging Face and Ollama source obligations must have e
 before their consumers run. The derivative Tinker obligation closes later under its explicit Q70
 precondition. No source row is waived or replaced.
 
-Every header audit has its own bounded record. Every Hugging Face, F4, Ollama, and Tinker transfer
+Every header audit has its own bounded record. Native candidates and remote workload datasets
+have explicit source-acquisition dependencies under the same qualification and containment rules. Every Hugging Face, F4, Ollama, and Tinker transfer
 has separate start and terminal-verification records. A transfer start depends on its exact passing
 physical profile and header audit; a verify record binds the same logical operation started by its
 matching start.
@@ -349,7 +309,8 @@ tier:
 - `exec_c3_k3_compiled_portability`
 
 For each row, `QUALIFY_START`, `PREPARE_START`, and `RUN_START` bind separate exact cards.
-Preparation may include full F6 compilation, so it never inherits authority from qualification.
+Preparation may include full F6 compilation. RUN_QUALIFY_START/VERIFY then measures the actual
+prepared runtime plan; it cannot inherit the preparation profile.
 The corresponding verify records require no new action unless their sealed template says otherwise.
 
 For each row, execute `capability_complete_q16` and `sustained_q48`. The capability suite includes
@@ -395,6 +356,23 @@ equivalence, Q73 atomic child
 publication, Q74 endurance admission, named-client callability, and the Tier-B invalidation and
 clean-derivation requirements where applicable.
 
+### Training thermal proof
+
+The training_thermal family gives every declared training operation and exact host/drive/plan a
+PLAN, qualification, START and VERIFY. PLAN freezes the Q48 duty experiment before the normal
+TRAIN run. An exact qualifying interval from that run may be reused only with complete raw proof;
+otherwise the dedicated thermal START runs the same production training path. Every required
+interval lasts at least 120 minutes and writes at least twice the evidence-based SLC cache estimate,
+with above/below-duty-cycle evidence on each applicable Apple class and the unchanged Q74 endurance
+admission. Unknown mandatory cache evidence blocks the volume claim. An evidenced absence of SLC cache may
+produce a zero SLC estimate; the complete duration, duty-cycle and service proof still applies.
+TRAINING-THERMAL-ALL-PASS is required before FINAL-PROVENANCE and its producers belong in Q80 replay.
+
+Every inference, training, protocol and sustained operation keeps external networking disabled
+from activation through terminal evidence capture. Overlapping operations hold separate leases;
+restore networking only after the last lease closes under its exact cue. Training START capture
+never restores access while the job remains active. A missing interval requires a new attempt.
+
 ### Live failure rows
 
 Expand every live injection across acquisition, compilation, inference prefill, inference decode,
@@ -418,7 +396,9 @@ extends the graph with 320 base records plus the 112 requalification records fix
 Every coordinate uses the operation subject and source artifact fixed in the matrix, creates a
 fresh logical operation, and binds one exact starting physical profile. Its `ARM` record receives
 an exact ordinary write card before creating the durable pre-injection boundary. It has separate arm,
-injection, recovery, and verification records. The matrix deterministically adds requalification
+injection, recovery, and verification records. ARM holds the exact active failure locus until
+INJECT; the latter verifies the same operation and barrier before issuing its cue. An idle, terminal
+or wrong-boundary operation cannot satisfy an in-flight fault assertion. The matrix deterministically adds requalification
 start and verify records for disconnect, either reconnect, sleep/wake, bus reset, port migration,
 and read-only remount; it omits both for the two capacity injections and source-revision change. No
 runtime observation may alter that graph. A changed drive, cable, port, host, path, plan, or
@@ -451,16 +431,16 @@ replace the failed result with a simulator or a smaller model.
 
 Start from the clean source revision and clean Cassette campaign roots on qualified APFS external
 drives. Preserve and recheck the off-drive inventory of any pre-existing content. Materialize one
-flat, bounded replay-session record for the transitive LIVE prerequisite closure of every terminal
-record whose materialized `matrix_assertion_owners` list is nonempty, plus final Q79 and Q78. Reject
-any required live assertion without a literal owner, any required pre-live assertion without its
-sealed prior-proof binding, or either missing Q78 checkpoint before computing that closure. Preserve the exact induced
-dependency graph: every replay depends on the replays of its original predecessors, and every
-verify or recovery record binds the same fresh clean-root logical operation created by its replayed
-start. Record the original count, replay count, edge count, and graph digest; all must reproduce.
+flat replay record for every LIVE product/physical node in the full prerequisite closure of all
+required matrix and supplemental terminal owners plus FINAL-PROVENANCE. Traverse intermediate nodes of every
+evidence level first. Freeze declared machine and REFERENCE_ONLY records as exact input bindings,
+and preserve precedence between retained LIVE nodes across excluded intermediate nodes. Missing
+producer, owner, reference binding or either Q78 checkpoint rejects expansion. Include the new
+checkpoint, verification-work and training-thermal producers. Record exact source/replay counts,
+contracted edges and graph digests; all must reproduce.
 Re-run those records through production paths, preserving all raw traces and
-immutable evidence IDs. No L05 record may conceal several principal sessions. Re-run the
-complete Python suite and ledger, reproduce Q78 exact accounting, and complete the Q79 offline proof.
+immutable evidence IDs. Each L05 matrix-phase receipt binds its exact principal actions. These receipts remain within L37. Re-run the complete Python suite and
+ledger, reproduce Q78 exact accounting, and complete Q79. Final closure performs no hidden long job.
 
 Compute the completion digest only when every required expanded row is `PASS` and `LIVE_PROVEN`,
 both fixture gates passed before any frontier compiled row ran, every compiled row carries an

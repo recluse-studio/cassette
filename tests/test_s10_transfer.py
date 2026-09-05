@@ -66,6 +66,44 @@ def _run(adapter, revision, artifact, extents, capacity_coordinator, chunk_diges
 def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
     """Q51/Q53: each transfer transition uses the cartridge's concrete coordinator."""
 
+    # Q51/Q55: grants retain cartridge ownership at every directory and file boundary.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    original = outside / "part.extent"
+    original.write_bytes(b"original")
+    for component in ("extent", "operation", "transfers", "hardlink"):
+        owned = tmp_path / component
+        owned.mkdir()
+        if component == "transfers":
+            (owned / "transfers").symlink_to(outside, target_is_directory=True)
+        else:
+            (owned / "transfers").mkdir()
+            if component == "operation":
+                (owned / "transfers" / "operation").symlink_to(outside, target_is_directory=True)
+            else:
+                directory = owned / "transfers" / "operation"
+                directory.mkdir()
+                if component == "hardlink":
+                    os.link(original, directory / "part.extent")
+                else:
+                    (directory / "part.extent").symlink_to(original)
+        with pytest.raises(CassetteError) as redirected:
+            grant_transfer_extent(owned, "operation", "part", 8)
+        assert redirected.value.code == "CONTAINMENT_REJECTED"
+        assert original.read_bytes() == b"original"
+        assert sorted(item.name for item in outside.iterdir()) == ["part.extent"]
+
+    resumed_cart = tmp_path / "resumed"
+    resumed_cart.mkdir()
+    extent = grant_transfer_extent(resumed_cart, "operation", "part", 8)
+    os.pwrite(extent.fd, b"retained", 0)
+    os.close(extent.fd)
+    resumed = grant_transfer_extent(resumed_cart, "operation", "part", 8)
+    try:
+        assert os.pread(resumed.fd, 8, 0) == b"retained"
+    finally:
+        os.close(resumed.fd)
+
     payload = _payload(b"cassette-s10-capacity/", 2 * CHUNK + 17)
     artifact_name = "model.safetensors"
     cartridge = tmp_path / "scratch-cartridge"

@@ -3,6 +3,7 @@
 
 import json
 from pathlib import Path
+import tracemalloc
 
 from blake3 import blake3
 import pytest
@@ -13,6 +14,7 @@ from store import (
     CapacityCoordinator,
     CapacityTransition,
     IdentityTuple,
+    PAGE_BYTES,
     ReclaimableObject,
     complete_capacity_claim,
     create_repair_set,
@@ -145,6 +147,26 @@ def test_q53_next_transition_claims_observations_concurrency_recovery_and_reclai
 
 def test_q62_corrupt_payload_index_manifest_root_and_parity_repair(tmp_path):
     """Q62 acceptance: every named object fails before use and returns to its original digest."""
+
+    # Q2/Q47/Q62: verification must not retain a model-sized collection of valid pages.
+    large_source = tmp_path / "large.safetensors"
+    _write_safetensors(large_source, "large", b"".join(bytes([value]) * PAGE_BYTES for value in range(4)))
+    large_cart = tmp_path / "large-cartridge"
+    large_root = import_safetensors({large_source.name: large_source}, large_cart, _identity(large_source))
+    create_repair_set(large_cart, large_root, CapacityCoordinator(large_cart))
+    last_digest = load_root(large_cart, large_root)["tensor_maps"][0]["spans"][-1]["page_digest"]
+    last_location = next(location for location in page_locations(large_cart, large_root) if location.page_digest == last_digest)
+    tracemalloc.start()
+    try:
+        assert verify_revision(large_cart, large_root).available
+        with (large_cart / "segments" / last_location.segment_id[7:]).open("r+b") as handle:
+            handle.seek(last_location.offset)
+            handle.write(b"X")
+        assert verify_revision(large_cart, large_root).unavailable_pages == (last_digest,)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 3 * PAGE_BYTES, f"verification retained {peak} bytes for a four-page model"
 
     alpha = b"alpha-page-contents"
     beta = b"beta-page-contents"

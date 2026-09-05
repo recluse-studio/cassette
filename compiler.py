@@ -1108,6 +1108,8 @@ def _certificate(evidence: dict, eta_value: object, rank_value: object, bounds_v
         total_delta = 1 - survival
     elif risk["kind"] == "DECLARED_DEPENDENCE":
         total_delta = _fraction(risk["proof"].get("total_bound") if isinstance(risk["proof"], dict) else None, object_id, "declared risk bound")
+        if not min(Fraction(1), sum(deltas, Fraction(0))) <= total_delta <= 1:
+            _reject("CAPABILITY_MISMATCH", object_id, "a declared total alone cannot justify risk below the union bound")
     else:
         _reject("INVALID_REQUEST", object_id, "risk composition kind is unsupported")
     total_epsilon = sum(
@@ -3230,7 +3232,42 @@ def _verify_bundle_structure(
     if validate("mathematical_certificate", certificate) or validate("execution_plan", plan):
         _reject("ROOT_INVALID", root_digest, "compiled certificate or execution plan is structurally invalid")
     graph_digest = None
-    if bundle["version"] == _RECOMPILE_VERSION:
+    if bundle["version"] == _VERSION:
+        provenance = source_root["provenance"]
+        material = provenance["identity_material"]
+        texts = [
+            container["metadata"][_MANIFEST_KEY]
+            for container in provenance["containers"]
+            if _MANIFEST_KEY in container["metadata"]
+        ]
+        if not texts or any(text != texts[0] for text in texts):
+            _reject("CAPABILITY_MISMATCH", root_digest, "source compiler manifests are absent or disagree")
+        manifest = json.loads(texts[0], object_pairs_hook=_unique_object)
+        source = {
+            "identity": source_identity,
+            "source_alias": provenance["source_alias"],
+            "requested_revision": provenance["requested_revision"],
+            "artifacts": material["artifacts"],
+        }
+        values, shape = _decode_tensor(
+            source_root, cartridge, bundle["source_root"], manifest["target_tensor"]
+        )
+        expected_evidence = _canonical_copy(manifest["evidence"])
+        expected_evidence["target"]["source_values"] = values
+        if (
+            _digest(_compile_inputs(source, manifest, tensor_inventory)) != plan_digest
+            or expected_evidence["target"]["source_shape"] != shape
+            or bundle["evidence"] != expected_evidence
+            or certificate != _certificate(
+                expected_evidence, manifest["eta_rep"], manifest["rank_budget"], manifest["operation_bounds"]
+            )
+            or inventory != manifest["operator_inventory"]
+            or bundle["profile"] != manifest["profile"]
+            or bundle["contribution_map"]["target_tensor"] != manifest["target_tensor"]
+            or plan["prior_mode_failures"] != manifest["prior_mode_failures"]
+        ):
+            _reject("CAPABILITY_MISMATCH", root_digest, "compiled proof differs from its immutable source and preparation inputs")
+    elif bundle["version"] == _RECOMPILE_VERSION:
         specification = _specification_from_bundle(
             cartridge, root_digest, root, bundle
         )

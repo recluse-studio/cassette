@@ -1257,69 +1257,72 @@ def grant_transfer_extent(
     capacity_controller = _capacity_coordinator(
         cartridge, capacity_controller, operation_id
     )
-    directory = cartridge / "transfers" / operation_id
-    path = directory / f"{extent_id}.extent"
-    if path.exists():
+    directories = []
+    descriptor = None
+    try:
+        directories.append(os.open(cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+        for name in ("transfers", operation_id):
+            parent_fd = directories[-1]
+            try:
+                directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            except FileNotFoundError:
+                def create_directory(claim: CapacityClaim) -> None:
+                    execute_claimed_write(claim, lambda: os.mkdir(name, mode=0o700, dir_fd=parent_fd))
+                    os.fsync(parent_fd)
+
+                _run_claimed_writes(capacity_controller, CapacityTransition(
+                    operation_id, f"transfer-directory:{name}", declared_writes=1, write_bytes=(0,),
+                ), create_directory)
+                directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            directories.append(directory_fd)
+        directory_fd = directories[-1]
+        filename = f"{extent_id}.extent"
+        flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
         try:
-            metadata = path.stat()
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != length:
-                _capacity_reject(
-                    operation_id,
-                    f"existing transfer extent {extent_id!r} has another shape",
-                    "INVALID_REQUEST",
-                )
-            descriptor = os.open(path, os.O_RDWR)
-        except CassetteError:
-            raise
-        except OSError as error:
-            _capacity_reject(
-                operation_id,
-                f"existing transfer extent {extent_id!r} is unavailable: {error}",
-                "CARTRIDGE_DISCONNECTED",
-                "retryable",
-            )
-        return TransferExtent(descriptor, 0, length, operation_id)
+            descriptor = os.open(filename, flags, dir_fd=directory_fd)
+        except FileNotFoundError:
+            def create(claim: CapacityClaim) -> int:
+                created = execute_claimed_write(claim, lambda: os.open(
+                    filename, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd,
+                ))
+                try:
+                    def size_and_sync() -> None:
+                        os.ftruncate(created, length)
+                        os.fsync(created)
+                        command = getattr(fcntl, "F_FULLFSYNC", None)
+                        if command is not None:
+                            fcntl.fcntl(created, command)
 
-    missing = _missing_directories(directory)
-    write_bytes = (*((0,) * len(missing)), 0, 0)
-    transition = CapacityTransition(
-        operation_id,
-        f"transfer-extent:{extent_id}",
-        declared_writes=len(write_bytes),
-        write_bytes=write_bytes,
-    )
+                    execute_claimed_write(claim, size_and_sync)
+                    os.fsync(directory_fd)
+                    return created
+                except Exception:
+                    os.close(created)
+                    os.unlink(filename, dir_fd=directory_fd)
+                    raise
 
-    def create(claim: CapacityClaim) -> TransferExtent:
+            descriptor = _run_claimed_writes(capacity_controller, CapacityTransition(
+                operation_id, f"transfer-extent:{extent_id}", declared_writes=2, write_bytes=(0, 0),
+            ), create)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            _capacity_reject(operation_id, "transfer extent must be one owned regular file", "CONTAINMENT_REJECTED")
+        if metadata.st_size != length:
+            _capacity_reject(operation_id, f"existing transfer extent {extent_id!r} has another shape", "INVALID_REQUEST")
+        extent = TransferExtent(descriptor, 0, length, operation_id)
         descriptor = None
-        try:
-            for missing_directory in missing:
-                execute_claimed_write(claim, missing_directory.mkdir)
-                _sync_directory(
-                    missing_directory.parent,
-                    f"transfer-extent:{extent_id}",
-                )
-            descriptor = execute_claimed_write(
-                claim,
-                lambda: os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600),
-            )
-
-            def size_and_sync() -> None:
-                os.ftruncate(descriptor, length)
-                os.fsync(descriptor)
-                command = getattr(fcntl, "F_FULLFSYNC", None)
-                if command is not None:
-                    fcntl.fcntl(descriptor, command)
-
-            execute_claimed_write(claim, size_and_sync)
-            _sync_directory(directory, f"transfer-extent:{extent_id}")
-            return TransferExtent(descriptor, 0, length, operation_id)
-        except Exception:
-            if descriptor is not None:
-                os.close(descriptor)
-            path.unlink(missing_ok=True)
-            raise
-
-    return _run_claimed_writes(capacity_controller, transition, create)
+        return extent
+    except OSError as error:
+        _capacity_reject(
+            operation_id,
+            f"transfer extent {extent_id!r} could not be opened within its cartridge: {error}",
+            "CONTAINMENT_REJECTED" if error.errno in {errno.ELOOP, errno.ENOTDIR} else "CARTRIDGE_DISCONNECTED",
+        )
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        for directory_fd in reversed(directories):
+            os.close(directory_fd)
 
 
 def _active_claim(claim: CapacityClaim, operation_id: str) -> CapacityClaim:
@@ -7327,122 +7330,96 @@ def _integrity_operation(
                 replace(path, payload, digest, object_id)
                 _transition(states, transitions, object_id, "VALID")
 
-    parity_payloads = {}
+    # Q47/Q62: verification retains no model pages; repair retains only its current stripe.
     for stripe in record["stripes"]:
-        digest = stripe["parity_digest"]
-        object_id = f"parity:{digest}"
+        parity_digest = stripe["parity_digest"]
+        parity_id = f"parity:{parity_digest}"
+        parity_path = _repair_object_path(cartridge, parity_digest)
         try:
-            payload = _repair_object_path(cartridge, digest).read_bytes()
-            valid = digest_bytes(payload) == digest and len(payload) == stripe["length"]
+            parity_valid = parity_path.stat().st_size == stripe["length"] and _file_digest(parity_path) == parity_digest
         except OSError:
-            payload, valid = b"", False
-        if valid:
-            parity_payloads[digest] = payload
-        else:
-            _mark_corrupt(states, transitions, object_id)
-
-    page_payloads = {}
-    corrupt_pages = set()
-    segment_corrupt = set()
-    for segment_id in sorted({location.segment_id for location in locations.values()}):
-        path = cartridge / "segments" / _content_hex(segment_id, segment_id)
+            parity_valid = False
+        if not parity_valid:
+            _mark_corrupt(states, transitions, parity_id)
+        segment_id = stripe["segment_id"]
+        segment_path = cartridge / "segments" / _content_hex(segment_id, segment_id)
+        segment_state = f"segment:{segment_id}"
         try:
-            segment = path.read_bytes()
+            segment_valid = _file_digest(segment_path) == segment_id
         except OSError:
-            segment = b""
-        members = sorted(
-            (location for location in locations.values() if location.segment_id == segment_id),
-            key=lambda item: item.offset,
-        )
-        if digest_bytes(segment) != segment_id:
-            segment_id_state = f"segment:{segment_id}"
-            states[segment_id_state] = "VALID"
-            _mark_corrupt(states, transitions, segment_id_state)
-            segment_corrupt.add(segment_id)
+            segment_valid = False
+        if not segment_valid:
+            states[segment_state] = "VALID"
+            _mark_corrupt(states, transitions, segment_state)
+        members = [locations[digest] for digest in stripe["page_digests"]]
+        page_payloads = {}
+        corrupt_pages = []
         for location in members:
-            payload = segment[location.offset:location.offset + location.length]
-            if len(payload) == location.length and digest_bytes(payload) == location.page_digest:
-                page_payloads[location.page_digest] = payload
-            else:
-                object_id = f"page:{location.page_digest}"
-                _mark_corrupt(states, transitions, object_id)
-                corrupt_pages.add(location.page_digest)
-
-    page_records = {page["page_digest"]: page for page in record["pages"]}
-    stripe_records = {stripe["parity_digest"]: stripe for stripe in record["stripes"]}
-    if repair:
+            try:
+                payload = _read_page(cartridge, location)
+                if repair:
+                    page_payloads[location.page_digest] = payload
+                del payload
+            except CassetteError:
+                _mark_corrupt(states, transitions, f"page:{location.page_digest}")
+                corrupt_pages.append(location.page_digest)
+        if not repair:
+            continue
         for digest in sorted(corrupt_pages):
             object_id = f"page:{digest}"
             _transition(states, transitions, object_id, "REPAIRING")
-            page = page_records[digest]
+            length = locations[digest].length
             candidate = None
-            local_path = _repair_object_path(cartridge, digest)
             try:
-                local = local_path.read_bytes()
-                if len(local) == page["length"] and digest_bytes(local) == digest:
+                local = _repair_object_path(cartridge, digest).read_bytes()
+                if len(local) == length and digest_bytes(local) == digest:
                     candidate = local
+                del local
             except OSError:
                 pass
             source = sources.get(digest)
-            if candidate is None and source is not None and len(source) == page["length"]:
+            if candidate is None and source is not None and len(source) == length:
                 candidate = source
-            parity_digest = page["parity_digest"]
-            stripe = stripe_records[parity_digest]
             peers = [item for item in stripe["page_digests"] if item != digest]
-            if (candidate is None and parity_digest in parity_payloads
-                    and all(peer in page_payloads for peer in peers)):
+            if candidate is None and parity_valid and all(peer in page_payloads for peer in peers):
                 candidate = _xor_payloads(
-                    (parity_payloads[parity_digest], *[page_payloads[peer] for peer in peers]),
+                    (parity_path.read_bytes(), *[page_payloads[peer] for peer in peers]),
                     stripe["length"],
-                )[:page["length"]]
+                )[:length]
             if candidate is not None and digest_bytes(candidate) == digest:
                 page_payloads[digest] = candidate
             else:
                 _transition(states, transitions, object_id, "UNAVAILABLE")
-
-        for segment_id in sorted(segment_corrupt):
-            members = sorted(
-                (location for location in locations.values() if location.segment_id == segment_id),
-                key=lambda item: item.offset,
-            )
-            if all(member.page_digest in page_payloads for member in members):
-                cursor = 0
-                payload = bytearray()
-                for member in members:
-                    if member.offset != cursor:
-                        _integrity_reject(f"segment:{segment_id}", "segment page intervals are discontinuous")
-                    payload.extend(page_payloads[member.page_digest])
-                    cursor += member.length
-                _transition(states, transitions, f"segment:{segment_id}", "REPAIRING")
-                replace(
-                    cartridge / "segments" / _content_hex(segment_id, segment_id),
-                    bytes(payload),
-                    segment_id,
-                    f"segment:{segment_id}",
-                )
-                _transition(states, transitions, f"segment:{segment_id}", "VALID")
-                for member in members:
-                    object_id = f"page:{member.page_digest}"
-                    if states[object_id] == "REPAIRING":
-                        _transition(states, transitions, object_id, "VALID")
-
-        for stripe in record["stripes"]:
-            digest = stripe["parity_digest"]
-            object_id = f"parity:{digest}"
-            if states[object_id] != "CORRUPT":
-                continue
-            _transition(states, transitions, object_id, "REPAIRING")
-            if all(page in page_payloads for page in stripe["page_digests"]):
-                payload = _xor_payloads(
-                    tuple(page_payloads[page] for page in stripe["page_digests"]),
-                    stripe["length"],
-                )
-                if digest_bytes(payload) == digest:
-                    replace(_repair_object_path(cartridge, digest), payload, digest, object_id)
-                    parity_payloads[digest] = payload
+            del candidate
+        if not segment_valid and all(member.page_digest in page_payloads for member in members):
+            cursor = 0
+            payload = bytearray()
+            for member in members:
+                if member.offset != cursor:
+                    _integrity_reject(segment_state, "segment page intervals are discontinuous")
+                payload.extend(page_payloads[member.page_digest])
+                cursor += member.length
+            _transition(states, transitions, segment_state, "REPAIRING")
+            replace(segment_path, bytes(payload), segment_id, segment_state)
+            del payload
+            _transition(states, transitions, segment_state, "VALID")
+            for member in members:
+                object_id = f"page:{member.page_digest}"
+                if states[object_id] == "REPAIRING":
                     _transition(states, transitions, object_id, "VALID")
-                    continue
-            _transition(states, transitions, object_id, "UNAVAILABLE")
+        if not parity_valid:
+            _transition(states, transitions, parity_id, "REPAIRING")
+            if all(page in page_payloads for page in stripe["page_digests"]):
+                payload = _xor_payloads(tuple(page_payloads.values()), stripe["length"])
+                if digest_bytes(payload) == parity_digest:
+                    replace(parity_path, payload, parity_digest, parity_id)
+                    _transition(states, transitions, parity_id, "VALID")
+                else:
+                    _transition(states, transitions, parity_id, "UNAVAILABLE")
+                del payload
+            else:
+                _transition(states, transitions, parity_id, "UNAVAILABLE")
+        page_payloads.clear()
 
     unavailable = {
         digest for digest in required_pages

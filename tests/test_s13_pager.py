@@ -527,6 +527,22 @@ def _mutable_ids(value: object) -> set[int]:
 def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedule_admission():
     """Q19/Q47/Q63 acceptance: exact evidence alone earns a time-indexed schedule within every memory boundary."""
     plan, certificate, evidence, profile = _fixture()
+    # Q19: marginal bounds alone admit the union bound, not an asserted joint bound.
+    for total, accepted in (("1/4", False), ("3/4", True)):
+        candidate_plan, candidate_certificate, candidate_evidence, candidate_profile = _fixture()
+        risk = {"kind": "DECLARED_DEPENDENCE", "proof": {"total_bound": total}}
+        candidate_evidence["execution_contract"]["risk_composition"] = risk
+        candidate_certificate["execution_contract"]["risk_composition_kind"] = risk["kind"]
+        candidate_certificate["execution_contract"]["risk_composition_digest"] = _digest(risk)
+        candidate_certificate["resources"]["delta_exec_total"] = 0.75 if accepted else 0.25
+        _bind(candidate_plan, candidate_certificate, candidate_profile)
+        if accepted:
+            pager.admit_schedule(candidate_plan, candidate_certificate, candidate_evidence, candidate_profile)
+        else:
+            with pytest.raises(CassetteError) as unproved:
+                pager.admit_schedule(candidate_plan, candidate_certificate, candidate_evidence, candidate_profile)
+            assert unproved.value.code == "CAPABILITY_MISMATCH"
+
     boundaries = [_mutable_ids(value) for value in (plan, certificate, evidence, profile)]
     assert not any(
         left & right

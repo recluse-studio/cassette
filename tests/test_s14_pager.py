@@ -6,8 +6,10 @@ from __future__ import annotations
 import asyncio
 import copy
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 import platform
+import signal
 
 import pytest
 
@@ -217,6 +219,27 @@ def test_q20_q64_f3_page_readiness_replay_and_selection_failure(tmp_path):
     plan, certificate, evidence, profile, page_map = _stochastic_fixture(
         root_digest, pages
     )
+
+    # Q20: every admitted rational law terminates even when its denominator exceeds one hash word.
+    runtime = pager.CertifiedPager(cartridge, plan, certificate, evidence, profile, page_map)
+    def sampling_timeout(signum, frame):
+        raise AssertionError("Q20 rational sampler did not terminate")
+
+    previous_handler = signal.signal(signal.SIGALRM, sampling_timeout)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, 5)
+        for denominator in (257, 2**256, 2**257 + 1, 2**769 + 1):
+            step = replace(runtime._steps[0], probabilities=(Fraction(1, denominator), Fraction(denominator - 1, denominator)))
+            draws, seed = pager._draw_units(step, certificate["certificate_id"], 0)
+            assert len(draws) == step.schedule.fresh_samples and seed == 0
+            assert set(draws) <= {0, 1}
+            assert pager._draw_units(step, certificate["certificate_id"], 0) == (draws, seed)
+            balanced = replace(step, probabilities=(Fraction(denominator // 2, denominator), Fraction(denominator - denominator // 2, denominator)))
+            balanced_draws, _ = pager._draw_units(balanced, certificate["certificate_id"], 0)
+            assert set(balanced_draws) == {0, 1}
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
     def reject_page_map(candidate_map, invariant):
         candidate_plan = copy.deepcopy(plan)

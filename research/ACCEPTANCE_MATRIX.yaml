@@ -273,9 +273,9 @@ fixture_gate_rows:
     blocks_completion: true
     contract: Q36 F4 GATE
     model_class: 3-8B dense, permissive license
-    model: required_at_L14_selection
-    source_revision: required_at_L14_selection
-    selection_record_digest: required_at_L14_selection
+    model: required_at_F4_SELECTION
+    source_revision: required_at_F4_SELECTION
+    selection_record_digest: required_at_F4_SELECTION
     pass_condition: >-
       Q19-certified compiled revision covers the frozen Q15/Q16 protected conditions, independently
       recomputes every atom/rank field, every per-atom and per-step resource table, every peak and
@@ -673,15 +673,15 @@ failure_rows:
       starting_profile_record: QUALIFY-FAILURE-compilation-VERIFY
     inference_prefill:
       subject: selected_F4_compiled_revision
-      source_artifact_record: L24
+      source_artifact_record: F4-CERTIFICATE
       starting_profile_record: QUALIFY-FAILURE-inference_prefill-VERIFY
     inference_decode:
       subject: selected_F4_compiled_revision
-      source_artifact_record: L24
+      source_artifact_record: F4-CERTIFICATE
       starting_profile_record: QUALIFY-FAILURE-inference_decode-VERIFY
     training:
       subject: selected_F4_compiled_revision_with_dense_tier_a_plan
-      source_artifact_record: L25
+      source_artifact_record: F4-INFERENCE-CLOSED
       starting_profile_record: QUALIFY-FAILURE-training-VERIFY
     export:
       subject: train_dense_fixture_tier_a_child
@@ -689,11 +689,11 @@ failure_rows:
       starting_profile_record: QUALIFY-FAILURE-export-VERIFY
     repair:
       subject: selected_F4_compiled_revision
-      source_artifact_record: L24
+      source_artifact_record: F4-CERTIFICATE
       starting_profile_record: QUALIFY-FAILURE-repair-VERIFY
     removal:
       subject: selected_F4_compiled_revision
-      source_artifact_record: L24
+      source_artifact_record: F4-CERTIFICATE
       starting_profile_record: QUALIFY-FAILURE-removal-VERIFY
   operation_binding_rule: >-
     tools/campaign.py must resolve each selector above to one exact source artifact digest, one fresh

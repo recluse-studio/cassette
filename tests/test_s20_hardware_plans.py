@@ -175,7 +175,19 @@ def _compiled_fixture(tmp_path: Path):
         "contribution_map": contribution,
         "execution_plan": base_plan,
     }
-    plan_digest = _digest({"s20": "platform-neutral-prerequisite"})
+    with path.open("r+b") as handle:
+        plan_digest = compiler.plan_revision({
+            "source_kind": material.source_kind,
+            "source_alias": material.source_alias,
+            "locator": material.canonical_locator,
+            "requested_revision": material.requested_revision,
+            "immutable_revision": material.immutable_revision,
+            "identity": model_identity(material),
+            "artifacts": [{"path": artifact_path, "size": len(payload), "digest": material.artifacts[0].digest}],
+            "license_digest": material.license_digest,
+        }, {artifact_path: {
+            "fd": handle.fileno(), "offset": 0, "length": len(payload), "operation_id": "s20-plan",
+        }}, cartridge)
     source_identity = model_identity(material)
     bundle = {
         "version": "s19-compiler-v1",

@@ -1256,8 +1256,8 @@ def admit_schedule(
     elif risk["kind"] == "DECLARED_DEPENDENCE":
         proof = _record(risk["proof"], {"total_bound"}, object_id, "declared-dependence proof")
         total_delta = _fraction(proof["total_bound"], object_id, "declared-dependence total")
-        if total_delta < max(trace_deltas) or total_delta > sum(trace_deltas, Fraction(0)):
-            raise _error("CAPABILITY_MISMATCH", object_id, "Q19: declared-dependence risk composition", "declared bound must lie between the largest event and the union bound")
+        if not min(Fraction(1), sum(trace_deltas, Fraction(0))) <= total_delta <= 1:
+            raise _error("CAPABILITY_MISMATCH", object_id, "Q19: declared-dependence risk composition", "a declared total alone cannot justify risk below the union bound")
     else:
         _reject_evidence(object_id, "risk composition", "unknown generated risk-composition kind")
     if total_delta > 1:
@@ -2431,7 +2431,8 @@ def _draw_units(
         for probability in step.probabilities
     ]
     total = sum(weights)
-    ceiling = 1 << 256
+    words = max(1, ((total - 1).bit_length() + 255) // 256)
+    ceiling = 1 << (256 * words)
     accepted = ceiling - ceiling % total
     unit_ids = tuple(unit for unit, _ in step.sample_units)
     draws = []
@@ -2446,6 +2447,16 @@ def _draw_units(
                 "attempt": attempt,
             }))
             value = int(block[7:], 16)
+            for word in range(1, words):
+                block = digest_bytes(canonical_bytes({
+                    "certificate_id": certificate_id,
+                    "step": step.schedule.step,
+                    "seed": seed_or_schedule,
+                    "draw": draw,
+                    "attempt": attempt,
+                    "word": word,
+                }))
+                value = (value << 256) | int(block[7:], 16)
             attempt += 1
             if value < accepted:
                 target = value % total

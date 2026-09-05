@@ -9,10 +9,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 
 import pytest
 
-from broker import AcquisitionContext, CanonicalBroker, PHASES
+from broker import AcquisitionContext, CanonicalBroker, PHASES, _await_completion
 from compiler_fixture import artifact as compiler_artifact
 from errors import CODES, CassetteError
 import fixture_server as source_fixture
@@ -575,6 +576,44 @@ def test_q5_capacity_pause_resumes_from_the_exact_transfer_boundary(tmp_path, mo
         assert len(_terminal_events(generic.events(operation_id))) == 1
 
     asyncio.run(cancel_running_worker())
+
+    async def stop_executor_worker(action, nested):
+        request = {"protocol_version": "1", "operation": "run", "idempotency_key": f"s16-thread-{action}-{nested}", "arguments": {}}
+        started, release, finished = threading.Event(), threading.Event(), threading.Event()
+        marker = tmp_path / f"thread-{action}-{nested}.txt"
+
+        def worker():
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError("fixture did not release executor worker")
+            marker.write_text("completed while broker retained ownership")
+            finished.set()
+            return {"written": True}
+
+        async def coroutine_worker():
+            return await _await_completion(asyncio.to_thread(worker))
+
+        factory = coroutine_worker if nested else lambda: asyncio.to_thread(worker)
+        task = asyncio.create_task(generic.execute(request, factory))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            operation_id = CanonicalBroker.operation_id(request)
+            getattr(generic, action)(operation_id)
+            await asyncio.sleep(0.02)
+            assert not task.done() and not finished.is_set()
+            assert generic.status(operation_id)["state"] == "RUNNING"
+            with pytest.raises(CassetteError) as owned:
+                generic.close()
+            assert owned.value.code == "OVERLOADED"
+        finally:
+            release.set()
+        result = await task
+        assert finished.is_set() and marker.exists()
+        assert result["state"] == ("CANCELLED" if action == "cancel" else "PAUSED")
+
+    for action in ("cancel", "pause"):
+        for nested in (False, True):
+            asyncio.run(stop_executor_worker(action, nested))
 
     for label, field, value in (
         ("phase", "phase", "ACTIVE"),
