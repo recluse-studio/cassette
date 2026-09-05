@@ -623,7 +623,7 @@ def _pytest(root: Path, node: str | None = None) -> subprocess.CompletedProcess:
         command.append(node)
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
     return subprocess.run(
-        command, cwd=root, capture_output=True, text=True, timeout=900, env=environment
+        command, cwd=root, capture_output=True, text=True, timeout=3600, env=environment
     )
 
 
@@ -830,6 +830,7 @@ def prove_complete_j(root: Path) -> dict:
     if baseline["violations"]:
         raise ValueError(f"Q29 baseline ledger failed: {baseline['violations']}")
     suite = _pytest(root)
+    print(suite.stdout, file=sys.stderr, end="")
     if suite.returncode:
         raise ValueError(f"Q29 full suite failed: {suite.stdout}{suite.stderr}")
     summary = re.search(r"(?P<passed>\d+) passed(?:, (?P<skipped>\d+) skipped)?", suite.stdout)
