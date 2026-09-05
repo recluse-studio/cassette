@@ -1251,6 +1251,14 @@ def number(*, minimum: float = 0.0, maximum: float = 1e300) -> dict:
     return {"type": "number", "minimum": minimum, "maximum": maximum}
 
 
+def certificate_number(*, maximum: float = 1e300) -> dict:
+    """Preserve exact Q19 claims when a JSON number would round the rational."""
+    return {"anyOf": [number(maximum=maximum), {
+        **text(maximum=128, pattern=r"^[0-9]+/[1-9][0-9]*$"),
+        "format": "cassette-rational", "x-cassette-maximum": maximum,
+    }]}
+
+
 def bounded_array(items: dict, *, minimum: int = 0, maximum: int = MAX_TABLE_ROWS) -> dict:
     return array(items, minimum=minimum, maximum=maximum)
 
@@ -1536,7 +1544,7 @@ EXCLUDED_CONDITION = record(
 WITNESS_LOSS = record(
     "Condition-wise witness loss",
     "Q19/MATHS sections 1 and 8",
-    {"condition_id": identifier(), "loss": number()},
+    {"condition_id": identifier(), "loss": certificate_number()},
 )
 DESCRIPTION = record(
     "Resident description and residual relation",
@@ -1556,7 +1564,7 @@ DESCRIPTION = record(
         ),
         "reconstruction_digest": digest(),
         "residual_relation_digest": digest(),
-        "distortion_bound": number(),
+        "distortion_bound": certificate_number(),
         "estimator_digest": digest(),
         "estimator_calibration_digest": digest(),
         "sampling_law_id": identifier(),
@@ -1593,9 +1601,9 @@ OPERATION_COMPOSITION = record(
         "operator_case_id": identifier(),
         "rank_accounting_digest": digest(),
         "loss_propagation_digest": digest(),
-        "remainder_bound": number(),
-        "epsilon_exec": number(),
-        "delta_exec": number(maximum=1.0),
+        "remainder_bound": certificate_number(),
+        "epsilon_exec": certificate_number(),
+        "delta_exec": certificate_number(maximum=1.0),
         "sampling_law_id": identifier(),
     },
 )
@@ -1603,9 +1611,9 @@ RESOURCE_VECTOR = record(
     "Separate mathematical and physical resource bounds",
     "Q19/MATHS section 8",
     {
-        "eta_rep": number(),
-        "epsilon_exec": number(),
-        "delta_exec_total": number(maximum=1.0),
+        "eta_rep": certificate_number(),
+        "epsilon_exec": certificate_number(),
+        "delta_exec_total": certificate_number(maximum=1.0),
         "atom_count": integer(minimum=1),
         "max_atom_rank": integer(minimum=1),
         "description_bytes_peak": integer(),
@@ -1631,8 +1639,8 @@ ATOM_RESOURCE = record(
         "fresh_samples_total": integer(),
         "fresh_traffic_max": integer(),
         "fresh_traffic_total": integer(),
-        "epsilon_exec": number(),
-        "delta_exec": number(maximum=1.0),
+        "epsilon_exec": certificate_number(),
+        "delta_exec": certificate_number(maximum=1.0),
     },
 )
 OPERATION_RESOURCE = record(
@@ -1648,8 +1656,8 @@ OPERATION_RESOURCE = record(
         "fresh_samples_total": integer(),
         "fresh_traffic_max": integer(),
         "fresh_traffic_total": integer(),
-        "epsilon_exec": number(),
-        "delta_exec": number(maximum=1.0),
+        "epsilon_exec": certificate_number(),
+        "delta_exec": certificate_number(maximum=1.0),
     },
 )
 TRACE_STEP_RESOURCE = record(
@@ -1663,8 +1671,8 @@ TRACE_STEP_RESOURCE = record(
         "metadata_bytes_resident": integer(),
         "fresh_samples": integer(),
         "fresh_traffic": integer(),
-        "epsilon_exec": number(),
-        "delta_exec": number(maximum=1.0),
+        "epsilon_exec": certificate_number(),
+        "delta_exec": certificate_number(maximum=1.0),
     },
 )
 PHYSICAL_CONVERSION_ROW = record(
@@ -1711,7 +1719,7 @@ MATHEMATICAL_CERTIFICATE = record(
             "Compatibility complex and atom cover",
             "Q19/MATHS sections 1 and 2",
             {
-                "eta_rep": number(),
+                "eta_rep": certificate_number(),
                 "rank_budget": integer(minimum=1),
                 "service_faces": bounded_array(SERVICE_FACE, minimum=1),
                 "minimal_nonfaces": bounded_array(MINIMAL_NONFACE),
@@ -1740,7 +1748,7 @@ MATHEMATICAL_CERTIFICATE = record(
                 "selector_digest": digest(),
                 "loss_family_digest": digest(),
                 "sample_count": integer(),
-                "confidence": number(maximum=1.0),
+                "confidence": certificate_number(maximum=1.0),
                 "off_support": bounded_text(enum=["REJECT"]),
             },
         ),
@@ -1890,9 +1898,9 @@ HARDWARE_PLAN = record(
             "Hardware-plan mathematical error, risk, and horizon",
             "Q19/Q33/Q59",
             {
-                "eta_rep": number(),
-                "epsilon_exec": number(),
-                "delta_exec_total": number(maximum=1.0),
+                "eta_rep": certificate_number(),
+                "epsilon_exec": certificate_number(),
+                "delta_exec_total": certificate_number(maximum=1.0),
                 "horizon": integer(minimum=1),
             },
         ),
@@ -2247,6 +2255,7 @@ VALIDATOR_SRC = '''# validator.py — {note}; depends on (none).
 import json
 import math
 import re
+from fractions import Fraction
 from pathlib import Path
 
 _SCHEMAS = {{}}
@@ -2351,6 +2360,9 @@ def _validate(schema, value, path, root_schema=None, depth=0):
             defects.append(f"{{path}}: string is longer than {{schema['maxLength']}}")
         if kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
             defects.append(f"{{path}}: string does not match {{schema['pattern']!r}}")
+        if kind == "string" and schema.get("format") == "cassette-rational" and not defects:
+            if Fraction(value) > Fraction(str(schema["x-cassette-maximum"])):
+                defects.append(f"{{path}}: rational exceeds {{schema['x-cassette-maximum']}}")
         if kind == "number" and not math.isfinite(value):
             defects.append(f"{{path}}: number must be finite")
         if "minimum" in schema and value < schema["minimum"]:

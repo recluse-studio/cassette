@@ -350,14 +350,19 @@ def _fraction(value: object, object_id: str, label: str) -> Fraction:
     return candidate
 
 
-def _number(value: Fraction, object_id: str, label: str) -> float:
+def _number(value: Fraction, object_id: str, label: str) -> float | str:
     try:
         result = float(value)
     except OverflowError:
         result = math.inf
-    if not math.isfinite(result) or result < 0 or result > 1e300:
+    if not math.isfinite(result) or value < 0 or value > Fraction("1e300"):
         _reject("CAPABILITY_MISMATCH", object_id, f"{label} is outside the certificate number domain")
-    return result
+    if Fraction(str(result)) == value:
+        return result
+    exact = f"{value.numerator}/{value.denominator}"
+    if len(exact) > 128:
+        _reject("CAPABILITY_MISMATCH", object_id, f"{label} exceeds the exact certificate scalar bound")
+    return exact
 
 
 def _scalar(value: object, field: str, object_id: str, label: str) -> tuple[Fraction, Fraction]:
@@ -1167,7 +1172,7 @@ def _certificate(evidence: dict, eta_value: object, rank_value: object, bounds_v
             "selector_digest": _digest(observation["selector"]),
             "loss_family_digest": _digest(observation["loss_family"]),
             "sample_count": observation["sample_count"],
-            "confidence": observation["confidence"],
+            "confidence": _number(_fraction(observation["confidence"], object_id, "observation confidence"), object_id, "observation confidence"),
             "off_support": observation["off_support"],
         },
         "execution_contract": {

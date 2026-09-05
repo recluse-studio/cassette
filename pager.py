@@ -449,6 +449,13 @@ def _document_digest(value: dict, identity_field: str) -> str:
 
 def _expect_number(value: object, expected: Fraction, object_id: str, label: str) -> None:
     observed = _fraction(value, object_id, label)
+    if observed != expected:
+        raise _error(
+            "CAPABILITY_MISMATCH",
+            object_id,
+            f"Q19: {label}",
+            f"certificate reports {value}; canonical evidence recomputes {expected}",
+        )
     try:
         observed_number = float(observed)
         expected_number = float(expected)
@@ -465,13 +472,6 @@ def _expect_number(value: object, expected: Fraction, object_id: str, label: str
             object_id,
             f"Q19: {label}",
             "the certificate claim or canonical recomputation lies outside the finite certificate-number domain",
-        )
-    if observed_number != expected_number:
-        raise _error(
-            "CAPABILITY_MISMATCH",
-            object_id,
-            f"Q19: {label}",
-            f"certificate reports {value}; canonical evidence recomputes {expected}",
         )
 
 

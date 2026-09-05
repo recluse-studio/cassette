@@ -4,24 +4,30 @@
 import json
 import shutil
 import subprocess
-import sys
 import venv
 from pathlib import Path
 
 from tools.ledger import (
     check_commit_law,
+    check_mlx_confinement,
+    top_level_imports,
     check_removal_map,
     check_test_citations,
     check_tracked_artifacts,
     load_authorities,
+    run,
 )
 
 REPO = Path(__file__).resolve().parent.parent
-LEDGER = REPO / "tools" / "ledger.py"
 
 
-def run_ledger(root: Path) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(LEDGER), str(root)], capture_output=True, text=True)
+def run_source_ledger(root: Path) -> subprocess.CompletedProcess:
+    """Check source law before the complete suite can produce its own Q29 report."""
+    report = run(root, verify_report=False)
+    return subprocess.CompletedProcess(
+        args=[], returncode=int(bool(report["violations"])),
+        stdout=json.dumps(report, sort_keys=True), stderr="",
+    )
 
 
 def git(root: Path, *args: str) -> str:
@@ -87,8 +93,8 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
     """Q29 acceptance: J excludes foreign environments but includes new governed source."""
     clone = tmp_path / "clone"
     clone_candidate(clone)
-    first = run_ledger(clone)
-    second = run_ledger(clone)
+    first = run_source_ledger(clone)
+    second = run_source_ledger(clone)
     assert first.returncode == 0, first.stdout
     assert first.stdout == second.stdout
     report = json.loads(first.stdout)
@@ -101,7 +107,7 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
         foreign = environment / "lib" / "python3.13" / "site-packages" / "foreign_runtime.py"
         foreign.parent.mkdir(parents=True, exist_ok=True)
         foreign.write_text("import mlx\nimport store\n")
-    isolated = run_ledger(clone)
+    isolated = run_source_ledger(clone)
     assert isolated.returncode == 0, isolated.stdout
     assert isolated.stdout == first.stdout
 
@@ -125,7 +131,7 @@ def test_ledger_reproducible_from_clean_checkout(tmp_path):
         "# hostile_governed.py — tracked workflow source; depends on (none).\nimport mlx\n"
     )
     git(clone, "add", "hostile_staged.py", "research/hostile_governed.py", ".github/hostile_governed.py")
-    governed = run_ledger(clone)
+    governed = run_source_ledger(clone)
     assert governed.returncode == 1
     governed_report = json.loads(governed.stdout)
     assert set(governed_report["files_checked"]) - set(report["files_checked"]) == {
@@ -193,7 +199,7 @@ def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):
     )
     (tmp_path / "store.py").write_text("import os\n")
     (tmp_path / ".git").write_text("")  # git present but broken: checks must fail closed, not pass
-    result = run_ledger(tmp_path)
+    result = run_source_ledger(tmp_path)
     assert result.returncode == 1
     report = json.loads(result.stdout)
     assert any("line 1 must be" in v for v in report["violations"])
@@ -403,3 +409,31 @@ def test_commit_law_requires_anchored_nonempty_fields(tmp_path):
     assert any("already answers Deleted" in violation for violation in violations)
     assert any("target is not governed history" in violation for violation in violations)
     assert any("malformed commit-law repair" in violation for violation in violations)
+
+
+def test_q30_computed_runtime_acquisition_stays_with_exact_owner_paths(tmp_path):
+    """Q30 acceptance: ledger rejects computed runtime acquisition outside pager/trainer."""
+    forbidden = (
+        "__import__('mlx.core')",
+        "__import__('m' + 'lx.core')",
+        "name = 'mlx.core'\n__import__(name)",
+        "import importlib\nimportlib.import_module('mlx.core')",
+        "import importlib as loader\nloader.import_module('m' + 'lx.core')",
+        "from importlib import import_module as load\nload('mlx.core')",
+        "load = __import__\nload('mlx.core')",
+        "from builtins import __import__ as load\nload('mlx.core')",
+    )
+    for rel in (Path("compiler.py"), Path("tools/pager.py")):
+        (tmp_path / rel).parent.mkdir(exist_ok=True)
+        for source in forbidden:
+            (tmp_path / rel).write_text(source + "\n")
+            violations = check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel))
+            assert violations, (rel, source)
+            assert all("Q30 confinement" in item for item in violations)
+    for rel in (Path("pager.py"), Path("trainer.py")):
+        (tmp_path / rel).write_text(forbidden[2] + "\n")
+        assert check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel)) == []
+    rel = Path("compiler.py")
+    for source in ("import math", "__import__('math')", "import importlib as loader\nloader.import_module('json')"):
+        (tmp_path / rel).write_text(source + "\n")
+        assert check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel)) == []

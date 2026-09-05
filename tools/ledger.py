@@ -274,11 +274,38 @@ def top_level_imports(root: Path, rel: Path) -> set[str]:
 def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str]:
     """Reject direct imports and indirect MLX runtime access outside its two owners."""
 
-    if rel.name in MLX_ALLOWED_FILES:
+    if rel.as_posix() in MLX_ALLOWED_FILES:
         return []
     if "mlx" in imported:
         return [f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     tree = ast.parse((root / rel).read_text(encoding="utf-8"), filename=str(rel))
+    loaders = {"__import__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {"importlib", "builtins"}:
+            loaders.update(
+                alias.asname or alias.name for alias in node.names
+                if alias.name in {"import_module", "__import__"}
+            )
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Name) and node.id in loaders
+            or isinstance(node, ast.Attribute) and node.attr in {"import_module", "__import__"}
+        ):
+            continue
+        call = parents.get(node)
+        # Only an immediate literal import proves that acquisition excludes MLX.
+        if isinstance(call, ast.Call) and call.func is node:
+            argument = call.args[0] if call.args else next(
+                (item.value for item in call.keywords if item.arg == "name"), None
+            )
+            if (
+                isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+                and argument.value and not argument.value.startswith(".")
+                and argument.value.split(".")[0] != "mlx"
+            ):
+                continue
+        return [f"{rel}: unresolved or MLX dynamic import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and (
             node.attr == "_mlx_runtime"

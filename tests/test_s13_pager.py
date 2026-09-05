@@ -209,7 +209,7 @@ def _fixture() -> tuple[dict, dict, dict, dict]:
                 "witness_losses": [
                     {
                         "condition_id": condition_id,
-                        "loss": float(
+                        "loss": str(
                             SERVED_LOSS
                             if condition_id in face_conditions
                             else UNSERVED_LOSS
@@ -543,6 +543,31 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
                 pager.admit_schedule(candidate_plan, candidate_certificate, candidate_evidence, candidate_profile)
             assert unproved.value.code == "CAPABILITY_MISMATCH"
 
+    # Q19: a distinct rational may round to the same certificate number.
+    for confidence in ("0.95000000000000000001", "0.94999999999999999999"):
+        collision_plan, collision_certificate, collision_evidence, collision_profile = _fixture()
+        collision_certificate["observation_contract"]["confidence"] = 0.95
+        collision_evidence["observation_contract"]["confidence"] = confidence
+        assert float(Fraction(confidence)) == 0.95
+        assert Fraction(confidence) != Fraction("0.95")
+        _bind(collision_plan, collision_certificate, collision_profile)
+        with pytest.raises(CassetteError) as collision_refused:
+            pager.admit_schedule(
+                collision_plan, collision_certificate, collision_evidence, collision_profile
+            )
+        assert collision_refused.value.code == "CAPABILITY_MISMATCH"
+        assert collision_refused.value.failed_invariant == "Q19: observation confidence"
+        collision_certificate["observation_contract"]["confidence"] = str(Fraction(confidence))
+        _bind(collision_plan, collision_certificate, collision_profile)
+        pager.admit_schedule(
+            collision_plan, collision_certificate, collision_evidence, collision_profile
+        )
+
+    for invalid_rational in ("2/1", "1/0", "-1/2", "1/" + "9" * 127):
+        invalid_certificate = copy.deepcopy(certificate)
+        invalid_certificate["observation_contract"]["confidence"] = invalid_rational
+        assert validate("mathematical_certificate", invalid_certificate)
+
     boundaries = [_mutable_ids(value) for value in (plan, certificate, evidence, profile)]
     assert not any(
         left & right
@@ -678,7 +703,7 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
         lambda cert, ev: cert["atoms"][0]["witness_losses"][0].__setitem__(
             "loss",
             math.nextafter(
-                cert["atoms"][0]["witness_losses"][0]["loss"], math.inf
+                float(Fraction(cert["atoms"][0]["witness_losses"][0]["loss"])), math.inf
             ),
         ),
         lambda cert, ev: cert["compatibility"]["service_faces"][0].__setitem__(
@@ -852,9 +877,9 @@ def test_q19_q47_q63_f2_exact_certificate_recomputation_precedes_bounded_schedul
     rank_claim["rank"] = 2
     rank_claim["witness_digest"] = _digest(_normal_matrix(rank_matrix))
     rank_claim["witness_losses"] = [
-        {"condition_id": "condition.a", "loss": float(Fraction(6017, 2_007_000))},
-        {"condition_id": "condition.b", "loss": float(Fraction(6017, 2_007_000))},
-        {"condition_id": "condition.c", "loss": float(Fraction(1_010_017, 1_007_000))},
+        {"condition_id": "condition.a", "loss": str(Fraction(6017, 2_007_000))},
+        {"condition_id": "condition.b", "loss": str(Fraction(6017, 2_007_000))},
+        {"condition_id": "condition.c", "loss": str(Fraction(1_010_017, 1_007_000))},
     ]
     rank_claim["description"].update(
         reconstruction_digest=_digest(_normal_matrix(rank_reconstruction)),

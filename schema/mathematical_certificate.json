@@ -38,9 +38,21 @@
                 "type": "string"
               },
               "distortion_bound": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "estimator_calibration_digest": {
                 "maxLength": 71,
@@ -115,9 +127,21 @@
                   "type": "string"
                 },
                 "loss": {
-                  "maximum": 1e+300,
-                  "minimum": 0.0,
-                  "type": "number"
+                  "anyOf": [
+                    {
+                      "maximum": 1e+300,
+                      "minimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "format": "cassette-rational",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "pattern": "^[0-9]+/[1-9][0-9]*$",
+                      "type": "string",
+                      "x-cassette-maximum": 1e+300
+                    }
+                  ]
                 }
               },
               "required": [
@@ -198,9 +222,21 @@
           "type": "array"
         },
         "eta_rep": {
-          "maximum": 1e+300,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1e+300,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1e+300
+            }
+          ]
         },
         "excluded_conditions": {
           "items": {
@@ -434,14 +470,38 @@
             "additionalProperties": false,
             "properties": {
               "delta_exec": {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1.0
+                  }
+                ]
               },
               "epsilon_exec": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "loss_propagation_digest": {
                 "maxLength": 71,
@@ -468,9 +528,21 @@
                 "type": "string"
               },
               "remainder_bound": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "sampling_law_id": {
                 "maxLength": 256,
@@ -596,9 +668,21 @@
       "additionalProperties": false,
       "properties": {
         "confidence": {
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1.0
+            }
+          ]
         },
         "experiment_digest": {
           "maxLength": 71,
@@ -766,9 +850,21 @@
                 "type": "string"
               },
               "delta_exec": {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1.0
+                  }
+                ]
               },
               "description_bytes": {
                 "maximum": 18446744073709551615,
@@ -776,9 +872,21 @@
                 "type": "integer"
               },
               "epsilon_exec": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "fresh_samples_max": {
                 "maximum": 18446744073709551615,
@@ -831,9 +939,21 @@
             "additionalProperties": false,
             "properties": {
               "delta_exec": {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1.0
+                  }
+                ]
               },
               "description_bytes_peak": {
                 "maximum": 18446744073709551615,
@@ -846,9 +966,21 @@
                 "type": "integer"
               },
               "epsilon_exec": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "fresh_samples_max": {
                 "maximum": 18446744073709551615,
@@ -920,9 +1052,21 @@
                 "type": "string"
               },
               "delta_exec": {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1.0
+                  }
+                ]
               },
               "description_bytes_resident": {
                 "maximum": 18446744073709551615,
@@ -930,9 +1074,21 @@
                 "type": "integer"
               },
               "epsilon_exec": {
-                "maximum": 1e+300,
-                "minimum": 0.0,
-                "type": "number"
+                "anyOf": [
+                  {
+                    "maximum": 1e+300,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "format": "cassette-rational",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[0-9]+/[1-9][0-9]*$",
+                    "type": "string",
+                    "x-cassette-maximum": 1e+300
+                  }
+                ]
               },
               "fresh_samples": {
                 "maximum": 18446744073709551615,
@@ -999,9 +1155,21 @@
           "type": "integer"
         },
         "delta_exec_total": {
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1.0
+            }
+          ]
         },
         "description_bytes_peak": {
           "maximum": 18446744073709551615,
@@ -1014,14 +1182,38 @@
           "type": "integer"
         },
         "epsilon_exec": {
-          "maximum": 1e+300,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1e+300,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1e+300
+            }
+          ]
         },
         "eta_rep": {
-          "maximum": 1e+300,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1e+300,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1e+300
+            }
+          ]
         },
         "fresh_samples_max": {
           "maximum": 18446744073709551615,

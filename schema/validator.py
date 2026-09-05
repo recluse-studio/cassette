@@ -4,6 +4,7 @@
 import json
 import math
 import re
+from fractions import Fraction
 from pathlib import Path
 
 _SCHEMAS = {}
@@ -108,6 +109,9 @@ def _validate(schema, value, path, root_schema=None, depth=0):
             defects.append(f"{path}: string is longer than {schema['maxLength']}")
         if kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
             defects.append(f"{path}: string does not match {schema['pattern']!r}")
+        if kind == "string" and schema.get("format") == "cassette-rational" and not defects:
+            if Fraction(value) > Fraction(str(schema["x-cassette-maximum"])):
+                defects.append(f"{path}: rational exceeds {schema['x-cassette-maximum']}")
         if kind == "number" and not math.isfinite(value):
             defects.append(f"{path}: number must be finite")
         if "minimum" in schema and value < schema["minimum"]:

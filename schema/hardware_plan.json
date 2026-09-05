@@ -110,19 +110,55 @@
       "additionalProperties": false,
       "properties": {
         "delta_exec_total": {
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1.0
+            }
+          ]
         },
         "epsilon_exec": {
-          "maximum": 1e+300,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1e+300,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1e+300
+            }
+          ]
         },
         "eta_rep": {
-          "maximum": 1e+300,
-          "minimum": 0.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1e+300,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "format": "cassette-rational",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[0-9]+/[1-9][0-9]*$",
+              "type": "string",
+              "x-cassette-maximum": 1e+300
+            }
+          ]
         },
         "horizon": {
           "maximum": 18446744073709551615,

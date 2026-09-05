@@ -308,6 +308,42 @@ def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publicat
     assert compiler._witness_loss(target, atom, metric, "literal-witness") == Fraction(6, 5)
     assert pager._witness_loss(target, atom, metric, "literal-witness") == Fraction(6, 5)
 
+    # Q19: certificate serialization preserves an exact loss beyond float precision.
+    assert compiler._number(Fraction(401, 100300), "exact-loss", "witness loss") == "401/100300"
+    assert compiler._number(Fraction(1, 4), "exact-loss", "witness loss") == 0.25
+    assert compiler._number(Fraction(2**53 + 1), "exact-loss", "witness loss") == "9007199254740993/1"
+    for outside_domain in (Fraction(-1), Fraction(10**301), Fraction(1, 10**130 + 1)):
+        with pytest.raises(CassetteError) as scalar_refused:
+            compiler._number(outside_domain, "exact-loss", "witness loss")
+        assert scalar_refused.value.code == "CAPABILITY_MISMATCH"
+
+    def rational_witness(document):
+        document["eta_rep"] = 1.0
+        document["evidence"]["observation_contract"]["confidence"] = "0.95000000000000000001"
+        atom = document["evidence"]["atoms"][0]
+        atom["matrix"] = [[1, 0], [0, 4]]
+        atom["description"]["reconstruction"] = [[1, 0], [0, 4]]
+        atom["description"]["estimator_calibration"]["atom_norm_squared"] = "17"
+
+    rational_cartridge, _, rational_fd, _, rational_source, rational_extents, _ = _case(
+        tmp_path, "rational-witness", mutate=rational_witness
+    )
+    try:
+        rational_plan = plan_revision(rational_source, rational_extents, rational_cartridge)
+        rational_prepared = prepare_revision(
+            rational_source, rational_extents, rational_cartridge, rational_plan,
+            capacity_coordinator=CapacityCoordinator(rational_cartridge), operation_id="s19-rational",
+        )
+        rational_bundle = load_root(rational_cartridge, rational_prepared.candidate_root)["plans"][0]
+        assert rational_bundle["certificate"]["atoms"][0]["witness_losses"][0]["loss"] == "9/17"
+        assert Fraction(rational_bundle["certificate"]["observation_contract"]["confidence"]) == Fraction("0.95000000000000000001")
+        admit_schedule(
+            rational_bundle["execution_plan"], rational_bundle["certificate"],
+            rational_bundle["evidence"], rational_bundle["profile"],
+        )
+    finally:
+        os.close(rational_fd)
+
     indefinite_metric = [[_exact(1), _exact(0)], [_exact(0), _exact(-1)]]
     for witness_loss in (compiler._witness_loss, pager._witness_loss):
         with pytest.raises(CassetteError) as impossible_loss:

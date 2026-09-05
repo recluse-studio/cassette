@@ -9,10 +9,12 @@ F4 selection and baseline metadata may establish the exact profile requests afte
 the source-entry L01.5 gate; they make no live header request and move no model payload. Every live
 row remains `NOT_RUN`.
 
-IMPLEMENTATION.md contains L01-L31 coding stages and L32-L37 live-proof stages; L01 is DONE; L02 is next.
-The 15-20-minute target counts active agent coding only. Source qualification/acquisition belongs
-to L32, measured baselines to L33, F4 to L34, F5 to L35, the full runtime matrix to L36 and clean
-replay to L37. Operation receipts and matrix phases retain their exact meanings within those stages.
+IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
+stages, L05-L10. L01 is in progress; the previously completed recovery proof is retained inside it.
+Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
+F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
+separate from the matrix phase labels used below. Consolidated preparation has no verified duration
+estimate. Operation receipts remain evidence within their owning stage.
 
 ## Authority and identity
 
@@ -25,8 +27,8 @@ physical drive.
 | Record | Immutable identity |
 |---|---|
 | Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
-| Deferred-live projection, `s26-deferred-live-v4` | `blake3:7e2aad2c92504b7ed01ccac73961c9cc5b75f1a91dd386ce0335139b97e56efb` |
-| S26 machine baseline, amendment pending | `blake3:cfb70c3c29988a575fdf6d2e9ff79da93137d74fdf57129ce40174a8e3ce3993` |
+| Deferred-live projection, `s26-deferred-live-v4` | `blake3:21a64f61e1c68a444c6b8ef5903caf2d9451ad1ba652d33820fac3e0e4a19f6c` |
+| S26 machine baseline, amendment pending | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
 | S27 complete J report | `sha256:bb278c5360658b37db770b02213ac5e993b0d3770c02cbcf0c7a34914bbc5343` |
 
 The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The current machine outcome is
@@ -37,7 +39,7 @@ The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The current machine outcome 
 
 ## Coding time and independent verification
 
-The coding budget and overrun rule are owned by IMPLEMENTATION.md. Test runs, downloads,
+Active coding time and resume rules are owned by IMPLEMENTATION.md. Test runs, downloads,
 compilation, training, physical measurements, review, evidence capture and waiting are outside
 the agent coding budget. Keep their owner stage IN_PROGRESS until its required proof completes.
 A long operation retains its durable receipt and recovery boundary; it does not require a new

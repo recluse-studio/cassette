@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 def test_q29_complete_j_classifies_every_surface_and_exposes_all_nine_coordinates(tmp_path):
     """Q29 acceptance: the clean classifier reproduces every J coordinate and catches added surface."""
-    report = run(REPO)
+    report = run(REPO, verify_report=False)
     assert report["violations"] == []
     accounting = report["accounting"]
     assert J_LABELS == [

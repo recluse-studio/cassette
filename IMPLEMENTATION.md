@@ -1532,1530 +1532,1327 @@ steps:
         observed: "PHASE_LIVE_RUNBOOK.md remains 13,610 bytes at blake3:b180c539716c8f717a4d6eacf515888e80273c4ab8cac775ee6fddde4cf6ffe0. S28_CLOSEOUT.md is 5,356 bytes at sha256:0fa627b6640e6b9198c4234da7adf2a49cd6b2d3608ae277e8bb70c86474098f. The ledger is green, the matrix remains schema version 4 at its recorded digest, and all live evidence remains NOT_RUN."
 ```
 
-## PHASE LIVE — code-sized build and live proof
+## PREPARATION AND LIVE PROOF — four non-drive stages, then the drive campaign
 
-**L01 is DONE; L02 is next.** The queue contains 31 coding stages followed by 6 live-proof stages,
-numbered L01-L37. The count follows the implementation boundaries inspected in the current
-source. It is not a target inherited from an earlier plan.
+**L01 is in progress. There are four non-drive stages, L01-L04, followed by six drive/live
+stages, L05-L10.** This grouping follows the principal's instruction to consolidate preparation.
+The previous count of 31 coding stages is superseded. The larger groups have no verified
+15–20-minute duration estimate.
 
-The target is **15-20 minutes of active agent coding per coding stage**. Count implementation
-reasoning, product/test edits and debugging. Test execution, downloads, model compilation or
-training runs, measurements, independent review, evidence capture and waiting do not count.
-Each stage keeps its own proof; routine launches and results do not become build stages.
+| Stage | Deliverable | Boundary |
+|---|---|---|
+| L01 | Repaired baseline, exact guards and current capacity proof | Non-drive |
+| L02 | Ordinary-source native model execution | Non-drive |
+| L03 | Compiled execution, training and client delivery | Non-drive |
+| L04 | Campaign tooling and final machine proof | Non-drive |
+| L05 | Qualify the physical drive and acquire frozen inputs | Drive/live |
+| L06 | Measure and select comparison baselines | Drive/live |
+| L07 | Dense F4 experiment | Drive/live |
+| L08 | Sparse F5 experiment | Drive/live |
+| L09 | Complete runtime, training, client and failure matrix | Drive/live |
+| L10 | Clean-root replay and release proof | Drive/live |
 
-The scopes are engineering judgments, not measured duration guarantees. In particular, the
-condition/atom, description, composition and observation producers have distinct mathematical
-obligations and uncertain implementation effort. They have separate stages and exact checkers;
-a timer cannot prove their feasibility. Their predecessor observations and admitted primitives
-must exist before coding starts. F4/F5 decide real-model success under the unchanged gates.
+The four preparation groups share concrete results: a corrected baseline, a native execution
+path, a compiled/trained execution path, and an executable campaign. The detailed requirements
+remain within those groups. They have no separate stage numbers, closure reviews or instruction
+boundaries. This grouping does not establish that every previously proposed implementation is
+missing: before writing code, reconcile the cited path with the completed S-stage work and current
+source. Reuse what passes; add code only for a reproduced failure or missing required path.
 
-### Why these boundaries
+### Authority and retained work
 
-The current code already implements capacity claims, source transfer, durable broker operations,
-certificate checking and MLX dispatch. Those paths receive focused repairs or extensions. The
-compiler still reads a Cassette-specific source manifest and supplied witnesses. The transformer
-still binds the F3 4x4 graph, the trainer uses 2x3 parameter windows and miniature losses, and
-`tools/campaign.py` is absent. Those missing implementations cannot be treated as small wiring
-changes inside a single stage.
+The principal's current four-stage limit governs this grouping. ORIGINAL_REMIT.md owns intent;
+MATHS.md owns mathematics; research/RESEARCH.md owns build decisions; the acceptance matrix owns
+release rows and thresholds. This file owns execution order and status. The local review skills
+own their applicable review procedure. The consolidation supersedes earlier stage-size and
+numbering rules; it does not change the acceptance matrix.
 
-Keep work together where it shares the controlling implementation: tokenizer and conversation
-rendering produce one token sequence; SFT and continued pretraining share one language-model loss
-engine; update/checkpoint/merge share one tensor-window contract. Split work where its algorithm,
-state boundary or oracle changes: sparse routing, DPO, each mathematical witness family, physical
-profiling, thermal experiments and graph ownership. The YAML names the inspected code, actual
-change, reason for each boundary and deciding proof for every coding stage.
+Historical S01-S28 records remain unchanged. The completed recovery repair from former L01 is
+retained verbatim below with its source revision and review evidence. Its completed assertions do
+not become undone because the new L01 contains additional work. The attempted guard repair from
+former L02 remains incomplete: its failing probe and unaccepted candidate are retained off-tree;
+the checkout preserves the preceding source. New L02 names native execution, so requests referring
+to the earlier guard repair resolve to new L01, not to new L02.
 
-The six earlier code repairs remain in the working tree. L01 reproduces the still-relevant
-lifecycle/corrupt-root failures from the retained baseline. L02 owns numerical boundary guards;
-L03 integrates the existing capacity amendment and regenerates the current projections. Do not
-rebuild an existing subsystem or repeat a passed proof merely because a prior stage title named it.
-
-### Order and authority
-
-ORIGINAL_REMIT.md owns intent; MATHS.md owns mathematics; research/RESEARCH.md owns build decisions;
-research/ACCEPTANCE_MATRIX.yaml owns release rows and thresholds. This file owns order and state.
-The matrix phase labels L01.25, L01.5 and L02-L05 keep their meanings. Historical S01-S28 records
-above remain unchanged. L01 is DONE with its retained machine proof; L02-L37 remain TODO. Active coding time for L01 is an estimate, not a measured duration.
-
-| Stages | Work |
-|---|---|
-| L01-L03 | Repair the amended machine baseline |
-| L04-L09 | Ordinary source semantics and complete native model execution |
-| L10-L15 | Actual observations, mathematical producers and compiled execution |
-| L16-L20 | Drive-resident real training and callable child revisions |
-| L21 | Canonical endpoint and named clients |
-| L22-L27 | Evidence capture, review ownership and campaign graph |
-| L28-L31 | Profiling, thermal measurement, recovery and integrated machine proof |
-| L32-L33 | Qualified source acquisition and measured baselines |
-| L34-L35 | Dense F4 and sparse F5 falsification gates |
-| L36 | Every required runtime, training, client, failure and privacy row |
-| L37 | Complete clean-root replay and release proof |
+Matrix phase labels L01.25, L01.5 and L02-L05 remain unchanged and are separate from execution-stage
+numbers. The six drive-stage workloads, evidence recipes, dependencies, thresholds and permission
+boundaries are preserved. A renamed owner does not change a matrix phase or establish a live pass.
 
 ### Execute, verify and resume
 
-Execute the named stage through its existing component owners and cited acceptance assertions.
-Use implementation-rigor and the applicable local review skill. Before editing, resolve its
-literal file allowlist and smallest credible discriminator from the inspected entrypoints and
-completed predecessors. Source-format work may require the canonical schema generator and a
-pinned primitive admission; no stage permits hand edits to generated files or a new numerical
-kernel. Tests must cite the owning invariant and use real internal components.
+Execute the named deliverable using implementation-rigor and the applicable local review skill.
+Resolve the required outcome, its existing implementation and the smallest deciding proof before
+editing. Keep the component authorities, pinned primitives and generated-schema rules. Run focused
+proof and directly coupled regressions as each behavior changes. Full suite/ledger/J gates belong
+to L01 and L04, then POST-SELECTION-MACHINE-PASS, FINAL-PROVENANCE and COMPLETION. Reuse an exact
+candidate's accepted evidence; do not repeat completed work just to fill a new stage label.
 
-Run the focused proof and directly coupled regression. Full gates belong to L03, L27, L31,
-POST-SELECTION-MACHINE-PASS, FINAL-PROVENANCE and COMPLETION. Until L03, only the exact recorded
-baseline failures assigned to L01-L03 may remain; every new failure blocks its affected behavior.
-Keep one frozen result per candidate and reuse it at dependent closures. Do not run a full suite
-for each checklist item. No elapsed budget, partial verification or launch receipt closes a stage.
+Record actual active coding time separately from test execution, compilation, training, measurement,
+review and waiting. The four groups have no invented duration guarantee. Resume partial work within
+its owner, with exact source, failing or passing observation and next action. Every required outcome
+must pass before closure; internal work clauses do not create additional stage gates or attempt quotas.
 
-Track cumulative active coding time. Check scope at the start against actual predecessor outputs;
-if the assumed primitive or bounded input is missing, name that specific issue rather than starting
-an open-ended implementation. At 20 coding minutes retain the exact candidate and residual change,
-report the sizing miss and amend only that scope when needed. Preserve completed work and stage
-identities; neither a fresh turn nor a new label resets the time already spent.
+L01-L03 use bootstrap machine review. L04 uses bootstrap until its ownership and graph machinery is
+proved, then normal review on the integrated candidate. Post-selection and later machine repairs use
+normal review. Live attempts use live-stage-review. Preserve the skills' finite attempt/review limits,
+immutable evidence and invalidation rules; same-agent review must not be called independent staffing.
 
-Use bootstrap machine review through construction of L27. Its integrated scratch proof establishes
-the review machinery, after which normal review verifies that frozen candidate. L28-L31 and the
-post-selection machine refresh use normal review. The live stages use live-stage-review with each
-immutable attempt. The existing finite attempt/review limits and exact remediation/invalidation
-rules remain in the local skills. Code, test, environment and authority failures retain distinct
-causes. A code repair reopens its owning stage and only the evidence its change invalidates.
+### Drive boundary
 
-### Live proof and permission boundaries
+L01-L04 use fixtures, loopback sources and scratch cartridge images. L05 begins the drive/live
+campaign: freeze source descriptors, refresh machine identities, inventory the physical drive and
+qualify the approved operation before acquisition. No physical qualification has been performed by
+this consolidation. PHASE_LIVE_RUNBOOK.md owns run cards, protected-content inventory and the exact
+permission boundary for each physical write, fault or path change.
 
-L01-L31 use fixtures, loopback sources and scratch cartridge images. L32 begins source selection
-and the post-selection machine refresh; physical participation follows the machine gate. Every
-physical write, fault or path change retains its exact run card and principal cue from
-PHASE_LIVE_RUNBOOK.md. No live input is moved earlier to fix a machine stage.
-
-The runbook and evidence recipes below carry the full live workload. Receipts bind identities,
-operations, assertion owners, exact permission scopes and raw results within the named stage.
-Launch, checkpoint, verification and review are not extra user stages. A long operation leaves
-its owner IN_PROGRESS with the durable operation ID and exact next action until required proof
-finishes. The materializer rejects missing inputs, missing owners, cycles and inherited rewrites.
-
-Preserve the corrected causal order: freeze workloads and baseline descriptors before measurement;
-qualify/acquire candidates before native selection; qualify compilation from its intended work
-plan and inference only after the resulting certificate exists. F4 PASS precedes F5, and both
-precede frontier compiled execution. Training thermal experiments preserve the complete duration,
-write volume and above/below-duty-cycle requirements. Runtime networking stays disabled through
-terminal capture and is restored only after the last owning interval closes.
-
-Every original matrix row, threshold, negative case and Q19 certificate obligation remains
-required. Q80 retains all live producers and precedence through intermediate machine/reference
-nodes. Q38 falsification is a recorded failure, not release completion. Independent raw verification
-retains complete coverage; use resumable jobs when input size requires them. The scientific and
-product result remains unproved until its actual live evidence passes.
+Preserve causal order: freeze inputs before measurement, qualify/acquire candidates before selection,
+qualify compilation against its intended plan and inference against its resulting certificate.
+F4 PASS precedes F5 and frontier compiled execution. Thermal windows retain complete duration,
+write-volume and duty-cycle requirements. Runtime networking remains disabled for its whole owning
+interval. Every matrix row, negative case, Q19 obligation and Q80 dependency remains required;
+Q38 falsification remains FAIL. Long operations retain durable receipts within their owner stage.
 
 ### Queue and evidence contracts
 
 ```yaml
 phase_live_queue:
-  schema_version: 6
-  next_step: L02
-  revision_reason: '2026-09-04 code-grounded regrouping: each coding stage names its inspected implementation
-    boundary and discriminator. Stage count follows the work; matrix rows, thresholds and operation dependencies
-    are preserved.'
+  schema_version: 7
+  next_step: L01
+  revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
+    Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
-    counts:
-      - implementation reasoning
-      - writing or editing product code
-      - writing or editing tests
-      - debugging a code defect
-    excludes:
-      - test and build execution
-      - downloads
-      - model compilation and training execution
-      - physical measurement
-      - independent review
-      - evidence capture
-      - principal actions
-      - waiting
-    target_minutes: 15
-    limit_minutes: 20
-    measurement: Record active coding intervals and their cumulative sum for the stage; do not reset the total
-      on resume.
-    overrun: At 20 active coding minutes stop editing, retain the candidate and name the exact residual work and
-      sizing error. Keep its evidence honest. Amend only that measured scope if necessary; do not renumber the
-      whole queue or manufacture preparation/verification stages. A fresh turn does not reset the cumulative coding
-      total.
-    honesty: The 15-20-minute values are sizing targets, not demonstrated durations. Static inspection establishes
-      the change boundaries. Witness construction and source-primitive admission remain explicitly uncertain.
-      Check each stage against its completed predecessor outputs before coding; duration guarantees and a total
-      build-time estimate are not supported.
+    measurement: Record actual active coding time separately from execution and waiting. No duration estimate
+      is established for these consolidated stages.
+    scope: Four non-drive deliverables. Work clauses are acceptance detail within their owner, not separately
+      executed stages or review gates. Reuse completed S-stage implementations and proofs; require a reproduced
+      failure or missing required path before adding code.
+    resume: Retain partial work and exact next action inside the same stage. Do not create additional prerequisite
+      stages or reset accumulated work on resume.
   fixed_steps:
-    - id: L01
-      title: Repair acquisition and corrupt-root recovery
-      depends: [S28]
-      invariants: [Q1, Q29, Q80, Q19, Q49, Q53, Q60, Q62]
-      files: [broker.py, store.py, tests/test_s26_phase_machine.py, tools/genschema.py, tests/]
+  - id: L01
+    title: Repair and close the amended machine baseline
+    phase: NON_DRIVE_PREPARATION
+    depends:
+    - S28
+    invariants:
+    - Q1
+    - Q29
+    - Q80
+    - Q19
+    - Q49
+    - Q53
+    - Q60
+    - Q62
+    - Q30
+    - Q39
+    - Q41
+    - Q42
+    - Q33
+    - Q78
+    files:
+    - broker.py
+    - store.py
+    - tests/test_s26_phase_machine.py
+    - tools/genschema.py
+    - tests/
+    - pager.py
+    - tools/ledger.py
+    - compiler.py
+    work: Existing recovery proof remains valid; exact certificate/runtime guards and amended capacity behavior
+      pass; generated projections, full suite, ledger and J match the candidate.
+    required_outcomes:
+    - title: Repair acquisition and corrupt-root recovery
       inspected_code: broker.py:CanonicalBroker._advance; store.py:recover_generation; tests/test_s26_phase_machine.py
       work: Repair access validation at the first filesystem operation and the corrupt-root resume path. Capture
         the current baseline while reproducing those failures; preserve the six existing repairs.
-      sizing_basis: Both repairs concern the durable source-to-cartridge boundary. Existing Q49/Q60 states and
-        retained failing tests constrain the change; baseline capture needs no separate stage.
-      done_when: The seven retained acquisition lifecycle cases reach their intended operation boundary, and corrupt-root
-        recovery produces the exact Q60/Q62 outcome without accepting corrupt bytes.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: ACTIVE_CODING_ESTIMATE
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: DONE
-      attempts:
-        - id: L01-1
-          source_commit: 4d7653d3183e02d7e4ebdee0e57d8d221e99d8f8
-          evidence_level: INTEGRATION
-          outcome: PASS
-          review_route: PASS_READY
-          evidence_directory: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01
-          review_envelope_sha256: 7a92cf87fa4bc64cb9d7e3a0c2a5e68a613fde78ea6a719fa8780c132f1d66e2
-      closed_utc: 2026-09-05T02:35:18.796713+00:00
-      coding_time:
-        estimated_active_minutes: 4
-        method: Manual estimate of code investigation and the two edits; no continuous active-time timer was used.
-        measured_duration: false
-        budget_minutes: 20
-      closeout:
-        - clause: Q49 acquisition lifecycle errors enter the broker and preserve exact recovery.
-          test_or_probe: tests/test_s26_phase_machine.py -k 'q49 and acquisition'
-          input: All 16 acquisition injection coordinates, including seven stale/read-only failures and exact reconnect/replacement recovery.
-          expected: Canonical operation entrypoint records the typed result; no stale use or partial child occurs.
-          observed: 16 passed on the frozen commit; restoring the eager constructor check fails the disconnect coordinate.
-        - clause: Q60/Q62 corrupt immutable roots and indexes remain refused.
-          test_or_probe: tests/test_s19_compiler.py::test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication
-          input: Independently truncated candidate/source roots and indexes; separate missing metadata, absent segment and interrupted pending root.
-          expected: Corrupt immutable bytes raise ROOT_INVALID unchanged; incomplete uncommitted objects reconstruct exactly from verified source, without publication.
-          observed: All four corruption/refusal and exact reconstruction paths pass; the silent-root-replacement negative control fails. No store corruption guard was weakened.
-        - clause: Coupled broker and source-binding behavior remains correct.
-          test_or_probe: tests/test_s16_broker.py and tests/test_s19_compiler.py
-          input: Frozen candidate using real store, source fixtures and broker operations.
-          expected: Existing idempotency, pause/cancel, capacity recovery and source/certificate binding assertions pass.
-          observed: 5 passed; together with acquisition replay, 21 focused and coupled checks passed.
-      proof_limit: Full suite, ledger and J were not rerun here; the current queue assigns their next gate and retained failures to L03. This is machine evidence only.
-      discovered_scope: PHASE_LIVE_RUNBOOK.md next-stage pointer updated as the queue projection.
-      commit_location: Isolated local branch codex/l01-recovery-proof; inherited main-checkout edits and its index were preserved.
-
-    - id: L02
-      title: Enforce exact certificate and runtime boundaries
-      depends: [L01]
-      invariants: [Q19, Q30]
-      files: [pager.py, tools/ledger.py, tools/genschema.py, tests/]
+      done_when: The seven retained acquisition lifecycle cases reach their intended operation boundary, and
+        corrupt-root recovery produces the exact Q60/Q62 outcome without accepting corrupt bytes.
+    - title: Enforce exact certificate and runtime boundaries
       inspected_code: pager.py:_expect_number; tools/ledger.py:_imports
-      work: Compare the rational certificate value before float conversion and detect computed acquisition of
-        MLX outside pager/trainer.
-      sizing_basis: Two small guard corrections with known discriminators; neither changes numerical execution
-        or introduces a new framework.
-      done_when: Unequal rationals that collide as floats are rejected; computed MLX imports outside the two owners
-        fail the ledger. Each disabled guard makes its discriminator fail.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L03
-      title: Close the capacity amendment and its projections
-      depends: [L02]
-      invariants: [Q53, Q60, Q39, Q41, Q42, Q33, Q80, Q29, Q78, Q49]
-      files: [store.py, tools/genschema.py, tools/ledger.py, tests/]
+      work: Compare the rational certificate value before float conversion and detect computed acquisition
+        of MLX outside pager/trainer.
+      done_when: Unequal rationals that collide as floats are rejected; computed MLX imports outside the two
+        owners fail the ledger. Each disabled guard makes its discriminator fail.
+    - title: Close the capacity amendment and its projections
       inspected_code: store.py:claim_next_transition; store.py:resume_capacity_claim; store.py:select_reclaimable_objects;
         tools/genschema.py; tools/ledger.py
-      work: Use the existing adaptive claim/reclamation implementation, repair any failing matrix control, regenerate
-        schema-v5 deferrals and restore exact J/removal evidence.
-      sizing_basis: Capacity control already exists. This is a repair and integration pass over its declared assertions,
-        not a new capacity subsystem. Generator and J runtime are excluded from coding.
+      work: Use the existing adaptive claim/reclamation implementation, repair any failing matrix control,
+        regenerate schema-v5 deferrals and restore exact J/removal evidence.
       done_when: Adaptive claims, concurrent capacity loss, reclamation exclusions, ENOSPC/resume and descriptive
         drive eligibility pass. Full suite and ledger pass with regenerated current projections.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L04
-      title: Import ordinary source metadata
-      depends: [L03]
-      invariants: [Q1, Q9, Q50, Q55]
-      files: [compiler.py, sources.py, tools/genschema.py, tests/]
+    done_when: Existing recovery proof remains valid; exact certificate/runtime guards and amended capacity
+      behavior pass; generated projections, full suite, ledger and J match the candidate.
+    acceptance_boundary: Machine evidence from fixtures and real internal components. Physical drive and real-model
+      results are owned by L05-L10.
+    execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
+      outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
+    timing_evidence: NOT_RUN
+    review_profile: bootstrap
+    env: macos_arm64_fixture_only
+    evidence_level: INTEGRATION
+    record_kind: stage
+    status: IN_PROGRESS
+    attempts: []
+    retained_proof: The former 37-stage queue L01 recovery closeout is retained under retained_machine_evidence.
+      Its passing work is not reopened by grouping.
+    next_action: 'Resolve exact certificate serialization and validation together: the interrupted former L02
+      candidate rejected the valid existing witness loss 401/100300 after float serialization. Then finish
+      both guard discriminators and the amended capacity/full-gate proof.'
+    discovered_scope: compiler.py:_number is the producer coupled to pager.py:_expect_number and generated
+      mathematical-certificate fields. The reproduced rounded-witness failure requires considering all three
+      together.
+  - id: L02
+    title: Complete ordinary-source native model execution
+    phase: NON_DRIVE_PREPARATION
+    depends:
+    - L01
+    invariants:
+    - Q1
+    - Q9
+    - Q50
+    - Q55
+    - Q10
+    - Q30
+    - Q33
+    - Q66
+    - Q7
+    - Q58
+    - Q20
+    - Q63
+    - Q18
+    files:
+    - compiler.py
+    - sources.py
+    - tools/genschema.py
+    - tests/
+    - pager.py
+    - broker.py
+    work: An ordinary source fixture runs through source tokenization, generated dense/sparse/modality graphs,
+      prefill, decode and recovered state with independently checked outputs.
+    required_outcomes:
+    - title: Import ordinary source metadata
       inspected_code: compiler.py:_manifest; compiler.py:_source_material; sources.py
-      work: Build the canonical semantic input from ordinary config, shard indexes and SafeTensors headers without
-        requiring cassette.compiler.v1 or executing source code.
-      sizing_basis: One source-format boundary into the existing identity and store paths. Tokenization and runtime
-        execution have separate owners.
-      done_when: An ordinary multi-shard fixture without Cassette metadata yields the exact tensor inventory and
-        committed identity; missing or conflicting semantics fail explicitly.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L05
-      title: Execute source tokenization and conversation rendering
-      depends: [L04]
-      invariants: [Q10, Q30, Q33, Q66]
-      files: [compiler.py, sources.py, tools/genschema.py, tests/]
+      work: Build the canonical semantic input from ordinary config, shard indexes and SafeTensors headers
+        without requiring cassette.compiler.v1 or executing source code.
+      done_when: An ordinary multi-shard fixture without Cassette metadata yields the exact tensor inventory
+        and committed identity; missing or conflicting semantics fail explicitly.
+    - title: Execute source tokenization and conversation rendering
       inspected_code: compiler.py:_source_material; sources.py; pyproject.toml
-      work: Bind and execute source tokenizer and conversation/tool templates using admitted primitives and committed
-        semantic data.
-      sizing_basis: These operations jointly define the input token sequence. Reuse must be resolved from pinned
-        primitives; a missing primitive needs the Q10/Q30 admission, not a handwritten tokenizer.
+      work: Bind and execute source tokenizer and conversation/tool templates using admitted primitives and
+        committed semantic data.
       done_when: Source-derived token IDs, roles, tool histories and rendered conversations match an independent
         oracle; changed tokenizer/template bytes change semantic identity.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: primitive admission and exact source semantics must be resolved before editing
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L06
-      title: Run a generated dense model graph
-      depends: [L05]
-      invariants: [Q7, Q30, Q33, Q58, Q10, Q20, Q63]
-      files: [pager.py, compiler.py, tools/genschema.py, tests/]
+    - title: Run a generated dense model graph
       inspected_code: pager.py:_transformer_case_rows; pager.py:_bind_transformer_steps; pager.py:CertifiedTransformer;
         compiler.py:_inventory
       work: Replace the fixed F3 graph dimensions and literal operation sequence with generated source-derived
         graph data; run complete layered dense prefill.
-      sizing_basis: Existing embedding, normalization, attention, RoPE and matmul dispatch is reusable. This stage
-        generalizes graph binding and traversal; decode persistence, experts and modality processing follow separately.
       done_when: A complete multi-layer graph at dimensions other than F3 matches an independent dense oracle,
         covers every source contribution and rejects absent operator tuples.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L07
-      title: Advance decode and durable model state
-      depends: [L06]
-      invariants: [Q20, Q63, Q66]
-      files: [pager.py, broker.py, tools/genschema.py, tests/]
+    - title: Advance decode and durable model state
       inspected_code: pager.py:CertifiedTransformer; pager.py:_runtime_tokens; broker.py:CanonicalBroker.execute
       work: Advance actual autoregressive decode and plan-derived KV/recurrent state through the existing token
         commit boundary.
-      sizing_basis: One state-transition path over the dense graph just established. Reuse page residency and
-        atomic commit rather than adding a second scheduler.
-      done_when: Multi-token generation matches the oracle; interruption exposes only committed tokens and resumes
-        exact KV/recurrent state at a different sequence length.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L08
-      title: Run sparse experts through graph data
-      depends: [L07]
-      invariants: [Q7, Q10, Q18, Q30]
-      files: [pager.py, compiler.py, tools/genschema.py, tests/]
+      done_when: Multi-token generation matches the oracle; interruption exposes only committed tokens and
+        resumes exact KV/recurrent state at a different sequence length.
+    - title: Run sparse experts through graph data
       inspected_code: pager.py:dispatch; pager.py:_bind_runtime_steps; compiler.py:_inventory
-      work: Add generated routing, selected-expert execution and result combination to the same model-graph path.
-      sizing_basis: One sparse graph operation family over established dense traversal. Routing and expert coverage
-        require their own oracle, so they do not hide inside dense prefill.
+      work: Add generated routing, selected-expert execution and result combination to the same model-graph
+        path.
       done_when: A sparse fixture matches full expert execution, including rare-route activation and source-contribution
         accounting, with no model-family branch.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L09
-      title: Execute the declared modality processors
-      depends: [L08]
-      invariants: [Q10, Q30, Q66]
-      files: [pager.py, compiler.py, tools/genschema.py, tests/]
+    - title: Execute the declared modality processors
       inspected_code: pager.py:_convolution; pager.py:_embedding; compiler.py:_source_material
       work: Bind source processor identity and execute declared image/modality inputs into the existing model
         graph.
-      sizing_basis: Processor semantics and their oracle differ from text tokenization. Reuse admitted runtime
-        primitives and generated source data; do not replace the required modality with a text-only claim.
       done_when: Each declared processor path in the source-data fixture matches its independent output oracle,
         binds exact bytes and rejects an unsupported operator explicitly.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: primitive admission and exact source semantics must be resolved before editing
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L10
-      title: Capture real teacher and workload observations
-      depends: [L09]
-      invariants: [Q13, Q18, Q19, Q40, Q15, Q16, Q17]
-      files: [tools/capture_fixture.py, pager.py, compiler.py, tools/genschema.py, tests/]
+    done_when: An ordinary source fixture runs through source tokenization, generated dense/sparse/modality
+      graphs, prefill, decode and recovered state with independently checked outputs.
+    acceptance_boundary: Machine evidence from fixtures and real internal components. Physical drive and real-model
+      results are owned by L05-L10.
+    execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
+      outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
+    timing_evidence: NOT_RUN
+    review_profile: bootstrap
+    env: macos_arm64_fixture_only
+    evidence_level: INTEGRATION
+    record_kind: stage
+    status: TODO
+    attempts: []
+  - id: L03
+    title: Complete compiled execution, training and client delivery
+    phase: NON_DRIVE_PREPARATION
+    depends:
+    - L02
+    invariants:
+    - Q13
+    - Q18
+    - Q19
+    - Q40
+    - Q15
+    - Q16
+    - Q17
+    - Q30
+    - Q64
+    - Q4
+    - Q37
+    - Q58
+    - Q60
+    - Q20
+    - Q45
+    - Q23
+    - Q51
+    - Q52
+    - Q53
+    - Q21
+    - Q71
+    - Q24
+    - Q72
+    - Q26
+    - Q25
+    - Q70
+    - Q27
+    - Q75
+    - Q22
+    - Q73
+    - Q5
+    - Q6
+    - Q31
+    - Q76
+    - Q77
+    files:
+    - tools/capture_fixture.py
+    - pager.py
+    - compiler.py
+    - tools/genschema.py
+    - tests/
+    - sources.py
+    - store.py
+    - trainer.py
+    - broker.py
+    - adapters/__init__.py
+    work: Actual fixture observations produce independently recomputed certificates; compiled execution, SFT/pretraining/DPO
+      and Tier-B child regeneration reach canonical clients through the real internal path.
+    required_outcomes:
+    - title: Capture real teacher and workload observations
       inspected_code: tools/capture_fixture.py:capture; pager.py:CertifiedTransformer; compiler.py:_prepare_revision
-      work: Replace fixed example capture with actual native activations/logits and required gradients; bind frozen
-        cases, scorers, seeds, trials, strata and baseline identities.
-      sizing_basis: One observation producer using the native executor. Workload freezing belongs with capture
-        because it fixes what the observations mean before they exist.
+      work: Replace fixed example capture with actual native activations/logits and required gradients; bind
+        frozen cases, scorers, seeds, trials, strata and baseline identities.
       done_when: Captured observations reproduce from the frozen workload, include required rare-route/ablation
         evidence and change when actual model behavior changes.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L11
-      title: Construct condition witnesses and atom covers
-      depends: [L10]
-      invariants: [Q18, Q19]
-      files: [compiler.py, tools/genschema.py, tests/]
+    - title: Construct condition witnesses and atom covers
       inspected_code: compiler.py:_certificate; compiler.py:_witness_loss; MATHS.md:sections 1-4
       work: Construct condition metrics and candidate atoms from committed observations, with explicit faces,
         nonfaces, exclusions and a complete protected-condition cover.
-      sizing_basis: 'One mathematical feasibility problem: which conditions share a rank-bounded witness. Existing
-        exact validators provide the oracle; selecting a useful scalable construction remains an implementation
-        uncertainty.'
-      done_when: Independently computed losses, ranks and cover membership verify on a nontrivial fixture; a pairwise-only
-        false cover fails. No useful real-model cover is claimed before F4/F5.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: mechanism construction; no reliable duration estimate until its predecessor observations/operation
-        contracts exist
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L12
-      title: Construct descriptions and residual addresses
-      depends: [L11]
-      invariants: [Q19, Q30]
-      files: [compiler.py, tools/genschema.py, tests/]
+      done_when: Independently computed losses, ranks and cover membership verify on a nontrivial fixture;
+        a pairwise-only false cover fails. No useful real-model cover is claimed before F4/F5.
+    - title: Construct descriptions and residual addresses
       inspected_code: compiler.py:_certificate; compiler.py:_contribution_map; MATHS.md:section 5
-      work: Produce descriptions, residual laws and exact source-address maps using admitted primitives and separately
-        declared peak/total description budgets.
-      sizing_basis: One representation/resource construction. Atom compatibility is already supplied; description
-        size and fresh reads must be priced independently.
+      work: Produce descriptions, residual laws and exact source-address maps using admitted primitives and
+        separately declared peak/total description budgets.
       done_when: Independent reconstruction verifies distortion, residual sampling law and exact source contribution
         addresses, including peak and total byte limits.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: mechanism construction; no reliable duration estimate until its predecessor observations/operation
-        contracts exist
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L13
-      title: Construct operation-specific composition bounds
-      depends: [L12]
-      invariants: [Q19]
-      files: [compiler.py, pager.py, tools/genschema.py, tests/]
+    - title: Construct operation-specific composition bounds
       inspected_code: compiler.py:_certificate; pager.py:admit_schedule; MATHS.md:section 6
-      work: Produce rank/loss propagation and horizon risk for each declared operation; use quadrature only with
-        all centering, dependence, linearization and remainder witnesses.
-      sizing_basis: Composition is a separate mathematical obligation, not an extra coefficient in the description
-        producer. Reuse the accepted operation catalog and exact checker.
-      done_when: A multi-operation trace independently recomputes rank/error and horizon risk; removing any required
-        hypothesis rejects conditional quadrature.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: mechanism construction; no reliable duration estimate until its predecessor observations/operation
-        contracts exist
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L14
-      title: Construct observation adequacy evidence
-      depends: [L13]
-      invariants: [Q18, Q19, Q64]
-      files: [compiler.py, tools/genschema.py, tests/]
+      work: Produce rank/loss propagation and horizon risk for each declared operation; use quadrature only
+        with all centering, dependence, linearization and remainder witnesses.
+      done_when: A multi-operation trace independently recomputes rank/error and horizon risk; removing any
+        required hypothesis rejects conditional quadrature.
+    - title: Construct observation adequacy evidence
       inspected_code: compiler.py:_certificate; MATHS.md:section 7
       work: Bind the protected decision family or test law, its support, sample count, confidence rule, selector
         and off-support behavior.
-      sizing_basis: One selector-information obligation. Average quality or prompt similarity cannot discharge
-        it, so it stays separate from composition.
       done_when: Independent adequacy checks accept the declared protected case and reject unsupported selection;
         altered support or confidence inputs invalidate the witness.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: mechanism construction; no reliable duration estimate until its predecessor observations/operation
-        contracts exist
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L15
-      title: Publish and execute the complete compiled plan
-      depends: [L14]
-      invariants: [Q4, Q19, Q37, Q58, Q60, Q20, Q45, Q64]
-      files: [compiler.py, pager.py, tools/genschema.py, tests/]
-      inspected_code: compiler.py:_prepare_revision; compiler.py:_execution_plan; pager.py:CertifiedPager; pager.py:CertifiedTransformer
+    - title: Publish and execute the complete compiled plan
+      inspected_code: compiler.py:_prepare_revision; compiler.py:_execution_plan; pager.py:CertifiedPager;
+        pager.py:CertifiedTransformer
       work: Assemble constructed witnesses into resumable blockwise compilation and execute compiled descriptions/correction
         across the complete model graph.
-      sizing_basis: Integration of supplied producers into existing compiler and pager paths. It must not also
-        invent witness algorithms, graph traversal or a new numerical kernel.
       done_when: Source-to-compiled execution passes exact Q19 recomputation, complete prefill/decode and memory/fresh-read/horizon
         bounds; corruption and restart use the actual durable path.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L16
-      title: Acquire and stream training datasets
-      depends: [L15]
-      invariants: [Q23, Q51, Q52, Q53, Q21, Q71]
-      files: [sources.py, store.py, trainer.py, broker.py, tools/genschema.py, tests/]
+    - title: Acquire and stream training datasets
       inspected_code: sources.py:transfer_artifact; store.py; trainer.py:_training_material
       work: Transfer immutable dataset bytes through store-granted extents and stream bounded token sequences,
         preference pairs and masks into training.
-      sizing_basis: One data path that reuses source transfer and page reads. Dataset acquisition is not model
-        compilation; batch correctness precedes loss implementation.
       done_when: Interrupted transfer resumes exact bytes, and independently decoded batches preserve sequence
         boundaries, masks and chosen/rejected pairs without internal full copies.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L17
-      title: Generalize parameter and optimizer windows
-      depends: [L16]
-      invariants: [Q21, Q30, Q71, Q24, Q72, Q26, Q25]
-      files: [trainer.py, pager.py, tools/genschema.py, tests/]
+    - title: Generalize parameter and optimizer windows
       inspected_code: trainer.py:_training_material; trainer.py:_update_delta; trainer.py:_state_pages; pager.py:merge_adapter_material
-      work: Remove fixed 2x3 operand, parameter, optimizer and merge shapes together; derive all windows and resumable
-        optimizer state from tensor maps and plans.
-      sizing_basis: One tensor-window contract used by update, checkpoint and merge. Avoid a separate miniature
-        shape generalization that real training would immediately replace.
+      work: Remove fixed 2x3 operand, parameter, optimizer and merge shapes together; derive all windows and
+        resumable optimizer state from tensor maps and plans.
       done_when: Non-2x3 multi-window parameters update, checkpoint, resume and merge with independent optimizer
         equivalence and exact bounded-state accounting.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L18
-      title: Train real language-model objectives
-      depends: [L17]
-      invariants: [Q21, Q70, Q71]
-      files: [trainer.py, pager.py, tools/genschema.py, tests/]
+    - title: Train real language-model objectives
       inspected_code: trainer.py:_update_delta; trainer.py:advance_training; pager.py:_autograd_mse
       work: Replace miniature MSE objectives with masked full-graph language-model losses for SFT and continued
         pretraining.
-      sizing_basis: Both operations share sequence log-probabilities and the cross-entropy path; their masks/boundaries
-        differ. One engine and paired fixtures are smaller and clearer than two implementations.
       done_when: Independent full-graph loss and gradients match for SFT and continued pretraining, with padding/sequence
         boundaries and real token inputs.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L19
-      title: Train the preference objective
-      depends: [L18]
-      invariants: [Q21, Q70, Q71]
-      files: [trainer.py, pager.py, tools/genschema.py, tests/]
+    - title: Train the preference objective
       inspected_code: trainer.py:_update_delta; pager.py:_autograd_dpo; trainer.py:advance_training
       work: Compute DPO from chosen/rejected sequence probabilities and the frozen reference identity through
         the real model and optimizer path.
-      sizing_basis: Pairwise reference-relative loss has a different input and oracle from SFT, so it merits one
-        separate coding stage.
       done_when: Real sequence DPO loss, gradient and update match the independent oracle; changing the reference
         or pair direction changes the expected result.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L20
-      title: Recover certificates and publish callable training children
-      depends: [L19]
-      invariants: [Q19, Q27, Q70, Q75, Q22, Q26, Q73]
-      files: [trainer.py, compiler.py, broker.py, tools/genschema.py, tests/]
+    - title: Recover certificates and publish callable training children
       inspected_code: trainer.py:_calibrations; trainer.py:commit_training; compiler.py; broker.py:CanonicalBroker.callable_revision
       work: Dispatch Tier-B regeneration of every invalidated witness, then publish and reload the exact trained
         child while preserving its parent.
-      sizing_basis: Reuse the already built mathematical producers and existing atomic child publication. The
-        new work is invalidation-to-regeneration wiring and one end-to-end child proof.
-      done_when: Incremental Tier-B certificates match clean derivation across declared precision tiers; the committed
-        child reloads through broker/pager and interrupted publication leaves parent or exact child.
-      acceptance_boundary: Machine proof through broker/pager and store. L21 proves the same child through the
-        actual loopback endpoint; L34-L36 own real training/client proof.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L21
-      title: Serve the canonical endpoint and named clients
-      depends: [L20]
-      invariants: [Q5, Q6, Q31, Q76, Q77]
-      files: [broker.py, adapters/__init__.py, tools/genschema.py, tests/]
+      done_when: Incremental Tier-B certificates match clean derivation across declared precision tiers; the
+        committed child reloads through broker/pager and interrupted publication leaves parent or exact child.
+    - title: Serve the canonical endpoint and named clients
       inspected_code: broker.py:CanonicalBroker.issue; broker.py:CanonicalBroker.execute; adapters/__init__.py
       work: Add the stdlib loopback listener in the existing broker process and connect generated client translations
         to actual model execution.
-      sizing_basis: Canonical request handling and adapters already exist. Transport, capability negotiation and
-        one real client path form a cohesive missing boundary.
-      done_when: Every named client mapping reaches native, compiled and trained-child execution, preserves tools/history
-        and reports only implemented capabilities.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L22
-      title: Bind approved attempts and seal their evidence
-      depends: [L21]
-      invariants: [Q6, Q33, Q5, Q60, Q79]
-      files: [tools/campaign.py, store.py, tools/genschema.py, tests/]
+      done_when: Every named client mapping reaches native, compiled and trained-child execution, preserves
+        tools/history and reports only implemented capabilities.
+    done_when: Actual fixture observations produce independently recomputed certificates; compiled execution,
+      SFT/pretraining/DPO and Tier-B child regeneration reach canonical clients through the real internal path.
+    acceptance_boundary: Machine evidence from fixtures and real internal components. Physical drive and real-model
+      results are owned by L05-L10.
+    execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
+      outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
+    timing_evidence: NOT_RUN
+    review_profile: bootstrap
+    env: macos_arm64_fixture_only
+    evidence_level: INTEGRATION
+    record_kind: stage
+    status: TODO
+    attempts: []
+  - id: L04
+    title: Complete campaign tooling and the machine-to-drive handoff
+    phase: NON_DRIVE_PREPARATION
+    depends:
+    - L03
+    invariants:
+    - Q6
+    - Q33
+    - Q5
+    - Q60
+    - Q79
+    - Q44
+    - Q41
+    - Q43
+    - Q47
+    - Q48
+    - Q23
+    - Q28
+    - Q32
+    - Q80
+    - Q27
+    - Q75
+    - Q29
+    - Q42
+    - Q74
+    - Q25
+    - Q49
+    - Q37
+    - Q16
+    - Q36
+    - Q70
+    - Q76
+    - Q78
+    files:
+    - tools/campaign.py
+    - store.py
+    - tools/genschema.py
+    - tests/
+    - broker.py
+    - trainer.py
+    - tools/ledger.py
+    - compiler.py
+    work: One integrated scratch campaign captures and verifies evidence, ownership, dependencies, invalidation,
+      profiles, thermal windows and operation recovery; complete suite, generated authorities, ledger/J and
+      Q78 pass before the drive campaign.
+    required_outcomes:
+    - title: Bind approved attempts and seal their evidence
       inspected_code: tools/campaign.py (absent); store.py:canonical_bytes; store.py:digest_bytes
       work: Implement immutable action templates, fresh execution bindings and exact namespace seals, including
         recoverable capture-failure bundles.
-      sizing_basis: One immutable attempt representation with its writer and verifier. Reuse canonical serialization/digest
-        primitives; no physical collector is added here.
-      done_when: A scratch attempt binds exact inputs and fresh operation identity; lstat namespace checks reject
-        missing/extra files, symlinks, hard links and special objects, including interrupted capture.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L23
-      title: Collect drive identity and protected-content inventory
-      depends: [L22]
-      invariants: [Q44, Q79, Q41, Q43]
-      files: [tools/campaign.py, tools/genschema.py, tests/]
+      done_when: A scratch attempt binds exact inputs and fresh operation identity; lstat namespace checks
+        reject missing/extra files, symlinks, hard links and special objects, including interrupted capture.
+    - title: Collect drive identity and protected-content inventory
       inspected_code: tools/campaign.py (absent); PHASE_LIVE_RUNBOOK.md:Run cards and cartridge preservation
-      work: Collect exact host/disk/path identity and off-drive top-level name/type/aggregate-byte inventory with
-        resumable traversal.
-      sizing_basis: One physical containment and preservation collector. Detailed per-file inventories remain
-        outside the contract; scratch fixtures exercise it before physical participation.
+      work: Collect exact host/disk/path identity and off-drive top-level name/type/aggregate-byte inventory
+        with resumable traversal.
       done_when: Scratch inventories reproduce, distinguish identity/path changes, exclude only declared volatile
         entries and detect unexplained top-level changes.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L24
-      title: Collect operation-interval telemetry
-      depends: [L23]
-      invariants: [Q47, Q79, Q48, Q23, Q28, Q41]
-      files: [tools/campaign.py, broker.py, trainer.py, tools/genschema.py, tests/]
+    - title: Collect operation-interval telemetry
       inspected_code: tools/campaign.py (absent); broker.py:CanonicalBroker.events; trainer.py:TrainingObservation
       work: Bind memory/process, power/thermal, socket/network and filesystem/write observations to exact operation
         intervals.
-      sizing_basis: One interval collector with data-driven sample fields and shared timestamps. Optional unavailable
-        sensors remain explicit UNKNOWN; mandatory evidence cannot be inferred.
       done_when: Deterministic boundary collectors prove complete aligned intervals, socket/placement observations
         and physical writes; missing mandatory samples fail the affected assertion.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L25
-      title: Implement exclusive review history
-      depends: [L24]
-      invariants: [Q5, Q32, Q60]
-      files: [tools/campaign.py, tools/genschema.py, tests/]
+    - title: Implement exclusive review history
       inspected_code: tools/campaign.py (absent); .agents/skills/machine-stage-review/SKILL.md
-      work: Implement atomic review leases and append-only envelope heads, including expiry, succession and termination
-        after accepted remediation.
-      sizing_basis: One compare-and-swap ownership/history mechanism. The same state transitions serve machine
-        and live reviews; do not build separate authorities.
-      done_when: Competing reviewers, stale heads, expired leases and attempted second remediations produce the
-        declared outcomes without altering sealed execution evidence.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L26
-      title: Expand literal campaign dependencies
-      depends: [L25]
-      invariants: [Q33, Q80, Q60]
-      files: [tools/campaign.py, tools/genschema.py, tests/]
+      work: Implement atomic review leases and append-only envelope heads, including expiry, succession and
+        termination after accepted remediation.
+      done_when: Competing reviewers, stale heads, expired leases and attempted second remediations produce
+        the declared outcomes without altering sealed execution evidence.
+    - title: Expand literal campaign dependencies
       inspected_code: tools/campaign.py (absent); tools/genschema.py; research/ACCEPTANCE_MATRIX.yaml
-      work: Generate finite evidence coordinates, exact assertion owners and prerequisite edges, then seal monotone
-        graph revisions.
-      sizing_basis: One materializer from existing declarative recipes. Expansion and ownership belong together
-        because an unowned coordinate is not executable evidence.
+      work: Generate finite evidence coordinates, exact assertion owners and prerequisite edges, then seal
+        monotone graph revisions.
       done_when: Every required assertion resolves to complete producer/owner sets; missing inputs, duplicate
         IDs, cycles and inherited node/edge rewrites reject expansion.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L27
-      title: Prove invalidation and clean-replay reachability
-      depends: [L26]
-      invariants: [Q80, Q27, Q75, Q29, Q60, Q79, Q5, Q33]
-      files: [tools/campaign.py, tools/ledger.py, tools/genschema.py, tests/]
+    - title: Prove invalidation and clean-replay reachability
       inspected_code: tools/campaign.py (absent); tools/ledger.py:removal_proof_node; .agents/skills/machine-stage-review/SKILL.md
       work: Use the sealed graph for transitive invalidation and Q80 reachability through intermediate evidence
         levels; add the bounded remediation diff counter and integrate campaign controls.
-      sizing_basis: The same graph traversal supplies both affected-descendant and replay-closure calculations.
-        Reuse the ledger parser for diff accounting; the integrated scratch tests add no new product subsystem.
       done_when: Integrated scratch proof rejects lost predecessor reachability, incomplete invalidation, owner/edge
         damage and disallowed repairs; normal review validates the frozen candidate after bootstrap proof.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: bootstrap_then_normal
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L28
-      title: Measure exact operation storage profiles
-      depends: [L27]
-      invariants: [Q41, Q42, Q44]
-      files: [tools/campaign.py, compiler.py, trainer.py, tools/genschema.py, tests/]
+    - title: Measure exact operation storage profiles
       inspected_code: tools/campaign.py (absent); compiler.py:_execution_plan; trainer.py:admit_training
-      work: Execute resumable plan-derived read/write/latency/flush profile patterns and bind measurements to
-        exact drive, host, path, operation and plan.
-      sizing_basis: One profile producer feeding existing admission logic. It describes measurements rather than
-        adding media-class gates.
+      work: Execute resumable plan-derived read/write/latency/flush profile patterns and bind measurements
+        to exact drive, host, path, operation and plan.
       done_when: Deterministic profile inputs independently reproduce every required Q41-Q44 output and reject
         mismatched plan/path identity.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: normal
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L29
-      title: Measure training thermal and endurance behavior
-      depends: [L28]
-      invariants: [Q28, Q48, Q74]
-      files: [trainer.py, tools/campaign.py, tools/genschema.py, tests/]
+    - title: Measure training thermal and endurance behavior
       inspected_code: trainer.py:assess_training_observation; trainer.py:_assess_training_observation; tools/campaign.py
         (absent)
       work: Implement continuous training windows, cache-volume evidence and above/below-duty-cycle experiments.
-      sizing_basis: Reuse existing training resource/endurance calculations. The missing experiment and window
-        accounting differ from ordinary latency profiling and need a separate proof.
       done_when: Deterministic traces prove unchanged Q48 duration, cache-write volume and duty-cycle predicates
         plus Q74 admission. Actual long physical runs occur later.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: normal
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L30
-      title: Hold and recover active broker operations
-      depends: [L29]
-      invariants: [Q5, Q25, Q49, Q60]
-      files: [broker.py, trainer.py, tools/genschema.py, tests/]
+    - title: Hold and recover active broker operations
       inspected_code: broker.py:CanonicalBroker.pause; broker.py:CanonicalBroker.resume; broker.py:CanonicalBroker.execute;
         trainer.py:advance_training
-      work: Add explicit first-boundary hold/acknowledgement and release to the existing durable operations used
-        by the campaign.
-      sizing_basis: One scheduler/durable-boundary extension reused across operations. Starting, killing and resuming
-        tests remain within this stage; they do not each become a stage.
+      work: Add explicit first-boundary hold/acknowledgement and release to the existing durable operations
+        used by the campaign.
       done_when: Each affected operation reaches the declared hold, cannot pass it before release, and survives
         real kill/resume without duplicating committed effects.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: normal
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L31
-      title: Finish independent verification and the machine gate
-      depends: [L30]
-      invariants: [Q37, Q47, Q60, Q16, Q36, Q70, Q76, Q80, Q29, Q78]
-      files: [tools/campaign.py, broker.py, tools/ledger.py, compiler.py, tools/genschema.py, tests/]
+    - title: Finish independent verification and the machine gate
       inspected_code: tools/campaign.py (absent); broker.py:CanonicalBroker.execute; tools/ledger.py; compiler.py:_certificate
-      work: Connect independent raw verification to resumable coverage and wire all completed producers into the
-        matrix entrypoints; close the integrated pre-live gate.
-      sizing_basis: Reuse existing certificate/scoring/ledger computations as verification workers. New coding
-        is job/coverage integration; full test, J and Q78 execution time is not coding.
-      done_when: Partial coverage cannot close a target; the complete ordinary-source-to-client fixture and recovery
-        path pass. Full suite, ledger, J, generated authorities and pre-live Q78 pass on the exact candidate.
-      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
-        and release success remain owned by the later live stages.
-      coding_target_minutes: 15
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
-      review_profile: normal
-      env: macos_arm64_fixture_only
-      evidence_level: INTEGRATION
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L32
-      title: Qualify storage and acquire the frozen inputs
-      depends: [L31]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: Pin source and workload/baseline descriptors, refresh machine identities, inventory the approved drive,
-        prove Q44, qualify each exact transfer and acquire all required model/dataset bytes.
-      evidence_recipe: F4-SELECTION through SOURCE-ENTRY-PASS; source_header, acquisition, ollama_source and workload_freeze
-      done_when: SOURCE-ENTRY-PASS, required acquisition/Ollama receipts and BASELINE-INPUTS-FROZEN pass with
-        preserved inventory and exact source identities.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L33
-      title: Measure and select the comparison baselines
-      depends: [L32]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: Run the frozen native candidate sets and actual teacher/reference captures; select the native winner
-        only from completed measurements.
-      evidence_recipe: native_candidate_measurement, native_baseline_selection, reference_capture and baseline_freeze
-      done_when: BASELINES-ALL-PASS and every required REFERENCE-<model>-ALL-PASS bind the frozen workload and
-        independently checked measurements.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L34
-      title: Prove the dense F4 mechanism
-      depends: [L33]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: Qualify the intended compile work, compile with real recovery, verify the certificate, qualify its
-        resulting inference plan and run dense inference plus Tier A/B training.
-      evidence_recipe: F4-COMPILE-PLAN through F4-GATE; f4_inference and dense training
-      done_when: F4-GATE passes all frozen Q36 predicates and dense training proofs. Q38 falsification is retained
-        as FAIL and blocks F5; it cannot close this stage as PASS.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L35
-      title: Prove the sparse F5 mechanism
-      depends: [L34]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: After F4 PASS, qualify and compile pinned Scout, run sparse inference/training and fit the predeclared
-        Q37 curves.
-      evidence_recipe: F5-COMPILE-PLAN through F5-GATE; f5_inference and sparse training
-      done_when: F5-GATE passes with independently verified sparse certificates and resource/quality/service curves;
-        a Q38 failure blocks frontier compiled execution.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L36
-      title: Prove every required runtime and failure row
-      depends: [L35]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: Run every required model/class, training operation, client, sustained interval, training-thermal experiment,
-        physical failure and offline/privacy coordinate; seal final Q78/Q79.
-      evidence_recipe: execution, training, sustained, protocol, live_failure, offline families, tinker_source
-        and FINAL-PROVENANCE
-      done_when: All required runtime/source/training/failure/privacy terminal owners and FINAL-PROVENANCE pass.
-        No representative sample replaces the matrix cross-products.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-    - id: L37
-      title: Replay from clean roots and close the release
-      depends: [L36]
-      invariants: [Q1, Q36, Q29, Q78, Q13, Q15, Q16, Q67, Q44, Q79, Q41, Q50, Q52, Q42, Q19, Q60, Q58, Q17, Q18,
-        Q37, Q80]
-      files: [PHASE_LIVE_RUNBOOK.md, IMPLEMENTATION.md, research/ACCEPTANCE_MATRIX.yaml]
-      work: Materialize the dependency-preserving clean-root replay, execute every required live member with fresh
-        identities and independently recompute completion.
-      evidence_recipe: Q80-MATERIALIZE, q80_clean_replay and COMPLETION
-      done_when: COMPLETION emits the reproducible Q80 digest only after every required replay, Q78/Q79 predicate
-        and complete matrix assertion passes.
-      acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
-        claims retain their named owners.
-      coding_target_minutes: 0
-      coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
-      sizing_basis: Operational proof on previously built code. No implementation is planned; long operations,
-        principal actions and review are outside the coding budget.
-      review_profile: live
-      env: declared_live_hosts_drives_sources_and_principal
-      evidence_level: LIVE
-      record_kind: stage
-      status: TODO
-      attempts: []
-  matrix_phases: [L01.25, L01.5, L02, L03, L04, L05]
-  statuses: [TODO, IN_PROGRESS, DONE, BLOCKED]
-  row_statuses: [NOT_RUN, RUNNING, PASS, FAIL, BLOCKED]
-  campaign_result_statuses: [NOT_RUN, RUNNING, INCOMPLETE, PASS, FAIL, BLOCKED]
+      work: Connect independent raw verification to resumable coverage and wire all completed producers into
+        the matrix entrypoints; close the integrated pre-live gate.
+      done_when: Partial coverage cannot close a target; the complete ordinary-source-to-client fixture and
+        recovery path pass. Full suite, ledger, J, generated authorities and pre-live Q78 pass on the exact
+        candidate.
+    done_when: One integrated scratch campaign captures and verifies evidence, ownership, dependencies, invalidation,
+      profiles, thermal windows and operation recovery; complete suite, generated authorities, ledger/J and
+      Q78 pass before the drive campaign.
+    acceptance_boundary: Machine evidence from fixtures and real internal components. Physical drive and real-model
+      results are owned by L05-L10.
+    execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
+      outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
+    timing_evidence: NOT_RUN
+    review_profile: bootstrap_then_normal
+    env: macos_arm64_fixture_only
+    evidence_level: INTEGRATION
+    record_kind: stage
+    status: TODO
+    attempts: []
+    review_transition: Use bootstrap review until integrated ownership and graph machinery is proved; use normal
+      review on the integrated candidate and subsequent machine attempts.
+  - id: L05
+    title: Qualify storage and acquire the frozen inputs
+    depends:
+    - L04
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: Pin source and workload/baseline descriptors, refresh machine identities, inventory the approved
+      drive, prove Q44, qualify each exact transfer and acquire all required model/dataset bytes.
+    evidence_recipe: F4-SELECTION through SOURCE-ENTRY-PASS; source_header, acquisition, ollama_source and
+      workload_freeze
+    done_when: SOURCE-ENTRY-PASS, required acquisition/Ollama receipts and BASELINE-INPUTS-FROZEN pass with
+      preserved inventory and exact source identities.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  - id: L06
+    title: Measure and select the comparison baselines
+    depends:
+    - L05
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: Run the frozen native candidate sets and actual teacher/reference captures; select the native winner
+      only from completed measurements.
+    evidence_recipe: native_candidate_measurement, native_baseline_selection, reference_capture and baseline_freeze
+    done_when: BASELINES-ALL-PASS and every required REFERENCE-<model>-ALL-PASS bind the frozen workload and
+      independently checked measurements.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  - id: L07
+    title: Prove the dense F4 mechanism
+    depends:
+    - L06
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: Qualify the intended compile work, compile with real recovery, verify the certificate, qualify its
+      resulting inference plan and run dense inference plus Tier A/B training.
+    evidence_recipe: F4-COMPILE-PLAN through F4-GATE; f4_inference and dense training
+    done_when: F4-GATE passes all frozen Q36 predicates and dense training proofs. Q38 falsification is retained
+      as FAIL and blocks F5; it cannot close this stage as PASS.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  - id: L08
+    title: Prove the sparse F5 mechanism
+    depends:
+    - L07
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: After F4 PASS, qualify and compile pinned Scout, run sparse inference/training and fit the predeclared
+      Q37 curves.
+    evidence_recipe: F5-COMPILE-PLAN through F5-GATE; f5_inference and sparse training
+    done_when: F5-GATE passes with independently verified sparse certificates and resource/quality/service
+      curves; a Q38 failure blocks frontier compiled execution.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  - id: L09
+    title: Prove every required runtime and failure row
+    depends:
+    - L08
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: Run every required model/class, training operation, client, sustained interval, training-thermal
+      experiment, physical failure and offline/privacy coordinate; seal final Q78/Q79.
+    evidence_recipe: execution, training, sustained, protocol, live_failure, offline families, tinker_source
+      and FINAL-PROVENANCE
+    done_when: All required runtime/source/training/failure/privacy terminal owners and FINAL-PROVENANCE pass.
+      No representative sample replaces the matrix cross-products.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  - id: L10
+    title: Replay from clean roots and close the release
+    depends:
+    - L09
+    invariants:
+    - Q1
+    - Q36
+    - Q29
+    - Q78
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    - Q44
+    - Q79
+    - Q41
+    - Q50
+    - Q52
+    - Q42
+    - Q19
+    - Q60
+    - Q58
+    - Q17
+    - Q18
+    - Q37
+    - Q80
+    files:
+    - PHASE_LIVE_RUNBOOK.md
+    - IMPLEMENTATION.md
+    - research/ACCEPTANCE_MATRIX.yaml
+    work: Materialize the dependency-preserving clean-root replay, execute every required live member with
+      fresh identities and independently recompute completion.
+    evidence_recipe: Q80-MATERIALIZE, q80_clean_replay and COMPLETION
+    done_when: COMPLETION emits the reproducible Q80 digest only after every required replay, Q78/Q79 predicate
+      and complete matrix assertion passes.
+    acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
+      claims retain their named owners.
+    timing_evidence: NOT_RUN
+    review_profile: live
+    env: declared_live_hosts_drives_sources_and_principal
+    evidence_level: LIVE
+    record_kind: stage
+    status: TODO
+    attempts: []
+    phase: DRIVE_AND_LIVE_PROOF
+  matrix_phases:
+  - L01.25
+  - L01.5
+  - L02
+  - L03
+  - L04
+  - L05
+  statuses:
+  - TODO
+  - IN_PROGRESS
+  - DONE
+  - BLOCKED
+  row_statuses:
+  - NOT_RUN
+  - RUNNING
+  - PASS
+  - FAIL
+  - BLOCKED
+  campaign_result_statuses:
+  - NOT_RUN
+  - RUNNING
+  - INCOMPLETE
+  - PASS
+  - FAIL
+  - BLOCKED
   record_defaults:
     status: TODO
     attempts: []
     required_proof_fields:
-      - proof_target
-      - required_path
-      - adjacent_false_pass
-      - discriminating_observation
-      - oracle
-      - source_revision
-      - raw_evidence_digest
-    scope_rule: Use each stage file allowlist and cited assertions. Resolve the smallest code change before editing;
-      do not change acceptance thresholds.
+    - proof_target
+    - required_path
+    - adjacent_false_pass
+    - discriminating_observation
+    - oracle
+    - source_revision
+    - raw_evidence_digest
+    scope_rule: Use each stage file allowlist and cited assertions. Resolve the smallest code change before
+      editing; do not change acceptance thresholds.
     review_rule: Review the frozen stage candidate with the declared local skill. Its evidence checks and review
       envelopes do not receive new L numbers.
     evidence_rule: Operation/family receipts belong to the declared owner stage and need no new user instruction
-      per receipt. Resolve dense F4 training and thermal receipts to L34, sparse F5 to L35, and frontier rows
-      to L36. Resolve qualification, checkpoint, offline-training and verification ownership from the exact consumer/target.
-      Ownership is not a dependency on the owner stage already being DONE. Preserve each exact action/permission
-      boundary.
+      per receipt. Resolve dense F4 training and thermal receipts to L07, sparse F5 to L08, and frontier rows
+      to L36. Resolve qualification, checkpoint, offline-training and verification ownership from the exact
+      consumer/target. Ownership is not a dependency on the owner stage already being DONE. Preserve each exact
+      action/permission boundary.
     closure_rule: DONE requires all stage assertions and its independent PASS_READY review. An elapsed coding
       budget or successful launch is not completion.
   operation_records:
-    - id: F4-SELECTION
-      matrix_phase: L02
-      title: Pin the permissive F4 model and opaque credential
-      depends: [L31]
-      evidence_level: PLATFORM
-      principal_action: Choose one printed candidate row and place any required token in the terminal or keychain.
-      work: Resolve candidate immutable revisions, artifact bytes, and license evidence without moving model payload;
-        write the exact selection through the matrix's canonical amendment path.
-      done_when: The matrix contains the exact F4 model, immutable revision, and selection-record digest; license
-        evidence and the secret-free credential reference resolve; no model payload moved.
-      status: TODO
-      attempts: []
-      invariants: [Q1, Q36]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L32
-    - id: POST-SELECTION-MACHINE-PASS
-      matrix_phase: L02
-      title: Refresh machine identities after the F4 selection
-      depends: [F4-SELECTION]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Update the runbook matrix identity; rerun full suite, ledger, J reproduction, Q78 removal proof, schema
-        expansion, and both reviewer-skill validations from the clean post-selection revision; invalidate the
-        provisional L26 graph and atomically seal the exact post-selection expansion and dependency-graph revision.
-      done_when: F4 authority is exact; matrix, runbook, expansion, and graph identities match; the new graph
-        names L26 as its parent and is eligible for later bindings; machine assertions remain PASS; no model byte
-        moved and no LIVE model result exists.
-      status: TODO
-      attempts: []
-      invariants: [Q29, Q78]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L32
-    - id: BASELINE-DESCRIPTORS
-      matrix_phase: L02
-      title: Freeze workload and baseline inputs before measurement
-      depends: [POST-SELECTION-MACHINE-PASS]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Materialize BASELINE-INPUTS-FROZEN from immutable teacher/hosted manifests and complete native candidate
-        descriptors. Freeze Q15/Q16 cases, strata, scorers, seeds, trials, training data/budgets and Q37 fit rules
-        before observing comparison outcomes. Expand candidate and teacher measurement records; do not select
-        a native winner yet.
-      done_when: Every measurement has frozen inputs, an exact reference-only provenance rule and a named result
-        producer; no winner is inferred from model size or reputation.
-      status: TODO
-      attempts: []
-      invariants: [Q13, Q15, Q16, Q67]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L32
-    - id: DRIVE-INVENTORY
-      matrix_phase: L01.5
-      title: Record drive identity and protected-content inventory
-      depends: [BASELINE-INPUTS-FROZEN]
-      evidence_level: LIVE
-      principal_action: Attach the candidate drive, confirm the printed disk identifier and APFS UUID, and approve
-        the READ_ONLY card.
-      work: After approval, capture host and path telemetry and the off-drive top-level name, type, and aggregate-byte
-        inventory.
-      done_when: Identity and inventory are sealed; the drive has no recorded byte change.
-      status: TODO
-      attempts: []
-      invariants: [Q44, Q79]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L32
-    - id: CARTRIDGE-DURABILITY
-      matrix_phase: L01.5
-      title: Create the campaign root and prove Q44 through remount
-      depends: [DRIVE-INVENTORY]
-      evidence_level: LIVE
-      principal_action: Approve the exact CAMPAIGN_DIRECTORY_WRITE and PHYSICAL_FAULT cards; detach and reattach
-        only on their printed cues.
-      work: After approval, create the campaign root as the first write; execute write, readback hash, F_FULLFSYNC,
-        root, pointer, F_FULLFSYNC; remount by exact identity; compare inventories.
-      done_when: The exact generation survives remount and no top-level change exists outside the campaign root.
-      status: TODO
-      attempts: []
-      invariants: [Q44]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L32
-    - id: SOURCE-QUALIFICATION-REQUESTS
-      matrix_phase: L01.5
-      title: Materialize source qualification and header records
-      depends: [BASELINE-INPUTS-FROZEN, CARTRIDGE-DURABILITY]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Materialize header and acquisition profiles and records for F4, the three pinned models, and every
-        frozen native candidate; preserve the separate Ollama request. Header/acquisition plans use pinned source
-        metadata and bounded wire shapes, not a nonexistent inference certificate.
-      done_when: Every literal source and candidate has its own header/acquisition request and dependencies; no
-        live source or payload action precedes the source-entry gate.
-      status: TODO
-      attempts: []
-      invariants: [Q41, Q50, Q52]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L32
-    - id: SOURCE-ENTRY-PASS
-      matrix_phase: L01.5
-      title: Close source-entry physical qualification
-      depends: [SOURCE-PROFILES-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Recompute every HEADER, ACQ, and OLLAMA physical profile from its sealed bundle and reconcile the
-        coarse protected-content inventory before any live source request.
-      done_when: Every HEADER and ACQ profile and the OLLAMA profile are PASS; no live source request or model
-        payload acquisition has begun.
-      status: TODO
-      attempts: []
-      invariants: [Q41, Q42]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L32
-    - id: F4-COMPILE-PLAN
-      matrix_phase: L03
-      title: Materialize F4 compilation qualification
-      depends: [ACQ-F4-VERIFY, REFERENCE-F4-ALL-PASS, SOURCE-ENTRY-PASS]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Build and freeze the intended F4 compilation work plan from acquired source semantics, protected teacher
-        observations and declared transform budget. Materialize only its compile profile; no certified inference
-        plan is assumed.
-      done_when: F4-COMPILE-PROFILES-ALL-PASS names the exact compile-plan profile. Inference qualification is
-        owned by the post-certificate model_inference_qualification family.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q42]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L34
-    - id: F4-COMPILE-PROFILE-PASS
-      matrix_phase: L03
-      title: Close F4 compilation qualification
-      depends: [F4-COMPILE-PROFILES-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Close the exact compile profile from independently verified raw measurements.
-      done_when: Only the intended F4 compilation path is qualified.
-      status: TODO
-      attempts: []
-      invariants: [Q42]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L34
-    - id: F4-COMPILE-START
-      matrix_phase: L03
-      title: Start F4 compilation
-      depends: [F4-COMPILE-PROFILE-PASS]
-      evidence_level: LIVE
-      principal_action: Approve the exact F4 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
-        claim, paths, recovery boundary, and stop conditions are printed.
-      work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
-        Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
-      done_when: The exact operation is durably launched and owned; later recovery and certificate verification
-        remain NOT_RUN.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q60]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L34
-    - id: F4-CERTIFICATE
-      matrix_phase: L03
-      title: Verify terminal F4 compilation and Q19 certificate
-      depends: [F4-COMPILE-START]
-      evidence_level: LIVE
-      principal_action: none
-      work: Independently verify the terminal F4 revision through verification_work; materialize its frozen condition
-        records and exact post-certificate inference-profile request in the same graph successor.
-      done_when: One immutable F4 compiled revision is published, every certificate field recomputes, and the
-        F4 inference records and aggregate reproduce from its frozen condition set.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q58]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L34
-    - id: F4-INFERENCE-CLOSED
-      matrix_phase: L03
-      title: Close the expanded F4 inference proof
-      depends: [F4-INFERENCE-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Recompute every frozen Q15 and Q16 condition, touched-byte result, schedule, memory bound, corruption
-        discriminator, and restoration result from the expanded records.
-      done_when: Every F4 inference coordinate is PASS at LIVE evidence.
-      status: TODO
-      attempts: []
-      invariants: [Q17, Q18, Q19]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L34
-    - id: F4-GATE
-      matrix_phase: L03
-      title: Decide the F4 gate
-      depends:
-        - F4-INFERENCE-CLOSED
-        - TRAIN-train_dense_fixture_tier_a-ALL-PASS
-        - TRAIN-train_dense_fixture_tier_b-ALL-PASS
-        - BASELINES-ALL-PASS
-      evidence_level: LIVE
-      principal_action: none
-      work: Compute the predeclared paired Q17 and Q18 statistics and all Q36 predicates from raw evidence; emit
-        PASS or FAIL with Q38_FALSIFIED.
-      done_when: The exact gate record exists; only PASS satisfies F5-COMPILE-PLAN and the two frontier-compiled
-        L04 rows.
-      status: TODO
-      attempts: []
-      invariants: [Q36]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L34
-    - id: F5-COMPILE-PLAN
-      matrix_phase: L03
-      title: Materialize Scout F5 compilation qualification
-      depends: [F4-GATE@PASS, ACQ-llama_4_scout-VERIFY, REFERENCE-llama_4_scout-ALL-PASS]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Freeze the intended F5 compilation work plan and materialize only its exact compile-profile request;
-        inference qualification follows F5-CERTIFICATE.
-      done_when: F5-COMPILE-PROFILES-ALL-PASS binds the exact compile plan, source and teacher observations.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q42]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L35
-    - id: F5-COMPILE-PROFILE-PASS
-      matrix_phase: L03
-      title: Close F5 compilation qualification
-      depends: [F5-COMPILE-PROFILES-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Close the exact F5 compile profile from its independent verification job.
-      done_when: Only the intended F5 compilation path is qualified.
-      status: TODO
-      attempts: []
-      invariants: [Q42]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L35
-    - id: F5-COMPILE-START
-      matrix_phase: L03
-      title: Start F5 compilation
-      depends: [F5-COMPILE-PROFILE-PASS]
-      evidence_level: LIVE
-      principal_action: Approve the exact F5 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
-        claim, paths, recovery boundary, and stop conditions are printed.
-      work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
-        Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
-      done_when: The exact operation is durably launched and owned; later recovery and certificate verification
-        remain NOT_RUN.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q60]
-      record_kind: evidence
-      review_profile: live
-      owner_stage: L35
-    - id: F5-CERTIFICATE
-      matrix_phase: L03
-      title: Verify terminal F5 compilation and Q19 certificate
-      depends: [F5-COMPILE-START]
-      evidence_level: LIVE
-      principal_action: none
-      work: Independently verify the terminal F5 revision through verification_work; materialize its frozen condition
-        records and exact post-certificate inference-profile request.
-      done_when: One immutable Scout F5 revision is published with every certificate field exact, and the F5 inference
-        records and aggregate reproduce from its frozen condition set.
-      status: TODO
-      attempts: []
-      invariants: [Q19, Q58]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L35
-    - id: F5-INFERENCE-CLOSED
-      matrix_phase: L03
-      title: Close the expanded F5 inference proof
-      depends: [F5-INFERENCE-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Recompute every frozen condition, traffic bound, schedule, memory, corruption, risk, and horizon result
-        from the expanded records.
-      done_when: Every F5 inference coordinate is PASS at LIVE evidence.
-      status: TODO
-      attempts: []
-      invariants: [Q17, Q18, Q19]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L35
-    - id: F5-GATE
-      matrix_phase: L03
-      title: Decide the F5 gate from Q37 curves
-      depends:
-        - F5-INFERENCE-CLOSED
-        - TRAIN-train_sparse_fixture_tier_a-ALL-PASS
-        - TRAIN-train_sparse_fixture_tier_b-ALL-PASS
-        - BASELINES-ALL-PASS
-      evidence_level: LIVE
-      principal_action: none
-      work: Fit the predeclared mathematical-resource, quality, and service curves; compare the predicted feasible
-        point with Q68 and E-011; emit PASS or FAIL with Q38_FALSIFIED.
-      done_when: The exact F5 record exists; only PASS makes the two frontier-compiled L04 rows eligible and permits
-        completion.
-      status: TODO
-      attempts: []
-      invariants: [Q36, Q37]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L35
-    - id: FINAL-PROVENANCE
-      matrix_phase: L04
-      title: Seal Q79 and final Q78 after every runtime row
-      depends:
-        - L04-RUNTIME-ALL-PASS
-        - TINKER-VERIFY
-        - ACQ-F4-VERIFY
-        - ACQ-kimi_k3-VERIFY
-        - ACQ-llama_4_scout-VERIFY
-        - ACQ-qwen3_235b_a22b-VERIFY
-        - OLLAMA-VERIFY
-        - F4-GATE@PASS
-        - F5-GATE@PASS
-        - TRAINING-THERMAL-ALL-PASS
-        - BASELINES-ALL-PASS
-      evidence_level: LIVE
-      principal_action: none
-      work: Recompute Q79 provenance and privacy from raw traces; rerun full suite, ledger, J, and Q78 removal
-        proof from the exact clean tree; reconcile every required row; atomically seal the final source dependency-graph
-        head for Q80.
-      done_when: Q79 and q78_exact_accounting are PASS with immutable evidence and every required L04 runtime
-        row is PASS; the final graph digest and owner-completeness report reproduce.
-      status: TODO
-      attempts: []
-      invariants: [Q78, Q79]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L36
-    - id: Q80-MATERIALIZE
-      matrix_phase: L05
-      title: Materialize the clean-root Q80 replay graph
-      depends: [FINAL-PROVENANCE]
-      evidence_level: INTEGRATION
-      principal_action: none
-      work: Materialize and audit the exact Q80 replay closure through verification_work, including checkpoint
-        and verification producers and training thermal records. Contract frozen machine/reference nodes without
-        losing precedence or input identities.
-      done_when: The sorted original-record list, source count, replay count, edge count, and graph digest reproduce;
-        every replay record is TODO; Q80-ALL-PASS has exact one-to-one membership.
-      status: TODO
-      attempts: []
-      invariants: [Q80]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L37
-    - id: COMPLETION
-      matrix_phase: L05
-      title: Verify Q80 and emit or withhold the completion digest
-      depends: [Q80-ALL-PASS]
-      evidence_level: LIVE
-      principal_action: none
-      work: Recompute every row from raw clean-root replay evidence; rerun Q78 and Q79; verify gate order, inventories,
-        identities, and forbidden substitutes; compute the canonical preimage.
-      done_when: Set campaign result PASS and attach one digest only if every required row is PASS and LIVE_PROVEN;
-        otherwise retain the exact non-passing result and sealed evidence bundle.
-      status: TODO
-      attempts: []
-      invariants: [Q80]
-      record_kind: evidence
-      verification_work: required
-      closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
-        producer. This record checks its complete independent result and declared review before closure.
-      review_profile: live
-      owner_stage: L37
+  - id: F4-SELECTION
+    matrix_phase: L02
+    title: Pin the permissive F4 model and opaque credential
+    depends:
+    - L04
+    evidence_level: PLATFORM
+    principal_action: Choose one printed candidate row and place any required token in the terminal or keychain.
+    work: Resolve candidate immutable revisions, artifact bytes, and license evidence without moving model
+      payload; write the exact selection through the matrix's canonical amendment path.
+    done_when: The matrix contains the exact F4 model, immutable revision, and selection-record digest; license
+      evidence and the secret-free credential reference resolve; no model payload moved.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q1
+    - Q36
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L05
+  - id: POST-SELECTION-MACHINE-PASS
+    matrix_phase: L02
+    title: Refresh machine identities after the F4 selection
+    depends:
+    - F4-SELECTION
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Update the runbook matrix identity; rerun full suite, ledger, J reproduction, Q78 removal proof,
+      schema expansion, and both reviewer-skill validations from the clean post-selection revision; invalidate
+      the provisional L04 graph and atomically seal the exact post-selection expansion and dependency-graph
+      revision.
+    done_when: F4 authority is exact; matrix, runbook, expansion, and graph identities match; the new graph
+      names L04 as its parent and is eligible for later bindings; machine assertions remain PASS; no model
+      byte moved and no LIVE model result exists.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q29
+    - Q78
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L05
+  - id: BASELINE-DESCRIPTORS
+    matrix_phase: L02
+    title: Freeze workload and baseline inputs before measurement
+    depends:
+    - POST-SELECTION-MACHINE-PASS
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Materialize BASELINE-INPUTS-FROZEN from immutable teacher/hosted manifests and complete native candidate
+      descriptors. Freeze Q15/Q16 cases, strata, scorers, seeds, trials, training data/budgets and Q37 fit
+      rules before observing comparison outcomes. Expand candidate and teacher measurement records; do not
+      select a native winner yet.
+    done_when: Every measurement has frozen inputs, an exact reference-only provenance rule and a named result
+      producer; no winner is inferred from model size or reputation.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q13
+    - Q15
+    - Q16
+    - Q67
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L05
+  - id: DRIVE-INVENTORY
+    matrix_phase: L01.5
+    title: Record drive identity and protected-content inventory
+    depends:
+    - BASELINE-INPUTS-FROZEN
+    evidence_level: LIVE
+    principal_action: Attach the candidate drive, confirm the printed disk identifier and APFS UUID, and approve
+      the READ_ONLY card.
+    work: After approval, capture host and path telemetry and the off-drive top-level name, type, and aggregate-byte
+      inventory.
+    done_when: Identity and inventory are sealed; the drive has no recorded byte change.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q44
+    - Q79
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L05
+  - id: CARTRIDGE-DURABILITY
+    matrix_phase: L01.5
+    title: Create the campaign root and prove Q44 through remount
+    depends:
+    - DRIVE-INVENTORY
+    evidence_level: LIVE
+    principal_action: Approve the exact CAMPAIGN_DIRECTORY_WRITE and PHYSICAL_FAULT cards; detach and reattach
+      only on their printed cues.
+    work: After approval, create the campaign root as the first write; execute write, readback hash, F_FULLFSYNC,
+      root, pointer, F_FULLFSYNC; remount by exact identity; compare inventories.
+    done_when: The exact generation survives remount and no top-level change exists outside the campaign root.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q44
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L05
+  - id: SOURCE-QUALIFICATION-REQUESTS
+    matrix_phase: L01.5
+    title: Materialize source qualification and header records
+    depends:
+    - BASELINE-INPUTS-FROZEN
+    - CARTRIDGE-DURABILITY
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Materialize header and acquisition profiles and records for F4, the three pinned models, and every
+      frozen native candidate; preserve the separate Ollama request. Header/acquisition plans use pinned source
+      metadata and bounded wire shapes, not a nonexistent inference certificate.
+    done_when: Every literal source and candidate has its own header/acquisition request and dependencies;
+      no live source or payload action precedes the source-entry gate.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q41
+    - Q50
+    - Q52
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L05
+  - id: SOURCE-ENTRY-PASS
+    matrix_phase: L01.5
+    title: Close source-entry physical qualification
+    depends:
+    - SOURCE-PROFILES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Recompute every HEADER, ACQ, and OLLAMA physical profile from its sealed bundle and reconcile the
+      coarse protected-content inventory before any live source request.
+    done_when: Every HEADER and ACQ profile and the OLLAMA profile are PASS; no live source request or model
+      payload acquisition has begun.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q41
+    - Q42
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L05
+  - id: F4-COMPILE-PLAN
+    matrix_phase: L03
+    title: Materialize F4 compilation qualification
+    depends:
+    - ACQ-F4-VERIFY
+    - REFERENCE-F4-ALL-PASS
+    - SOURCE-ENTRY-PASS
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Build and freeze the intended F4 compilation work plan from acquired source semantics, protected
+      teacher observations and declared transform budget. Materialize only its compile profile; no certified
+      inference plan is assumed.
+    done_when: F4-COMPILE-PROFILES-ALL-PASS names the exact compile-plan profile. Inference qualification is
+      owned by the post-certificate model_inference_qualification family.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q42
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L07
+  - id: F4-COMPILE-PROFILE-PASS
+    matrix_phase: L03
+    title: Close F4 compilation qualification
+    depends:
+    - F4-COMPILE-PROFILES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Close the exact compile profile from independently verified raw measurements.
+    done_when: Only the intended F4 compilation path is qualified.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q42
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L07
+  - id: F4-COMPILE-START
+    matrix_phase: L03
+    title: Start F4 compilation
+    depends:
+    - F4-COMPILE-PROFILE-PASS
+    evidence_level: LIVE
+    principal_action: Approve the exact F4 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
+      claim, paths, recovery boundary, and stop conditions are printed.
+    work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
+      Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
+    done_when: The exact operation is durably launched and owned; later recovery and certificate verification
+      remain NOT_RUN.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q60
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L07
+  - id: F4-CERTIFICATE
+    matrix_phase: L03
+    title: Verify terminal F4 compilation and Q19 certificate
+    depends:
+    - F4-COMPILE-START
+    evidence_level: LIVE
+    principal_action: none
+    work: Independently verify the terminal F4 revision through verification_work; materialize its frozen condition
+      records and exact post-certificate inference-profile request in the same graph successor.
+    done_when: One immutable F4 compiled revision is published, every certificate field recomputes, and the
+      F4 inference records and aggregate reproduce from its frozen condition set.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q58
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L07
+  - id: F4-INFERENCE-CLOSED
+    matrix_phase: L03
+    title: Close the expanded F4 inference proof
+    depends:
+    - F4-INFERENCE-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Recompute every frozen Q15 and Q16 condition, touched-byte result, schedule, memory bound, corruption
+      discriminator, and restoration result from the expanded records.
+    done_when: Every F4 inference coordinate is PASS at LIVE evidence.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q17
+    - Q18
+    - Q19
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L07
+  - id: F4-GATE
+    matrix_phase: L03
+    title: Decide the F4 gate
+    depends:
+    - F4-INFERENCE-CLOSED
+    - TRAIN-train_dense_fixture_tier_a-ALL-PASS
+    - TRAIN-train_dense_fixture_tier_b-ALL-PASS
+    - BASELINES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Compute the predeclared paired Q17 and Q18 statistics and all Q36 predicates from raw evidence; emit
+      PASS or FAIL with Q38_FALSIFIED.
+    done_when: The exact gate record exists; only PASS satisfies F5-COMPILE-PLAN and the two frontier-compiled
+      L02 rows.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q36
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L07
+  - id: F5-COMPILE-PLAN
+    matrix_phase: L03
+    title: Materialize Scout F5 compilation qualification
+    depends:
+    - F4-GATE@PASS
+    - ACQ-llama_4_scout-VERIFY
+    - REFERENCE-llama_4_scout-ALL-PASS
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Freeze the intended F5 compilation work plan and materialize only its exact compile-profile request;
+      inference qualification follows F5-CERTIFICATE.
+    done_when: F5-COMPILE-PROFILES-ALL-PASS binds the exact compile plan, source and teacher observations.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q42
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L08
+  - id: F5-COMPILE-PROFILE-PASS
+    matrix_phase: L03
+    title: Close F5 compilation qualification
+    depends:
+    - F5-COMPILE-PROFILES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Close the exact F5 compile profile from its independent verification job.
+    done_when: Only the intended F5 compilation path is qualified.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q42
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L08
+  - id: F5-COMPILE-START
+    matrix_phase: L03
+    title: Start F5 compilation
+    depends:
+    - F5-COMPILE-PROFILE-PASS
+    evidence_level: LIVE
+    principal_action: Approve the exact F5 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
+      claim, paths, recovery boundary, and stop conditions are printed.
+    work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
+      Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
+    done_when: The exact operation is durably launched and owned; later recovery and certificate verification
+      remain NOT_RUN.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q60
+    record_kind: evidence
+    review_profile: live
+    owner_stage: L08
+  - id: F5-CERTIFICATE
+    matrix_phase: L03
+    title: Verify terminal F5 compilation and Q19 certificate
+    depends:
+    - F5-COMPILE-START
+    evidence_level: LIVE
+    principal_action: none
+    work: Independently verify the terminal F5 revision through verification_work; materialize its frozen condition
+      records and exact post-certificate inference-profile request.
+    done_when: One immutable Scout F5 revision is published with every certificate field exact, and the F5
+      inference records and aggregate reproduce from its frozen condition set.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q19
+    - Q58
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L08
+  - id: F5-INFERENCE-CLOSED
+    matrix_phase: L03
+    title: Close the expanded F5 inference proof
+    depends:
+    - F5-INFERENCE-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Recompute every frozen condition, traffic bound, schedule, memory, corruption, risk, and horizon
+      result from the expanded records.
+    done_when: Every F5 inference coordinate is PASS at LIVE evidence.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q17
+    - Q18
+    - Q19
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L08
+  - id: F5-GATE
+    matrix_phase: L03
+    title: Decide the F5 gate from Q37 curves
+    depends:
+    - F5-INFERENCE-CLOSED
+    - TRAIN-train_sparse_fixture_tier_a-ALL-PASS
+    - TRAIN-train_sparse_fixture_tier_b-ALL-PASS
+    - BASELINES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Fit the predeclared mathematical-resource, quality, and service curves; compare the predicted feasible
+      point with Q68 and E-011; emit PASS or FAIL with Q38_FALSIFIED.
+    done_when: The exact F5 record exists; only PASS makes the two frontier-compiled L02 rows eligible and
+      permits completion.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q36
+    - Q37
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L08
+  - id: FINAL-PROVENANCE
+    matrix_phase: L04
+    title: Seal Q79 and final Q78 after every runtime row
+    depends:
+    - L02-RUNTIME-ALL-PASS
+    - TINKER-VERIFY
+    - ACQ-F4-VERIFY
+    - ACQ-kimi_k3-VERIFY
+    - ACQ-llama_4_scout-VERIFY
+    - ACQ-qwen3_235b_a22b-VERIFY
+    - OLLAMA-VERIFY
+    - F4-GATE@PASS
+    - F5-GATE@PASS
+    - TRAINING-THERMAL-ALL-PASS
+    - BASELINES-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Recompute Q79 provenance and privacy from raw traces; rerun full suite, ledger, J, and Q78 removal
+      proof from the exact clean tree; reconcile every required row; atomically seal the final source dependency-graph
+      head for Q80.
+    done_when: Q79 and q78_exact_accounting are PASS with immutable evidence and every required L02 runtime
+      row is PASS; the final graph digest and owner-completeness report reproduce.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q78
+    - Q79
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L09
+  - id: Q80-MATERIALIZE
+    matrix_phase: L05
+    title: Materialize the clean-root Q80 replay graph
+    depends:
+    - FINAL-PROVENANCE
+    evidence_level: INTEGRATION
+    principal_action: none
+    work: Materialize and audit the exact Q80 replay closure through verification_work, including checkpoint
+      and verification producers and training thermal records. Contract frozen machine/reference nodes without
+      losing precedence or input identities.
+    done_when: The sorted original-record list, source count, replay count, edge count, and graph digest reproduce;
+      every replay record is TODO; Q80-ALL-PASS has exact one-to-one membership.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q80
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L10
+  - id: COMPLETION
+    matrix_phase: L05
+    title: Verify Q80 and emit or withhold the completion digest
+    depends:
+    - Q80-ALL-PASS
+    evidence_level: LIVE
+    principal_action: none
+    work: Recompute every row from raw clean-root replay evidence; rerun Q78 and Q79; verify gate order, inventories,
+      identities, and forbidden substitutes; compute the canonical preimage.
+    done_when: Set campaign result PASS and attach one digest only if every required row is PASS and LIVE_PROVEN;
+      otherwise retain the exact non-passing result and sealed evidence bundle.
+    status: TODO
+    attempts: []
+    invariants:
+    - Q80
+    record_kind: evidence
+    verification_work: required
+    closure_rule: All work described by work/done_when that scales with input size runs in the named verification_work
+      producer. This record checks its complete independent result and declared review before closure.
+    review_profile: live
+    owner_stage: L10
   materialized_record_contract:
-    required_literal_fields: [evidence_level, matrix_assertion_owners]
+    required_literal_fields:
+    - evidence_level
+    - matrix_assertion_owners
     family_evidence_levels:
       baseline_freeze: INTEGRATION
       physical_qualification: LIVE
@@ -3084,871 +2881,1091 @@ phase_live_queue:
       verification_work: inherit_target
       workload_freeze: INTEGRATION
     matrix_assertion_owner_rules:
-      - selector: every QUALIFY-<consumer-flat-id>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]
-      - selector: ACQ-<kimi_k3|llama_4_scout|qwen3_235b_a22b>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]
-      - selector: OLLAMA-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_ollama_content_addressed_reimport].assertions[*]
-      - selector: TINKER-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_tinker_export_reimport].assertions[*]
-      - selector: F4-GATE
-        owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f4_gate].pass_condition
-      - selector: F5-GATE
-        owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f5_gate].pass_condition
-      - selector: every TRAIN-<row>-<operation>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#training_rows[id=<row>]+training_assertions.required_for_every_training_row[*]
-      - selector: every EXEC-<row>-RUN_VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#execution_rows[id=<row>]+workload_suites[id=capability_complete_q16].assertions[*]
-      - selector: every SUSTAINED-<row>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#workload_suites[id=sustained_q48].assertions[*]
-      - selector: every PROTOCOL-<row>-<client>
-        owns: research/ACCEPTANCE_MATRIX.yaml#protocol_cross_product.assertions[*]
-      - selector: every FAILURE-<injection>-<operation>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#failure_rows.assertions[*]
-      - selector: every OFFLINE-INFERENCE-<row>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_inference_all_execution_rows].assertions[*]
-      - selector: every OFFLINE-TRAINING-<row>-<operation>-VERIFY
-        owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_training_all_training_rows].assertions[*]
-      - selector: FINAL-PROVENANCE
-        owns: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
+    - selector: every QUALIFY-<consumer-flat-id>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]
+    - selector: ACQ-<kimi_k3|llama_4_scout|qwen3_235b_a22b>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]
+    - selector: OLLAMA-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_ollama_content_addressed_reimport].assertions[*]
+    - selector: TINKER-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_tinker_export_reimport].assertions[*]
+    - selector: F4-GATE
+      owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f4_gate].pass_condition
+    - selector: F5-GATE
+      owns: research/ACCEPTANCE_MATRIX.yaml#fixture_gate_rows[id=f5_gate].pass_condition
+    - selector: every TRAIN-<row>-<operation>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#training_rows[id=<row>]+training_assertions.required_for_every_training_row[*]
+    - selector: every EXEC-<row>-RUN_VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#execution_rows[id=<row>]+workload_suites[id=capability_complete_q16].assertions[*]
+    - selector: every SUSTAINED-<row>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#workload_suites[id=sustained_q48].assertions[*]
+    - selector: every PROTOCOL-<row>-<client>
+      owns: research/ACCEPTANCE_MATRIX.yaml#protocol_cross_product.assertions[*]
+    - selector: every FAILURE-<injection>-<operation>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#failure_rows.assertions[*]
+    - selector: every OFFLINE-INFERENCE-<row>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_inference_all_execution_rows].assertions[*]
+    - selector: every OFFLINE-TRAINING-<row>-<operation>-VERIFY
+      owns: research/ACCEPTANCE_MATRIX.yaml#offline_and_privacy_rows[id=offline_training_all_training_rows].assertions[*]
+    - selector: FINAL-PROVENANCE
+      owns: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
     pre_live_assertion_binding_rules:
-      - authority: research/ACCEPTANCE_MATRIX.yaml#adaptive_capacity_control.required_assertions[*]
-        sealed_by: L31
-      - authority: research/ACCEPTANCE_MATRIX.yaml#storage_eligibility_control.required_assertions[*]
-        sealed_by: L31
-      - authority: research/ACCEPTANCE_MATRIX.yaml#baseline_freeze.assertions[*]
-        sealed_by: BASELINES-ALL-PASS
-      - authority: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
-        sealed_by: [L31, FINAL-PROVENANCE]
+    - authority: research/ACCEPTANCE_MATRIX.yaml#adaptive_capacity_control.required_assertions[*]
+      sealed_by: L04
+    - authority: research/ACCEPTANCE_MATRIX.yaml#storage_eligibility_control.required_assertions[*]
+      sealed_by: L04
+    - authority: research/ACCEPTANCE_MATRIX.yaml#baseline_freeze.assertions[*]
+      sealed_by: BASELINES-ALL-PASS
+    - authority: research/ACCEPTANCE_MATRIX.yaml#minimum_code_rows[id=q78_exact_accounting].assertions[*]
+      sealed_by:
+      - L04
+      - FINAL-PROVENANCE
     completion_contract_binding: COMPLETION
     default_matrix_assertion_owners: []
     completeness_rule: Resolve every original matrix assertion and every supplemental rule to literal producers
-      and terminal owners. Supplemental rules cite only existing Q13/Q15/Q16/Q19/Q37/Q48/Q79 contracts and cannot
-      change thresholds. Reject missing producers, missing LIVE owners, ambiguous selectors, unknown authority
-      keys and missing pre-live/reference bindings; include both Q78 checkpoints.
+      and terminal owners. Supplemental rules cite only existing Q13/Q15/Q16/Q19/Q37/Q48/Q79 contracts and
+      cannot change thresholds. Reject missing producers, missing LIVE owners, ambiguous selectors, unknown
+      authority keys and missing pre-live/reference bindings; include both Q78 checkpoints.
     supplemental_assertion_owner_rules:
-      - authority: research/RESEARCH.md#Q13.acceptance_check
-        selector: NATIVE-<class>-SELECT
-        producer: every-NATIVE-<class>-<candidate>-VERIFY
-      - authority: research/RESEARCH.md#Q15.acceptance_check
-        selector: REFERENCE-<model>-ALL-PASS
-        producer: every-REFERENCE-<model>-<baseline>-<batch>-VERIFY
-      - authority: research/RESEARCH.md#Q16.acceptance_check
-        selector: every EXEC-<row>-RUN_VERIFY and its Q80 replay
-        producer: matching execution, reference and verification jobs
-      - authority: research/RESEARCH.md#Q19.acceptance_check
-        selector: F4-CERTIFICATE, F5-CERTIFICATE and every compiled EXEC-<row>-PREPARE_VERIFY
-        producer: L11-L15 machine witnesses, matching reference observations and exact live compilation
-      - authority: research/RESEARCH.md#Q37.acceptance_check
-        selector: F5-GATE and full-scale compiled EXEC-<row>-RUN_VERIFY
-        producer: frozen BASELINE-DESCRIPTORS fit rules and independent measured curves
-      - authority: research/RESEARCH.md#Q48.formal_contract and acceptance_check
-        selector: every TRAIN-THERMAL-<row>-<operation>-VERIFY and SUSTAINED-<row>-VERIFY
-        producer: matching exact duty experiment and continuous measurement interval
-      - authority: research/RESEARCH.md#Q79.acceptance_check
-        selector: every OFFLINE-TRAINING-<row>-<operation>-VERIFY and FINAL-PROVENANCE
-        producer: continuous per-operation network restriction, socket and placement traces
+    - authority: research/RESEARCH.md#Q13.acceptance_check
+      selector: NATIVE-<class>-SELECT
+      producer: every-NATIVE-<class>-<candidate>-VERIFY
+    - authority: research/RESEARCH.md#Q15.acceptance_check
+      selector: REFERENCE-<model>-ALL-PASS
+      producer: every-REFERENCE-<model>-<baseline>-<batch>-VERIFY
+    - authority: research/RESEARCH.md#Q16.acceptance_check
+      selector: every EXEC-<row>-RUN_VERIFY and its Q80 replay
+      producer: matching execution, reference and verification jobs
+    - authority: research/RESEARCH.md#Q19.acceptance_check
+      selector: F4-CERTIFICATE, F5-CERTIFICATE and every compiled EXEC-<row>-PREPARE_VERIFY
+      producer: L03-L03 machine witnesses, matching reference observations and exact live compilation
+    - authority: research/RESEARCH.md#Q37.acceptance_check
+      selector: F5-GATE and full-scale compiled EXEC-<row>-RUN_VERIFY
+      producer: frozen BASELINE-DESCRIPTORS fit rules and independent measured curves
+    - authority: research/RESEARCH.md#Q48.formal_contract and acceptance_check
+      selector: every TRAIN-THERMAL-<row>-<operation>-VERIFY and SUSTAINED-<row>-VERIFY
+      producer: matching exact duty experiment and continuous measurement interval
+    - authority: research/RESEARCH.md#Q79.acceptance_check
+      selector: every OFFLINE-TRAINING-<row>-<operation>-VERIFY and FINAL-PROVENANCE
+      producer: continuous per-operation network restriction, socket and placement traces
   dependency_graph_revision_contract:
     head_update: atomic_compare_and_swap
-    successor_fields: [revision_digest, parent_graph_digest, expansion_registry_digest, materializer_record_id]
-    provisional_graph: L26
+    successor_fields:
+    - revision_digest
+    - parent_graph_digest
+    - expansion_registry_digest
+    - materializer_record_id
+    provisional_graph: L04
     first_execution_eligible_graph: POST-SELECTION-MACHINE-PASS
     later_materializers:
-      - BASELINE-DESCRIPTORS
-      - SOURCE-QUALIFICATION-REQUESTS
-      - F4-COMPILE-PLAN
-      - F4-CERTIFICATE
-      - F5-COMPILE-PLAN
-      - F5-CERTIFICATE
-      - FAILURE-MATERIALIZE
-      - Q80-MATERIALIZE
-      - model_inference_qualification
-      - training_thermal
-      - checkpoint_proof
-      - verification_work
-      - workload_freeze
-      - native_candidate_measurement
-      - native_baseline_selection
-      - reference_capture
+    - BASELINE-DESCRIPTORS
+    - SOURCE-QUALIFICATION-REQUESTS
+    - F4-COMPILE-PLAN
+    - F4-CERTIFICATE
+    - F5-COMPILE-PLAN
+    - F5-CERTIFICATE
+    - FAILURE-MATERIALIZE
+    - Q80-MATERIALIZE
+    - model_inference_qualification
+    - training_thermal
+    - checkpoint_proof
+    - verification_work
+    - workload_freeze
+    - native_candidate_measurement
+    - native_baseline_selection
+    - reference_capture
     attempt_binding: exact_active_graph_digest
     invalidation_graph: latest_sealed_successor_containing_attempt_graph
     q80_source_graph: FINAL-PROVENANCE graph head
     monotonic_extension_rule: every successor preserves inherited nodes, literal edges, evidence levels, assertion
       owners, permission bindings, and terminal-state meanings byte-for-byte and may add only records and edges
       authorized by its declared materializer; mutation, deletion, or retargeting rejects the successor
-    producer_rule: Seal all literal dependencies before any consumer runs. Topologically sort the expanded graph,
-      using canonical flat ID only to break ties. Every listed predecessor is earlier in execution order even
-      when its printed template appears later.
+    producer_rule: Seal all literal dependencies before any consumer runs. Topologically sort the expanded
+      graph, using canonical flat ID only to break ties. Every listed predecessor is earlier in execution order
+      even when its printed template appears later.
   expanded_session_families:
-    - family: baseline_freeze
-      matrix_phase: L02
-      materialized_by: BASELINE-DESCRIPTORS
-      expand_over: every_applicable_model_teacher_and_hosted_manifest_plus_each_frozen_native_candidate_manifest
-      records_per_coordinate: [FREEZE]
-      id_format: BASELINE-<baseline-coordinate>-FREEZE
-      dependencies:
-        FREEZE: [BASELINE-DESCRIPTORS]
-      work: Freeze one exact immutable reference manifest or native candidate manifest, including Q16 harness,
-        eligibility, source and compute provenance, settings and honest NON_EQUIVALENT fields. Candidate membership
-        and evaluation policy freeze before results; selection occurs in native_baseline_selection.
-      principal_action: Supply a hosted-reference credential only for the exact hosted coordinate and only as
-        an opaque terminal or keychain reference; every other coordinate requires none.
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record: BASELINE-INPUTS-FROZEN
-      aggregate_dependencies: [every-BASELINE-<baseline-coordinate>-FREEZE, WORKLOADS-FROZEN]
-      aggregate_rule: Every applicable input manifest and the BASELINE-DESCRIPTORS workload/data/trial/fit manifests
-        are immutable before any measurement. This aggregate does not claim that B_native has been selected.
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L32
-      aggregate_owner_stage: L33
-    - family: physical_qualification
-      matrix_phase: L01.5
-      expand_over: every_exact_consumer_profile_request
-      records_per_request: [START, VERIFY]
-      id_format: QUALIFY-<consumer-flat-id>-<record>
-      request_fields:
-        - consumer_flat_id
-        - physical_disk_id
-        - apfs_volume_uuid
-        - host_id
-        - assembled_path_digest
-        - operation
-        - plan_digest
-        - expected_read_write_shape
-      dependencies:
-        START: [literal_consumer_prerequisites_that_do_not_depend_on_this_profile]
-        VERIFY: [matching-START]
-      start_work: Launch the exact profile with a durable receipt and first-data-boundary hold; checkpoint_proof
-        verifies its resumability before measurement continues.
-      verify_work: After terminal state, verify all plan sizes, alignments, patterns, cache crossing, p05, p50,
-        p95, p99, maximum latency, IOPS, flushes, errors, thermal events, writes, health, endurance, Q44 ordering,
-        and inventory effects that apply.
-      principal_action: On START, attach or move the named drive when cued, confirm exact identity, and approve
-        this one profile card. VERIFY requires none.
-      path_change_rule: Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
-        request and blocks resumed I/O until its VERIFY record passes.
-      group_aggregate_id_format: <request-group>-ALL-PASS
-      group_aggregate_rule: The owning materializer seals every request into SOURCE-PROFILES, F4-COMPILE-PROFILES,
-        F5-COMPILE-PROFILES or its exact post-preparation consumer group. Requests cannot borrow another plan
-        digest.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: inherit_consumer_stage
-    - family: source_header
-      matrix_phase: L02
-      materialized_by: SOURCE-QUALIFICATION-REQUESTS
-      records_per_instance: [RUN]
-      id_format: HEADER-<instance>-RUN
-      dependencies:
-        RUN: [SOURCE-ENTRY-PASS, BASELINE-INPUTS-FROZEN, QUALIFY-HEADER-<instance>-VERIFY]
-      work: After approval, exercise live resolve, enumerate, metadata, license, authentication, and header-range
-        paths; land only header bytes; inventory dtypes, shapes, operators, semantics, and execute no remote code.
-      principal_action: Approve the exact HEADER CAMPAIGN_DIRECTORY_WRITE card; accept a source license in the
-        browser only when the service requests it.
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record: HEADERS-ALL-PASS
-      aggregate_dependencies: [every HEADER-<instance>-RUN]
-      aggregate_rule: Every literal primary-model and native-candidate header member passes. Each acquisition
-        depends on its own header; another completed acquisition does not invalidate this aggregate.
-      expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L32
-    - family: acquisition
-      matrix_phase: L02
-      records_per_instance: [START, VERIFY]
-      id_format: ACQ-<instance>-<record>
-      dependencies:
-        START: [SOURCE-ENTRY-PASS, HEADER-<instance>-RUN, QUALIFY-ACQ-<instance>-VERIFY]
-        VERIFY: [matching-START]
-      start_work: After approval, launch direct-to-cartridge ranged acquisition with a durable receipt, first-boundary
-        hold and no internal model file. checkpoint_proof performs kill/resume separately.
-      verify_work: After terminal state, prove immutable revision, complete intervals, final source and local
-        digests, exact byte total, and no internal model file.
-      principal_action: START requires the exact drive and write card; a different drive first requires its own
-        physical-qualification request and PASS. VERIFY requires none.
-      status_per_record: TODO
-      attempts_per_record: []
-      expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L32
-    - family: ollama_source
-      matrix_phase: L02
-      instances: [source_ollama_content_addressed_reimport]
-      records_per_instance: [START, VERIFY]
-      id_format: OLLAMA-<record>
-      dependencies:
-        START: [ACQ-llama_4_scout-VERIFY, QUALIFY-OLLAMA-VERIFY]
-        VERIFY: [matching-START]
-      start_work: After approval, launch content-addressed production-adapter reacquisition of the pinned Scout
-        identity with a durable receipt and first-boundary hold.
-      verify_work: After terminal state, prove complete manifest and blob digests, semantic identity, source identity,
-        and the shared Q5 lifecycle.
-      principal_action: START requires the exact bounded drive-write card. VERIFY requires none.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L32
-    - family: f4_inference
-      matrix_phase: L03
-      materialized_by: F4-CERTIFICATE
-      expand_over: frozen_Q15_Q16_conditions_for_selected_F4
-      records_per_coordinate: [START, VERIFY]
-      id_format: F4-INFERENCE-<condition-digest>-<record>
-      dependencies:
-        START: [F4-CERTIFICATE, QUALIFY-F4-INFERENCE-VERIFY, REFERENCE-F4-ALL-PASS]
-        VERIFY: [matching-START]
-      start_work: Launch this frozen condition with a durable receipt and first-boundary hold. Execute its full
-        trial population only after checkpoint_proof, with network restriction retained through terminal verification.
-      verify_work: Verify its quality inputs, touched bytes, schedule, memory, corrupt-page discriminator, and
-        exact restoration result.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record: F4-INFERENCE-ALL-PASS
-      aggregate_dependencies: [every-F4-INFERENCE-<condition-digest>-VERIFY]
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L34
-    - family: f5_inference
-      matrix_phase: L03
-      materialized_by: F5-CERTIFICATE
-      expand_over: frozen_Q15_Q16_conditions_for_pinned_Scout_F5
-      records_per_coordinate: [START, VERIFY]
-      id_format: F5-INFERENCE-<condition-digest>-<record>
-      dependencies:
-        START: [F5-CERTIFICATE, QUALIFY-F5-INFERENCE-VERIFY, REFERENCE-llama_4_scout-ALL-PASS]
-        VERIFY: [matching-START]
-      start_work: Launch this frozen condition with a durable receipt and first-boundary hold. Execute its full
-        trial population only after checkpoint_proof, with network restriction retained through terminal verification.
-      verify_work: Verify its quality inputs, traffic bound, schedule, memory, corruption, error-risk, and horizon
-        predicates.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record: F5-INFERENCE-ALL-PASS
-      aggregate_dependencies: [every-F5-INFERENCE-<condition-digest>-VERIFY]
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L35
-    - family: tinker_source
-      matrix_phase: L02
-      instances: [source_tinker_export_reimport]
-      records_per_instance: [QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
-      id_format: TINKER-<record>
-      dependencies:
-        QUALIFY_START: [TRAIN-train_dense_fixture_tier_a-ALL-PASS]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        START: [matching-QUALIFY_VERIFY]
-        VERIFY: [matching-START]
-      qualify_start_work: After approval, begin the exact export and re-import profile measurement.
-      qualify_verify_work: Verify the terminal Q41-Q44 and Q74 profile.
-      start_work: After approval, launch the dense Tier-A export and production-wire Tinker re-import with a durable
-        receipt and first-boundary hold for each long operation.
-      verify_work: Prove terminal weight identity, parent, training provenance, digests, and shared lifecycle.
-      principal_action: QUALIFY_START and START each require their own exact bounded card; the other records require
-        none.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: training
-      matrix_phase: L03_or_L04_from_matrix_row
-      expand_over: training_rows_x_every_declared_operation
-      records_per_coordinate: [QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
-      id_format: TRAIN-<row>-<operation>-<record>
-      dependencies:
-        QUALIFY_START: [literal-row-dependencies]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        START: [matching-QUALIFY_VERIFY]
-        VERIFY: [matching-START]
-      row_dependencies:
-        train_dense_fixture_tier_a: [F4-INFERENCE-CLOSED]
-        train_dense_fixture_tier_b: [TRAIN-train_dense_fixture_tier_a-ALL-PASS]
-        train_sparse_fixture_tier_a: [F5-INFERENCE-CLOSED, F4-GATE@PASS]
-        train_sparse_fixture_tier_b: [TRAIN-train_sparse_fixture_tier_a-ALL-PASS]
-        train_c1_frontier_tier_a: [EXEC-exec_c1_frontier_compiled-RUN_VERIFY]
-        train_c1_frontier_tier_b: [TRAIN-train_c1_frontier_tier_a-ALL-PASS]
-        train_c1_scout_tier_a: [EXEC-exec_c1_scout_least_invasive-RUN_VERIFY]
-        train_c3_frontier_tier_a: [EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY]
-        train_c3_frontier_tier_b: [TRAIN-train_c3_frontier_tier_a-ALL-PASS]
-      qualify_start_work: After approval, begin the exact training-plan Q41-Q44 and Q74 profile.
-      qualify_verify_work: Verify terminal profile, writes, health, endurance, and inventory evidence.
-      start_work: With Q79 tracing armed and external networking disabled, launch the exact training operation
-        with a first-boundary hold. checkpoint_proof performs real kill/resume; the operation then runs to terminal
-        state under the same network restriction.
-      verify_work: Through verification_work prove all original Q70/Q71/Q72/Q73, write, estimate, quality, non-regression,
-        client-callability and Tier-B requirements, plus continuous Q79 restriction coverage. Q48 training duration
-        and cache-volume proof closes through training_thermal.
-      principal_action: QUALIFY_START binds its profile card. START binds the exact drive-operation-plan card
-        and network-off cue. VERIFY may restore networking only after terminal evidence and all overlapping offline
-        leases are closed; capture at START never restores networking.
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record_per_row: ALL-PASS
-      aggregate_id_format: TRAIN-<row>-ALL-PASS
-      aggregate_dependencies: [every-TRAIN-<row>-<declared-operation>-VERIFY]
-      aggregate_rule: PASS only when every operation declared by that exact matrix row is PASS at its required
-        evidence level.
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: by_training_row
-    - family: execution
-      matrix_phase: L04
-      expand_over: execution_rows
-      records_per_row:
-        - QUALIFY_START
-        - QUALIFY_VERIFY
-        - PREPARE_START
-        - PREPARE_VERIFY
-        - RUN_QUALIFY_START
-        - RUN_QUALIFY_VERIFY
-        - RUN_START
-        - RUN_VERIFY
-      id_format: EXEC-<row>-<record>
-      dependencies:
-        QUALIFY_START: [literal-row-dependencies]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        PREPARE_START: [matching-QUALIFY_VERIFY]
-        PREPARE_VERIFY: [matching-PREPARE_START]
-        RUN_START: [matching-RUN_QUALIFY_VERIFY, BASELINES-ALL-PASS, matching-REFERENCE-ALL-PASS]
-        RUN_VERIFY: [matching-RUN_START]
-        RUN_QUALIFY_START: [matching-PREPARE_VERIFY]
-        RUN_QUALIFY_VERIFY: [matching-RUN_QUALIFY_START]
-      row_dependencies:
-        exec_c1_frontier_compiled: [ACQ-kimi_k3-VERIFY, F4-GATE@PASS, F5-GATE@PASS, REFERENCE-kimi_k3-ALL-PASS]
-        exec_c1_scout_least_invasive: [ACQ-llama_4_scout-VERIFY]
-        exec_c2_qwen_least_invasive: [ACQ-qwen3_235b_a22b-VERIFY]
-        exec_c3_k3_native_teacher: [ACQ-kimi_k3-VERIFY]
-        exec_c3_k3_compiled_portability: [ACQ-kimi_k3-VERIFY, F4-GATE@PASS, F5-GATE@PASS, REFERENCE-kimi_k3-ALL-PASS]
-      qualify_start_work: Qualify only the intended preparation plan, derived from immutable acquired semantics
-        and applicable teacher observations.
-      qualify_verify_work: Verify terminal Q41-Q44 and applicable Q74 evidence.
-      prepare_start_work: Launch the intended Q40 preparation or full-scale F6 compilation with a durable receipt
-        and first-boundary hold. The separately expanded checkpoint_proof proves kill/resume.
-      prepare_verify_work: Verify terminal native or immutable prepared revision, prior-mode Q38 records, total
-        map, and independent Q19 certificate when compiled.
-      run_start_work: Launch the complete frozen Q16 suite with a durable receipt and first-boundary hold; retain
-        network restriction across all cases and terminal verification.
-      run_verify_work: Verify every case, context boundary, gate, honesty vector, tail, capability, and forbidden
-        label from raw evidence.
-      principal_action: QUALIFY_START, PREPARE_START, RUN_QUALIFY_START and RUN_START each bind their own exact
-        card. Runtime START and its descendants retain the network restriction until terminal verification.
-      status_per_record: TODO
-      attempts_per_record: []
-      run_qualify_start_work: After PREPARE_VERIFY, derive the actual runtime plan and qualify its exact drive/host/path
-        before any measured run. A preparation profile is not an inference profile.
-      run_qualify_verify_work: Independently verify the runtime profile through verification_work, binding the
-        committed plan and certificate when applicable.
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: sustained
-      matrix_phase: L04
-      expand_over: execution_rows
-      records_per_row: [START, VERIFY]
-      id_format: SUSTAINED-<row>-<record>
-      dependencies:
-        START: [matching-EXEC-<row>-RUN_VERIFY]
-        VERIFY: [matching-START]
-      start_work: Launch the sustained inference job and retain its durable receipt. After checkpoint_proof, measure
-        a fresh uninterrupted interval meeting both Q48 minima. The first two five-minute windows are checked
-        by terminal verification, not inside START.
-      verify_work: Through verification_work recompute every original Q48 window, both duration/token minima,
-        duty-cycle response, decay, tails, thermal and integrity assertions.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: protocol
-      matrix_phase: L04
-      expand_over: execution_rows_x_agent_clients
-      records_per_coordinate: [RUN]
-      id_format: PROTOCOL-<row>-<client>
-      dependencies:
-        RUN: [matching-EXEC-<row>-RUN_VERIFY]
-      work: Capture all eight required traces and prove Q76, Q77, and no fabricated feature for this one row and
-        client mapping.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: failure_materialization
-      matrix_phase: L04
-      records: [FAILURE-MATERIALIZE]
-      dependencies:
-        - HEADER-F4-RUN
-        - ACQ-F4-VERIFY
-        - F4-CERTIFICATE
-        - F4-INFERENCE-CLOSED
-        - TRAIN-train_dense_fixture_tier_a-ALL-PASS
-      work: Resolve the eight matrix operation subjects to literal source artifacts and plans; materialize all
-        eighty failure coordinates, the eight starting physical-profile requests, and the matrix-determined requalification
-        nodes; atomically extend the graph.
-      done_when: Operation bindings, 80 coordinates, 320 base records, 112 requalification records, profile requests,
-        assertion owners, action templates, and every literal edge reproduce.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: live_failure
-      matrix_phase: L04
-      materialized_by: FAILURE-MATERIALIZE
-      expand_over: phase_live_injections_x_failure_operations
-      base_records_per_coordinate: [ARM, INJECT, RECOVER, VERIFY]
-      requalification_records: [REQUALIFY_START, REQUALIFY_VERIFY]
-      requalification_rule: Materialize both requalification records exactly when the injection appears in matrix.failure_rows.requalification_after_recovery.required_for;
-        omit both exactly when it appears in not_applicable_for. An injection in neither or both lists rejects
-        expansion. This produces 320 base records plus 112 requalification records from the current matrix.
-      id_format: FAILURE-<injection>-<operation>-<record>
-      materialized_binding_fields:
-        - source_artifact_record_id
-        - source_artifact_digest
-        - operation_plan_digest
-        - physical_qualification_record_id
-        - logical_operation_id
-        - recovery_action_template_digest
-        - requalification_required
-      requalification_field_rule: requalification_required is true exactly for an injection listed in matrix.failure_rows.requalification_after_recovery.required_for
-        and false exactly for one listed in not_applicable_for; no runtime observation may change the materialized
-        value
-      operation_subjects: matrix.failure_rows.phase_live_operation_bindings
-      starting_profile_requests: FAILURE-MATERIALIZE creates the eight exact QUALIFY-FAILURE-<operation> profile
-        requests; each profile START depends on FAILURE-MATERIALIZE and its literal source artifact. Every VERIFY
-        must pass before the matching ARM records become eligible.
-      dependencies:
-        ARM: [FAILURE-MATERIALIZE, literal-source-artifact-record-id, literal-physical-qualification-record-id]
-        INJECT: [matching-ARM]
-        RECOVER: [matching-INJECT]
-        REQUALIFY_START: [matching-RECOVER]
-        REQUALIFY_VERIFY: [matching-REQUALIFY_START]
-        VERIFY:
-          always: [matching-RECOVER]
-          when_requalification_required: [matching-REQUALIFY_VERIFY]
-      arm_work: Create a fresh operation bound to its exact source, plan and starting profile. Hold at the operation-specific
-        injection barrier; record the active I/O target and hold acknowledgement. The hold must preserve the active
-        failure locus, not turn an in-flight fault into an idle operation.
-      inject_work: After exact approval, apply one injection and capture the immediate typed result.
-      recover_work: After an exact recovery card when physical action is required, restore or refuse the named
-        identity and seal the resulting boundary.
-      requalify_start_work: After path-profile approval, start a new exact Q41-Q44 profile for any changed drive,
-        cable, port, host, path, plan, or mechanism.
-      requalify_verify_work: Verify the terminal replacement profile before any resumed I/O.
-      verify_work: Prove all six failure assertions and inventory effects from the coordinate's own lineage.
-      principal_action: ARM requires the exact coordinate's CAMPAIGN_DIRECTORY_WRITE card before creating its
-        fresh durable operation. INJECT always requires its separate exact injection card. RECOVER requires a
-        separate exact card when it changes physical state. REQUALIFY_START requires its own profile card. Perform
-        only the printed cue; a general campaign approval never applies.
-      status_per_record: TODO
-      attempts_per_record: []
-      injection_precondition: Before the separate INJECT cue, verify the same logical operation, live access and
-        barrier are still armed. If terminal, stale, quiesced at the wrong locus or unacknowledged, do not inject;
-        create a new ARM attempt.
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: offline_inference
-      matrix_phase: L04
-      expand_over: execution_rows
-      records_per_row: [START, VERIFY]
-      id_format: OFFLINE-INFERENCE-<row>-<record>
-      dependencies:
-        START: [matching-EXEC-<row>-RUN_VERIFY]
-        VERIFY: [matching-START]
-      start_work: After the network-off cue, start the complete row through loopback while tracing processes,
-        sockets, files, identities, credentials, and persistence.
-      verify_work: Recompute every offline and privacy assertion and restore networking only on its sealed cue.
-      principal_action: START requires the exact network-off cue; VERIFY requires the exact network-restore cue.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: offline_training_audit
-      matrix_phase: L04
-      expand_over: training_rows_x_every_declared_operation
-      records_per_coordinate: [VERIFY]
-      id_format: OFFLINE-TRAINING-<row>-<operation>-VERIFY
-      dependencies:
-        VERIFY: [matching-TRAIN-<row>-<operation>-VERIFY]
-      work: Verify continuous enforced network restriction from activation through terminal result, along with
-        the exact operation placement, socket, credential and persistence traces. An early restore or trace gap
-        requires a new TRAIN attempt; no after-the-fact scan can fill the gap.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: inherit_training_stage
-    - family: l04_runtime_closure
-      matrix_phase: L04
-      records: [L04-RUNTIME-ALL-PASS]
-      dependencies:
-        - every EXEC-<row>-RUN_VERIFY
-        - every SUSTAINED-<row>-VERIFY
-        - every PROTOCOL-<row>-<client>
-        - every L04 TRAIN-<row>-ALL-PASS
-        - every FAILURE-<injection>-<operation>-VERIFY
-        - every OFFLINE-INFERENCE-<row>-VERIFY
-        - every OFFLINE-TRAINING-<row>-<operation>-VERIFY
-        - TRAINING-THERMAL-ALL-PASS
-        - BASELINES-ALL-PASS
-      work: Resolve the sealed registry against every required runtime expansion and reject any missing, duplicate,
-        ineligible, FAIL, BLOCKED, RUNNING, or NOT_RUN coordinate.
-      done_when: PASS only when every required L04 runtime row is PASS; independent rows may run after a gate
-        failure, but this aggregate cannot pass until both gates and their dependent rows pass.
-      principal_action: none
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L36
-    - family: workload_freeze
-      matrix_phase: L02
-      materialized_by: BASELINE-DESCRIPTORS
-      expand_over: each_applicable_model_x_each_Q15_stratum_plus_each_training_row_operation_dataset
-      records_per_coordinate: [FREEZE]
-      id_format: WORKLOAD-<coordinate>-FREEZE
-      dependencies:
-        FREEZE: [BASELINE-DESCRIPTORS]
-      work: Produce one immutable actual input/scorer batch or training dataset manifest, with source/license
-        provenance, case IDs, primary stratum, exact expected protocol invariants, scorer version, seeds, Q17
-        trial count, context/modality requirements, timeout, resource limits and byte digests. Fix Q15 weights,
-        Q37 fit model and training budget before observing results. Acquisition of remote dataset bytes uses its
-        own qualified source operation; FREEZE may pin a descriptor but no consumer runs before its bytes verify.
-      done_when: Every coordinate has executable case inputs or a pinned dataset descriptor and named verified-acquisition
-        dependency. No placeholder prompt, guessed score or post-result case selection passes.
-      evidence_level: INTEGRATION
-      provenance: REFERENCE_ONLY
-      replay_policy: FROZEN_REFERENCE
-      principal_action: No live source in this record; remote input acquisition uses its own exact source card.
-      aggregate_record: WORKLOADS-FROZEN
-      aggregate_dependencies: [every-WORKLOAD-<coordinate>-FREEZE]
-      aggregate_rule: Complete Q15 coverage and weights, Q16 cases, Q17 pairing/trials, Q37 fit and Q70 datasets/budgets
-        are frozen. No measurement result is asserted.
-      invariants: [Q13, Q15, Q16, Q17, Q37, Q70]
-      timing_evidence: NOT_RUN
-      status_per_record: TODO
-      attempts_per_record: []
-      owner_stage: L32
-    - family: native_candidate_measurement
-      matrix_phase: L02
-      expand_over: frozen_NativeSet_c1_air_32_and_c2_max_128_candidates
-      records_per_coordinate: [PLAN, QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
-      id_format: NATIVE-<class>-<candidate>-<record>
-      materialized_by: BASELINE-DESCRIPTORS
-      dependencies:
-        PLAN: [SOURCE-ENTRY-PASS, matching-candidate-ACQ-VERIFY]
-        QUALIFY_START: [matching-PLAN]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        START: [matching-QUALIFY_VERIFY, BASELINE-INPUTS-FROZEN, WORKLOADS-FROZEN]
-        VERIFY: [matching-START]
-      work: Resolve the candidate through the ordinary source/header/acquisition families. Run its frozen Q16
-        aggregate on the exact Apple class after Q7 native admission, with all inference state resident and no
-        cartridge paging or Cassette compiled assistance. Preserve every candidate result and measured native
-        eligibility; unavailable required candidates block selection rather than silently disappearing.
-      storage_rule: Reference acquisition retains bytes in the declared external source area; native execution
-        loads its admitted full state into RAM before scoring and proves zero cartridge-assisted model reads during
-        scoring. No internal model copy or hidden swap claim is introduced.
-      evidence_level: PLATFORM
-      provenance: REFERENCE_ONLY
-      replay_policy: FROZEN_REFERENCE
-      principal_action: Exact reference host, source and any qualification/write cards; network disabled during
-        local reference execution.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L33
-    - family: native_baseline_selection
-      matrix_phase: L02
-      expand_over: b_native_c1_and_b_native_c2
-      records_per_coordinate: [SELECT]
-      id_format: NATIVE-<class>-SELECT
-      materialized_by: BASELINE-DESCRIPTORS
-      dependencies:
-        SELECT: [every-NATIVE-<class>-<candidate>-VERIFY]
-      work: Independently reproduce Q13 argmax from every frozen eligible candidate score and the predeclared
-        tie rule. Bind the selected source/runtime/hardware/harness identity without changing candidate membership
-        after observing results.
-      evidence_level: INTEGRATION
-      provenance: REFERENCE_ONLY
-      replay_policy: FROZEN_REFERENCE
-      principal_action: none
-      aggregate_record: BASELINES-ALL-PASS
-      aggregate_dependencies: [BASELINE-INPUTS-FROZEN, NATIVE-c1_air_32-SELECT, NATIVE-c2_max_128-SELECT]
-      aggregate_rule: The frozen input manifests and both measured selections satisfy the unchanged Q13/Q67 baseline
-        contract before any Q17/Q18/Q68 product comparison.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L33
-    - family: reference_capture
-      matrix_phase: L02
-      expand_over: each_applicable_model_x_each_frozen_teacher_or_equivalent_hosted_case_batch
-      records_per_coordinate: [PLAN, QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
-      id_format: REFERENCE-<model>-<baseline>-<batch>-<record>
-      materialized_by: BASELINE-DESCRIPTORS
-      dependencies:
-        PLAN: [BASELINE-INPUTS-FROZEN, matching-local-source-ACQ-VERIFY_when_local]
-        QUALIFY_START: [matching-PLAN, SOURCE-ENTRY-PASS]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        START: [matching-QUALIFY_VERIFY, WORKLOADS-FROZEN]
-        VERIFY: [matching-START]
-      work: Run the pinned reference through the frozen Q15/Q16 cases and Q17 trials. Capture quality/scorer inputs
-        and the native activations, gradient/ablation and protected-support observations required by Q18/Q19.
-        A hosted response without required internals cannot satisfy a compiler witness; use the declared full-capacity
-        reference compute and retain complete provenance.
-      compute_rule: Reference execution may use the remit-authorized external reference/compilation infrastructure
-        and is labelled REFERENCE_ONLY. It cannot answer a Cassette runtime request. External services need the
-        exact account/compute card; local reference I/O needs its own measured profile. For a hosted-only request
-        QUALIFY records verify the declared service/transport boundary without claiming physical-drive proof;
-        any local write still has its own physical profile.
-      evidence_level: LIVE
-      provenance: REFERENCE_ONLY
-      replay_policy: FROZEN_REFERENCE
-      principal_action: Exact reference account/compute, source and write scope; opaque credentials only.
-      aggregate_record_per_model: REFERENCE-<model>-ALL-PASS
-      aggregate_dependencies: [every-required-REFERENCE-<model>-<baseline>-<batch>-VERIFY]
-      aggregate_rule: Every required comparison and compiler-observation input exists under frozen identities;
-        NON_EQUIVALENT hosted fields are reported but excluded from ratio gates.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: L33
-    - family: model_inference_qualification
-      matrix_phase: L01.5
-      expand_over: F4_after_F4-CERTIFICATE_and_F5_after_F5-CERTIFICATE
-      records_per_instance: [START, VERIFY]
-      id_format: QUALIFY-<F4|F5>-INFERENCE-<record>
-      materialized_by: [F4-CERTIFICATE, F5-CERTIFICATE]
-      dependencies:
-        START: [matching-compiled-certificate-VERIFY]
-        VERIFY: [matching-START]
-      work: Derive the actual certified inference plan from the committed revision, then run the physical_qualification
-        contract for that exact consumer. The source and compilation profiles cannot satisfy this record.
-      evidence_level: LIVE
-      principal_action: Exact plan-specific qualification card.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      owner_stage: inherit_consumer_stage
-    - family: training_thermal
-      matrix_phase: L04
-      expand_over: every_training_row_x_every_declared_operation_x_exact_host_drive_plan
-      records_per_coordinate: [PLAN, QUALIFY_START, QUALIFY_VERIFY, START, VERIFY]
-      id_format: TRAIN-THERMAL-<row>-<operation>-<record>
-      dependencies:
-        PLAN: [matching-TRAIN-<row>-<operation>-QUALIFY_VERIFY]
-        QUALIFY_START: [matching-PLAN]
-        QUALIFY_VERIFY: [matching-QUALIFY_START]
-        START: [matching-QUALIFY_VERIFY, matching-TRAIN-<row>-<operation>-VERIFY]
-        VERIFY: [matching-START]
-      work: Freeze the Q48 duty-cycle experiment and evidence-based SLC_cache_estimate with Q74 endurance bounds.
-        Measure above and below the selected duty cycle on each applicable class, then hold a fresh uninterrupted
-        training interval for at least 120 minutes and at least 2*SLC_cache_estimate physical writes. Use the
-        same production training path, with external networking disabled throughout. Preserve UNKNOWN optional
-        sensors; an unknown mandatory cache estimate blocks the volume claim. A path with no SLC cache may use
-        an evidenced zero SLC estimate and still owes the full duration, duty-cycle and service proof. Unknown
-        is not zero; media labels never decide admission.
-      reuse_rule: PLAN precedes the measured interval. A normal TRAIN run may supply it only when PLAN was frozen
-        before TRAIN START and exact plan, both minima, duty experiment, raw coverage and continuous restriction
-        match; otherwise execute the separate thermal START. The finite graph and every member remain present
-        in either case, and reuse binds actual raw inputs rather than skipping the record.
-      principal_action: Separate exact endurance/duty-cycle and write approval; retain network restriction through
-        terminal VERIFY and all overlapping offline leases. Each separately materialized above-duty experiment
-        carries its own exact action scope; no general campaign approval authorizes endurance stress.
-      evidence_level: LIVE
-      invariants: [Q28, Q48, Q74, Q79]
-      aggregate_record: TRAINING-THERMAL-ALL-PASS
-      aggregate_dependencies: [every-TRAIN-THERMAL-<row>-<operation>-VERIFY]
-      aggregate_rule: All required training plans and classes pass the complete Q48 interval, volume, duty and
-        thermal predicates with Q74 admission.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
-        exact operation lineage.
-      materialized_by: the_training_coordinate_materializer_before_any_coordinate_member_executes
-      owner_stage: inherit_training_stage
-    - family: checkpoint_proof
-      matrix_phase: inherit_operation
-      expand_over: every_long_operation_START_except_verification_work
-      records_per_operation: [RECOVERABILITY]
-      id_format: CHECKPOINT-<operation-start-flat-id>-RECOVERABILITY
-      dependencies:
-        RECOVERABILITY: [exact-operation-START]
-      eligibility: The declared data boundary is held and durably acknowledged; waiting consumes no attempt.
-      work: Verify the hold and exact durable lineage, perform the declared real process-death/resume discriminator,
-        verify the same source/plan/recovery boundary, and release the job. Insert this node before all terminal
-        verification and dependent runtime work for that operation.
-      evidence_level: inherit_operation
-      principal_action: Exact approved interruption/resume card for the named operation; never a physical-fault
-        substitute.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
-        is omitted.
-      owner_stage: inherit_target_stage
-    - family: verification_work
-      matrix_phase: inherit_target
-      expand_over: verification_contract_targets_after_literal_family_expansion
-      records_per_target: [START, RESULT]
-      id_format: VERIFY-WORK-<target-flat-id>-<record>
-      dependencies:
-        START: [every-original-target-predecessor]
-        RESULT: [matching-START]
-      eligibility: All required raw inputs are terminal and sealed; ordinary waiting is uncounted preflight.
-      work: Execute the target original full proof with the independent verifier and complete coverage index under
-        verification_contract. Keep the raw source, model, profile and authority identities fixed across resumptions.
-        START proves launch; RESULT proves the entire independent job finished and its coverage/namespace seal
-        is exact. It cannot accept missing recomputation.
-      evidence_level: inherit_target
-      principal_action: Inherit only the exact target read/write authority. Any additional model-bearing scratch
-        storage or physical action needs its own declared card; metadata-only review has no principal action.
-      status_per_record: TODO
-      attempts_per_record: []
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      owner_stage: inherit_target_stage
-    - family: q80_clean_replay
-      matrix_phase: L05
-      materialized_by: Q80-MATERIALIZE
-      membership_rule: Start with every required original matrix and supplemental terminal owner plus FINAL-PROVENANCE.
-        Traverse all predecessor nodes regardless of evidence level. Keep LIVE product/physical nodes, including
-        checkpoint and independent verification producers, and their aggregates. Freeze only explicitly declared
-        REFERENCE_ONLY nodes and machine/selection proofs as immutable inputs. No unlabelled LIVE producer may
-        be omitted. Exclude the replay family itself. Expected replay count equals this exact retained vertex
-        set.
-      edge_rule: For retained u and v, preserve u -> v when the original graph has a path from u to v whose internal
-        nodes are all excluded frozen-input nodes. Retain every such precedence edge, bind the excluded node proofs
-        to the consuming replay, and add no other edge. This contracts intermediate frozen nodes without dropping
-        an earlier LIVE acquisition or qualification.
-      records_per_member: [REPLAY]
-      id_format: Q80-<original-flat-id>
-      lineage_rule: A replay START creates a fresh logical operation in one clean campaign root. Its replay VERIFY,
-        recovery, and aggregate descendants bind that same replay logical operation and root, never the original
-        campaign operation.
-      work: Re-execute one exact original record against the fresh clean-root operation and input bindings. Verification
-        producers rerun their complete independent jobs. Reference identities and measured selections remain frozen
-        inputs; remote reference material never answers a product runtime request.
-      principal_action: Mirror the original record's one exact action template, or none when the original required
-        none.
-      status_per_record: TODO
-      attempts_per_record: []
-      aggregate_record: Q80-ALL-PASS
-      aggregate_dependencies: [every-Q80-<original-flat-id>]
-      aggregate_rule: PASS only when the one-to-one record and edge counts match the sealed source graph and every
-        replay member is PASS at LIVE evidence.
-      timing_evidence: NOT_RUN
-      invariants: [Q80]
-      owner_stage: L37
+  - family: baseline_freeze
+    matrix_phase: L02
+    materialized_by: BASELINE-DESCRIPTORS
+    expand_over: every_applicable_model_teacher_and_hosted_manifest_plus_each_frozen_native_candidate_manifest
+    records_per_coordinate:
+    - FREEZE
+    id_format: BASELINE-<baseline-coordinate>-FREEZE
+    dependencies:
+      FREEZE:
+      - BASELINE-DESCRIPTORS
+    work: Freeze one exact immutable reference manifest or native candidate manifest, including Q16 harness,
+      eligibility, source and compute provenance, settings and honest NON_EQUIVALENT fields. Candidate membership
+      and evaluation policy freeze before results; selection occurs in native_baseline_selection.
+    principal_action: Supply a hosted-reference credential only for the exact hosted coordinate and only as
+      an opaque terminal or keychain reference; every other coordinate requires none.
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record: BASELINE-INPUTS-FROZEN
+    aggregate_dependencies:
+    - every-BASELINE-<baseline-coordinate>-FREEZE
+    - WORKLOADS-FROZEN
+    aggregate_rule: Every applicable input manifest and the BASELINE-DESCRIPTORS workload/data/trial/fit manifests
+      are immutable before any measurement. This aggregate does not claim that B_native has been selected.
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L05
+    aggregate_owner_stage: L06
+  - family: physical_qualification
+    matrix_phase: L01.5
+    expand_over: every_exact_consumer_profile_request
+    records_per_request:
+    - START
+    - VERIFY
+    id_format: QUALIFY-<consumer-flat-id>-<record>
+    request_fields:
+    - consumer_flat_id
+    - physical_disk_id
+    - apfs_volume_uuid
+    - host_id
+    - assembled_path_digest
+    - operation
+    - plan_digest
+    - expected_read_write_shape
+    dependencies:
+      START:
+      - literal_consumer_prerequisites_that_do_not_depend_on_this_profile
+      VERIFY:
+      - matching-START
+    start_work: Launch the exact profile with a durable receipt and first-data-boundary hold; checkpoint_proof
+      verifies its resumability before measurement continues.
+    verify_work: After terminal state, verify all plan sizes, alignments, patterns, cache crossing, p05, p50,
+      p95, p99, maximum latency, IOPS, flushes, errors, thermal events, writes, health, endurance, Q44 ordering,
+      and inventory effects that apply.
+    principal_action: On START, attach or move the named drive when cued, confirm exact identity, and approve
+      this one profile card. VERIFY requires none.
+    path_change_rule: Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
+      request and blocks resumed I/O until its VERIFY record passes.
+    group_aggregate_id_format: <request-group>-ALL-PASS
+    group_aggregate_rule: The owning materializer seals every request into SOURCE-PROFILES, F4-COMPILE-PROFILES,
+      F5-COMPILE-PROFILES or its exact post-preparation consumer group. Requests cannot borrow another plan
+      digest.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: inherit_consumer_stage
+  - family: source_header
+    matrix_phase: L02
+    materialized_by: SOURCE-QUALIFICATION-REQUESTS
+    records_per_instance:
+    - RUN
+    id_format: HEADER-<instance>-RUN
+    dependencies:
+      RUN:
+      - SOURCE-ENTRY-PASS
+      - BASELINE-INPUTS-FROZEN
+      - QUALIFY-HEADER-<instance>-VERIFY
+    work: After approval, exercise live resolve, enumerate, metadata, license, authentication, and header-range
+      paths; land only header bytes; inventory dtypes, shapes, operators, semantics, and execute no remote
+      code.
+    principal_action: Approve the exact HEADER CAMPAIGN_DIRECTORY_WRITE card; accept a source license in the
+      browser only when the service requests it.
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record: HEADERS-ALL-PASS
+    aggregate_dependencies:
+    - every HEADER-<instance>-RUN
+    aggregate_rule: Every literal primary-model and native-candidate header member passes. Each acquisition
+      depends on its own header; another completed acquisition does not invalidate this aggregate.
+    expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L05
+  - family: acquisition
+    matrix_phase: L02
+    records_per_instance:
+    - START
+    - VERIFY
+    id_format: ACQ-<instance>-<record>
+    dependencies:
+      START:
+      - SOURCE-ENTRY-PASS
+      - HEADER-<instance>-RUN
+      - QUALIFY-ACQ-<instance>-VERIFY
+      VERIFY:
+      - matching-START
+    start_work: After approval, launch direct-to-cartridge ranged acquisition with a durable receipt, first-boundary
+      hold and no internal model file. checkpoint_proof performs kill/resume separately.
+    verify_work: After terminal state, prove immutable revision, complete intervals, final source and local
+      digests, exact byte total, and no internal model file.
+    principal_action: START requires the exact drive and write card; a different drive first requires its own
+      physical-qualification request and PASS. VERIFY requires none.
+    status_per_record: TODO
+    attempts_per_record: []
+    expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L05
+  - family: ollama_source
+    matrix_phase: L02
+    instances:
+    - source_ollama_content_addressed_reimport
+    records_per_instance:
+    - START
+    - VERIFY
+    id_format: OLLAMA-<record>
+    dependencies:
+      START:
+      - ACQ-llama_4_scout-VERIFY
+      - QUALIFY-OLLAMA-VERIFY
+      VERIFY:
+      - matching-START
+    start_work: After approval, launch content-addressed production-adapter reacquisition of the pinned Scout
+      identity with a durable receipt and first-boundary hold.
+    verify_work: After terminal state, prove complete manifest and blob digests, semantic identity, source
+      identity, and the shared Q5 lifecycle.
+    principal_action: START requires the exact bounded drive-write card. VERIFY requires none.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L05
+  - family: f4_inference
+    matrix_phase: L03
+    materialized_by: F4-CERTIFICATE
+    expand_over: frozen_Q15_Q16_conditions_for_selected_F4
+    records_per_coordinate:
+    - START
+    - VERIFY
+    id_format: F4-INFERENCE-<condition-digest>-<record>
+    dependencies:
+      START:
+      - F4-CERTIFICATE
+      - QUALIFY-F4-INFERENCE-VERIFY
+      - REFERENCE-F4-ALL-PASS
+      VERIFY:
+      - matching-START
+    start_work: Launch this frozen condition with a durable receipt and first-boundary hold. Execute its full
+      trial population only after checkpoint_proof, with network restriction retained through terminal verification.
+    verify_work: Verify its quality inputs, touched bytes, schedule, memory, corrupt-page discriminator, and
+      exact restoration result.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record: F4-INFERENCE-ALL-PASS
+    aggregate_dependencies:
+    - every-F4-INFERENCE-<condition-digest>-VERIFY
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L07
+  - family: f5_inference
+    matrix_phase: L03
+    materialized_by: F5-CERTIFICATE
+    expand_over: frozen_Q15_Q16_conditions_for_pinned_Scout_F5
+    records_per_coordinate:
+    - START
+    - VERIFY
+    id_format: F5-INFERENCE-<condition-digest>-<record>
+    dependencies:
+      START:
+      - F5-CERTIFICATE
+      - QUALIFY-F5-INFERENCE-VERIFY
+      - REFERENCE-llama_4_scout-ALL-PASS
+      VERIFY:
+      - matching-START
+    start_work: Launch this frozen condition with a durable receipt and first-boundary hold. Execute its full
+      trial population only after checkpoint_proof, with network restriction retained through terminal verification.
+    verify_work: Verify its quality inputs, traffic bound, schedule, memory, corruption, error-risk, and horizon
+      predicates.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record: F5-INFERENCE-ALL-PASS
+    aggregate_dependencies:
+    - every-F5-INFERENCE-<condition-digest>-VERIFY
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L08
+  - family: tinker_source
+    matrix_phase: L02
+    instances:
+    - source_tinker_export_reimport
+    records_per_instance:
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - START
+    - VERIFY
+    id_format: TINKER-<record>
+    dependencies:
+      QUALIFY_START:
+      - TRAIN-train_dense_fixture_tier_a-ALL-PASS
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      START:
+      - matching-QUALIFY_VERIFY
+      VERIFY:
+      - matching-START
+    qualify_start_work: After approval, begin the exact export and re-import profile measurement.
+    qualify_verify_work: Verify the terminal Q41-Q44 and Q74 profile.
+    start_work: After approval, launch the dense Tier-A export and production-wire Tinker re-import with a
+      durable receipt and first-boundary hold for each long operation.
+    verify_work: Prove terminal weight identity, parent, training provenance, digests, and shared lifecycle.
+    principal_action: QUALIFY_START and START each require their own exact bounded card; the other records
+      require none.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: training
+    matrix_phase: L03_or_L04_from_matrix_row
+    expand_over: training_rows_x_every_declared_operation
+    records_per_coordinate:
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - START
+    - VERIFY
+    id_format: TRAIN-<row>-<operation>-<record>
+    dependencies:
+      QUALIFY_START:
+      - literal-row-dependencies
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      START:
+      - matching-QUALIFY_VERIFY
+      VERIFY:
+      - matching-START
+    row_dependencies:
+      train_dense_fixture_tier_a:
+      - F4-INFERENCE-CLOSED
+      train_dense_fixture_tier_b:
+      - TRAIN-train_dense_fixture_tier_a-ALL-PASS
+      train_sparse_fixture_tier_a:
+      - F5-INFERENCE-CLOSED
+      - F4-GATE@PASS
+      train_sparse_fixture_tier_b:
+      - TRAIN-train_sparse_fixture_tier_a-ALL-PASS
+      train_c1_frontier_tier_a:
+      - EXEC-exec_c1_frontier_compiled-RUN_VERIFY
+      train_c1_frontier_tier_b:
+      - TRAIN-train_c1_frontier_tier_a-ALL-PASS
+      train_c1_scout_tier_a:
+      - EXEC-exec_c1_scout_least_invasive-RUN_VERIFY
+      train_c3_frontier_tier_a:
+      - EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY
+      train_c3_frontier_tier_b:
+      - TRAIN-train_c3_frontier_tier_a-ALL-PASS
+    qualify_start_work: After approval, begin the exact training-plan Q41-Q44 and Q74 profile.
+    qualify_verify_work: Verify terminal profile, writes, health, endurance, and inventory evidence.
+    start_work: With Q79 tracing armed and external networking disabled, launch the exact training operation
+      with a first-boundary hold. checkpoint_proof performs real kill/resume; the operation then runs to terminal
+      state under the same network restriction.
+    verify_work: Through verification_work prove all original Q70/Q71/Q72/Q73, write, estimate, quality, non-regression,
+      client-callability and Tier-B requirements, plus continuous Q79 restriction coverage. Q48 training duration
+      and cache-volume proof closes through training_thermal.
+    principal_action: QUALIFY_START binds its profile card. START binds the exact drive-operation-plan card
+      and network-off cue. VERIFY may restore networking only after terminal evidence and all overlapping offline
+      leases are closed; capture at START never restores networking.
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record_per_row: ALL-PASS
+    aggregate_id_format: TRAIN-<row>-ALL-PASS
+    aggregate_dependencies:
+    - every-TRAIN-<row>-<declared-operation>-VERIFY
+    aggregate_rule: PASS only when every operation declared by that exact matrix row is PASS at its required
+      evidence level.
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: by_training_row
+  - family: execution
+    matrix_phase: L04
+    expand_over: execution_rows
+    records_per_row:
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - PREPARE_START
+    - PREPARE_VERIFY
+    - RUN_QUALIFY_START
+    - RUN_QUALIFY_VERIFY
+    - RUN_START
+    - RUN_VERIFY
+    id_format: EXEC-<row>-<record>
+    dependencies:
+      QUALIFY_START:
+      - literal-row-dependencies
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      PREPARE_START:
+      - matching-QUALIFY_VERIFY
+      PREPARE_VERIFY:
+      - matching-PREPARE_START
+      RUN_START:
+      - matching-RUN_QUALIFY_VERIFY
+      - BASELINES-ALL-PASS
+      - matching-REFERENCE-ALL-PASS
+      RUN_VERIFY:
+      - matching-RUN_START
+      RUN_QUALIFY_START:
+      - matching-PREPARE_VERIFY
+      RUN_QUALIFY_VERIFY:
+      - matching-RUN_QUALIFY_START
+    row_dependencies:
+      exec_c1_frontier_compiled:
+      - ACQ-kimi_k3-VERIFY
+      - F4-GATE@PASS
+      - F5-GATE@PASS
+      - REFERENCE-kimi_k3-ALL-PASS
+      exec_c1_scout_least_invasive:
+      - ACQ-llama_4_scout-VERIFY
+      exec_c2_qwen_least_invasive:
+      - ACQ-qwen3_235b_a22b-VERIFY
+      exec_c3_k3_native_teacher:
+      - ACQ-kimi_k3-VERIFY
+      exec_c3_k3_compiled_portability:
+      - ACQ-kimi_k3-VERIFY
+      - F4-GATE@PASS
+      - F5-GATE@PASS
+      - REFERENCE-kimi_k3-ALL-PASS
+    qualify_start_work: Qualify only the intended preparation plan, derived from immutable acquired semantics
+      and applicable teacher observations.
+    qualify_verify_work: Verify terminal Q41-Q44 and applicable Q74 evidence.
+    prepare_start_work: Launch the intended Q40 preparation or full-scale F6 compilation with a durable receipt
+      and first-boundary hold. The separately expanded checkpoint_proof proves kill/resume.
+    prepare_verify_work: Verify terminal native or immutable prepared revision, prior-mode Q38 records, total
+      map, and independent Q19 certificate when compiled.
+    run_start_work: Launch the complete frozen Q16 suite with a durable receipt and first-boundary hold; retain
+      network restriction across all cases and terminal verification.
+    run_verify_work: Verify every case, context boundary, gate, honesty vector, tail, capability, and forbidden
+      label from raw evidence.
+    principal_action: QUALIFY_START, PREPARE_START, RUN_QUALIFY_START and RUN_START each bind their own exact
+      card. Runtime START and its descendants retain the network restriction until terminal verification.
+    status_per_record: TODO
+    attempts_per_record: []
+    run_qualify_start_work: After PREPARE_VERIFY, derive the actual runtime plan and qualify its exact drive/host/path
+      before any measured run. A preparation profile is not an inference profile.
+    run_qualify_verify_work: Independently verify the runtime profile through verification_work, binding the
+      committed plan and certificate when applicable.
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: sustained
+    matrix_phase: L04
+    expand_over: execution_rows
+    records_per_row:
+    - START
+    - VERIFY
+    id_format: SUSTAINED-<row>-<record>
+    dependencies:
+      START:
+      - matching-EXEC-<row>-RUN_VERIFY
+      VERIFY:
+      - matching-START
+    start_work: Launch the sustained inference job and retain its durable receipt. After checkpoint_proof,
+      measure a fresh uninterrupted interval meeting both Q48 minima. The first two five-minute windows are
+      checked by terminal verification, not inside START.
+    verify_work: Through verification_work recompute every original Q48 window, both duration/token minima,
+      duty-cycle response, decay, tails, thermal and integrity assertions.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: protocol
+    matrix_phase: L04
+    expand_over: execution_rows_x_agent_clients
+    records_per_coordinate:
+    - RUN
+    id_format: PROTOCOL-<row>-<client>
+    dependencies:
+      RUN:
+      - matching-EXEC-<row>-RUN_VERIFY
+    work: Capture all eight required traces and prove Q76, Q77, and no fabricated feature for this one row
+      and client mapping.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: failure_materialization
+    matrix_phase: L04
+    records:
+    - FAILURE-MATERIALIZE
+    dependencies:
+    - HEADER-F4-RUN
+    - ACQ-F4-VERIFY
+    - F4-CERTIFICATE
+    - F4-INFERENCE-CLOSED
+    - TRAIN-train_dense_fixture_tier_a-ALL-PASS
+    work: Resolve the eight matrix operation subjects to literal source artifacts and plans; materialize all
+      eighty failure coordinates, the eight starting physical-profile requests, and the matrix-determined requalification
+      nodes; atomically extend the graph.
+    done_when: Operation bindings, 80 coordinates, 320 base records, 112 requalification records, profile requests,
+      assertion owners, action templates, and every literal edge reproduce.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: live_failure
+    matrix_phase: L04
+    materialized_by: FAILURE-MATERIALIZE
+    expand_over: phase_live_injections_x_failure_operations
+    base_records_per_coordinate:
+    - ARM
+    - INJECT
+    - RECOVER
+    - VERIFY
+    requalification_records:
+    - REQUALIFY_START
+    - REQUALIFY_VERIFY
+    requalification_rule: Materialize both requalification records exactly when the injection appears in matrix.failure_rows.requalification_after_recovery.required_for;
+      omit both exactly when it appears in not_applicable_for. An injection in neither or both lists rejects
+      expansion. This produces 320 base records plus 112 requalification records from the current matrix.
+    id_format: FAILURE-<injection>-<operation>-<record>
+    materialized_binding_fields:
+    - source_artifact_record_id
+    - source_artifact_digest
+    - operation_plan_digest
+    - physical_qualification_record_id
+    - logical_operation_id
+    - recovery_action_template_digest
+    - requalification_required
+    requalification_field_rule: requalification_required is true exactly for an injection listed in matrix.failure_rows.requalification_after_recovery.required_for
+      and false exactly for one listed in not_applicable_for; no runtime observation may change the materialized
+      value
+    operation_subjects: matrix.failure_rows.phase_live_operation_bindings
+    starting_profile_requests: FAILURE-MATERIALIZE creates the eight exact QUALIFY-FAILURE-<operation> profile
+      requests; each profile START depends on FAILURE-MATERIALIZE and its literal source artifact. Every VERIFY
+      must pass before the matching ARM records become eligible.
+    dependencies:
+      ARM:
+      - FAILURE-MATERIALIZE
+      - literal-source-artifact-record-id
+      - literal-physical-qualification-record-id
+      INJECT:
+      - matching-ARM
+      RECOVER:
+      - matching-INJECT
+      REQUALIFY_START:
+      - matching-RECOVER
+      REQUALIFY_VERIFY:
+      - matching-REQUALIFY_START
+      VERIFY:
+        always:
+        - matching-RECOVER
+        when_requalification_required:
+        - matching-REQUALIFY_VERIFY
+    arm_work: Create a fresh operation bound to its exact source, plan and starting profile. Hold at the operation-specific
+      injection barrier; record the active I/O target and hold acknowledgement. The hold must preserve the
+      active failure locus, not turn an in-flight fault into an idle operation.
+    inject_work: After exact approval, apply one injection and capture the immediate typed result.
+    recover_work: After an exact recovery card when physical action is required, restore or refuse the named
+      identity and seal the resulting boundary.
+    requalify_start_work: After path-profile approval, start a new exact Q41-Q44 profile for any changed drive,
+      cable, port, host, path, plan, or mechanism.
+    requalify_verify_work: Verify the terminal replacement profile before any resumed I/O.
+    verify_work: Prove all six failure assertions and inventory effects from the coordinate's own lineage.
+    principal_action: ARM requires the exact coordinate's CAMPAIGN_DIRECTORY_WRITE card before creating its
+      fresh durable operation. INJECT always requires its separate exact injection card. RECOVER requires a
+      separate exact card when it changes physical state. REQUALIFY_START requires its own profile card. Perform
+      only the printed cue; a general campaign approval never applies.
+    status_per_record: TODO
+    attempts_per_record: []
+    injection_precondition: Before the separate INJECT cue, verify the same logical operation, live access
+      and barrier are still armed. If terminal, stale, quiesced at the wrong locus or unacknowledged, do not
+      inject; create a new ARM attempt.
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: offline_inference
+    matrix_phase: L04
+    expand_over: execution_rows
+    records_per_row:
+    - START
+    - VERIFY
+    id_format: OFFLINE-INFERENCE-<row>-<record>
+    dependencies:
+      START:
+      - matching-EXEC-<row>-RUN_VERIFY
+      VERIFY:
+      - matching-START
+    start_work: After the network-off cue, start the complete row through loopback while tracing processes,
+      sockets, files, identities, credentials, and persistence.
+    verify_work: Recompute every offline and privacy assertion and restore networking only on its sealed cue.
+    principal_action: START requires the exact network-off cue; VERIFY requires the exact network-restore cue.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: offline_training_audit
+    matrix_phase: L04
+    expand_over: training_rows_x_every_declared_operation
+    records_per_coordinate:
+    - VERIFY
+    id_format: OFFLINE-TRAINING-<row>-<operation>-VERIFY
+    dependencies:
+      VERIFY:
+      - matching-TRAIN-<row>-<operation>-VERIFY
+    work: Verify continuous enforced network restriction from activation through terminal result, along with
+      the exact operation placement, socket, credential and persistence traces. An early restore or trace gap
+      requires a new TRAIN attempt; no after-the-fact scan can fill the gap.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: inherit_training_stage
+  - family: l04_runtime_closure
+    matrix_phase: L04
+    records:
+    - L02-RUNTIME-ALL-PASS
+    dependencies:
+    - every EXEC-<row>-RUN_VERIFY
+    - every SUSTAINED-<row>-VERIFY
+    - every PROTOCOL-<row>-<client>
+    - every L02 TRAIN-<row>-ALL-PASS
+    - every FAILURE-<injection>-<operation>-VERIFY
+    - every OFFLINE-INFERENCE-<row>-VERIFY
+    - every OFFLINE-TRAINING-<row>-<operation>-VERIFY
+    - TRAINING-THERMAL-ALL-PASS
+    - BASELINES-ALL-PASS
+    work: Resolve the sealed registry against every required runtime expansion and reject any missing, duplicate,
+      ineligible, FAIL, BLOCKED, RUNNING, or NOT_RUN coordinate.
+    done_when: PASS only when every required L02 runtime row is PASS; independent rows may run after a gate
+      failure, but this aggregate cannot pass until both gates and their dependent rows pass.
+    principal_action: none
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L09
+  - family: workload_freeze
+    matrix_phase: L02
+    materialized_by: BASELINE-DESCRIPTORS
+    expand_over: each_applicable_model_x_each_Q15_stratum_plus_each_training_row_operation_dataset
+    records_per_coordinate:
+    - FREEZE
+    id_format: WORKLOAD-<coordinate>-FREEZE
+    dependencies:
+      FREEZE:
+      - BASELINE-DESCRIPTORS
+    work: Produce one immutable actual input/scorer batch or training dataset manifest, with source/license
+      provenance, case IDs, primary stratum, exact expected protocol invariants, scorer version, seeds, Q17
+      trial count, context/modality requirements, timeout, resource limits and byte digests. Fix Q15 weights,
+      Q37 fit model and training budget before observing results. Acquisition of remote dataset bytes uses
+      its own qualified source operation; FREEZE may pin a descriptor but no consumer runs before its bytes
+      verify.
+    done_when: Every coordinate has executable case inputs or a pinned dataset descriptor and named verified-acquisition
+      dependency. No placeholder prompt, guessed score or post-result case selection passes.
+    evidence_level: INTEGRATION
+    provenance: REFERENCE_ONLY
+    replay_policy: FROZEN_REFERENCE
+    principal_action: No live source in this record; remote input acquisition uses its own exact source card.
+    aggregate_record: WORKLOADS-FROZEN
+    aggregate_dependencies:
+    - every-WORKLOAD-<coordinate>-FREEZE
+    aggregate_rule: Complete Q15 coverage and weights, Q16 cases, Q17 pairing/trials, Q37 fit and Q70 datasets/budgets
+      are frozen. No measurement result is asserted.
+    invariants:
+    - Q13
+    - Q15
+    - Q16
+    - Q17
+    - Q37
+    - Q70
+    timing_evidence: NOT_RUN
+    status_per_record: TODO
+    attempts_per_record: []
+    owner_stage: L05
+  - family: native_candidate_measurement
+    matrix_phase: L02
+    expand_over: frozen_NativeSet_c1_air_32_and_c2_max_128_candidates
+    records_per_coordinate:
+    - PLAN
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - START
+    - VERIFY
+    id_format: NATIVE-<class>-<candidate>-<record>
+    materialized_by: BASELINE-DESCRIPTORS
+    dependencies:
+      PLAN:
+      - SOURCE-ENTRY-PASS
+      - matching-candidate-ACQ-VERIFY
+      QUALIFY_START:
+      - matching-PLAN
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      START:
+      - matching-QUALIFY_VERIFY
+      - BASELINE-INPUTS-FROZEN
+      - WORKLOADS-FROZEN
+      VERIFY:
+      - matching-START
+    work: Resolve the candidate through the ordinary source/header/acquisition families. Run its frozen Q16
+      aggregate on the exact Apple class after Q7 native admission, with all inference state resident and no
+      cartridge paging or Cassette compiled assistance. Preserve every candidate result and measured native
+      eligibility; unavailable required candidates block selection rather than silently disappearing.
+    storage_rule: Reference acquisition retains bytes in the declared external source area; native execution
+      loads its admitted full state into RAM before scoring and proves zero cartridge-assisted model reads
+      during scoring. No internal model copy or hidden swap claim is introduced.
+    evidence_level: PLATFORM
+    provenance: REFERENCE_ONLY
+    replay_policy: FROZEN_REFERENCE
+    principal_action: Exact reference host, source and any qualification/write cards; network disabled during
+      local reference execution.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L06
+  - family: native_baseline_selection
+    matrix_phase: L02
+    expand_over: b_native_c1_and_b_native_c2
+    records_per_coordinate:
+    - SELECT
+    id_format: NATIVE-<class>-SELECT
+    materialized_by: BASELINE-DESCRIPTORS
+    dependencies:
+      SELECT:
+      - every-NATIVE-<class>-<candidate>-VERIFY
+    work: Independently reproduce Q13 argmax from every frozen eligible candidate score and the predeclared
+      tie rule. Bind the selected source/runtime/hardware/harness identity without changing candidate membership
+      after observing results.
+    evidence_level: INTEGRATION
+    provenance: REFERENCE_ONLY
+    replay_policy: FROZEN_REFERENCE
+    principal_action: none
+    aggregate_record: BASELINES-ALL-PASS
+    aggregate_dependencies:
+    - BASELINE-INPUTS-FROZEN
+    - NATIVE-c1_air_32-SELECT
+    - NATIVE-c2_max_128-SELECT
+    aggregate_rule: The frozen input manifests and both measured selections satisfy the unchanged Q13/Q67 baseline
+      contract before any Q17/Q18/Q68 product comparison.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L06
+  - family: reference_capture
+    matrix_phase: L02
+    expand_over: each_applicable_model_x_each_frozen_teacher_or_equivalent_hosted_case_batch
+    records_per_coordinate:
+    - PLAN
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - START
+    - VERIFY
+    id_format: REFERENCE-<model>-<baseline>-<batch>-<record>
+    materialized_by: BASELINE-DESCRIPTORS
+    dependencies:
+      PLAN:
+      - BASELINE-INPUTS-FROZEN
+      - matching-local-source-ACQ-VERIFY_when_local
+      QUALIFY_START:
+      - matching-PLAN
+      - SOURCE-ENTRY-PASS
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      START:
+      - matching-QUALIFY_VERIFY
+      - WORKLOADS-FROZEN
+      VERIFY:
+      - matching-START
+    work: Run the pinned reference through the frozen Q15/Q16 cases and Q17 trials. Capture quality/scorer
+      inputs and the native activations, gradient/ablation and protected-support observations required by Q18/Q19.
+      A hosted response without required internals cannot satisfy a compiler witness; use the declared full-capacity
+      reference compute and retain complete provenance.
+    compute_rule: Reference execution may use the remit-authorized external reference/compilation infrastructure
+      and is labelled REFERENCE_ONLY. It cannot answer a Cassette runtime request. External services need the
+      exact account/compute card; local reference I/O needs its own measured profile. For a hosted-only request
+      QUALIFY records verify the declared service/transport boundary without claiming physical-drive proof;
+      any local write still has its own physical profile.
+    evidence_level: LIVE
+    provenance: REFERENCE_ONLY
+    replay_policy: FROZEN_REFERENCE
+    principal_action: Exact reference account/compute, source and write scope; opaque credentials only.
+    aggregate_record_per_model: REFERENCE-<model>-ALL-PASS
+    aggregate_dependencies:
+    - every-required-REFERENCE-<model>-<baseline>-<batch>-VERIFY
+    aggregate_rule: Every required comparison and compiler-observation input exists under frozen identities;
+      NON_EQUIVALENT hosted fields are reported but excluded from ratio gates.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: L06
+  - family: model_inference_qualification
+    matrix_phase: L01.5
+    expand_over: F4_after_F4-CERTIFICATE_and_F5_after_F5-CERTIFICATE
+    records_per_instance:
+    - START
+    - VERIFY
+    id_format: QUALIFY-<F4|F5>-INFERENCE-<record>
+    materialized_by:
+    - F4-CERTIFICATE
+    - F5-CERTIFICATE
+    dependencies:
+      START:
+      - matching-compiled-certificate-VERIFY
+      VERIFY:
+      - matching-START
+    work: Derive the actual certified inference plan from the committed revision, then run the physical_qualification
+      contract for that exact consumer. The source and compilation profiles cannot satisfy this record.
+    evidence_level: LIVE
+    principal_action: Exact plan-specific qualification card.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    owner_stage: inherit_consumer_stage
+  - family: training_thermal
+    matrix_phase: L04
+    expand_over: every_training_row_x_every_declared_operation_x_exact_host_drive_plan
+    records_per_coordinate:
+    - PLAN
+    - QUALIFY_START
+    - QUALIFY_VERIFY
+    - START
+    - VERIFY
+    id_format: TRAIN-THERMAL-<row>-<operation>-<record>
+    dependencies:
+      PLAN:
+      - matching-TRAIN-<row>-<operation>-QUALIFY_VERIFY
+      QUALIFY_START:
+      - matching-PLAN
+      QUALIFY_VERIFY:
+      - matching-QUALIFY_START
+      START:
+      - matching-QUALIFY_VERIFY
+      - matching-TRAIN-<row>-<operation>-VERIFY
+      VERIFY:
+      - matching-START
+    work: Freeze the Q48 duty-cycle experiment and evidence-based SLC_cache_estimate with Q74 endurance bounds.
+      Measure above and below the selected duty cycle on each applicable class, then hold a fresh uninterrupted
+      training interval for at least 120 minutes and at least 2*SLC_cache_estimate physical writes. Use the
+      same production training path, with external networking disabled throughout. Preserve UNKNOWN optional
+      sensors; an unknown mandatory cache estimate blocks the volume claim. A path with no SLC cache may use
+      an evidenced zero SLC estimate and still owes the full duration, duty-cycle and service proof. Unknown
+      is not zero; media labels never decide admission.
+    reuse_rule: PLAN precedes the measured interval. A normal TRAIN run may supply it only when PLAN was frozen
+      before TRAIN START and exact plan, both minima, duty experiment, raw coverage and continuous restriction
+      match; otherwise execute the separate thermal START. The finite graph and every member remain present
+      in either case, and reuse binds actual raw inputs rather than skipping the record.
+    principal_action: Separate exact endurance/duty-cycle and write approval; retain network restriction through
+      terminal VERIFY and all overlapping offline leases. Each separately materialized above-duty experiment
+      carries its own exact action scope; no general campaign approval authorizes endurance stress.
+    evidence_level: LIVE
+    invariants:
+    - Q28
+    - Q48
+    - Q74
+    - Q79
+    aggregate_record: TRAINING-THERMAL-ALL-PASS
+    aggregate_dependencies:
+    - every-TRAIN-THERMAL-<row>-<operation>-VERIFY
+    aggregate_rule: All required training plans and classes pass the complete Q48 interval, volume, duty and
+      thermal predicates with Q74 admission.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    checkpoint_rule: Every long-operation START expands checkpoint_proof; qualification and recovery preserve
+      exact operation lineage.
+    materialized_by: the_training_coordinate_materializer_before_any_coordinate_member_executes
+    owner_stage: inherit_training_stage
+  - family: checkpoint_proof
+    matrix_phase: inherit_operation
+    expand_over: every_long_operation_START_except_verification_work
+    records_per_operation:
+    - RECOVERABILITY
+    id_format: CHECKPOINT-<operation-start-flat-id>-RECOVERABILITY
+    dependencies:
+      RECOVERABILITY:
+      - exact-operation-START
+    eligibility: The declared data boundary is held and durably acknowledged; waiting consumes no attempt.
+    work: Verify the hold and exact durable lineage, perform the declared real process-death/resume discriminator,
+      verify the same source/plan/recovery boundary, and release the job. Insert this node before all terminal
+      verification and dependent runtime work for that operation.
+    evidence_level: inherit_operation
+    principal_action: Exact approved interruption/resume card for the named operation; never a physical-fault
+      substitute.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    verification_rule: Every terminal VERIFY expands verification_work before closure; no raw recomputation
+      is omitted.
+    owner_stage: inherit_target_stage
+  - family: verification_work
+    matrix_phase: inherit_target
+    expand_over: verification_contract_targets_after_literal_family_expansion
+    records_per_target:
+    - START
+    - RESULT
+    id_format: VERIFY-WORK-<target-flat-id>-<record>
+    dependencies:
+      START:
+      - every-original-target-predecessor
+      RESULT:
+      - matching-START
+    eligibility: All required raw inputs are terminal and sealed; ordinary waiting is uncounted preflight.
+    work: Execute the target original full proof with the independent verifier and complete coverage index
+      under verification_contract. Keep the raw source, model, profile and authority identities fixed across
+      resumptions. START proves launch; RESULT proves the entire independent job finished and its coverage/namespace
+      seal is exact. It cannot accept missing recomputation.
+    evidence_level: inherit_target
+    principal_action: Inherit only the exact target read/write authority. Any additional model-bearing scratch
+      storage or physical action needs its own declared card; metadata-only review has no principal action.
+    status_per_record: TODO
+    attempts_per_record: []
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    owner_stage: inherit_target_stage
+  - family: q80_clean_replay
+    matrix_phase: L05
+    materialized_by: Q80-MATERIALIZE
+    membership_rule: Start with every required original matrix and supplemental terminal owner plus FINAL-PROVENANCE.
+      Traverse all predecessor nodes regardless of evidence level. Keep LIVE product/physical nodes, including
+      checkpoint and independent verification producers, and their aggregates. Freeze only explicitly declared
+      REFERENCE_ONLY nodes and machine/selection proofs as immutable inputs. No unlabelled LIVE producer may
+      be omitted. Exclude the replay family itself. Expected replay count equals this exact retained vertex
+      set.
+    edge_rule: For retained u and v, preserve u -> v when the original graph has a path from u to v whose internal
+      nodes are all excluded frozen-input nodes. Retain every such precedence edge, bind the excluded node
+      proofs to the consuming replay, and add no other edge. This contracts intermediate frozen nodes without
+      dropping an earlier LIVE acquisition or qualification.
+    records_per_member:
+    - REPLAY
+    id_format: Q80-<original-flat-id>
+    lineage_rule: A replay START creates a fresh logical operation in one clean campaign root. Its replay VERIFY,
+      recovery, and aggregate descendants bind that same replay logical operation and root, never the original
+      campaign operation.
+    work: Re-execute one exact original record against the fresh clean-root operation and input bindings. Verification
+      producers rerun their complete independent jobs. Reference identities and measured selections remain
+      frozen inputs; remote reference material never answers a product runtime request.
+    principal_action: Mirror the original record's one exact action template, or none when the original required
+      none.
+    status_per_record: TODO
+    attempts_per_record: []
+    aggregate_record: Q80-ALL-PASS
+    aggregate_dependencies:
+    - every-Q80-<original-flat-id>
+    aggregate_rule: PASS only when the one-to-one record and edge counts match the sealed source graph and
+      every replay member is PASS at LIVE evidence.
+    timing_evidence: NOT_RUN
+    invariants:
+    - Q80
+    owner_stage: L10
   long_operation_contract:
     start_proves: Durable broker launch receipt, exact inputs, ownership and next-byte admission; bounded acknowledgement,
       not completion of a data window.
@@ -3957,94 +3974,189 @@ phase_live_queue:
       it.
     hold_rule: START requests a hold at the declared boundary. No worker may pass that boundary or finish before
       RECOVERABILITY records the discriminator. Missing hold acknowledgement blocks injection.
-    first_checkpoint_limit: L30 proves first-boundary hold/acknowledgement and durable recovery; L31 proves independent
-      verifier coverage. Preserve Q25/Q44 and actual operation response limits. The coding budget is not an I/O
-      deadline.
+    first_checkpoint_limit: L04 proves first-boundary hold/acknowledgement and durable recovery; L04 proves
+      independent verifier coverage. Preserve Q25/Q44 and actual operation response limits. The coding budget
+      is not an I/O deadline.
     terminal_verification: After terminal state, perform complete independent raw recomputation, using resumable
-      verification where needed. VERIFY closes only from complete evidence; its elapsed runtime is outside the
-      coding budget.
-    continuous_windows: Q48 timing and token/write minima begin after recovery and cover a fresh continuous interval;
-      pre-kill windows never count.
+      verification where needed. VERIFY closes only from complete evidence; its elapsed runtime is outside
+      the coding budget.
+    continuous_windows: Q48 timing and token/write minima begin after recovery and cover a fresh continuous
+      interval; pre-kill windows never count.
   verification_contract:
-    targets: Run the focused proof for each changed invariant. Full-suite, ledger, J and Q78 gates occur at the
-      explicit targets below. Each complete proof runs once per frozen candidate, with its retained result reused
-      by dependent closures.
+    targets: Run the focused proof for each changed invariant. Full-suite, ledger, J and Q78 gates occur at
+      the explicit targets below. Each complete proof runs once per frozen candidate, with its retained result
+      reused by dependent closures.
     materialization: Before sealing a new target, augment its original predecessors with p -> VERIFY-WORK-target-START
       -> VERIFY-WORK-target-RESULT -> target and retain original p -> target edges. START receives only original
       predecessors, never target. Exclude verification_work records from recursion. Never insert prerequisites
       into an already sealed target; an authority change starts the declared new graph root.
     before_campaign_tool: All machine-only verification may launch the named commands in isolated agent-owned
       test processes with immutable input/output receipts. Bootstrap uses its off-tree format; normal machine
-      review uses the completed campaign namespace. No unbuilt product verifier is assumed. L31 must pass before
+      review uses the completed campaign namespace. No unbuilt product verifier is assumed. L04 must pass before
       live model-bearing verification uses the broker.
     during_campaign: Live model-bearing work uses the existing broker process and store-granted extents. Checkpoint
-      by source extent, certificate atom/condition/trace, case/trial, evidence file or Q78 component; retain exact
-      coverage indexes. Machine-only tests remain isolated tooling, not an added product process.
+      by source extent, certificate atom/condition/trace, case/trial, evidence file or Q78 component; retain
+      exact coverage indexes. Machine-only tests remain isolated tooling, not an added product process.
     independence: Independently recompute from raw inputs and retain complete coverage, verifier identity and
       terminal evidence. Ordinary checks may run directly; large checks use the declared resumable verification
       job. Runtime is outside the coding budget and does not require another build stage.
     failure: Partial coverage is NOT_RUN. A failed check blocks its target and dependents. No digest-only shortcut
       replaces a required raw recomputation.
     fixed_targets:
-      - L03
-      - L27
-      - L31
-      - POST-SELECTION-MACHINE-PASS
-      - DRIVE-INVENTORY
-      - CARTRIDGE-DURABILITY
-      - F4-COMPILE-PROFILE-PASS
-      - F4-CERTIFICATE
-      - F4-INFERENCE-CLOSED
-      - F4-GATE
-      - F5-COMPILE-PROFILE-PASS
-      - F5-CERTIFICATE
-      - F5-INFERENCE-CLOSED
-      - F5-GATE
-      - FINAL-PROVENANCE
-      - Q80-MATERIALIZE
-      - COMPLETION
-      - BASELINES-ALL-PASS
-      - WORKLOADS-FROZEN
-      - TRAINING-THERMAL-ALL-PASS
-    full_gate_targets: [L03, L27, L31, POST-SELECTION-MACHINE-PASS, FINAL-PROVENANCE, COMPLETION]
-    early_failure_policy: L01 freezes the exact baseline failures. L01 and L02 must pass their own discriminators
-      and introduce no new failure; only specifically assigned pre-existing failures may remain until L03. L03
-      and all later full gates require zero failures and zero ledger violations.
+    - L01
+    - L04
+    - L04
+    - POST-SELECTION-MACHINE-PASS
+    - DRIVE-INVENTORY
+    - CARTRIDGE-DURABILITY
+    - F4-COMPILE-PROFILE-PASS
+    - F4-CERTIFICATE
+    - F4-INFERENCE-CLOSED
+    - F4-GATE
+    - F5-COMPILE-PROFILE-PASS
+    - F5-CERTIFICATE
+    - F5-INFERENCE-CLOSED
+    - F5-GATE
+    - FINAL-PROVENANCE
+    - Q80-MATERIALIZE
+    - COMPLETION
+    - BASELINES-ALL-PASS
+    - WORKLOADS-FROZEN
+    - TRAINING-THERMAL-ALL-PASS
+    full_gate_targets:
+    - L01
+    - L04
+    - L04
+    - POST-SELECTION-MACHINE-PASS
+    - FINAL-PROVENANCE
+    - COMPLETION
+    early_failure_policy: L01 freezes the exact baseline failures. L01 and L01 must pass their own discriminators
+      and introduce no new failure; only specifically assigned pre-existing failures may remain until L03.
+      L01 and all later full gates require zero failures and zero ledger violations.
   network_contract:
     scope: Every Cassette inference, training, client conformance, sustained and clean-replay operation, including
       F4/F5.
-    lease: Disable external networking before activation and retain the restriction through terminal result and
-      evidence capture. Track overlapping offline operations; restore only after the last owning lease closes
-      under its exact cue.
+    lease: Disable external networking before activation and retain the restriction through terminal result
+      and evidence capture. Track overlapping offline operations; restore only after the last owning lease
+      closes under its exact cue.
     reference_boundary: Reference-only hosted calls and explicit acquisitions run in separate declared network
-      intervals/environments. They never overlap a network-disabled proof on the same host and cannot supply product
-      runtime output.
+      intervals/environments. They never overlap a network-disabled proof on the same host and cannot supply
+      product runtime output.
     failure: A missing interval, external socket or premature restore fails the affected offline proof. A later
       audit cannot reconstruct absent enforcement.
   dataset_contract:
     producer: WORKLOAD freezes every actual training/reference dataset identity; SOURCE-QUALIFICATION-REQUESTS
-      materializes one exact header/acquisition plan per remotely acquired input descriptor, in addition to model
-      sources.
+      materializes one exact header/acquisition plan per remotely acquired input descriptor, in addition to
+      model sources.
     path: Use sources.py and store-granted source extents under Q23/Q51/Q52/Q53; qualify the exact input transfer
       before writing and independently verify complete bytes.
     consumer_dependency: Every reference, native-candidate and TRAIN START names its complete verified input-dataset
       acquisition IDs. Local fixture bytes are machine proof only; they cannot replace the frozen live dataset.
   materialization_order:
-    - The numbered fixed_steps are the user execution queue. Expand operation_records and family recipes only
-      from finite registries. Resolve every conditional owner to one literal stage and every producer prerequisite
-      to one literal evidence ID before sealing. A stage closes from its evidence; its evidence cannot require
-      that stage already DONE.
-    - Resolve model aliases F4/F5, full matrix Apple-class IDs, candidate IDs, dataset IDs, artifact selectors
-      and all aggregate members to literal stable IDs. Reject unresolved conditional strings.
-    - When materializing each TRAIN coordinate, materialize its entire thermal family in the same new graph before
-      any member executes. PLAN depends on TRAIN qualification; TRAIN START depends on thermal PLAN; thermal START
-      depends on normal TRAIN VERIFY. No inherited node receives a later added prerequisite.
-    - Augment new long-operation terminal paths with checkpoint_proof, then new heavy proof targets with verification_work;
-      do not recursively expand helper families.
-    - Attach every producer input edge, terminal assertion owner and frozen-reference binding; assert no missing
-      members and no cycles.
-    - Topologically sort with canonical ID tie breaks; seal counts, node/edge digests and complete coverage before
-      first execution. Later successors preserve all inherited nodes and edges.
+  - The numbered fixed_steps are the user execution queue. Expand operation_records and family recipes only
+    from finite registries. Resolve every conditional owner to one literal stage and every producer prerequisite
+    to one literal evidence ID before sealing. A stage closes from its evidence; its evidence cannot require
+    that stage already DONE.
+  - Resolve model aliases F4/F5, full matrix Apple-class IDs, candidate IDs, dataset IDs, artifact selectors
+    and all aggregate members to literal stable IDs. Reject unresolved conditional strings.
+  - When materializing each TRAIN coordinate, materialize its entire thermal family in the same new graph before
+    any member executes. PLAN depends on TRAIN qualification; TRAIN START depends on thermal PLAN; thermal
+    START depends on normal TRAIN VERIFY. No inherited node receives a later added prerequisite.
+  - Augment new long-operation terminal paths with checkpoint_proof, then new heavy proof targets with verification_work;
+    do not recursively expand helper families.
+  - Attach every producer input edge, terminal assertion owner and frozen-reference binding; assert no missing
+    members and no cycles.
+  - Topologically sort with canonical ID tie breaks; seal counts, node/edge digests and complete coverage before
+    first execution. Later successors preserve all inherited nodes and edges.
+  retained_machine_evidence:
+  - origin: Superseded schema-version-6 queue, former L01; historical identity preserved.
+    record:
+      id: L01
+      title: Repair acquisition and corrupt-root recovery
+      depends:
+      - S28
+      invariants:
+      - Q1
+      - Q29
+      - Q80
+      - Q19
+      - Q49
+      - Q53
+      - Q60
+      - Q62
+      files:
+      - broker.py
+      - store.py
+      - tests/test_s26_phase_machine.py
+      - tools/genschema.py
+      - tests/
+      inspected_code: broker.py:CanonicalBroker._advance; store.py:recover_generation; tests/test_s26_phase_machine.py
+      work: Repair access validation at the first filesystem operation and the corrupt-root resume path. Capture
+        the current baseline while reproducing those failures; preserve the six existing repairs.
+      sizing_basis: Both repairs concern the durable source-to-cartridge boundary. Existing Q49/Q60 states
+        and retained failing tests constrain the change; baseline capture needs no separate stage.
+      done_when: The seven retained acquisition lifecycle cases reach their intended operation boundary, and
+        corrupt-root recovery produces the exact Q60/Q62 outcome without accepting corrupt bytes.
+      acceptance_boundary: The named machine behavior through real internal components. Physical/service evidence
+        and release success remain owned by the later live stages.
+      coding_target_minutes: 15
+      coding_limit_minutes: 20
+      timing_evidence: ACTIVE_CODING_ESTIMATE
+      sizing_uncertainty: static scope estimate; actual coding time is unmeasured
+      review_profile: bootstrap
+      env: macos_arm64_fixture_only
+      evidence_level: INTEGRATION
+      record_kind: stage
+      status: DONE
+      attempts:
+      - id: L01-1
+        source_commit: 4d7653d3183e02d7e4ebdee0e57d8d221e99d8f8
+        evidence_level: INTEGRATION
+        outcome: PASS
+        review_route: PASS_READY
+        evidence_directory: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01
+        review_envelope_sha256: 7a92cf87fa4bc64cb9d7e3a0c2a5e68a613fde78ea6a719fa8780c132f1d66e2
+      closed_utc: 2026-09-05 02:35:18.796713+00:00
+      coding_time:
+        estimated_active_minutes: 4
+        method: Manual estimate of code investigation and the two edits; no continuous active-time timer was
+          used.
+        measured_duration: false
+        budget_minutes: 20
+      closeout:
+      - clause: Q49 acquisition lifecycle errors enter the broker and preserve exact recovery.
+        test_or_probe: tests/test_s26_phase_machine.py -k 'q49 and acquisition'
+        input: All 16 acquisition injection coordinates, including seven stale/read-only failures and exact
+          reconnect/replacement recovery.
+        expected: Canonical operation entrypoint records the typed result; no stale use or partial child occurs.
+        observed: 16 passed on the frozen commit; restoring the eager constructor check fails the disconnect
+          coordinate.
+      - clause: Q60/Q62 corrupt immutable roots and indexes remain refused.
+        test_or_probe: tests/test_s19_compiler.py::test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication
+        input: Independently truncated candidate/source roots and indexes; separate missing metadata, absent
+          segment and interrupted pending root.
+        expected: Corrupt immutable bytes raise ROOT_INVALID unchanged; incomplete uncommitted objects reconstruct
+          exactly from verified source, without publication.
+        observed: All four corruption/refusal and exact reconstruction paths pass; the silent-root-replacement
+          negative control fails. No store corruption guard was weakened.
+      - clause: Coupled broker and source-binding behavior remains correct.
+        test_or_probe: tests/test_s16_broker.py and tests/test_s19_compiler.py
+        input: Frozen candidate using real store, source fixtures and broker operations.
+        expected: Existing idempotency, pause/cancel, capacity recovery and source/certificate binding assertions
+          pass.
+        observed: 5 passed; together with acquisition replay, 21 focused and coupled checks passed.
+      proof_limit: Full suite, ledger and J were not rerun here; the current queue assigns their next gate
+        and retained failures to L03. This is machine evidence only.
+      discovered_scope: PHASE_LIVE_RUNBOOK.md next-stage pointer updated as the queue projection.
+      commit_location: Isolated local branch codex/l01-recovery-proof; inherited main-checkout edits and its
+        index were preserved.
+  - origin: Superseded schema-version-6 queue, former L02; interrupted before accepted repair.
+    result: INCOMPLETE
+    evidence_directory: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L02
+    observed: 'Two new discriminators failed before edits. Candidate had 8 passed and 1 failed: strict equality
+      rejected the valid existing rounded witness 401/100300. Unaccepted source/test edits are retained off-tree
+      and restored in the checkout.'
+    review: NOT_RUN
 ```
 
 ## Status vocabulary

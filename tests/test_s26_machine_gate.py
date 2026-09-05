@@ -286,7 +286,7 @@ def _portable_reimport(
     )
 
 
-def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferrals(
+def _machine_outcome(
     tmp_path,
     monkeypatch,
 ):
@@ -507,6 +507,12 @@ def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferra
         },
         "live_evidence": "NOT_RUN",
     }
+    return outcome
+
+
+def test_q36_phase_machine_integrates_success_path_and_records_only_live_deferrals(tmp_path, monkeypatch):
+    """Q36 promotion readiness: reproduce amended machine evidence with every live row NOT_RUN."""
+    outcome = _machine_outcome(tmp_path, monkeypatch)
     recorded = json.loads(GATE_PATH.read_bytes())
     assert canonical_bytes(recorded) + b"\n" == GATE_PATH.read_bytes()
     assert outcome == recorded
