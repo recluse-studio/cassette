@@ -10,7 +10,7 @@ the source-entry L01.5 gate; they make no live header request and move no model 
 row remains `NOT_RUN`.
 
 IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
-stages, L05-L10. L01 is reopened for Q30 repair; its completed recovery proof remains retained.
+stages, L05-L10. L01 is DONE after Q30 remediation and L02 is next; the completed recovery proof remains retained.
 Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
 F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
 separate from the matrix phase labels used below. Consolidated preparation has no verified duration
@@ -29,7 +29,7 @@ physical drive.
 | Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
 | Deferred-live projection, `s26-deferred-live-v4` | `blake3:21a64f61e1c68a444c6b8ef5903caf2d9451ad1ba652d33820fac3e0e4a19f6c` |
 | Amended S26 machine fixture | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
-| S27 complete J report | `sha256:f53067994cfda7c568b2e02747bd470af6c45b9d1913008b00186017b5871200` |
+| S27 complete J report | `sha256:15b81c535a4aada190ae31a1ed4ae2d273b827118901f220167a8c1fb4edf184` |
 
 The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The matrix-declared deferral outcome is
 `CONTRACT_AMENDMENT_REQUIRES_L01_25_MACHINE_PROOF`; the retained machine-baseline claim is
@@ -37,10 +37,11 @@ The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The matrix-declared deferral
 `F4_PASS`, `F5_PASS`, `frontier_capability`, `hosted_comparison`, and
 `physical_drive_performance`. Those labels require the live evidence named below.
 
-The prior consolidated L01 run passed 315 tests and all twelve removal/bypass triples. A fresh
-review then reproduced computed-import false passes under Q30, superseding its closure. The repaired
-attempt must complete the suite, ledger and J proof before L02 becomes eligible. IMPLEMENTATION.md
-retains the prior evidence and owns the new attempt.
+The prior L01 closure was superseded by a fresh Q30 finding. Repaired attempt L01-consolidated-7
+passed 315 tests with zero skips, all twelve removal/bypass triples and the current ledger.
+Its Q30 checks cover reflective, implicit-builtins and relative-context import forms and the actual
+ledger tool path. IMPLEMENTATION.md binds its source, generated report and same-agent repair review,
+and preserves the failed candidates and earlier independent review.
 The matrix retains its deferral declarations; every physical and real-model claim remains NOT_RUN.
 
 ## Coding time and independent verification

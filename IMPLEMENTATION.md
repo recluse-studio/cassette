@@ -1619,7 +1619,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L01
+  next_step: L02
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -1688,13 +1688,13 @@ phase_live_queue:
       results are owned by L05-L10.
     execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
       outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
-    timing_evidence: Active coding duration was not measured continuously; the recorded 417.17 seconds is full-suite
+    prior_timing_evidence: Active coding duration was not measured continuously; the recorded 417.17 seconds is full-suite
       execution time only.
     review_profile: bootstrap
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: IN_PROGRESS
+    status: DONE
     reopened: '2026-09-05: supplied fresh review reproduced Q30 computed-import false passes. Prior closeout is historical; L02 depends on a repaired L01 full gate.'
     attempts:
     - id: L01-consolidated-1
@@ -1727,6 +1727,12 @@ phase_live_queue:
       outcome: FAIL
       cause: Collector PYTEST_ADDOPTS basetemp conflicted with a nested pytest working directory; 314 cases passed.
       raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/attempt-6-full-proof.txt
+    - id: L01-consolidated-7
+      source_commit: 2881d16bfb4c93ea23c37af766a2a23f80c97537
+      outcome: PASS
+      evidence_level: INTEGRATION
+      review_route: PASS_READY
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/full-proof.txt
     collector_retry_decision: '2026-09-05 queue decision under the authorized remediation: the failing Q78 case
       passes with the collector override removed. Permit one seventh attempt on unchanged executable source,
       using pytest default temporary-directory allocation. Preserve attempt six as a collector failure.'
@@ -1735,7 +1741,7 @@ phase_live_queue:
       controls pass. The sixth attempt changes no stage count, product requirement or proof threshold.'
     retained_proof: The former 37-stage queue L01 recovery closeout is retained under retained_machine_evidence.
       Its passing work is not reopened by grouping.
-    execution_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated
+    prior_execution_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated
     candidate_history:
     - source_commit: 0a413b7bb5b36f019c85130be2bec78ff336eb2d
       result: Full suite returned 313 passed and two coupled fixture failures; both were repaired.
@@ -1747,11 +1753,11 @@ phase_live_queue:
       and IMPLEMENTATION.md record current identities and closure. Coupled S12/S14 fixture expectations follow
       the exact certificate representation. tools/ledger.py raises only the proof-runner timeout and retains
       completed suite output.
-    closed_utc: '2026-09-05T03:59:35.508304+00:00'
-    source_step_commit: f2dae08978f081eb5d8a1ae1d8b181d7d1257035
-    artifact_commit: 86aba00815b67b4a55733590fa6607fc67b740ff
-    review_envelope_sha256: b41e89fdbd3de4584f81f9fe918c50c331c96fc6b8c0c5e1d24ccd2f3d4feb61
-    closeout:
+    prior_closed_utc: '2026-09-05T03:59:35.508304+00:00'
+    prior_source_step_commit: f2dae08978f081eb5d8a1ae1d8b181d7d1257035
+    prior_artifact_commit: 86aba00815b67b4a55733590fa6607fc67b740ff
+    prior_review_envelope_sha256: b41e89fdbd3de4584f81f9fe918c50c331c96fc6b8c0c5e1d24ccd2f3d4feb61
+    prior_closeout:
     - clause: Q49/Q60/Q62 acquisition lifecycle and corrupt-root recovery remain valid.
       test_or_probe: 'Full suite: tests/test_s26_phase_machine.py and tests/test_s19_compiler.py; retained predecessor
         recovery controls.'
@@ -1795,9 +1801,35 @@ phase_live_queue:
       observed: 315 passed, zero skipped in 417.17 seconds. All 36 removal experiments have their expected outcomes.
         Ledger reports zero violations and J=(0,0,11454,1,1,5,0,0,0). Same-agent read-only bootstrap review returned
         PASS_READY.
-    proof_limit: Machine evidence only. No external drive qualification, source account, real-model download,
+    prior_proof_limit: Machine evidence only. No external drive qualification, source account, real-model download,
       F4/F5 or release proof ran. Full suite executed on the source step commit; the artifact commit adds only
       its generated J report.
+    closed_utc: '2026-09-05T12:54:00.822050+00:00'
+    source_step_commit: 2881d16bfb4c93ea23c37af766a2a23f80c97537
+    artifact_commit: 21aae20fff3d9bda014a096388f299451cb9e33a
+    review_envelope_sha256: 9e51a39dff5eb5f33c74b33d36f3d2f53b5486aa3198fde91dfb70c618a2bab8
+    execution_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair
+    timing_evidence: 'Full suite: 208.37 seconds. Complete suite and removal proof: 240.18 seconds.
+      Active coding time was not continuously measured. Stopped earlier candidates remain recorded separately.'
+    closeout:
+    - clause: Q30 computed import machinery is confined through the checker and the ledger entrypoint.
+      input: Twenty-four forbidden forms at two non-owner paths and both exact owners; six literal standard-library controls.
+      expected: Reject 48 forbidden acquisitions; accept 48 owner cases and six standard-library controls.
+      observed: All 102 direct cases pass; the full suite passes the extended test including both real-ledger path checks.
+      controls: Parent checker, implicit-namespace, relative-context and tool-call-site sensitivity records detect their named omissions.
+    - clause: Q30 fixture runtime ownership preserves Q18/Q19/Q40 teacher evidence.
+      input: Existing common, rare and ablated teacher fixtures through pager.dispatch_float32 and generated dispatch.
+      expected: Exact checked-in teacher corpus including logits, ablations and digest.
+      observed: Focused check and complete suite reproduce the corpus without direct runtime access from the tool.
+    - clause: Existing Q19, Q49/Q60/Q62 and Q53 proof remains applicable.
+      input: Unchanged product paths and prior pager AST, fresh 1/7 rational collisions, and the current complete suite.
+      expected: Exact claims pass; unequal float-colliding claims reject; recovery, capacity and eligibility retain their invariants.
+      observed: Preserved-source comparison, fresh rational probes and complete suite pass. The supplied independent review's unchanged-path findings remain retained.
+    - clause: Q29/Q78 complete gate and review skill discovery match the candidate.
+      expected: Zero test failures/skips and ledger violations, all twelve control/deletion/bypass triples, and resolving local skill links.
+      observed: '315 passed, zero skipped; 36 component checks pass; J=[0, 0, 11469, 1, 1, 5, 0, 0, 0]; current default ledger and skill-link checks pass.'
+    proof_limit: Machine evidence only. Same-agent read-only repair review on the same Mac; no independent staffing
+      claim and no physical-drive, model-source, F4/F5 or release proof. Earlier closeout and failed attempts remain historical.
   - id: L02
     title: Complete ordinary-source native model execution
     phase: NON_DRIVE_PREPARATION

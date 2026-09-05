@@ -7139,3 +7139,62 @@ mutable Cassette machine-review source has since changed, so that provenance is 
 remains `IN_PROGRESS`. Astra must neutralize the stale route, make the two document checks load-bearing,
 submit a fresh attempt, and obtain a new review. No product defect was identified, and no downstream
 stage was closed.
+
+#### Entry 81 — 2026-09-05, the import that the green suite missed
+
+Drew asked for another review of L01 because he was not satisfied with the first. The earlier
+Codex closeout at `77ebc94` reported 315 passing tests, a clean ledger, and a completed stage.
+The review Drew supplied then showed three ways to retrieve Python's module loader that the
+ledger accepted outside the two permitted runtime owners. Those observations invalidated the
+Q30 confinement claim. The same review's certificate, recovery, and capacity challenges passed;
+its complete fresh J replay did not finish within its review window.
+
+In this remediation pass, Codex reproduced all three missed imports against the prior checker.
+The existing test failed as soon as the first reflective form was added. Codex kept the repair
+inside the existing source checker: imported loader namespaces may expose only a directly checked
+loader call, and a dynamic import may not return another import namespace. Ordinary literal
+standard-library imports remain permitted. The restriction deliberately rejects some benign
+namespace inspection outside the runtime owners; the checker remains a static source rule, with
+no claim that it confines every possible behavior of arbitrary Python.
+
+Tracing the checker into the ledger exposed a second omission. The ledger called Q30 for product
+files but skipped tools, although the test named a tool path as forbidden. Extending that call
+found an existing teacher-fixture generator obtaining MLX directly from the pager. Codex moved its
+array conversion into the pager and retained the generated dispatch path. The deciding check
+reproduced the checked-in teacher corpus exactly, including its ablation results and identity.
+No certificate mathematics, capacity policy, recovery algorithm, numerical kernel, or dependency
+changed.
+
+The repository also contained an unfinished migration to one independent-review skill. Codex
+preserved that work in the complete snapshot and repaired four discovery links whose targets the
+migration had removed. Claude and Copilot now each resolve the unified skill. The first implementation
+change is `c851327c01047e623c81692e88ce9b0f20815bf3`.
+
+Codex started the broad gate before finishing its direct checker review, then found two more
+forms of the same defect. Python exposes an implicit `__builtins__` namespace, and its import
+function can resolve a literal name under another package when given a relative-import context.
+The agent stopped both dependent runs, preserved those failed candidates, and repaired the
+namespace rule and the single-argument exception. The final source revision is
+`ba223420513660bd08000d42ed04488b87f55dc6`. Its existing Q30 fixture now contains 24 forbidden
+forms, tested at both permitted and forbidden owner paths, with ordinary standard-library controls.
+
+The next complete run passed 314 cases and failed one because the off-tree collector forced a
+shared pytest temporary directory into a nested test run. Removing that collector override made
+the failing Q78 control pass in 0.72 seconds. Codex recorded the failed attempt and reran the
+complete gate using pytest's default allocation; the executable source remained unchanged.
+
+The corrected collector candidate is `2881d16bfb4c93ea23c37af766a2a23f80c97537`;
+its only difference from the executable revision above is the queue record of the collector retry.
+
+The corrected attempt passed 315 tests with zero failures or skips in 208.37 seconds,
+and all twelve component controls, twelve deletions, and twelve executable bypasses produced their
+required outcomes. The ledger reports `J = (0, 0, 11469, 1, 1, 5, 0, 0, 0)`, an increase of fifteen authored executable
+lines from the earlier L01 closeout. The repair review used fresh import and rational inputs,
+source preservation checks, and the new complete gate on the same Mac; it was performed by the
+same Codex agent and is recorded without an independent-staffing claim.
+
+The supplied review, failed probes, stopped runs, final commands, source identities and raw results
+are retained under `.codex/reviews/cassette/2026-09-05/L01-q30-repair` in Drew's home directory.
+The source revision above, generated report at `21aae20fff3d9bda014a096388f299451cb9e33a`, and review envelope
+`9e51a39dff5eb5f33c74b33d36f3d2f53b5486aa3198fde91dfb70c618a2bab8` bind this correction. L01 is closed on that evidence and L02 is next.
+Every physical-drive and real-model claim remains unrun.
