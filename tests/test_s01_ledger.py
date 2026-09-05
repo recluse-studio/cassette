@@ -432,6 +432,9 @@ def test_q30_computed_runtime_acquisition_stays_with_exact_owner_paths(tmp_path)
         "from importlib import __dict__ as namespace\nnamespace['import_module']('mlx.core')",
         "from importlib import *\nimport_module('mlx.core')",
         "import importlib.util as utility\ngetattr(utility, 'find_spec')('mlx.core')",
+        "__builtins__['__import__']('mlx.core')",
+        "getattr(__builtins__, '__import__')('mlx.core')",
+        "__builtins__.get('__import__')('mlx.core')",
     )
     for rel in (Path("compiler.py"), Path("tools/pager.py")):
         (tmp_path / rel).parent.mkdir(exist_ok=True)

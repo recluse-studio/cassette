@@ -280,7 +280,7 @@ def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str
         return [f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     tree = ast.parse((root / rel).read_text(encoding="utf-8"), filename=str(rel))
     loaders = {"__import__"}
-    namespaces = {}
+    namespaces = {"__builtins__": "__import__"}
     machinery = {"importlib": "import_module", "builtins": "__import__"}
     violation = [f"{rel}: unresolved or MLX dynamic import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     for node in ast.walk(tree):
