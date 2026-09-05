@@ -1,10 +1,5 @@
----
-name: live-stage-review
-description: Adversarially review one live, hardware-in-the-loop, source-service, model-bearing, or principal-assisted attempt from its immutable execution bundle under the application's governing contract; replay every declared assertion, prove the nearest false pass, apply at most one bounded implementation remediation only when that contract permits it, declare invalidation, seal a separate review envelope, and return the attempt to the queue without closing it. Use only after a live attempt begins. Do not use for machine-only work, queue authoring, or stage closure.
----
-
 <!-- Portable live-attempt review; the application's existing contract supplies authorities, schemas, identity, resource checks, budgets, tools, and invalidation meanings. -->
-# Live Stage Review
+# Live attempt procedure
 
 Review exactly one live attempt under the application's existing live-stage contract. Preserve what
 happened. Test whether the sealed evidence distinguishes the claimed behavior from its nearest false
@@ -114,6 +109,12 @@ When the contract declares an operation capable of outliving a session, require 
 terminal `VERIFY` records. `START` proves only the first declared durable boundary and any required
 kill/resume discriminator. `VERIFY` is eligible only after the operation is terminal. A preflight
 check or ordinary waiting period is not a terminal result.
+
+## Shared review standard
+
+Apply the adversarial examination in [SKILL.md](../SKILL.md): trace implementation, design fresh
+challenges, prove the instrument can detect the relevant failure, and evaluate supported improvements.
+The procedures below do not replace that examination. A clean result requires both.
 
 ## Review workflow
 
@@ -262,8 +263,11 @@ Write these sections in order:
 
 1. Scope, governing contract, and frozen identities.
 2. Execution-bundle integrity and action/binding lineage.
-3. Per-assertion status, evidence level, raw artifact, replay, false pass, and discriminator.
-4. Cross-artifact, resource, and sensitivity findings.
+3. Per-assertion status, evidence level, source trace, raw artifact, reviewer-designed challenge,
+   expected and observed results, replay, false pass, and discriminator.
+4. Cross-artifact, resource, and sensitivity findings; supported improvements with benefit,
+   tradeoff, and verification method, plus rejected candidates and reasons. Recommendations do not
+   change the frozen assertions or authorize remediation.
 5. Primary and contributing cause; failure route.
 6. Remediation lineage and complete gate, or `none`.
 7. Invalidation class, scope digest, invalidated IDs, operation lineages, and qualification lineages.
@@ -276,8 +280,8 @@ live assertion's status or evidence level.”
 
 End with exactly one baton:
 
-- `PASS_READY`: every applicable assertion is `PASS` at its required level; the queue may apply its
-  closure rule.
+- `PASS_READY`: every applicable assertion is `PASS` at its required level and the adversarial
+  examination above is complete; the queue may apply its closure rule.
 - `INCOMPLETE`: name every `NOT_RUN` or `BLOCKED` assertion and its exact prerequisite or missing
   evidence.
 - `REMEDIATED`: name the exact child revision and invalidation route; the queue may schedule a new

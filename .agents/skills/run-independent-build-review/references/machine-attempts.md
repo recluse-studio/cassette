@@ -1,14 +1,9 @@
----
-name: machine-stage-review
-description: Adversarially review one fixture, integration, or platform machine-stage attempt from frozen evidence; prove one bounded implementation defect red on the parent and green on an isolated child revision, declare invalidation, seal a separate review envelope, and return the stage to its queue. Use only for non-live machine work. Never use for hardware, credentials, accounts, live source services, model-bearing operations, or principal-assisted stages.
----
-
 <!-- Machine-stage review and bounded remediation; depends on repository instructions, the execution queue, governing acceptance authorities, one frozen machine-attempt manifest, and any prior review envelope. -->
-# Machine Stage Review
+# Machine attempt procedure
 
-Review one completed machine attempt against its declared assertions. Find the nearest false pass.
-Repair one proved implementation or instrument defect. The review does not close, reorder, or
-redefine a stage.
+Review one completed machine attempt against its declared assertions. Challenge the implementation
+and its evidence. If a defect is proved and the profile permits remediation, apply the bounded
+repair procedure. The review does not close, reorder, or redefine a stage.
 
 ## Boundary
 
@@ -52,6 +47,12 @@ redefine a stage.
   then atomically compares and swaps that head to its sealed envelope digest. A stale expected head
   or fork fails. The fifth incomplete review returns `QUEUE_ROUTE`. Bootstrap review follows the
   same five-record limit and atomic-head rule, but uses no campaign lease.
+
+## Shared review standard
+
+Apply the adversarial examination in [SKILL.md](../SKILL.md): trace implementation, design fresh
+challenges, prove the instrument can detect the relevant failure, and evaluate supported improvements.
+The procedures below do not replace that examination. A clean result requires both.
 
 ## Review
 
@@ -120,15 +121,16 @@ required change, invalidation scope, and rerun target.
 
 The normal envelope contains its review ID, prior-envelope pointer, expected and new review-set
 heads, all frozen identities
-and lease history; one row per assertion; raw replay and
-mutation artifacts; cause and route; remediation lineage or `none`; invalidation; and every
+and lease history; one row per assertion with source trace, reviewer-designed challenge, expected
+and observed results; raw replay and mutation artifacts; supported improvement recommendations
+with benefit, tradeoff, and verification method, plus rejected candidates and reasons; cause and route; remediation lineage or `none`; invalidation; and every
 disposable artifact created and removed. State: “This review made no live-state claim or live-state
 change.”
 
 End with exactly one route:
 
-- `PASS_READY`: every applicable assertion is `PASS` at its required level; the queue may apply its
-  closure rule.
+- `PASS_READY`: every applicable assertion is `PASS` at its required level and the adversarial
+  examination above is complete; the queue may apply its closure rule.
 - `INCOMPLETE`: name every `NOT_RUN` or `BLOCKED` assertion and its exact prerequisite or missing
   evidence.
 - `REMEDIATED`: queue may schedule a new machine attempt on the exact child revision after applying

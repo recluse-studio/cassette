@@ -422,6 +422,16 @@ def test_q30_computed_runtime_acquisition_stays_with_exact_owner_paths(tmp_path)
         "from importlib import import_module as load\nload('mlx.core')",
         "load = __import__\nload('mlx.core')",
         "from builtins import __import__ as load\nload('mlx.core')",
+        "getattr(__import__('importlib'), 'import_module')('mlx.core')",
+        "getattr(__import__('importlib'), 'import_module')(name='mlx.core')",
+        "import importlib\nvars(importlib)['import_module']('mlx.core')",
+        "import importlib as library\nload = getattr(library, 'import_' + 'module')\nload('mlx.core')",
+        "import importlib as library\nnamespace = library.__dict__\nnamespace['import_module']('mlx.core')",
+        "import builtins as library\ngetattr(library, '__import__')('mlx.core')",
+        "__import__('builtins').__dict__['__import__']('mlx.core')",
+        "from importlib import __dict__ as namespace\nnamespace['import_module']('mlx.core')",
+        "from importlib import *\nimport_module('mlx.core')",
+        "import importlib.util as utility\ngetattr(utility, 'find_spec')('mlx.core')",
     )
     for rel in (Path("compiler.py"), Path("tools/pager.py")):
         (tmp_path / rel).parent.mkdir(exist_ok=True)
@@ -431,9 +441,32 @@ def test_q30_computed_runtime_acquisition_stays_with_exact_owner_paths(tmp_path)
             assert violations, (rel, source)
             assert all("Q30 confinement" in item for item in violations)
     for rel in (Path("pager.py"), Path("trainer.py")):
-        (tmp_path / rel).write_text(forbidden[2] + "\n")
-        assert check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel)) == []
+        for source in forbidden:
+            (tmp_path / rel).write_text(source + "\n")
+            assert check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel)) == []
     rel = Path("compiler.py")
-    for source in ("import math", "__import__('math')", "import importlib as loader\nloader.import_module('json')"):
+    for source in (
+        "import math", "__import__('math')",
+        "import importlib as loader\nloader.import_module('json')",
+        "import importlib as loader\nloader.import_module(name='json')",
+        "from importlib import import_module as load\nload('json')",
+        "import builtins as loader\nloader.__import__('math')",
+    ):
         (tmp_path / rel).write_text(source + "\n")
         assert check_mlx_confinement(tmp_path, rel, top_level_imports(tmp_path, rel)) == []
+
+    clone = tmp_path / "candidate"
+    clone_candidate(clone)
+    assert run(clone, verify_report=False)["violations"] == []
+    for rel in (Path("compiler.py"), Path("tools/pager.py")):
+        target = clone / rel
+        original = target.read_bytes() if target.exists() else None
+        target.write_text(f"# {rel.name} — Q30 computed-import fixture; depends on (none).\n" + forbidden[8] + "\n")
+        try:
+            violations = run(clone, verify_report=False)["violations"]
+            assert any(str(rel) in item and "Q30 confinement" in item for item in violations), violations
+        finally:
+            if original is None:
+                target.unlink()
+            else:
+                target.write_bytes(original)

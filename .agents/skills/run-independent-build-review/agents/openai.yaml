@@ -1,0 +1,5 @@
+# This file provides Codex UI metadata for the run-independent-build-review skill; dependencies: ../SKILL.md.
+interface:
+  display_name: "Run Independent Build Review"
+  short_description: "Adversarial code and build review, live or non-live"
+  default_prompt: "Use $run-independent-build-review to challenge this implementation against its requirements, trace the code, run independent probes, and report proved defects, useful improvements, and untested claims at their actual evidence level."

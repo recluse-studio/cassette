@@ -32,18 +32,16 @@ def capture() -> dict:
         ("common", [[1, 0], [2, 0], [-1, 0]]),
         ("rare", [[0, 1], [0, 2], [0, -1]]),
     )
-    mx, _ = pager._mlx_runtime()
     traces = []
     for condition_id, inputs in conditions:
-        source = mx.array(inputs, dtype=mx.float32)
-        full = pager.dispatch(CASE_ID, (source, mx.array(weights, dtype=mx.float32)))
-        removed = pager.dispatch(CASE_ID, (source, mx.array(ablated, dtype=mx.float32)))
+        full = pager.dispatch_float32(CASE_ID, (inputs, weights))
+        removed = pager.dispatch_float32(CASE_ID, (inputs, ablated))
         traces.append({
             "condition_id": condition_id,
             "inputs": inputs,
-            "teacher_logits": full.tolist(),
-            "ablated_logits": removed.tolist(),
-            "ablation_changed": full.tolist() != removed.tolist(),
+            "teacher_logits": full,
+            "ablated_logits": removed,
+            "ablation_changed": full != removed,
         })
     metric = _identity(4)
     evidence = {

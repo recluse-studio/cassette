@@ -280,14 +280,25 @@ def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str
         return [f"{rel}: mlx import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     tree = ast.parse((root / rel).read_text(encoding="utf-8"), filename=str(rel))
     loaders = {"__import__"}
+    namespaces = {}
+    machinery = {"importlib": "import_module", "builtins": "__import__"}
+    violation = [f"{rel}: unresolved or MLX dynamic import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in {"importlib", "builtins"}:
-            loaders.update(
-                alias.asname or alias.name for alias in node.names
-                if alias.name in {"import_module", "__import__"}
-            )
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in machinery:
+                    namespaces[alias.asname or alias.name.split(".")[0]] = machinery.get(alias.name)
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] in machinery:
+            if any(alias.name != machinery.get(node.module) for alias in node.names):
+                return violation
+            loaders.update(alias.asname or alias.name for alias in node.names)
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     for node in ast.walk(tree):
+        # Import namespaces may expose only a directly checked loader, never escape to reflection.
+        if isinstance(node, ast.Name) and node.id in namespaces:
+            parent = parents.get(node)
+            if not isinstance(parent, ast.Attribute) or parent.attr != namespaces[node.id]:
+                return violation
         if not (
             isinstance(node, ast.Name) and node.id in loaders
             or isinstance(node, ast.Attribute) and node.attr in {"import_module", "__import__"}
@@ -302,10 +313,10 @@ def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str
             if (
                 isinstance(argument, ast.Constant) and isinstance(argument.value, str)
                 and argument.value and not argument.value.startswith(".")
-                and argument.value.split(".")[0] != "mlx"
+                and argument.value.split(".")[0] not in {"mlx", "importlib", "builtins"}
             ):
                 continue
-        return [f"{rel}: unresolved or MLX dynamic import outside {sorted(MLX_ALLOWED_FILES)} (Q30 confinement)"]
+        return violation
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and (
             node.attr == "_mlx_runtime"
@@ -960,8 +971,9 @@ def run(root: Path, *, verify_report: bool = True) -> dict:
             allowed = ALLOWED_EDGES.get(owner, set())
             for target in sorted(actual - allowed - {owner}):
                 violations.append(f"{rel}: illegal import of '{target}' (allowed: {sorted(allowed) or 'none'})")
-            violations.extend(check_mlx_confinement(root, rel, imported))
             violations.extend(check_identity_authority(rel, imported))
+        if cls in {"product", "tools"}:
+            violations.extend(check_mlx_confinement(root, rel, imported))
         if cls == "tests":
             violations.extend(check_test_citations(root, rel, authorities))
 

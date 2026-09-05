@@ -1581,7 +1581,7 @@ boundaries are preserved. A renamed owner does not change a matrix phase or esta
 
 ### Execute, verify and resume
 
-Execute the named deliverable using implementation-rigor and the applicable local review skill.
+Execute the named deliverable using implementation-rigor and run-independent-build-review.
 Resolve the required outcome, its existing implementation and the smallest deciding proof before
 editing. Keep the component authorities, pinned primitives and generated-schema rules. Run focused
 proof and directly coupled regressions as each behavior changes. Full suite/ledger/J gates belong
@@ -1595,7 +1595,8 @@ must pass before closure; internal work clauses do not create additional stage g
 
 L01-L03 use bootstrap machine review. L04 uses bootstrap until its ownership and graph machinery is
 proved, then normal review on the integrated candidate. Post-selection and later machine repairs use
-normal review. Live attempts use live-stage-review. Preserve the skills' finite attempt/review limits,
+normal review. All reviews use run-independent-build-review, which applies its internal machine or
+live procedure from the attempt's required evidence. Preserve its finite attempt/review limits,
 immutable evidence and invalidation rules; same-agent review must not be called independent staffing.
 
 ### Drive boundary
@@ -1618,7 +1619,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L02
+  next_step: L01
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -1693,7 +1694,8 @@ phase_live_queue:
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: DONE
+    status: IN_PROGRESS
+    reopened: '2026-09-05: supplied fresh review reproduced Q30 computed-import false passes. Prior closeout is historical; L02 depends on a repaired L01 full gate.'
     attempts:
     - id: L01-consolidated-1
       source_commit: 0a413b7bb5b36f019c85130be2bec78ff336eb2d

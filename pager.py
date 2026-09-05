@@ -1626,6 +1626,12 @@ def dispatch(case_id: str, inputs: Sequence[object]) -> object:
     return result
 
 
+def dispatch_float32(case_id: str, inputs: Sequence[object]) -> object:
+    """Convert plain float32 fixture inputs inside the runtime owner and return plain output."""
+    mx, _ = _mlx_runtime()
+    return dispatch(case_id, tuple(mx.array(value, dtype=mx.float32) for value in inputs)).tolist()
+
+
 def merge_adapter_material(windows: object) -> dict[str, bytes]:
     """Execute verified Tier-A material only through the generated Q30 merge tuple."""
 

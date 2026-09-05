@@ -1,5 +1,0 @@
-# This file provides Codex UI metadata for the machine-stage-review skill; dependencies: ../SKILL.md.
-interface:
-  display_name: "Machine Stage Review"
-  short_description: "Review one machine attempt and make one bounded red-to-green repair"
-  default_prompt: "Use $machine-stage-review to review this completed machine-stage attempt: freeze its parent revision and evidence, replay every declared assertion, find the nearest false pass, make at most one red-on-parent and green-on-child bounded remediation, declare invalidation, and return the baton without claiming LIVE evidence."

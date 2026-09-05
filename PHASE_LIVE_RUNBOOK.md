@@ -10,7 +10,7 @@ the source-entry L01.5 gate; they make no live header request and move no model 
 row remains `NOT_RUN`.
 
 IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
-stages, L05-L10. L01 is DONE and L02 is next; the completed recovery proof remains retained.
+stages, L05-L10. L01 is reopened for Q30 repair; its completed recovery proof remains retained.
 Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
 F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
 separate from the matrix phase labels used below. Consolidated preparation has no verified duration
@@ -37,9 +37,10 @@ The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The matrix-declared deferral
 `F4_PASS`, `F5_PASS`, `frontier_capability`, `hosted_comparison`, and
 `physical_drive_performance`. Those labels require the live evidence named below.
 
-Consolidated L01 supplies the current machine proof for the amended capacity and eligibility
-controls: 315 tests passed with zero skips, all twelve removal/bypass triples passed, and the ledger
-reported zero violations. Its exact source, artifact and review identities are in IMPLEMENTATION.md.
+The prior consolidated L01 run passed 315 tests and all twelve removal/bypass triples. A fresh
+review then reproduced computed-import false passes under Q30, superseding its closure. The repaired
+attempt must complete the suite, ledger and J proof before L02 becomes eligible. IMPLEMENTATION.md
+retains the prior evidence and owns the new attempt.
 The matrix retains its deferral declarations; every physical and real-model claim remains NOT_RUN.
 
 ## Coding time and independent verification
