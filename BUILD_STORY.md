@@ -7226,14 +7226,37 @@ unadmitted expansion operations. No source-specific numerical kernel or second d
 
 Development evidence includes an ordinary two-shard loopback acquisition, independently calculated
 dense, sparse, and image outputs, multi-token generation, and reconstructed KV state. The first
-four-case run passed in 456.64 seconds. A later run, including broker pause/resume and changed
+test invocation failed during fixture setup because it used the broker as a context manager;
+Astra corrected the fixture to use `contextlib.closing`. The first completed four-case run
+passed in 456.64 seconds. A later run, including broker pause/resume and changed
 semantic identity, passed in 198.19 seconds. Those are development runs, preceding the final
 template bound; they are not the frozen acceptance attempt. The reports and raw outputs are retained
 under `.codex/reviews/cassette/2026-09-05/L02-astra-build` in Drew's home directory.
 
-L02 remains `IN_PROGRESS` while the frozen attempt and its read-only review are prepared. The
+At source freeze, L02 remained `IN_PROGRESS` pending the frozen attempt and its read-only review. The
 supported native path uses F32 weights and the admitted rotary, RMS-normalized, gated decoder
 operations; image processing currently covers declared rescaling, normalization, and patch
 projection. Unadmitted source semantics fail explicitly. Physical drives, real model sources,
 performance, and F4/F5 remain unproved. The queue assigns the next complete suite, J, and removal
 gate to L04; L02 uses focused checks of its changed behavior and coupled foundations.
+
+The frozen source is `176c446e4f2723a2636030dbd1cffa07628b1961`, tree
+`f9b08926cbed9860603cccd1531813d0ba16f5c2`. Attempt `L02-native-01` passed 14 focused tests
+with zero failures or skips in 251.08 seconds; its static ledger reported zero violations.
+The attempt manifest, SHA-256 `be089c9eb5262c70f269714fd047b28f9a4c3554fd07ab8fe782cb31944447d4`,
+binds the source, frozen inputs, commands, and raw results. These measured test durations do not
+establish active agent coding time. The original remit and mathematics remained unchanged.
+
+Terra then reviewed that exact attempt independently of Astra's implementation role, on the same
+Mac. Its fresh combined sparse-expert and image case matched the scalar oracle within a maximum
+absolute logit error of `3.85877195e-07`, selected the expected routes, recovered identical
+committed state, and changed its output when a pixel changed. A separate template control passed
+4,032 loop ticks and rejected work beyond the 4,096-tick bound. The review's first route comparison
+flattened a nested list incorrectly; Terra corrected the instrument and retained that failed probe.
+No production defect remained in the review. Its envelope, SHA-256
+`9074385e170c3e0398b9e3b0f81bd7c59e98aff4403597681db0a0703ce36e76`, records `PASS_READY`
+for all six outcomes and is linked by the completed bootstrap head.
+
+Astra closed L02 on that fixture/integration evidence and set L03 next. The restricted source
+template subset and admitted F32 decoder/image operations define the current compatibility boundary.
+No physical-drive, real-model, throughput, complete-J, or F4/F5 result was claimed by this closeout.

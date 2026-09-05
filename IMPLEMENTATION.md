@@ -1534,7 +1534,7 @@ steps:
 
 ## PREPARATION AND LIVE PROOF — four non-drive stages, then the drive campaign
 
-**L01 is DONE; L02 is next. There are four non-drive stages, L01-L04, followed by six drive/live
+**L01 and L02 are DONE; L03 is next. There are four non-drive stages, L01-L04, followed by six drive/live
 stages, L05-L10.** This grouping follows the principal's instruction to consolidate preparation.
 The previous count of 31 coding stages is superseded. The larger groups have no verified
 15–20-minute duration estimate.
@@ -1619,7 +1619,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L02
+  next_step: L03
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -1905,19 +1905,40 @@ phase_live_queue:
       results are owned by L05-L10.
     execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
       outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
-    timing_evidence: NOT_RUN
+    timing_evidence:
+      active_coding_seconds: NOT_MEASURED
+      focused_pytest_seconds: 251.08
+      focused_command_wall_seconds: 260.697
+      static_ledger_wall_seconds: 20.026
+      note: Execution durations do not establish an agent coding-time estimate.
     review_profile: bootstrap
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: IN_PROGRESS
+    status: DONE
     attempts:
     - id: L02-native-01
-      outcome: IN_PROGRESS
+      outcome: PASS
       review_profile: bootstrap
       evidence_level: INTEGRATION
       raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L02-astra-build/attempt-01
-      note: Source freezes before the first declared command; no physical-drive or real-model claim.
+      source_commit: 176c446e4f2723a2636030dbd1cffa07628b1961
+      source_tree: f9b08926cbed9860603cccd1531813d0ba16f5c2
+      manifest_sha256: be089c9eb5262c70f269714fd047b28f9a4c3554fd07ab8fe782cb31944447d4
+      review_route: PASS_READY
+      review_envelope: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L02-astra-build/final-review/review-envelope.json
+      review_envelope_sha256: 9074385e170c3e0398b9e3b0f81bd7c59e98aff4403597681db0a0703ce36e76
+      note: Inputs froze before execution; the separate Terra reviewer verified source and raw hashes and completed the bootstrap head update.
+    closeout:
+      ordinary_metadata: Ordinary two-shard sources acquire canonical JSON and weights, bind every contribution, and reject missing or conflicting semantics.
+      source_rendering: Committed tokenizer and template produce exact history/tool text and IDs; semantic changes alter identity; bounded template work passes fresh controls.
+      dense_graph: Source-generated hidden-size-12, three-layer execution matches the independent scalar oracle beyond the fixed F3 geometry.
+      durable_decode: Three-token broker generation, pause after commit, restart, resume, idempotency, and concurrent requests pass; recovered state matches exactly.
+      sparse_graph: Frozen sparse execution activates all four experts; fresh combined sparse/image execution matches the oracle and exact route multiset.
+      modality: Declared image normalization and projection match the oracle; changed pixels affect output; unsupported processor semantics reject explicitly.
+      validation: 14 focused tests passed with zero failures or skips; static ledger reports zero violations. Complete suite, J and Q78 remain assigned to L04.
+      review: Separate Terra reviewer on the same Mac; six outcomes PASS, no production defect found. Fresh combined-case maximum absolute logit error is 3.85877195e-07.
+      proof_limit: Fixture/integration only. F32 weights and the admitted decoder, image processor and contained template subset are proved; physical drives, real models, services, throughput and F4/F5 remain unproved.
   - id: L03
     title: Complete compiled execution, training and client delivery
     phase: NON_DRIVE_PREPARATION
