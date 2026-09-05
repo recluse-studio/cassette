@@ -9,7 +9,7 @@ F4 selection and baseline metadata may establish the exact profile requests afte
 the source-entry L01.5 gate; they make no live header request and move no model payload. Every live
 row remains `NOT_RUN`.
 
-IMPLEMENTATION.md contains L01-L31 coding stages and L32-L37 live-proof stages; L01 is next.
+IMPLEMENTATION.md contains L01-L31 coding stages and L32-L37 live-proof stages; L01 is DONE; L02 is next.
 The 15-20-minute target counts active agent coding only. Source qualification/acquisition belongs
 to L32, measured baselines to L33, F4 to L34, F5 to L35, the full runtime matrix to L36 and clean
 replay to L37. Operation receipts and matrix phases retain their exact meanings within those stages.

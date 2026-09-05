@@ -1534,7 +1534,7 @@ steps:
 
 ## PHASE LIVE — code-sized build and live proof
 
-**L01 is next.** The queue contains 31 coding stages followed by 6 live-proof stages,
+**L01 is DONE; L02 is next.** The queue contains 31 coding stages followed by 6 live-proof stages,
 numbered L01-L37. The count follows the implementation boundaries inspected in the current
 source. It is not a target inherited from an earlier plan.
 
@@ -1575,7 +1575,7 @@ rebuild an existing subsystem or repeat a passed proof merely because a prior st
 ORIGINAL_REMIT.md owns intent; MATHS.md owns mathematics; research/RESEARCH.md owns build decisions;
 research/ACCEPTANCE_MATRIX.yaml owns release rows and thresholds. This file owns order and state.
 The matrix phase labels L01.25, L01.5 and L02-L05 keep their meanings. Historical S01-S28 records
-above remain unchanged. Every new stage is TODO and every duration remains NOT_RUN.
+above remain unchanged. L01 is DONE with its retained machine proof; L02-L37 remain TODO. Active coding time for L01 is an estimate, not a measured duration.
 
 | Stages | Work |
 |---|---|
@@ -1650,7 +1650,7 @@ product result remains unproved until its actual live evidence passes.
 ```yaml
 phase_live_queue:
   schema_version: 6
-  next_step: L01
+  next_step: L02
   revision_reason: '2026-09-04 code-grounded regrouping: each coding stage names its inspected implementation
     boundary and discriminator. Stage count follows the work; matrix rows, thresholds and operation dependencies
     are preserved.'
@@ -1698,14 +1698,47 @@ phase_live_queue:
         and release success remain owned by the later live stages.
       coding_target_minutes: 15
       coding_limit_minutes: 20
-      timing_evidence: NOT_RUN
+      timing_evidence: ACTIVE_CODING_ESTIMATE
       sizing_uncertainty: static scope estimate; actual coding time is unmeasured
       review_profile: bootstrap
       env: macos_arm64_fixture_only
       evidence_level: INTEGRATION
       record_kind: stage
-      status: IN_PROGRESS
-      attempts: []
+      status: DONE
+      attempts:
+        - id: L01-1
+          source_commit: 4d7653d3183e02d7e4ebdee0e57d8d221e99d8f8
+          evidence_level: INTEGRATION
+          outcome: PASS
+          review_route: PASS_READY
+          evidence_directory: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01
+          review_envelope_sha256: 7a92cf87fa4bc64cb9d7e3a0c2a5e68a613fde78ea6a719fa8780c132f1d66e2
+      closed_utc: 2026-09-05T02:35:18.796713+00:00
+      coding_time:
+        estimated_active_minutes: 4
+        method: Manual estimate of code investigation and the two edits; no continuous active-time timer was used.
+        measured_duration: false
+        budget_minutes: 20
+      closeout:
+        - clause: Q49 acquisition lifecycle errors enter the broker and preserve exact recovery.
+          test_or_probe: tests/test_s26_phase_machine.py -k 'q49 and acquisition'
+          input: All 16 acquisition injection coordinates, including seven stale/read-only failures and exact reconnect/replacement recovery.
+          expected: Canonical operation entrypoint records the typed result; no stale use or partial child occurs.
+          observed: 16 passed on the frozen commit; restoring the eager constructor check fails the disconnect coordinate.
+        - clause: Q60/Q62 corrupt immutable roots and indexes remain refused.
+          test_or_probe: tests/test_s19_compiler.py::test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication
+          input: Independently truncated candidate/source roots and indexes; separate missing metadata, absent segment and interrupted pending root.
+          expected: Corrupt immutable bytes raise ROOT_INVALID unchanged; incomplete uncommitted objects reconstruct exactly from verified source, without publication.
+          observed: All four corruption/refusal and exact reconstruction paths pass; the silent-root-replacement negative control fails. No store corruption guard was weakened.
+        - clause: Coupled broker and source-binding behavior remains correct.
+          test_or_probe: tests/test_s16_broker.py and tests/test_s19_compiler.py
+          input: Frozen candidate using real store, source fixtures and broker operations.
+          expected: Existing idempotency, pause/cancel, capacity recovery and source/certificate binding assertions pass.
+          observed: 5 passed; together with acquisition replay, 21 focused and coupled checks passed.
+      proof_limit: Full suite, ledger and J were not rerun here; the current queue assigns their next gate and retained failures to L03. This is machine evidence only.
+      discovered_scope: PHASE_LIVE_RUNBOOK.md next-stage pointer updated as the queue projection.
+      commit_location: Isolated local branch codex/l01-recovery-proof; inherited main-checkout edits and its index were preserved.
+
     - id: L02
       title: Enforce exact certificate and runtime boundaries
       depends: [L01]
