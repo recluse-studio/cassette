@@ -272,7 +272,7 @@ def top_level_imports(root: Path, rel: Path) -> set[str]:
 
 
 def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str]:
-    """Reject direct imports and indirect MLX runtime access outside its two owners."""
+    """Enforce Q30 source rules for MLX imports, loader namespaces and runtime references."""
 
     if rel.as_posix() in MLX_ALLOWED_FILES:
         return []
@@ -305,13 +305,14 @@ def check_mlx_confinement(root: Path, rel: Path, imported: set[str]) -> list[str
         ):
             continue
         call = parents.get(node)
-        # Only an immediate literal import proves that acquisition excludes MLX.
+        # Permit one literal module name, without relative context or an import-namespace result.
         if isinstance(call, ast.Call) and call.func is node:
             argument = call.args[0] if call.args else next(
                 (item.value for item in call.keywords if item.arg == "name"), None
             )
             if (
                 isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+                and len(call.args) + len(call.keywords) == 1
                 and argument.value and not argument.value.startswith(".")
                 and argument.value.split(".")[0] not in {"mlx", "importlib", "builtins"}
             ):

@@ -1712,6 +1712,19 @@ phase_live_queue:
       evidence_level: INTEGRATION
       review_route: PASS_READY
       raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated/full-proof-3.txt
+    - id: L01-consolidated-4
+      source_commit: ac1cd0f83061bfa2ba81b97093de4fe9910b36bc
+      outcome: FAIL
+      cause: Fresh Q30 challenge exposed implicit __builtins__ lookup; dependent full gate stopped.
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/implicit-builtins-red.json
+    - id: L01-consolidated-5
+      source_commit: 53f2d601c87963efaf21ea737b68de5a94626556
+      outcome: FAIL
+      cause: Fresh Q30 challenge exposed relative import context; dependent full gate stopped.
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/relative-import-red.json
+    attempt_limit_decision: '2026-09-05 queue decision under the principal-authorized L01 remediation: retain the
+      failed fourth and fifth candidates; authorize one sixth attempt after the implicit-namespace and relative-context
+      controls pass. The sixth attempt changes no stage count, product requirement or proof threshold.'
     retained_proof: The former 37-stage queue L01 recovery closeout is retained under retained_machine_evidence.
       Its passing work is not reopened by grouping.
     execution_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-04/L01-consolidated
