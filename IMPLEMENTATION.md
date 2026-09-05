@@ -2062,7 +2062,7 @@ phase_live_queue:
       done_when: Deterministic boundary collectors prove complete aligned intervals, socket/placement observations
         and physical writes; missing mandatory samples fail the affected assertion.
     - title: Implement exclusive review history
-      inspected_code: tools/campaign.py (absent); .agents/skills/machine-stage-review/SKILL.md
+      inspected_code: tools/campaign.py (absent); .agents/skills/run-independent-build-review/references/machine-attempts.md
       work: Implement atomic review leases and append-only envelope heads, including expiry, succession and
         termination after accepted remediation.
       done_when: Competing reviewers, stale heads, expired leases and attempted second remediations produce
@@ -2074,7 +2074,7 @@ phase_live_queue:
       done_when: Every required assertion resolves to complete producer/owner sets; missing inputs, duplicate
         IDs, cycles and inherited node/edge rewrites reject expansion.
     - title: Prove invalidation and clean-replay reachability
-      inspected_code: tools/campaign.py (absent); tools/ledger.py:removal_proof_node; .agents/skills/machine-stage-review/SKILL.md
+      inspected_code: tools/campaign.py (absent); tools/ledger.py:removal_proof_node; .agents/skills/run-independent-build-review/references/machine-attempts.md
       work: Use the sealed graph for transitive invalidation and Q80 reachability through intermediate evidence
         levels; add the bounded remediation diff counter and integrate campaign controls.
       done_when: Integrated scratch proof rejects lost predecessor reachability, incomplete invalidation, owner/edge
