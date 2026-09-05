@@ -2255,7 +2255,7 @@ def _material_from_provenance(provenance: object, root_digest: str) -> tuple[Ide
     containers = provenance["containers"]
     if (not isinstance(containers, list)
             or any(not isinstance(item, dict) or set(item) != {"path", "format", "metadata"}
-                   or item["format"] not in {"gguf", "safetensors"}
+                   or item["format"] not in {"gguf", "safetensors", "json"}
                    or not isinstance(item["metadata"], dict)
                    or any(not isinstance(key, str) or not isinstance(value, str)
                           for key, value in item["metadata"].items())
@@ -2785,9 +2785,15 @@ def adopt_safetensors(
             os.lseek(duplicate, 0, os.SEEK_SET)
             with os.fdopen(duplicate, "rb", closefd=True) as handle:
                 duplicate = None
-                data_start, data_size, metadata, tensors = _safetensors_header(
-                    handle, object_id, hashes
-                )
+                if artifact_path.endswith(".json"):
+                    data_start, data_size, metadata = 0, size, {}
+                    tensors = (("asset." + artifact_path, "U8", (size,), 0, size),)
+                else:
+                    data_start, data_size, metadata, tensors = _safetensors_header(
+                        handle, object_id, hashes
+                    )
+                    if any(name.startswith(("asset.", "state.")) for name, *_ in tensors):
+                        _q57_reject(object_id, "source tensor uses a reserved semantic-asset or runtime-state name")
                 remaining = data_size
                 while remaining:
                     payload = _read_exact(
@@ -2847,7 +2853,7 @@ def adopt_safetensors(
             tensor_maps.append(TensorMap(name, shape, dtype, tuple(spans)).record())
         containers.append({
             "path": artifact_path,
-            "format": "safetensors",
+            "format": "json" if artifact_path.endswith(".json") else "safetensors",
             "metadata": metadata,
         })
     if observed != identity_record["artifacts"]:
@@ -7481,3 +7487,50 @@ def require_revision(cartridge: str | Path, root_digest: str) -> IntegrityReport
             object_id, f"unavailable potentially addressable pages: {joined}", "PAGE_CORRUPT"
         )
     return report
+
+
+def commit_runtime_state(
+    cartridge: str | Path,
+    parent_root_digest: str,
+    session_id: str,
+    payload: bytes,
+    *,
+    capacity_controller: CapacityCoordinator,
+) -> GenerationPin:
+    """Q20/Q63: publish one native context through the existing page/root/generation transaction."""
+    cartridge = Path(cartridge)
+    _transaction_id(session_id)
+    if not isinstance(payload, bytes) or not payload:
+        _q57_reject(session_id, "runtime context must contain nonempty bytes", "INVALID_REQUEST")
+    parent = load_root(cartridge, parent_root_digest)
+    if not parent["plans"] or parent["plans"][0].get("version") != "native-v1":
+        _q57_reject(session_id, "runtime context requires an ordinary-source native plan", "CAPABILITY_MISMATCH")
+    material, identity_record = _material_from_provenance(parent["provenance"], parent_root_digest)
+    transaction_id = "native-" + digest_bytes(canonical_bytes({
+        "parent": parent_root_digest, "session": session_id, "payload": digest_bytes(payload),
+    })).split(":")[1]
+    pages = tuple(payload[offset:offset + PAGE_BYTES] for offset in range(0, len(payload), PAGE_BYTES))
+    additions = stage_training_pages(
+        cartridge, pages, capacity_controller=capacity_controller,
+        operation_id=session_id, boundary_id=transaction_id,
+    )
+    locations = _read_index(cartridge, parent_root_digest)
+    locations.update({item.page_digest: item for item in additions})
+    name = "state." + session_id
+    maps = [item for item in parent["tensor_maps"] if item["semantic_tensor_id"] != name]
+    spans = tuple(TensorSpan(digest_bytes(page), 0, len(page), offset * PAGE_BYTES)
+                  for offset, page in enumerate(pages))
+    maps.append(TensorMap(name, (len(payload),), "U8", spans).record())
+    required = {span["page_digest"] for item in maps for span in item["spans"]}
+    required.update(page for delta in parent["deltas"] for page in delta["ordered_page_digests"])
+    candidate = _write_cartridge_root(
+        cartridge, material, identity_record, parent["provenance"]["containers"],
+        sorted(maps, key=lambda item: item["semantic_tensor_id"]),
+        tuple(locations[key] for key in sorted(required)), parent["plans"], parent["deltas"],
+        durable=True, capacity_controller=capacity_controller, operation_id=session_id,
+        boundary_id=transaction_id,
+    )
+    return commit_generation(
+        cartridge, transaction_id, candidate, expected_parent_root=parent_root_digest,
+        capacity_controller=capacity_controller, operation_id=session_id,
+    )

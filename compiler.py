@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import fcntl
 from fractions import Fraction
 import json
@@ -18,6 +18,8 @@ from typing import Mapping
 from errors import CassetteError
 from schema.tables import (
     DISPATCH_ROWS,
+    NATIVE_GRAPH_RECIPES,
+    NATIVE_OPERATORS,
     EXPORT_TARGETS,
     HARDWARE_PLAN_CATALOG_VERSION,
     HARDWARE_PLAN_VERSION,
@@ -32,6 +34,7 @@ from store import (
     PAGE_BYTES,
     adapter_export_fields,
     adopt_safetensors,
+    artifact_hasher,
     canonical_bytes,
     derive_root,
     derived_root_shape,
@@ -552,7 +555,7 @@ def _safe_artifact_path(value: object, object_id: str) -> str:
             object_id,
             "GGUF import is available, but the first compiled-preparation path requires SafeTensors",
         )
-    if not lowered.endswith(".safetensors"):
+    if value not in _NATIVE_ASSETS and not lowered.endswith(".safetensors"):
         _reject("CONTAINMENT_REJECTED", object_id, "artifact type is outside the data-only compiler allowlist")
     return value
 
@@ -680,6 +683,8 @@ def _manifest(source: dict, descriptors: dict[str, int]) -> tuple[dict, list[dic
     tensors = []
     names = set()
     for artifact in source["artifacts"]:
+        if artifact["path"].endswith(".json"):
+            continue
         inspected = inspect_safetensors(descriptors[artifact["path"]], artifact["digest"])
         _scan_containment(
             {
@@ -707,6 +712,11 @@ def _manifest(source: dict, descriptors: dict[str, int]) -> tuple[dict, list[dic
                 _reject("INVALID_REQUEST", source["identity"], "SafeTensors shards repeat a semantic tensor ID")
             names.add(tensor_id)
             tensors.append({"artifact_path": artifact["path"], **tensor})
+    if "config.json" in descriptors:
+        if texts:
+            _reject("METADATA_INSUFFICIENT", source["identity"], "ordinary config conflicts with a private compiler manifest")
+        tensors.sort(key=lambda item: item["semantic_tensor_id"])
+        return _native_manifest(source, descriptors, tensors), tensors
     if not texts or any(text != texts[0] for text in texts):
         _reject("METADATA_INSUFFICIENT", source["identity"], f"all compiler manifests must agree under {_MANIFEST_KEY!r}")
     try:
@@ -735,7 +745,7 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
-def _source_material(source: dict, manifest: dict, tensors: list[dict]) -> IdentityTuple:
+def _source_material(source: dict, manifest: dict, tensors: list[dict], *, check_identity: bool = True) -> IdentityTuple:
     model = manifest["model"]
     formats = _items(model["format_versions"], source["identity"], "format versions")
     pairs = []
@@ -764,14 +774,14 @@ def _source_material(source: dict, manifest: dict, tensors: list[dict]) -> Ident
         parent_ids=(),
         transform_manifest_digest=None,
     )
-    if model_identity(material) != source["identity"]:
+    if check_identity and model_identity(material) != source["identity"]:
         _reject("IDENTITY_MISMATCH", source["identity"], "parsed source identity differs from the durable source lock")
     return material
 
 
 def _compile_inputs(source: dict, manifest: dict, tensors: list[dict]) -> dict:
     return {
-        "version": _VERSION,
+        "version": manifest["version"],
         "source_identity": source["identity"],
         "source_alias": source["source_alias"],
         "requested_revision": source["requested_revision"],
@@ -3073,6 +3083,9 @@ def _prepare_revision(
     observed_plan_digest = _digest(_compile_inputs(source_record, manifest, tensors))
     if observed_plan_digest != expected_plan_digest:
         _reject("SOURCE_REVISION_CHANGED", source_record["identity"], "compiler inputs changed after durable planning")
+    if manifest["version"] == _NATIVE_VERSION:
+        return _prepare_native(source_record, descriptors, manifest, tensors, source_material,
+                               cartridge, expected_plan_digest, capacity_coordinator, operation_id)
     try:
         source_root_digest = adopt_safetensors(
             descriptors,
@@ -3856,3 +3869,351 @@ def select_hardware_plan(
         preparation_plan_digest,
         measured_profile,
     )
+
+_NATIVE_VERSION = "native-v1"
+_NATIVE_ASSETS = frozenset({
+    "config.json", "model.safetensors.index.json", "tokenizer.json",
+    "tokenizer_config.json", "preprocessor_config.json",
+})
+
+
+def _native_json(payload: bytes, object_id: str) -> dict:
+    if len(payload) > 64 * 1024 * 1024:
+        _reject("CONTAINMENT_REJECTED", object_id, "semantic asset exceeds the 64 MiB parser bound")
+    try:
+        result = json.loads(payload, object_pairs_hook=_unique_object)
+    except (UnicodeError, ValueError, RecursionError) as error:
+        _reject("METADATA_INSUFFICIENT", object_id, f"semantic asset is invalid JSON: {error}")
+    if not isinstance(result, dict):
+        _reject("METADATA_INSUFFICIENT", object_id, "semantic asset must be one JSON object")
+    return result
+
+
+def _native_graph(config: dict, tensors: list[dict], processor: dict | None) -> dict:
+    """Q7/Q33/Q58: expand the admitted source topology and account for every weight."""
+    object_id = "native-graph"
+    required = ("hidden_size", "vocab_size", "num_hidden_layers", "num_attention_heads",
+                "num_key_value_heads", "intermediate_size", "max_position_embeddings")
+    dimensions = {name: config.get(name) for name in required}
+    if any(type(value) is not int or not 0 < value <= _MAX_ITEMS for value in dimensions.values()):
+        _reject("METADATA_INSUFFICIENT", object_id, "source config lacks bounded positive graph dimensions")
+    h, v, layers, heads, kv_heads, intermediate, context = dimensions.values()
+    if h % heads or (h // heads) % 2 or heads % kv_heads:
+        _reject("UNSUPPORTED_OPERATOR", object_id, "head dimensions cannot represent the declared grouped rotary attention")
+    if config.get("hidden_act") != "silu" or any(config.get(name) not in (None, False, 0) for name in (
+        "rope_scaling", "sliding_window", "attention_dropout", "cross_attention_hidden_size",
+    )):
+        _reject("UNSUPPORTED_OPERATOR", object_id, "source declares an unadmitted activation, attention or rotary variant")
+    for name in ("rms_norm_eps", "rope_theta"):
+        value = config.get(name)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            _reject("METADATA_INSUFFICIENT", object_id, f"source {name} must be finite and positive")
+    inventory = {row["semantic_tensor_id"]: row for row in tensors}
+    if len(inventory) != len(tensors):
+        _reject("METADATA_INSUFFICIENT", object_id, "source repeats a tensor name")
+    used = set()
+
+    def weight(name: str, shape: list[int]) -> str:
+        row = inventory.get(name)
+        if row is None or row["shape"] != shape or row["dtype"] != "F32":
+            _reject("UNSUPPORTED_OPERATOR", name, f"native source requires float32 weight shape {shape}")
+        used.add(name)
+        return name
+
+    nodes = []
+    image_token = None
+    if processor is not None:
+        vision = config.get("vision_config", {})
+        patch, channels = vision.get("patch_size"), vision.get("num_channels")
+        image_token = config.get("image_token_index")
+        if (type(patch) is not int or not 0 < patch <= 128 or type(channels) is not int
+                or not 0 < channels <= 16 or type(image_token) is not int or not 0 <= image_token < v):
+            _reject("METADATA_INSUFFICIENT", object_id, "image source lacks patch geometry or its control-token ID")
+        if any(processor.get(name, False) for name in ("do_resize", "do_center_crop", "do_pad")):
+            _reject("UNSUPPORTED_OPERATOR", object_id, "source image resizing, cropping and padding require an admitted processor")
+        if not all(type(processor.get(name)) is bool for name in ("do_rescale", "do_normalize")):
+            _reject("METADATA_INSUFFICIENT", object_id, "image source must declare rescaling and normalization")
+        mean, std = processor.get("image_mean"), processor.get("image_std")
+        factor = processor.get("rescale_factor")
+        if (not isinstance(mean, list) or not isinstance(std, list) or len(mean) != channels
+                or len(std) != channels or any(type(x) not in (int, float) or not math.isfinite(x) for x in [*mean, *std])
+                or any(x <= 0 for x in std) or type(factor) not in (int, float) or not math.isfinite(factor)):
+            _reject("METADATA_INSUFFICIENT", object_id, "image scale, mean and standard deviation are incomplete")
+        nodes.append({"id": "patches", "operator": "image", "inputs": ["pixels"],
+                      "weights": [weight("vision.patch_embedding.weight", [h, channels, patch, patch])],
+                      "parameters": {"patch_size": patch, "channels": channels, "processor": processor}})
+    nodes.append({"id": "embedding", "operator": "embedding", "inputs": ["tokens"] + (["patches"] if processor else []),
+                  "weights": [weight("model.embed_tokens.weight", [v, h])],
+                  "parameters": {"image_token_index": image_token}})
+    previous = "embedding"
+    experts = config.get("num_local_experts", 0)
+    top_k = config.get("num_experts_per_tok", 0)
+    if type(experts) is not int or not 0 <= experts <= 1024 or (experts and (type(top_k) is not int or not 1 <= top_k <= experts)):
+        _reject("METADATA_INSUFFICIENT", object_id, "source expert count or selected-expert count is invalid")
+    for layer in range(layers):
+        prefix = f"model.layers.{layer}."
+        ref = lambda name: previous if name == "$input" else f"layer.{layer}.{name}"
+        shapes = {
+            "norm": [h], "ffn_input": [h], "q": [h, h], "k": [kv_heads * (h // heads), h],
+            "v": [kv_heads * (h // heads), h], "projection": [h, h],
+            "gate": [intermediate, h], "up": [intermediate, h], "down": [h, intermediate], "router": [experts, h],
+        }
+        recipe = NATIVE_GRAPH_RECIPES["attention"] + NATIVE_GRAPH_RECIPES["sparse" if experts else "dense"]
+        for name, operator, inputs, suffixes in recipe:
+            weights = [weight(prefix + suffix, shapes[name]) for suffix in suffixes]
+            parameters = {}
+            if operator == "linear" and weights and weights[0][:-6] + "bias" in inventory:
+                weights.append(weight(weights[0][:-6] + "bias", [shapes[name][0]]))
+            if operator == "norm":
+                parameters = {"eps": config["rms_norm_eps"]}
+            elif operator == "attention":
+                parameters = {"layer": layer, "heads": heads, "kv_heads": kv_heads, "head_dim": h // heads, "base": config["rope_theta"]}
+            elif operator == "experts":
+                parameters = {"top_k": top_k, "count": experts}
+                for expert in range(experts):
+                    for suffix, shape in (("w1", [intermediate, h]), ("w3", [intermediate, h]), ("w2", [h, intermediate])):
+                        weights.append(weight(prefix + f"block_sparse_moe.experts.{expert}.{suffix}.weight", shape))
+            nodes.append({"id": ref(name), "operator": operator, "inputs": [ref(item) for item in inputs],
+                          "weights": weights, "parameters": parameters})
+        previous = f"layer.{layer}.output"
+    nodes.append({"id": "final_norm", "operator": "norm", "inputs": [previous],
+                  "weights": [weight("model.norm.weight", [h])], "parameters": {"eps": config["rms_norm_eps"]}})
+    output = "model.embed_tokens.weight" if config.get("tie_word_embeddings") is True else "lm_head.weight"
+    nodes.append({"id": "logits", "operator": "linear", "inputs": ["final_norm"],
+                  "weights": [weight(output, [v, h])], "parameters": {}})
+    if used != set(inventory):
+        _reject("METADATA_INSUFFICIENT", object_id, f"source contributions have no graph owner: {sorted(set(inventory) - used)}")
+    return {"nodes": nodes, "context_limit": context, "vocabulary_size": v, "hidden_size": h,
+            "layers": layers, "heads": heads, "kv_heads": kv_heads, "head_dim": h // heads,
+            "intermediate_size": intermediate, "parameter_bytes": sum(math.prod(row["shape"]) * 4 for row in tensors),
+            "dispatch_digest": _digest(NATIVE_OPERATORS), "contributions": sorted(used)}
+
+
+def _native_manifest(source: dict, descriptors: dict[str, int], tensors: list[dict]) -> dict:
+    assets = {}
+    for artifact in source["artifacts"]:
+        if not artifact["path"].endswith(".json"):
+            continue
+        if artifact["size"] > 64 * 1024 * 1024:
+            _reject("CONTAINMENT_REJECTED", artifact["path"], "semantic asset exceeds the parser byte bound")
+        payload = os.pread(descriptors[artifact["path"]], artifact["size"], 0)
+        hasher = artifact_hasher(artifact["digest"], artifact["path"])
+        hasher.update(payload)
+        if len(payload) != artifact["size"] or artifact["digest"].split(":")[1] != hasher.hexdigest():
+            _reject("SOURCE_REVISION_CHANGED", artifact["path"], "semantic asset bytes differ from the source lock")
+        assets[artifact["path"]] = _native_json(payload, artifact["path"])
+    if not {"config.json", "tokenizer.json", "tokenizer_config.json"} <= set(assets):
+        _reject("METADATA_INSUFFICIENT", source["identity"], "ordinary source requires config, tokenizer and tokenizer configuration")
+    config = assets["config.json"]
+    _scan_containment(config, source["identity"])
+    tokenizer_config = assets["tokenizer_config.json"]
+    _scan_containment({key: value for key, value in tokenizer_config.items() if key != "chat_template"}, source["identity"])
+    _native_template(tokenizer_config.get("chat_template"))
+    _native_tokenizer(assets["tokenizer.json"])
+    shards = {row["path"] for row in source["artifacts"] if row["path"].endswith(".safetensors")}
+    index = assets.get("model.safetensors.index.json")
+    expected_map = {row["semantic_tensor_id"]: row["artifact_path"] for row in tensors}
+    if (len(shards) > 1 and index is None) or (index is not None and index.get("weight_map") != expected_map):
+        _reject("METADATA_INSUFFICIENT", source["identity"], "shard index must map every verified tensor to its exact source shard")
+    if index is not None and index.get("metadata", {}).get("total_size") != sum(math.prod(row["shape"]) * 4 for row in tensors):
+        _reject("METADATA_INSUFFICIENT", source["identity"], "shard index total_size differs from the tensor bytes")
+    graph = _native_graph(config, tensors, assets.get("preprocessor_config.json"))
+    architecture = config.get("architectures")
+    if not isinstance(architecture, list) or not architecture or any(not isinstance(name, str) or not name for name in architecture):
+        _reject("METADATA_INSUFFICIENT", source["identity"], "source architecture descriptors are absent")
+    digests = {row["path"]: row["digest"] for row in source["artifacts"]}
+    model = {"architecture": ",".join(architecture), "config": config,
+             "format_versions": [["safetensors", "1"], ["json", "1"]], "precision_scheme": "f32",
+             "tokenizer_digest": digests["tokenizer.json"], "template_digest": digests["tokenizer_config.json"],
+             "processor_digest": digests.get("preprocessor_config.json", _digest({}))}
+    return {"version": _NATIVE_VERSION, "model": model, "graph": graph,
+            "operator_inventory": [{"operator": name} for name in sorted({node["operator"] for node in graph["nodes"]})]}
+
+
+def _native_template(source: object):
+    from jinja2 import StrictUndefined, nodes, pass_eval_context
+    from jinja2.visitor import NodeTransformer
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+    if not isinstance(source, str) or not source or len(source.encode()) > 65536:
+        _reject("METADATA_INSUFFICIENT", "chat-template", "source template must be nonempty bounded text")
+    environment = ImmutableSandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
+    environment.globals.clear()
+    environment.filters = {name: value for name, value in environment.filters.items()
+                           if name in {"tojson", "trim", "default", "length", "lower", "upper"}}
+    iteration_count = 0
+
+    def tick():
+        nonlocal iteration_count
+        iteration_count += 1
+        if iteration_count > 4096:
+            _reject("CONTAINMENT_REJECTED", "chat-template", "source template exceeds 4096 loop iterations")
+        return ""
+
+    class BoundedLoops(NodeTransformer):
+        def visit_For(self, node, *args, **kwargs):
+            node = self.generic_visit(node, *args, **kwargs)
+            node.body.insert(0, nodes.Output([nodes.Call(nodes.Name("_cassette_tick", "load"), [], [], None, None)]))
+            return node
+
+    original_json = environment.filters["tojson"]
+
+    @pass_eval_context
+    def bounded_json(context, value, indent=None):
+        if indent not in (None, 0, 2, 4, 8):
+            _reject("CONTAINMENT_REJECTED", "chat-template", "JSON indentation exceeds the admitted choices")
+        pending = [(value, 0)]
+        items = 0
+        text_bytes = 0
+        while pending:
+            item, depth = pending.pop()
+            items += 1
+            if items > 4096 or depth > 32:
+                _reject("CONTAINMENT_REJECTED", "chat-template", "JSON filter input exceeds its node or depth bound")
+            if isinstance(item, str):
+                text_bytes += len(item.encode())
+            elif isinstance(item, dict):
+                pending.extend((part, depth + 1) for pair in item.items() for part in pair)
+            elif isinstance(item, (list, tuple)):
+                pending.extend((part, depth + 1) for part in item)
+            elif item is not None and type(item) not in (bool, int, float):
+                _reject("CONTAINMENT_REJECTED", "chat-template", "JSON filter accepts plain source data only")
+            if text_bytes > 65536 or len(pending) + items > 4096:
+                _reject("CONTAINMENT_REJECTED", "chat-template", "JSON filter input exceeds its byte or node bound")
+        result = original_json(context, value, indent)
+        if len(result.encode()) > 65536:
+            _reject("CONTAINMENT_REJECTED", "chat-template", "JSON filter output exceeds 64 KiB")
+        return result
+
+    environment.filters["tojson"] = bounded_json
+    environment.globals["_cassette_tick"] = tick
+    try:
+        syntax = environment.parse(source)
+        forbidden = (nodes.Call, nodes.Getattr, nodes.Import, nodes.FromImport, nodes.Include,
+                     nodes.Extends, nodes.Macro, nodes.CallBlock, nodes.Mul, nodes.Pow, nodes.Add, nodes.Concat)
+        if any(True for _ in syntax.find_all(forbidden)) or sum(1 for _ in syntax.find_all(nodes.Node)) > 1024:
+            _reject("CONTAINMENT_REJECTED", "chat-template", "source template requests an unadmitted operation")
+        if any(node.name == "_cassette_tick" for node in syntax.find_all(nodes.Name)):
+            _reject("CONTAINMENT_REJECTED", "chat-template", "source template names the internal loop counter")
+        return environment.from_string(BoundedLoops().visit(syntax))
+    except CassetteError:
+        raise
+    except Exception as error:
+        _reject("CONTAINMENT_REJECTED", "chat-template", f"source template cannot be contained: {error}")
+
+
+def _native_tokenizer(document: dict):
+    from tokenizers import Tokenizer
+
+    try:
+        tokenizer = Tokenizer.from_str(json.dumps(document))
+        if tokenizer.truncation is not None or tokenizer.padding is not None:
+            _reject("CAPABILITY_MISMATCH", "tokenizer", "implicit source truncation or padding is not admitted")
+        return tokenizer
+    except CassetteError:
+        raise
+    except Exception as error:
+        _reject("METADATA_INSUFFICIENT", "tokenizer", f"source tokenizer is invalid: {error}")
+
+
+def inspect_source_identity(source: object, extents: object, cartridge: str | Path) -> IdentityTuple:
+    """Q1/Q50: derive identity from complete verified ordinary source bytes before source lock."""
+    record = _source(source)
+    descriptors = _extent_descriptors(record, extents, cartridge)
+    manifest, tensors = _manifest(record, descriptors)
+    return _source_material(record, manifest, tensors, check_identity=False)
+
+
+def _prepare_native(source: dict, descriptors: dict, manifest: dict, tensors: list[dict],
+                    material: IdentityTuple, cartridge: str | Path, plan_digest: str,
+                    coordinator: CapacityCoordinator, operation_id: str) -> PreparedRevision:
+    source_root = adopt_safetensors(descriptors, cartridge, material,
+                                   capacity_controller=coordinator, operation_id=operation_id)
+    bundle = {"version": _NATIVE_VERSION, "source_identity": source["identity"],
+              "source_root": source_root, "preparation_plan_digest": plan_digest, "graph": manifest["graph"]}
+    executable = replace(material, revision_kind="executable", parent_ids=(source["identity"],),
+                         transform_manifest_digest=_digest(bundle))
+    candidate = derive_root(cartridge, source_root, executable, (bundle,),
+                            capacity_controller=coordinator, operation_id=operation_id)
+    verify_native_bundle(cartridge, candidate, source["identity"], plan_digest)
+    return PreparedRevision(source["identity"], material.artifacts, plan_digest, candidate)
+
+
+def verify_native_bundle(cartridge: str | Path, root_digest: str,
+                         source_identity: str | None = None, plan_digest: str | None = None) -> dict:
+    """Q1/Q33/Q58: reconstruct the native graph from committed semantics and exact tensor maps."""
+    root = load_root(cartridge, root_digest)
+    bundle = root["plans"][0] if root["plans"] else {}
+    if set(bundle) != {"version", "source_identity", "source_root", "preparation_plan_digest", "graph"} or bundle["version"] != _NATIVE_VERSION:
+        _reject("ROOT_INVALID", root_digest, "native preparation bundle has an incorrect field set or version")
+    if source_identity is not None and bundle["source_identity"] != source_identity:
+        _reject("IDENTITY_MISMATCH", root_digest, "native bundle differs from the locked source")
+    if plan_digest is not None and bundle["preparation_plan_digest"] != plan_digest:
+        _reject("IDENTITY_MISMATCH", root_digest, "native bundle differs from the planned source")
+    if _digest(bundle) != root["provenance"]["identity_material"]["transform_manifest_digest"]:
+        _reject("ROOT_INVALID", root_digest, "native bundle differs from its executable identity")
+    source_root = load_root(cartridge, bundle["source_root"])
+    if source_root["identity"] != bundle["source_identity"] or root["parents"] != [source_root["identity"]]:
+        _reject("ROOT_INVALID", root_digest, "native source root and executable parent disagree")
+    source_material = source_root["provenance"]["identity_material"]
+    executable_material = root["provenance"]["identity_material"]
+    for field in source_material:
+        if field not in {"revision_kind", "parent_ids", "transform_manifest_digest"} and source_material[field] != executable_material[field]:
+            _reject("ROOT_INVALID", root_digest, f"native executable changes source identity field {field}")
+    source_maps = source_root["tensor_maps"]
+    retained_maps = [item for item in root["tensor_maps"] if not item["semantic_tensor_id"].startswith("state.")]
+    if retained_maps != source_maps:
+        _reject("ROOT_INVALID", root_digest, "native executable maps differ from verified source contributions")
+    assets = {}
+    for item in executable_material["artifacts"]:
+        if item["path"].endswith(".json"):
+            payload = read_tensor(cartridge, root_digest, "asset." + item["path"])
+            hasher = artifact_hasher(item["digest"], item["path"])
+            hasher.update(payload)
+            if len(payload) != item["size"] or hasher.hexdigest() != item["digest"].split(":")[1]:
+                _reject("ROOT_INVALID", root_digest, "committed semantic bytes differ from source identity")
+            assets[item["path"]] = _native_json(payload, item["path"])
+    tensors = [item for item in root["tensor_maps"] if not item["semantic_tensor_id"].startswith(("asset.", "state."))]
+    if not {"config.json", "tokenizer.json", "tokenizer_config.json"} <= set(assets):
+        _reject("ROOT_INVALID", root_digest, "native executable lacks required committed semantic assets")
+    graph = _native_graph(assets["config.json"], tensors, assets.get("preprocessor_config.json"))
+    if graph != bundle["graph"]:
+        _reject("ROOT_INVALID", root_digest, "native graph differs from the complete committed source topology")
+    return graph
+
+
+def render_native_input(cartridge: str | Path, root_digest: str, messages: list[dict], tools: list[dict]) -> dict:
+    """Q10/Q55/Q66: render the contained source template and execute its exact tokenizer."""
+    verify_native_bundle(cartridge, root_digest)
+    if not isinstance(messages, list) or not messages or len(messages) > 64 or not isinstance(tools, list) or len(tools) > 64:
+        _reject("INVALID_REQUEST", root_digest, "native input requires one to 64 messages and at most 64 tools")
+    try:
+        encoded = canonical_bytes({"messages": messages, "tools": tools})
+    except (TypeError, ValueError, RecursionError) as error:
+        _reject("INVALID_REQUEST", root_digest, f"conversation is not plain canonical data: {error}")
+    if len(encoded) > 65536:
+        _reject("CAPABILITY_MISMATCH", root_digest, "conversation exceeds its 64 KiB contained-rendering bound")
+    configuration = _native_json(read_tensor(cartridge, root_digest, "asset.tokenizer_config.json"), root_digest)
+    template = _native_template(configuration.get("chat_template"))
+    context = {key: value for key, value in configuration.items() if key.endswith("_token") and isinstance(value, str)}
+    parts = []
+    length = 0
+    try:
+        for part in template.generate(messages=messages, tools=tools, add_generation_prompt=True, **context):
+            length += len(part.encode())
+            if length > 65536:
+                _reject("CAPABILITY_MISMATCH", root_digest, "rendered source conversation exceeds 64 KiB")
+            parts.append(part)
+    except CassetteError:
+        raise
+    except Exception as error:
+        _reject("CAPABILITY_MISMATCH", root_digest, f"source template cannot render this conversation: {error}")
+    rendered = "".join(parts)
+    tokenizer = _native_tokenizer(_native_json(read_tensor(cartridge, root_digest, "asset.tokenizer.json"), root_digest))
+    return {"rendered": rendered, "token_ids": tokenizer.encode(rendered, add_special_tokens=False).ids,
+            "input_digest": digest_bytes(encoded)}
+
+
+def decode_native_tokens(cartridge: str | Path, root_digest: str, tokens: list[int]) -> str:
+    tokenizer = _native_tokenizer(_native_json(read_tensor(cartridge, root_digest, "asset.tokenizer.json"), root_digest))
+    return tokenizer.decode(tokens, skip_special_tokens=False)

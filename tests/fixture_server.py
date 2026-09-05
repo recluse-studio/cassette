@@ -176,6 +176,21 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(302, b"", {"Location": self.server.control_redirect_target})
                 return
             response = _manifest(kind, artifacts) if operation in {"resolve", "artifacts"} else _metadata(kind, artifacts) if operation == "metadata" else _requirements(kind)
+            if kind in self.server.semantic_overrides and operation in {"resolve", "artifacts"}:
+                collection = {"huggingface": "metadata_siblings", "ollama": "assets", "tinker": "metadata_files"}[kind]
+                response[collection] = [_artifact(kind, item) for item in self.server.semantic_overrides[kind]]
+            if kind in self.server.identity_overrides:
+                identity = self.server.identity_overrides[kind]
+                if operation in {"resolve", "artifacts"}:
+                    if kind == "huggingface":
+                        response["cassette_identity"] = identity
+                    elif kind == "ollama":
+                        response["cassette"]["identity"] = identity
+                    else:
+                        response["provenance"]["identity"] = identity
+                elif operation == "metadata":
+                    wrapper = {"huggingface": "remote_metadata", "ollama": "model_info", "tinker": "evidence"}[kind]
+                    response[wrapper]["identity"]["value"] = identity
             if artifacts is not None:
                 validators = self.server.validator_overrides
                 collection = {"huggingface": response.get("siblings"), "ollama": response.get("layers"), "tinker": response.get("files")}.get(kind)
@@ -197,7 +212,8 @@ class _Handler(BaseHTTPRequestHandler):
             kind, name = parts[1], unquote(parts[2])
             fixture = _FIXTURES[kind]
             artifacts = self.server.artifact_overrides.get(kind, (fixture["artifact"],))
-            matches = [item for item in (*artifacts, fixture["asset"]) if item[0] == name]
+            semantics = self.server.semantic_overrides.get(kind, (fixture["asset"],))
+            matches = [item for item in (*artifacts, *semantics) if item[0] == name]
             if not matches:
                 self._send(404, b"")
                 return
@@ -248,7 +264,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def source_fixture_server(*, artifact_overrides=None):
+def source_fixture_server(*, artifact_overrides=None, semantic_overrides=None, identity_overrides=None):
     """Run one deterministic local server and remove its thread at the context boundary."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.requests = []
@@ -259,6 +275,8 @@ def source_fixture_server(*, artifact_overrides=None):
     server.control_redirect_target = None
     server.range_redirect_target = None
     server.artifact_overrides = artifact_overrides or {}
+    server.semantic_overrides = semantic_overrides or {}
+    server.identity_overrides = identity_overrides or {}
     server.validator_overrides = {}
     server.range_validator_overrides = {}
     server.interrupt_ranges = {}

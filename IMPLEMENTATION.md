@@ -1856,6 +1856,9 @@ phase_live_queue:
     - tests/
     - pager.py
     - broker.py
+    - store.py
+    - pyproject.toml
+    - uv.lock
     work: An ordinary source fixture runs through source tokenization, generated dense/sparse/modality graphs,
       prefill, decode and recovered state with independently checked outputs.
     required_outcomes:
@@ -1907,8 +1910,14 @@ phase_live_queue:
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: TODO
-    attempts: []
+    status: IN_PROGRESS
+    attempts:
+    - id: L02-native-01
+      outcome: IN_PROGRESS
+      review_profile: bootstrap
+      evidence_level: INTEGRATION
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L02-astra-build/attempt-01
+      note: Source freezes before the first declared command; no physical-drive or real-model claim.
   - id: L03
     title: Complete compiled execution, training and client delivery
     phase: NON_DRIVE_PREPARATION

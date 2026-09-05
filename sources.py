@@ -1631,7 +1631,7 @@ async def transfer_artifact(
     if not isinstance(adapter, SourceAdapter):
         _transfer_fail("INVALID_REQUEST", "transfer:unidentified", "SourceAdapter is required")
     adapter._revision(revision)
-    if not isinstance(artifact, Artifact) or artifact not in revision.artifacts:
+    if not isinstance(artifact, Artifact) or artifact not in (*revision.artifacts, *revision.metadata_assets):
         _transfer_fail("INVALID_REQUEST", revision.locator, "artifact must belong to the resolved source revision")
     if not isinstance(capacity_coordinator, CapacityCoordinator):
         _transfer_fail(

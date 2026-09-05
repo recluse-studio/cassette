@@ -172,7 +172,8 @@
               "format": {
                 "enum": [
                   "gguf",
-                  "safetensors"
+                  "safetensors",
+                  "json"
                 ],
                 "maxLength": 256,
                 "minLength": 1,

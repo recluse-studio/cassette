@@ -1111,6 +1111,44 @@ DISPATCH_ROWS = [
         "relative_tolerance": 1e-6,
     },
 ]
+# Q7/Q30/Q33: source-derived native graph recipes use only pinned MLX primitives.
+NATIVE_OPERATORS = {
+    "embedding": ["mlx.core.take"],
+    "linear": ["mlx.core.matmul", "mlx.core.transpose", "mlx.core.add"],
+    "norm": ["mlx.core.fast.rms_norm"],
+    "attention": ["mlx.core.fast.rope", "mlx.core.fast.scaled_dot_product_attention", "mlx.core.concatenate"],
+    "add": ["mlx.core.add"],
+    "silu": ["mlx.nn.silu"],
+    "multiply": ["mlx.core.multiply"],
+    "experts": ["mlx.core.softmax", "mlx.core.argsort", "mlx.core.take", "mlx.core.sum", "mlx.core.divide", "mlx.core.multiply", "mlx.core.add", "mlx.core.zeros", "mlx.core.matmul", "mlx.nn.silu"],
+    "image": ["mlx.core.subtract", "mlx.core.multiply", "mlx.core.divide", "mlx.core.conv2d"],
+    "sample": ["mlx.core.divide", "mlx.core.argmax", "mlx.core.random.categorical", "mlx.core.random.key"],
+}
+NATIVE_GRAPH_RECIPES = {
+    "attention": [
+        ["norm", "norm", ["$input"], ["input_layernorm.weight"]],
+        ["q", "linear", ["norm"], ["self_attn.q_proj.weight"]],
+        ["k", "linear", ["norm"], ["self_attn.k_proj.weight"]],
+        ["v", "linear", ["norm"], ["self_attn.v_proj.weight"]],
+        ["attention", "attention", ["q", "k", "v"], []],
+        ["projection", "linear", ["attention"], ["self_attn.o_proj.weight"]],
+        ["residual", "add", ["$input", "projection"], []],
+        ["ffn_input", "norm", ["residual"], ["post_attention_layernorm.weight"]],
+    ],
+    "dense": [
+        ["gate", "linear", ["ffn_input"], ["mlp.gate_proj.weight"]],
+        ["up", "linear", ["ffn_input"], ["mlp.up_proj.weight"]],
+        ["activated", "silu", ["gate"], []],
+        ["gated", "multiply", ["activated", "up"], []],
+        ["down", "linear", ["gated"], ["mlp.down_proj.weight"]],
+        ["output", "add", ["residual", "down"], []],
+    ],
+    "sparse": [
+        ["router", "linear", ["ffn_input"], ["block_sparse_moe.gate.weight"]],
+        ["down", "experts", ["ffn_input", "router"], []],
+        ["output", "add", ["residual", "down"], []],
+    ],
+}
 DISPATCH_DIGEST = "sha256:" + hashlib.sha256(
     json.dumps(
         {"runtime": MLX_RUNTIME, "rows": DISPATCH_ROWS},
@@ -1370,7 +1408,7 @@ ROOT_CONTAINER = record(
     "Q57",
     {
         "path": bounded_text(),
-        "format": identifier(enum=["gguf", "safetensors"]),
+        "format": identifier(enum=["gguf", "safetensors", "json"]),
         "metadata": bounded_string_map(),
     },
 )
@@ -2029,7 +2067,7 @@ CONTRACTS: dict[str, dict] = {
             "detail": text(empty=True, maximum=MAX_TEXT_BYTES),
         },
     ),
-    "request": record(
+    "request": with_bounded_json(record(
         "Control request",
         "Q6",
         {
@@ -2042,6 +2080,12 @@ CONTRACTS: dict[str, dict] = {
                 "Q6",
                 {
                     "source": ref("source_descriptor"),
+                    "messages": array(bounded_json_object(), minimum=1, maximum=64),
+                    "tools": array(bounded_json_object(), maximum=64),
+                    "seed": {"type": "integer", "minimum": 0, "maximum": 2**32 - 1},
+                    "temperature": number(),
+                    "max_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
+                    "pixels": array(bounded_json_value(), minimum=1, maximum=1),
                     "context_ref": bounded_text(),
                     "negotiation_id": digest(),
                     "tier": bounded_text(),
@@ -2054,11 +2098,12 @@ CONTRACTS: dict[str, dict] = {
                 optional=(
                     "source", "context_ref", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
+                    "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),
             ),
         },
         optional=("target",),
-    ),
+    )),
     "operation": with_bounded_json(record(
         "Asynchronous operation",
         "Q6",
@@ -2405,6 +2450,8 @@ def emit(outdir: Path) -> dict[str, str]:
         f"DISPATCH_DIGEST = {DISPATCH_DIGEST!r}\n"
         f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
+        f"NATIVE_OPERATORS = {pprint.pformat(NATIVE_OPERATORS, sort_dicts=True, width=100)}\n"
+        f"NATIVE_GRAPH_RECIPES = {pprint.pformat(NATIVE_GRAPH_RECIPES, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
         f"EXPORT_TARGETS = {pprint.pformat(EXPORT_TARGETS, sort_dicts=True, width=100)}\n"
         f"Q77_FIELDS = {pprint.pformat(Q77_FIELDS, sort_dicts=True, width=100)}\n"

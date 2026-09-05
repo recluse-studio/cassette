@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.metadata
+import json
 import math
 import platform
 import struct
@@ -15,9 +16,9 @@ from fractions import Fraction
 from pathlib import Path
 
 from errors import CassetteError
-from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, OPERATOR_DISPATCH, Q40_MODES
+from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, NATIVE_OPERATORS, OPERATOR_DISPATCH, Q40_MODES
 from schema.validator import validate
-from store import _read_page, canonical_bytes, digest_bytes, page_locations
+from store import _read_page, canonical_bytes, digest_bytes, load_root, page_locations, read_tensor
 
 _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
 _ADAPTER_MERGE_CASE = "mlx.adapter_merge.i8_f32.rank1.2x3"
@@ -3658,3 +3659,229 @@ class CertifiedTransformer(CertifiedPager):
             return committed
         finally:
             self.last_attempt_transitions = tuple(transitions)
+
+class NativeTransformer:
+    """Q7/Q20/Q30/Q63: execute a committed source graph and recover its exact native context."""
+
+    def __init__(self, cartridge: str | Path, root_digest: str, profile: dict,
+                 session_id: str, request_digest: str):
+        self.cartridge, self.root_digest = Path(cartridge), root_digest
+        self.session_id, self.request_digest = session_id, request_digest
+        root = load_root(cartridge, root_digest)
+        bundle = root["plans"][0] if root["plans"] else {}
+        if bundle.get("version") != "native-v1" or _digest(bundle) != root["provenance"]["identity_material"]["transform_manifest_digest"]:
+            raise _error("ROOT_INVALID", root_digest, "Q33: native source plan", "native plan is absent or differs from executable identity")
+        self.graph = bundle["graph"]
+        if self.graph.get("dispatch_digest") != _digest(NATIVE_OPERATORS):
+            raise _error("UNSUPPORTED_OPERATOR", root_digest, "Q30: generated native dispatch", "native dispatch identity is stale")
+        self.maps = {row["semantic_tensor_id"]: row for row in root["tensor_maps"]}
+        self.mx, _ = _mlx_runtime()
+        _require_runtime(root_digest, self.mx)
+        self._admit(profile)
+        self.image_peak_bytes = 0
+        self.state = {"version": "native-context-v1", "request_digest": request_digest,
+                      "graph_digest": _digest(self.graph), "position": 0, "generated_tokens": [], "kv_shapes": []}
+        self.kv = {}
+        name = "state." + session_id
+        if name in self.maps:
+            payload = read_tensor(cartridge, root_digest, name)
+            try:
+                count = int.from_bytes(payload[:8], "little")
+                state = json.loads(payload[8:8 + count])
+                if set(state) != set(self.state) or state["version"] != self.state["version"]:
+                    raise ValueError("state field set or version differs")
+                if state["request_digest"] != request_digest or state["graph_digest"] != self.state["graph_digest"]:
+                    raise ValueError("state belongs to another request or graph")
+                position = state["position"]
+                if type(position) is not int or not 0 < position <= self.graph["context_limit"]:
+                    raise ValueError("state position is outside the declared horizon")
+                shape = [1, self.graph["kv_heads"], position, self.graph["head_dim"]]
+                if state["kv_shapes"] != [shape] * self.graph["layers"]:
+                    raise ValueError("state KV shapes differ from source-derived state")
+                if (not isinstance(state["generated_tokens"], list) or not state["generated_tokens"]
+                        or any(type(token) is not int or not 0 <= token < self.graph["vocabulary_size"] for token in state["generated_tokens"])):
+                    raise ValueError("state generated-token frontier is invalid")
+                offset = 8 + count
+                for layer in range(self.graph["layers"]):
+                    values = []
+                    for _ in range(2):
+                        size = math.prod(shape) * 4
+                        raw = payload[offset:offset + size]
+                        if len(raw) != size:
+                            raise ValueError("state KV payload is truncated")
+                        values.append(self.mx.array(memoryview(raw).cast("f")).reshape(shape))
+                        offset += size
+                    self.kv[layer] = tuple(values)
+                if offset != len(payload):
+                    raise ValueError("state has trailing unowned bytes")
+                self.state = state
+            except (ValueError, TypeError, KeyError, OverflowError) as error:
+                raise _error("ROOT_INVALID", session_id, "Q20/Q63: exact native context", str(error)) from error
+
+    def _admit(self, profile: dict) -> None:
+        fields = {"physical_bytes", "recommended_max_working_set_bytes", "execution_bytes", "other_observed_bytes"}
+        if not isinstance(profile, dict) or set(profile) != fields or any(type(value) is not int or value < 0 for value in profile.values()):
+            raise _error("INVALID_REQUEST", self.root_digest, "Q47: measured memory profile", "native execution requires the four nonnegative measured memory fields")
+        physical, recommended = profile["physical_bytes"], profile["recommended_max_working_set_bytes"]
+        if recommended > physical:
+            raise _error("INVALID_REQUEST", self.root_digest, "Q47: measured working set", "recommended working set exceeds physical memory")
+        reserve = max(4 * _GIB, (physical + 3) // 4)
+        self.available_bytes = max(0, min(max(0, physical - reserve), 9 * recommended // 10)
+                                   - profile["execution_bytes"] - profile["other_observed_bytes"])
+        graph = self.graph
+        kv_bytes = 2 * graph["layers"] * graph["kv_heads"] * graph["head_dim"] * graph["context_limit"] * 4
+        activation_bytes = graph["context_limit"] * max(graph["hidden_size"], graph["intermediate_size"], graph["vocabulary_size"]) * 4
+        semantic_bytes = sum(math.prod(row["shape"]) for name, row in self.maps.items() if name.startswith("asset."))
+        self.declared_peak_bytes = graph["parameter_bytes"] + 8 * kv_bytes + 32 * activation_bytes + 4 * semantic_bytes + 8 * len(canonical_bytes(graph))
+        if self.declared_peak_bytes > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", self.root_digest, "Q7/Q47: native active representation", "complete native weights, context, semantics and activation bound do not fit")
+
+    def _weight(self, name: str):
+        row = self.maps[name]
+        if row["dtype"] != "F32":
+            raise _error("UNSUPPORTED_OPERATOR", name, "Q30: native weight representation", "native float32 dispatch cannot consume this source dtype")
+        payload = read_tensor(self.cartridge, self.root_digest, name)
+        return self.mx.array(memoryview(payload).cast("f")).reshape(row["shape"])
+
+    def _linear(self, value, weights: list[str]):
+        result = self.mx.matmul(value, self._weight(weights[0]).T)
+        return self.mx.add(result, self._weight(weights[1])) if len(weights) == 2 else result
+
+    def step(self, prompt_tokens: list[int], *, seed: int, temperature: float = 0.0,
+             pixels: object = None) -> dict:
+        """Return one candidate token and state; only the broker/store commit can expose them."""
+        mx = self.mx
+        if (not isinstance(prompt_tokens, list) or not prompt_tokens or any(type(token) is not int or not 0 <= token < self.graph["vocabulary_size"] for token in prompt_tokens)
+                or type(seed) is not int or not 0 <= seed < 2**32 or type(temperature) not in (int, float)
+                or not math.isfinite(temperature) or temperature < 0):
+            raise _error("INVALID_REQUEST", self.session_id, "Q10/Q66: native token and sampler input", "tokens, seed or temperature are outside the admitted source contract")
+        if len(prompt_tokens) > self.graph["context_limit"]:
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "prompt exceeds context; truncation is forbidden")
+        position = self.state["position"]
+        tokens = [self.state["generated_tokens"][-1]] if position else prompt_tokens
+        has_image = any(node["operator"] == "image" for node in self.graph["nodes"])
+        if pixels is not None and not has_image:
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source modalities", "source graph does not accept image input")
+        values = {"tokens": tokens, "pixels": pixels}
+        pending_kv = dict(self.kv)
+        routes = []
+        usage = []
+        try:
+            for node in self.graph["nodes"]:
+                operator, names, parameters = node["operator"], node["weights"], node["parameters"]
+                if operator not in NATIVE_OPERATORS:
+                    raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: generated native operator", "source graph names an absent operator")
+                inputs = [values[name] for name in node["inputs"]]
+                if operator == "image":
+                    if position:
+                        output = None
+                    else:
+                        output = self._image(inputs[0], names, parameters)
+                elif operator == "embedding":
+                    ids = mx.array(inputs[0], dtype=mx.int32)
+                    output = mx.take(self._weight(names[0]), ids, axis=0)
+                    if len(inputs) == 2 and not position:
+                        marker = parameters["image_token_index"]
+                        if inputs[0].count(marker) != 1 or inputs[1] is None:
+                            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: image control-token binding", "one image requires exactly one source image token")
+                        index = inputs[0].index(marker)
+                        output = mx.concatenate((output[:index], inputs[1], output[index + 1:]), axis=0)
+                    if position + output.shape[0] > self.graph["context_limit"]:
+                        raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "expanded native input exceeds context; truncation is forbidden")
+                elif operator == "linear":
+                    output = self._linear(inputs[0], names)
+                elif operator == "norm":
+                    output = mx.fast.rms_norm(inputs[0], self._weight(names[0]), parameters["eps"])
+                elif operator == "attention":
+                    layer, dimension = parameters["layer"], parameters["head_dim"]
+                    q, k, v = [value.reshape(1, value.shape[0], heads, dimension).transpose(0, 2, 1, 3)
+                               for value, heads in zip(inputs, (parameters["heads"], parameters["kv_heads"], parameters["kv_heads"]), strict=True)]
+                    q = mx.fast.rope(q, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
+                    k = mx.fast.rope(k, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
+                    if layer in self.kv:
+                        k, v = [mx.concatenate((old, new), axis=2) for old, new in zip(self.kv[layer], (k, v), strict=True)]
+                    pending_kv[layer] = (k, v)
+                    output = mx.fast.scaled_dot_product_attention(q, k, v, scale=dimension**-0.5, mask="causal")
+                    output = output.transpose(0, 2, 1, 3).reshape(inputs[0].shape)
+                elif operator == "add":
+                    output = mx.add(*inputs)
+                elif operator == "multiply":
+                    output = mx.multiply(*inputs)
+                elif operator == "silu":
+                    output = _activation(inputs, {})
+                elif operator == "experts":
+                    probabilities = mx.softmax(inputs[1], axis=-1)
+                    indices = mx.argsort(-probabilities, axis=-1)[:, :parameters["top_k"]]
+                    selected = indices.tolist()
+                    pieces = []
+                    for token_index, chosen in enumerate(selected):
+                        mixture = mx.zeros((1, self.graph["hidden_size"]), dtype=mx.float32)
+                        scores = mx.take(probabilities[token_index], indices[token_index])
+                        scores = scores / mx.sum(scores)
+                        for rank, expert in enumerate(chosen):
+                            gate, up, down = names[3 * expert:3 * expert + 3]
+                            value = inputs[0][token_index:token_index + 1]
+                            gated = _activation((self._linear(value, [gate]),), {}) * self._linear(value, [up])
+                            mixture = mixture + scores[rank] * self._linear(gated, [down])
+                        pieces.append(mixture)
+                    output = mx.concatenate(pieces, axis=0)
+                    routes.append({"node": node["id"], "experts": selected})
+                else:
+                    raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: source graph executor", "operator has no source-graph execution rule")
+                if isinstance(output, mx.array):
+                    mx.eval(output)
+                values[node["id"]] = output
+                usage.append(node["id"])
+                # A graph value survives only until its last declared consumer.
+                remaining = {name for later in self.graph["nodes"][len(usage):] for name in later["inputs"]}
+                for name in tuple(values):
+                    if name not in remaining and name != "logits":
+                        del values[name]
+            logits = values["logits"][-1]
+            mx.eval(logits)
+            plain_logits = logits.tolist()
+            if not all(math.isfinite(value) for value in plain_logits):
+                raise _error("CAPABILITY_MISMATCH", self.session_id, "Q20: finite native output", "source graph produced nonfinite logits")
+            counter = len(self.state["generated_tokens"])
+            token = int(mx.argmax(logits).item()) if temperature == 0 else int(mx.random.categorical(
+                logits / temperature, key=mx.random.key((seed + counter) % 2**32)).item())
+            state = {**self.state, "position": pending_kv[0][0].shape[2],
+                     "generated_tokens": [*self.state["generated_tokens"], token],
+                     "kv_shapes": [list(pending_kv[layer][0].shape) for layer in range(self.graph["layers"])]}
+            header = canonical_bytes(state)
+            payload = len(header).to_bytes(8, "little") + header + b"".join(
+                memoryview(value).tobytes() for layer in range(self.graph["layers"]) for value in pending_kv[layer])
+            return {"token": token, "logits": plain_logits, "state": state, "payload": payload,
+                    "executed_nodes": usage, "routes": routes, "declared_peak_bytes": self.declared_peak_bytes + self.image_peak_bytes}
+        except CassetteError:
+            raise
+        except Exception as error:
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q20/Q30: native graph execution", f"{type(error).__name__}: {error}") from error
+
+    def _image(self, pixels: object, names: list[str], parameters: dict):
+        mx = self.mx
+        if not isinstance(pixels, list) or not pixels:
+            raise _error("INVALID_REQUEST", self.session_id, "Q66: declared image processor", "image graph requires nonempty NHWC pixel data")
+        patch, channels = parameters["patch_size"], parameters["channels"]
+        if len(pixels) != 1 or not isinstance(pixels[0], list) or not pixels[0] or not isinstance(pixels[0][0], list):
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: image patch geometry", "image requires one nonempty rectangular NHWC batch")
+        height, width = len(pixels[0]), len(pixels[0][0])
+        if (not width or height % patch or width % patch
+                or (height // patch) * (width // patch) > self.graph["context_limit"]
+                or any(not isinstance(row, list) or len(row) != width for row in pixels[0])
+                or any(not isinstance(pixel, list) or len(pixel) != channels
+                       or any(type(value) not in (int, float) or not math.isfinite(value) for value in pixel)
+                       for row in pixels[0] for pixel in row)):
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: image patch geometry", "image shape or finite channel values differ from the source processor")
+        input_bytes = height * width * channels * 4
+        if self.declared_peak_bytes + 8 * input_bytes > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: image input", "source pixels and processor temporaries exceed the remaining admitted memory")
+        self.image_peak_bytes = 8 * input_bytes
+        image = mx.array(pixels, dtype=mx.float32)
+        processor = parameters["processor"]
+        if processor["do_rescale"]:
+            image = mx.multiply(image, processor["rescale_factor"])
+        if processor["do_normalize"]:
+            image = mx.divide(mx.subtract(image, mx.array(processor["image_mean"])), mx.array(processor["image_std"]))
+        projection = self._weight(names[0]).transpose(0, 2, 3, 1)
+        return mx.conv2d(image, projection, stride=patch).reshape(-1, self.graph["hidden_size"])

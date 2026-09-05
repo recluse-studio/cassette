@@ -7198,3 +7198,42 @@ are retained under `.codex/reviews/cassette/2026-09-05/L01-q30-repair` in Drew's
 The source revision above, generated report at `21aae20fff3d9bda014a096388f299451cb9e33a`, and review envelope
 `9e51a39dff5eb5f33c74b33d36f3d2f53b5486aa3198fde91dfb70c618a2bab8` bind this correction. L01 is closed on that evidence and L02 is next.
 Every physical-drive and real-model claim remains unrun.
+
+#### Entry 82 — 2026-09-05, the source files had to become the model
+
+Sol reviewed `51944c472b4a664d82e7a34192939a2bda354e2e` and found that L02 had no completed
+attempt and none of its six required execution paths. The existing private compiler manifest
+and fixed F3 decoder still worked. They did not establish ordinary-source execution. Drew asked
+Astra to assess the findings, implement the agreed changes, record the work, and commit and push.
+The implementer for this entry is **Astra**, task `01a06e5f-67f0-79d2-b3e4-19ad63db8a72`.
+
+Astra accepted all six findings. The native path now builds its graph from configuration,
+shard indexes, tensor names and shapes, tokenizer data, and declared image processing. Generated
+recipes expand dense or sparse layers at the source dimensions. Pinned Tokenizers and Jinja2
+supply tokenization and contained conversation rendering; pinned MLX supplies the numerical
+operations. The broker owns generation, and the store commits generated tokens and KV bytes
+through its existing pages, roots, and generation journal. A reconstructed runtime reads the
+committed state. The fixed compiled F3 path remains a foundation control; L03 owns the wider
+compiled execution work.
+
+The separate Terra reader found two integration omissions in the first implementation: semantic
+metadata was still outside broker acquisition, and different native requests could race their
+state commits. Astra put semantic JSON through the same transfer and verification path and
+serialized native computation and publication with scheduled model work. Terra then demonstrated
+that a source template could loop without producing output, evading the renderer's byte limit.
+Astra added a deterministic loop budget, bounded JSON rendering, and explicit refusal of
+unadmitted expansion operations. No source-specific numerical kernel or second disk writer was added.
+
+Development evidence includes an ordinary two-shard loopback acquisition, independently calculated
+dense, sparse, and image outputs, multi-token generation, and reconstructed KV state. The first
+four-case run passed in 456.64 seconds. A later run, including broker pause/resume and changed
+semantic identity, passed in 198.19 seconds. Those are development runs, preceding the final
+template bound; they are not the frozen acceptance attempt. The reports and raw outputs are retained
+under `.codex/reviews/cassette/2026-09-05/L02-astra-build` in Drew's home directory.
+
+L02 remains `IN_PROGRESS` while the frozen attempt and its read-only review are prepared. The
+supported native path uses F32 weights and the admitted rotary, RMS-normalized, gated decoder
+operations; image processing currently covers declared rescaling, normalization, and patch
+projection. Unadmitted source semantics fail explicitly. Physical drives, real model sources,
+performance, and F4/F5 remain unproved. The queue assigns the next complete suite, J, and removal
+gate to L04; L02 uses focused checks of its changed behavior and coupled foundations.

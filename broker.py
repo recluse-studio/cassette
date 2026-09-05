@@ -18,13 +18,16 @@ from types import MappingProxyType
 
 from compiler import (
     PreparedRevision,
+    decode_native_tokens,
+    render_native_input,
+    verify_native_bundle,
     plan_export,
     plan_revision,
     prepare_revision,
     verify_bundle_structure,
 )
 from errors import CassetteError
-from pager import CertifiedSchedule, admit_schedule, merge_adapter_material
+from pager import CertifiedSchedule, NativeTransformer, admit_schedule, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
@@ -37,6 +40,7 @@ from store import (
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     commit_generation,
+    commit_runtime_state,
     complete_capacity_claim,
     digest_bytes,
     execute_claimed_write,
@@ -400,10 +404,21 @@ def _partial_record(path: str, partial: PartialState) -> dict:
     }
 
 
+def _compiler_artifacts(revision: ResolvedSource) -> tuple[Artifact, ...]:
+    """Include the source tokenizer's admitted semantic files in the same verified transfer."""
+    objects = (*revision.artifacts, *revision.metadata_assets)
+    if len({item.path for item in objects}) != len(objects):
+        _reject("SOURCE_REVISION_CHANGED", revision.identity, "model and metadata paths overlap")
+    if any(item.path == "tokenizer.json" for item in objects):
+        return tuple(sorted((*revision.artifacts, *(item for item in revision.metadata_assets
+                                                    if item.path.endswith(".json"))), key=lambda item: item.path))
+    return revision.artifacts
+
+
 def _partials_from(records: object, revision: ResolvedSource, object_id: str) -> tuple[PartialState, ...]:
-    if not isinstance(records, list) or len(records) != len(revision.artifacts):
+    if not isinstance(records, list) or len(records) != len(_compiler_artifacts(revision)):
         _reject("ROOT_INVALID", object_id, "source verification must contain one record per artifact")
-    by_path = {artifact.path: artifact for artifact in revision.artifacts}
+    by_path = {artifact.path: artifact for artifact in _compiler_artifacts(revision)}
     result = []
     for record in records:
         if not isinstance(record, dict) or set(record) != {
@@ -457,7 +472,7 @@ def _compiler_source(revision: ResolvedSource, descriptor: Mapping[str, object])
         "identity": revision.identity,
         "artifacts": [
             {"path": item.path, "size": item.size, "digest": item.digest}
-            for item in revision.artifacts
+            for item in _compiler_artifacts(revision)
         ],
         "license_digest": revision.license_digest,
     }
@@ -471,11 +486,11 @@ def _compiler_extents(
     """Expose only pre-opened data extents; transfer checkpoints remain source-owned evidence."""
 
     if not isinstance(transfers, Mapping) or set(transfers) != {
-        artifact.path for artifact in revision.artifacts
+        artifact.path for artifact in _compiler_artifacts(revision)
     }:
         _reject("INVALID_REQUEST", operation_id, "transfers must name every source artifact exactly once")
     result = {}
-    for artifact in revision.artifacts:
+    for artifact in _compiler_artifacts(revision):
         pair = transfers[artifact.path]
         if not isinstance(pair, tuple) or len(pair) != 2 or not isinstance(pair[0], TransferExtent):
             _reject("INVALID_REQUEST", operation_id, f"{artifact.path} requires one compiler data extent")
@@ -568,6 +583,7 @@ class CanonicalBroker:
         self._negotiations: dict[str, dict] = {}
         self._queues: dict[str, deque[_QueuedRun]] = {}
         self._scheduler_lock = asyncio.Lock()
+        self._model_execution_lock = asyncio.Lock()
         self._client_order: list[str] = []
         self._deficits: dict[str, int] = {}
         self._queue_cursor = 0
@@ -1044,7 +1060,8 @@ class CanonicalBroker:
                     return
                 work = self._select()
             try:
-                result = await self._run_scheduled(work)
+                async with self._model_execution_lock:
+                    result = await self._run_scheduled(work)
             except asyncio.CancelledError:
                 if not work.future.done():
                     work.future.cancel()
@@ -1420,6 +1437,62 @@ class CanonicalBroker:
             except CassetteError as error:
                 return self._operation(self._failed(self._load(operation_id), error))
 
+    async def generate_native(
+        self, request: dict, cartridge: str | Path, profile: dict,
+        capacity_controller: CapacityCoordinator,
+    ) -> dict:
+        """Q5/Q10/Q20/Q63: own native generation and expose tokens only after the store commit."""
+        if request.get("operation") != "run" or not capacity_controller.owns(cartridge):
+            _reject("INVALID_REQUEST", "native-run", "native generation requires a run request and the cartridge capacity owner")
+        operation_id = self.operation_id(request)
+        arguments = request["arguments"]
+        required = {"messages", "tools", "seed", "temperature", "max_tokens"}
+        if not isinstance(arguments, dict) or not required <= set(arguments) or set(arguments) - required - {"pixels"}:
+            _reject("INVALID_REQUEST", operation_id, "native request must name conversation, tools and exact sampler fields")
+        maximum = arguments["max_tokens"]
+        if type(maximum) is not int or not 0 < maximum <= 1_048_576:
+            _reject("INVALID_REQUEST", operation_id, "max_tokens must be a bounded positive integer")
+        request_digest = _json_digest(request, operation_id, "native request")
+
+        def expose(tokens: list[int], root_digest: str) -> None:
+            record = self._load(operation_id)
+            emitted = [event["payload"]["token"] for event in record["events"]
+                       if event["type"] == "output_delta" and "token_index" in event["payload"]]
+            if emitted != tokens[:len(emitted)]:
+                _reject("ROOT_INVALID", operation_id, "broker token events differ from the committed context")
+            for index in range(len(emitted), len(tokens)):
+                record = self._append(record, "output_delta", {
+                    "token_index": index, "token": tokens[index], "committed_root": root_digest,
+                })
+
+        async def generate():
+            pin = recover_generation(cartridge)
+            if pin is None or load_root(cartridge, pin.root_digest)["identity"] != request.get("target"):
+                _reject("IDENTITY_MISMATCH", operation_id, "native target is not the currently published model identity")
+            graph = verify_native_bundle(cartridge, pin.root_digest)
+            rendered = render_native_input(cartridge, pin.root_digest, arguments["messages"], arguments["tools"])
+            if maximum + len(rendered["token_ids"]) > graph["context_limit"]:
+                _reject("CAPABILITY_MISMATCH", operation_id, "prompt and requested generation exceed the source horizon")
+            while True:
+                runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
+                tokens = runtime.state["generated_tokens"]
+                expose(tokens, pin.root_digest)
+                if len(tokens) >= maximum:
+                    return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
+                            "root_digest": pin.root_digest, "position": runtime.state["position"],
+                            "execution_mode": "NATIVE"}
+                candidate = runtime.step(rendered["token_ids"], seed=arguments["seed"],
+                                         temperature=arguments["temperature"], pixels=arguments.get("pixels"))
+                pin = await _await_completion(asyncio.to_thread(
+                    commit_runtime_state, cartridge, pin.root_digest, operation_id, candidate["payload"],
+                    capacity_controller=capacity_controller,
+                ))
+                expose(candidate["state"]["generated_tokens"], pin.root_digest)
+                await asyncio.sleep(0)
+
+        async with self._model_execution_lock:
+            return await self.execute(request, generate)
+
     async def export_revision(
         self,
         request: dict,
@@ -1637,11 +1710,11 @@ class CanonicalBroker:
         if phase == "ACQUIRING":
             async def acquire():
                 if not isinstance(context.transfers, Mapping) or set(context.transfers) != {
-                    artifact.path for artifact in revision.artifacts
+                    artifact.path for artifact in _compiler_artifacts(revision)
                 }:
                     _reject("INVALID_REQUEST", operation_id, "transfers must name every source artifact exactly once")
                 partials = []
-                for artifact in revision.artifacts:
+                for artifact in _compiler_artifacts(revision):
                     extents = context.transfers[artifact.path]
                     if not isinstance(extents, tuple) or len(extents) != 2:
                         _reject("INVALID_REQUEST", operation_id, f"{artifact.path} requires data and state extents")
@@ -1655,7 +1728,7 @@ class CanonicalBroker:
                     ))
                 return [
                     _partial_record(artifact.path, partial)
-                    for artifact, partial in zip(revision.artifacts, partials, strict=True)
+                    for artifact, partial in zip(_compiler_artifacts(revision), partials, strict=True)
                 ]
 
             checkpoint["partials"] = await self._controlled(operation_id, acquire, cancellable=True)
@@ -1772,7 +1845,7 @@ class CanonicalBroker:
             _reject("IDENTITY_MISMATCH", operation_id, "preparation result differs from the source lock or plan")
         expected = tuple(
             ArtifactIdentity(artifact.path, artifact.size, artifact.digest)
-            for artifact in revision.artifacts
+            for artifact in _compiler_artifacts(revision)
         )
         if prepared.verified_artifacts != expected:
             _reject("IDENTITY_MISMATCH", operation_id, "present-byte verification differs from resolved artifacts")
@@ -1789,16 +1862,19 @@ class CanonicalBroker:
             ]
         ):
             _reject("IDENTITY_MISMATCH", operation_id, "candidate root is not bound to the durable source lock")
-        plan, certificate, evidence, profile, compiled_identity = verify_bundle_structure(
-            cartridge,
-            root_digest,
-            revision.identity,
-            plan_digest,
-            {name: record["fd"] for name, record in source_descriptors.items()},
-        )
-        if root["identity"] != compiled_identity:
-            _reject("IDENTITY_MISMATCH", operation_id, "verified bundle and candidate identity disagree")
-        admit_schedule(plan, certificate, evidence, profile)
+        if root["plans"][0].get("version") == "native-v1":
+            verify_native_bundle(cartridge, root_digest, revision.identity, plan_digest)
+        else:
+            plan, certificate, evidence, profile, compiled_identity = verify_bundle_structure(
+                cartridge,
+                root_digest,
+                revision.identity,
+                plan_digest,
+                {name: record["fd"] for name, record in source_descriptors.items()},
+            )
+            if root["identity"] != compiled_identity:
+                _reject("IDENTITY_MISMATCH", operation_id, "verified bundle and candidate identity disagree")
+            admit_schedule(plan, certificate, evidence, profile)
         verify_root_content(cartridge, root_digest)
         pages = [location.page_digest for location in page_locations(cartridge, root_digest)]
         return {
@@ -1974,7 +2050,7 @@ class CanonicalBroker:
             verification = checkpoint["source_verification"]
             expected = [
                 {"path": item.path, "size": item.size, "digest": item.digest}
-                for item in revision.artifacts
+                for item in _compiler_artifacts(revision)
             ]
             if verification != expected:
                 _reject("ROOT_INVALID", object_id, "present-byte verification differs from the source lock")

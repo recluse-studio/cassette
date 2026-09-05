@@ -12,11 +12,16 @@ requires-python = "==3.13.*"
 # Q1/Q57: rfc8785.dumps is the one canonical model and manifest serializer.
 # Q51: resumablesha256 exposes fixed SHA-256 continuation state; hashlib exposes no state.
 # Q30: MLX 0.31.0 owns every dispatched Apple numerical operator; Cassette authors none.
+# Q10/Q55: tokenizers.Tokenizer.from_str/encode/decode (Apache-2.0); no Hub or training APIs.
+# Q10/Q55: Jinja2 ImmutableSandboxedEnvironment/StrictUndefined and AST inspection (BSD-3-Clause).
+# Both exact pins serve L02 source semantics; unrepresentable templates/tokenizers fail explicitly.
 dependencies = [
     "blake3==1.0.9",
     "mlx==0.31.0",
     "rfc8785==0.1.4",
     "resumablesha256==1.0",
+    "tokenizers==0.23.2",
+    "jinja2==3.1.6",
 ]
 
 [dependency-groups]
