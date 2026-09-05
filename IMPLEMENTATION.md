@@ -1722,6 +1722,14 @@ phase_live_queue:
       outcome: FAIL
       cause: Fresh Q30 challenge exposed relative import context; dependent full gate stopped.
       raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/relative-import-red.json
+    - id: L01-consolidated-6
+      source_commit: ba223420513660bd08000d42ed04488b87f55dc6
+      outcome: FAIL
+      cause: Collector PYTEST_ADDOPTS basetemp conflicted with a nested pytest working directory; 314 cases passed.
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L01-q30-repair/attempt-6-full-proof.txt
+    collector_retry_decision: '2026-09-05 queue decision under the authorized remediation: the failing Q78 case
+      passes with the collector override removed. Permit one seventh attempt on unchanged executable source,
+      using pytest default temporary-directory allocation. Preserve attempt six as a collector failure.'
     attempt_limit_decision: '2026-09-05 queue decision under the principal-authorized L01 remediation: retain the
       failed fourth and fifth candidates; authorize one sixth attempt after the implicit-namespace and relative-context
       controls pass. The sixth attempt changes no stage count, product requirement or proof threshold.'
