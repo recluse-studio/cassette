@@ -663,10 +663,14 @@ def test_q33_q40_f2_certificate_dimensions_are_bounded_data_and_fail_before_exec
     excessive["prior_mode_failures"].append(copy.deepcopy(excessive["prior_mode_failures"][-1]))
     assert any("permits at most 4" in defect for defect in validate("execution_plan", excessive))
     malformed.append((excessive, certificate()))
-    infinite = certificate()
-    infinite["resources"]["epsilon_exec"] = math.inf
-    assert any("number must be finite" in defect for defect in validate("mathematical_certificate", infinite))
-    malformed.append((plan(), infinite))
+    for nonfinite in (math.inf, -math.inf, math.nan):
+        infinite = certificate()
+        infinite["resources"]["epsilon_exec"] = nonfinite
+        assert any(
+            "resources.epsilon_exec" in defect
+            for defect in validate("mathematical_certificate", infinite)
+        )
+        malformed.append((plan(), infinite))
 
     mx.metal.reset_peak_memory()
     peak_before_validation = mx.metal.get_peak_memory()

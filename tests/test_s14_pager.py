@@ -559,11 +559,12 @@ def test_q20_q64_f3_page_readiness_replay_and_selection_failure(tmp_path):
         ).execute(_selection(certificate, evidence, 0, seed=11))
         assert replay_a.sample_units == replay_b.sample_units
         assert replay_a.output_digest == replay_b.output_digest
+        # Q64: exact certificate bytes determine the recorded counter-key stream.
         assert replay_a.sample_units == (
-            1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1
+            0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1
         )
         assert alternate.sample_units == (
-            1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1
+            0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0
         )
         assert replay_a.output_digest != alternate.output_digest
 
