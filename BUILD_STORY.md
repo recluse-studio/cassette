@@ -7332,3 +7332,11 @@ That run included FP32 and BF16 regeneration, bit-identical clean reconstruction
 context, all five named clients on the regenerated FP32 child, and the rare-expert corpus.
 The static ledger reported zero violations. The candidate is ready to freeze for the recorded
 attempt; these development results alone do not close L03.
+
+The first frozen attempt, `L03-integrated-01` at `2734f5c`, finished with 14 passes and one
+failure in 416.01 seconds. The failed S03 assertion required the exact generated schema inventory;
+Astra had added three L03 contracts without extending that fixture's inventory and golden records.
+The correction adds explicit field lists and round-trip examples for the workload, LoRA factors,
+and training checkpoint. All four schema checks then passed in 2.28 seconds. The failed attempt
+remains sealed as evidence; it does not count as L03 acceptance. Product code did not change in
+this correction.

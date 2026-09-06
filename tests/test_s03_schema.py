@@ -32,6 +32,9 @@ EXPECTED_KINDS = {
     "hardware_plan_catalog",
     "mathematical_certificate",
     "negotiated_capability",
+    "native_adapter_factors",
+    "native_training_manifest",
+    "native_workload",
     "operation",
     "operator_dispatch",
     "remote_metadata",
@@ -68,6 +71,17 @@ REMOTE_FIELDS = {
     "source_validators",
 }
 EXPECTED_FIELDS = {
+    "native_adapter_factors": {"a", "b", "scale"},
+    "native_training_manifest": {
+        "version", "job_id", "operation", "parent_root", "reference_root", "dataset",
+        "dataset_digest", "adapters", "pending_adapters", "admission", "precision", "seed",
+        "learning_rate", "beta", "epochs", "cursor", "window", "step", "losses", "complete",
+        "window_limit_bytes",
+    },
+    "native_workload": {
+        "version", "baseline", "cases", "confidence", "off_support", "scorer", "seeds",
+        "support", "trials",
+    },
     "error": {"code", "object_id", "failed_invariant", "retryability", "detail"},
     "request": {"protocol_version", "operation", "idempotency_key", "target", "arguments"},
     "operation": {"operation_id", "kind", "state", "progress", "result", "error"},
@@ -708,6 +722,30 @@ GOLDEN = {
         "integrity_root": DIGESTS[10],
     },
 }
+
+
+GOLDEN.update({
+    "native_adapter_factors": {"a": [[0.25, -0.5]], "b": [[0.0], [0.125]], "scale": 1.0},
+    "native_training_manifest": {
+        "version": "native-training-v1", "job_id": DIGESTS[0], "operation": "ADAPTER_SFT",
+        "parent_root": DIGESTS[1], "reference_root": None, "dataset": [DIGESTS[2]],
+        "dataset_digest": DIGESTS[3], "adapters": [{
+            "tensor_id": "lm_head.weight", "shape": [2, 2], "rank": 1,
+            "state_bytes": 16, "page_digest": DIGESTS[4],
+        }], "pending_adapters": [], "admission": {"window_bytes": 16}, "precision": "FP32",
+        "seed": 0, "learning_rate": 0.01, "beta": 0.1, "epochs": 1, "cursor": 0,
+        "window": 0, "step": 0, "losses": [], "complete": False, "window_limit_bytes": 4096,
+    },
+    "native_workload": {
+        "version": "native-workload-v1",
+        "baseline": {"equivalence": "EXACT_FIXTURE", "root_digest": DIGESTS[0]},
+        "cases": [{"condition_id": "condition.a", "stratum": "dense", "tokens": [0, 1],
+                   "pixels": None, "ablations": [["lm_head.weight"]],
+                   "gradient": {"operation": "ADAPTER_SFT"}}],
+        "confidence": 1.0, "off_support": "REJECT", "scorer": "TOKEN_LOGIT_VECTOR",
+        "seeds": [0], "support": ["condition.a"], "trials": 1,
+    },
+})
 
 
 def install_generator(root: Path) -> None:
