@@ -7340,3 +7340,30 @@ The correction adds explicit field lists and round-trip examples for the workloa
 and training checkpoint. All four schema checks then passed in 2.28 seconds. The failed attempt
 remains sealed as evidence; it does not count as L03 acceptance. Product code did not change in
 this correction.
+
+
+L03 reached fixture/integration acceptance on the corrected source
+`bcbace411458936ce410a80e02ae8c745e9ca842`, tree `35f69cc8324a00bdfdd61258f110bdde0337676c`.
+Attempt `L03-integrated-02` passed all 15 focused and coupled tests in 346.50 seconds; the static
+ledger reported zero violations. Manifest SHA-256 `dfc68f6665797a80a5609f8302d04741d1659dae7e1b0edf73eeaf6a2dcf6a99` binds the frozen
+inputs, exact commands, source identities and raw results. Active coding time was not measured.
+
+Terra reviewed the exact attempt independently of Astra's implementation role, on the same Mac.
+Its first fresh control removed a required embedding page after acquisition. Execution stopped
+with `PAGE_CORRUPT` before consuming that operand. Its second control contradicted the regenerated
+effective target during child admission. The runtime returned `ROOT_INVALID` because the target
+disagreed with the exact ordered adapter action. A probe setup initially forgot to publish its
+compiled parent; that instrument failure was corrected in disposable state and supplies no product
+finding. The review found no supported product defect and accepted all twelve L03 outcomes.
+
+Astra required the reviewer to preserve its probe scripts and raw outputs after the initial sealed
+report omitted those artifacts. The linked successor record completes that evidence trail without
+changing product code. The accepted review envelope is `/Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/envelopes/L03-integrated-02-independent-bootstrap-wording-successor.json`, SHA-256
+`fb1db0f6252450ca302eb6f4f955359397bdfb56c42fb73596b901ede3d73da9`; its report is `/Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/review-evidence-successor.md`.
+
+Astra, task `01a06e5f-67f0-79d2-b3e4-19ad63db8a72`, then closed L03 and set L04 next. The closeout
+uses an isolated checkout because unrelated `pure_math_lab/` work appeared in shared main during
+verification; that work remains untouched. These results establish finite fixture observations,
+compiled graph execution, real language-model objectives, regenerated children and five protocol
+paths. They do not establish useful real-model covers or physical-drive performance. L04 owns the
+complete machine gate and campaign handoff; all drive/live evidence remains `NOT_RUN`.

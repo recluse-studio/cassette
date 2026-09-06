@@ -1619,7 +1619,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L03
+  next_step: L04
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -2073,13 +2073,55 @@ phase_live_queue:
       results are owned by L05-L10.
     execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
       outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
-    timing_evidence: NOT_RUN
+    timing_evidence:
+      active_coding_seconds: NOT_MEASURED
+      focused_pytest_seconds: 346.50
+      focused_command_wall_seconds: 350.456
+      static_ledger_wall_seconds: 5.006
+      note: These are execution durations; no agent coding-time estimate follows.
     review_profile: bootstrap
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: IN_PROGRESS
-    attempts: []
+    status: DONE
+    attempts:
+    - id: L03-integrated-01
+      outcome: FAIL
+      review_profile: bootstrap
+      evidence_level: INTEGRATION
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/attempt-01
+      source_commit: 2734f5c98b91883124638a9ffc873e1b3b4b9770
+      manifest_sha256: f192b98e6d7791145633d24c86e18e1bd91898eca75ec891a060972e3b218e5a
+      note: Fourteen tests passed; the exact schema inventory omitted three new generated contracts. The explicit schema fixture repair is in bcbace4.
+    - id: L03-integrated-02
+      outcome: PASS
+      review_profile: bootstrap
+      evidence_level: INTEGRATION
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/attempt-02
+      source_commit: bcbace411458936ce410a80e02ae8c745e9ca842
+      source_tree: 35f69cc8324a00bdfdd61258f110bdde0337676c
+      manifest_sha256: dfc68f6665797a80a5609f8302d04741d1659dae7e1b0edf73eeaf6a2dcf6a99
+      review_route: PASS_READY
+      review_report: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/review-evidence-successor.md
+      review_envelope: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/envelopes/L03-integrated-02-independent-bootstrap-wording-successor.json
+      review_envelope_sha256: fb1db0f6252450ca302eb6f4f955359397bdfb56c42fb73596b901ede3d73da9
+      note: Inputs froze before execution. A separate Terra reviewer checked the exact source and raw hashes, challenged two failure paths, and advanced the bootstrap review head.
+    closeout:
+      teacher_observations: Actual activations, logits, gradients and ablations reproduce from the frozen finite census; all four expert contributions have measured effects.
+      condition_witnesses: Source-derived condition metrics and atoms pass independent rational rank, loss and cover checks; the pairwise-only false cover rejects.
+      descriptions_and_addresses: Independent reconstruction verifies description distortion, residual sampling law and every source offset; peak and total bytes remain separate.
+      composition: Per-window ranks, representation loss, execution bounds and horizon union risk recompute. This path uses triangle then Cauchy-Schwarz and admits no conditional quadrature.
+      observation_adequacy: Exact finite input support, count, selector and confidence rule bind the witness; altered support, confidence and unsupported selection reject.
+      compiled_execution: Complete graph prefill and decode use prepared exact operands and compiled head windows; resource admission, Q19, corruption and durable restart pass.
+      datasets: Interrupted source transfer resumes exact bytes and yields bounded records preserving sequence boundaries, masks and chosen/rejected pairs; corrupted material rejects.
+      parameter_windows: Non-2x3 LoRA windows match independent frozen-batch SGD, checkpoint/resume and effective-operand merge; state admission is bounded.
+      language_objectives: Full-graph masked SFT and continued pretraining match scalar loss and finite-difference gradients; maximum observed gradient discrepancy is 1.6815505432532518e-08.
+      preference_objective: Sequence DPO matches independent loss, gradients and update; pair reversal and changed frozen reference alter the result; maximum gradient discrepancy is 1.4649370605468448e-09.
+      compiled_recovery: Exact-source training, recapture and complete regeneration produce the same child as clean derivation for FP32 and BF16; reload and interrupted publication preserve parent or exact child.
+      clients: Codex, Custom, Hermes, Ollama and OpenClaw mappings reach native, compiled and trained execution; all five reach the regenerated FP32 child, preserve tools/history and expose implemented capabilities.
+      validation: Fifteen focused and coupled tests passed with no failures or skips; static ledger has zero violations. Full suite, J and Q78 remain L04 gates.
+      review: Separate Terra reviewer on the same Mac returned PASS_READY for all twelve outcomes. Missing prepared operand rejects PAGE_CORRUPT; contradicted effective target rejects ROOT_INVALID.
+      proof_limit: Fixture/integration only. Finite-census support, conservative resource bounds and source-derived output windows are proved; useful real-model covers, physical drives, throughput, Q70 scale calibration and F4/F5 remain unproved.
   - id: L04
     title: Complete campaign tooling and the machine-to-drive handoff
     phase: NON_DRIVE_PREPARATION

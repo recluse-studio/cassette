@@ -10,8 +10,9 @@ the source-entry L01.5 gate; they make no live header request and move no model 
 row remains `NOT_RUN`.
 
 IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
-stages, L05-L10. L01 and L02 are DONE; L03 is next. L02 closes ordinary-source native execution
-at the fixture/integration boundary; the completed recovery proof remains retained.
+stages, L05-L10. L01-L03 are DONE; L04 is next. L02 closes ordinary-source native execution;
+L03 closes compiled execution, training, certificate recovery and client delivery at the
+fixture/integration boundary. Their completed recovery evidence remains retained.
 Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
 F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
 separate from the matrix phase labels used below. Consolidated preparation has no verified duration
