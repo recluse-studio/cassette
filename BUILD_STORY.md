@@ -7260,3 +7260,75 @@ for all six outcomes and is linked by the completed bootstrap head.
 Astra closed L02 on that fixture/integration evidence and set L03 next. The restricted source
 template subset and admitted F32 decoder/image operations define the current compatibility boundary.
 No physical-drive, real-model, throughput, complete-J, or F4/F5 result was claimed by this closeout.
+
+## L03 — compile, train, recover, and deliver the fixture
+
+Drew asked Astra to execute L03. The stage joins the ordinary-source runtime to compiled
+execution, language-model training, certificate recovery, and the named client protocols. Its
+boundary remains a scratch cartridge and deterministic source fixtures. The implementer is
+**Astra**, task `01a06e5f-67f0-79d2-b3e4-19ad63db8a72`.
+
+The first useful change was to share the generated model graph across inference, teacher capture,
+and differentiation. MLX supplies the operations, automatic differentiation, and SGD. Teacher
+capture now records actual activations, logits, gradients, and contribution ablations. The
+observation claim is an exact census of a finite declared input family. Repeating a deterministic
+forward pass does not create statistical confidence; the new contract makes that distinction
+explicit and rejects unsupported inputs.
+
+The compiler constructs source-addressed output-matrix windows and retains each construction
+checkpoint through the existing store. Representation loss, residual distortion, execution risk,
+and observation support remain separate. A source-derived rank-one control has positive
+representation loss. Independent rational arithmetic checks its rank, projective losses, and
+residual law. The established three-condition fixture supplies the counterexample to a
+pairwise-only cover. Composition uses the triangle inequality and Cauchy–Schwarz; this path
+admits no conditional quadrature. The declared read deadline is an enforced policy bound, not a
+storage-speed measurement.
+
+Two early shortcuts did not survive review. The first used the client's generation seed for
+private correction draws. Astra separated the correction key and retained it in runtime state.
+Terra then reproduced a serialization failure: most unsigned 64-bit keys exceed canonical JSON's
+safe integer range. The state now stores fixed-width hexadecimal text, and high counter keys enter
+the draw hash as text. The second shortcut scheduled only the output head. Exact operands elsewhere
+in the graph now enter the same existing page-acquisition state machine, with their physical bytes
+included in the compiled admission and their consumption bracketed by readiness transitions.
+
+Training consumes bounded sequence records, masked causal log probabilities, and chosen/rejected
+sequence probabilities against an immutable DPO reference. LoRA windows derive their dimensions
+from source tensors. All gradients for one batch use the same parameter snapshot; partial updates
+remain pending until the last window completes. This corrects the earlier sequential update that
+would have changed later gradients. Receipts bind the model, ordered adapters, batch, optimizer
+context, precision, and durable cursor before a checkpoint can advance. The development scalar
+oracle measured maximum gradient discrepancies of `1.6815505432532518e-08` for SFT and continued
+pretraining, and `1.4649370605468448e-09` for DPO.
+
+A compiled parent's training runs in explicit exact-source mode. The broker then captures the
+trained source, commits its effective target through the store, regenerates the affected certificate
+closure, and publishes the child through the existing generation journal. Terra initially described
+the absence of a separately named recovery operation as an L03 failure. On rereading Q21, Q70,
+and Q75, the reviewer withdrew that finding: L03 requires the recovery behavior, while calibration
+scale and held-out quality gates belong to F4/F5. Clean reconstruction and an interrupted publication
+remain the relevant fixture discriminators.
+
+The stdlib listener connects the five generated client mappings to the broker's actual operation
+stream. It preserves explicit conversation history and tool definitions, emits committed token
+output, supports cancellation, and advertises implemented capabilities. No inference service or
+additional process was introduced.
+
+Development checks retained both failures and corrections. One arithmetic assertion initially
+misread an exact rational certificate field as a float. Two long integration runs were stopped
+before acceptance after the implementation changed. A stack capture showed that recovery was
+rehashing every historical generation on every write. Recovery now stops after verifying the
+newest valid generation, while preserving fallback and complete-history enumeration for their
+respective callers. The coupled transaction and mathematical checks passed in 55.59 seconds.
+
+At this entry, L03 remains `IN_PROGRESS`, pending the frozen source attempt and its separate
+read-only review. Development logs and assessments are retained under
+`/Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build`. No physical-drive,
+real-model, useful-cover, throughput, or F4/F5 acceptance claim follows from these fixtures.
+The complete suite, J accounting, and removal gate remain assigned to L04.
+
+The final development candidate passed its three composite integration tests in 196.27 seconds.
+That run included FP32 and BF16 regeneration, bit-identical clean reconstruction, resumed compiled
+context, all five named clients on the regenerated FP32 child, and the rare-expert corpus.
+The static ledger reported zero violations. The candidate is ready to freeze for the recorded
+attempt; these development results alone do not close L03.

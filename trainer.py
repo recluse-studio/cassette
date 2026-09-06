@@ -12,7 +12,8 @@ import platform
 import struct
 
 from errors import CassetteError
-from schema.tables import DISPATCH_ROWS, MLX_RUNTIME
+from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, NATIVE_OBJECTIVES
+from schema.validator import validate
 from store import (
     PAGE_BYTES,
     CapacityCoordinator,
@@ -2712,3 +2713,217 @@ def adapter_merge_material(cartridge, root_digest: str) -> tuple[dict, ...]:
             "zero_point": codec["zero_point"],
         })
     return tuple(material)
+
+
+def native_training_state(cartridge, checkpoint_root: str, manifest_digest: str) -> dict:
+    """Q25: recover an exact bounded native-training checkpoint from verified store pages."""
+    root = load_root(cartridge, checkpoint_root)
+    if not root["deltas"] or root["deltas"][-1]["manifest_digest"] != manifest_digest:
+        _reject("ROOT_INVALID", checkpoint_root, "native checkpoint manifest is not the final ordered delta")
+    state = _decode(read_training_page(cartridge, checkpoint_root, manifest_digest), checkpoint_root, "native training state")
+    defects = validate("native_training_manifest", state)
+    if defects:
+        _reject("ROOT_INVALID", checkpoint_root, "; ".join(defects[:8]))
+    for name in ("cursor", "window", "step", "epochs", "seed", "window_limit_bytes"):
+        _counter(state[name], checkpoint_root, name, positive=name in {"epochs", "window_limit_bytes"})
+    if state["precision"] not in _DELTA_PRECISIONS or state["operation"] not in _TIER_A:
+        _reject("ROOT_INVALID", checkpoint_root, "native training precision or objective is unsupported")
+    if (state["complete"] != (state["step"] == state["epochs"]) or state["step"] > state["epochs"]
+            or len(state["pending_adapters"]) != state["window"]
+            or any(pending["tensor_id"] != original["tensor_id"] for pending, original in zip(state["pending_adapters"], state["adapters"]))):
+        _reject("ROOT_INVALID", checkpoint_root, "native checkpoint is not a prefix of the frozen global update")
+    if state["cursor"] >= len(state["dataset"]) or state["window"] >= len(state["adapters"]):
+        _reject("ROOT_INVALID", checkpoint_root, "native cursor is outside its frozen dataset or window catalog")
+    maps = {row["semantic_tensor_id"]: row for row in root["tensor_maps"]}
+    names = [row["tensor_id"] for row in state["adapters"]]
+    expected_losses = ((state["step"] * len(state["dataset"]) + state["cursor"]) * len(names) + state["window"])
+    if (names != sorted(set(names)) or len(state["losses"]) != expected_losses
+            or state["dataset_digest"] != digest_bytes(canonical_bytes(state["dataset"]))
+            or state["learning_rate"] <= 0 or state["beta"] <= 0
+            or (state["operation"] == "OFFLINE_ADAPTER_DPO") != (state["reference_root"] is not None)):
+        _reject("ROOT_INVALID", checkpoint_root, "native checkpoint schedule, dataset or window ownership differs")
+    for row in (*state["adapters"], *state["pending_adapters"]):
+        factors = _decode(read_training_page(cartridge, checkpoint_root, row["page_digest"]), row["page_digest"], "adapter factors")
+        shape = maps.get(row["tensor_id"], {}).get("shape", [])
+        if (validate("native_adapter_factors", factors) or row["shape"] != shape
+                or row["rank"] != len(factors["a"]) or row["rank"] > min(shape)
+                or len(factors["b"]) != shape[0]
+                or any(len(item) != shape[1] for item in factors["a"])
+                or any(len(item) != row["rank"] for item in factors["b"])
+                or row["state_bytes"] != row["rank"] * sum(shape) * 4
+                or 3 * row["state_bytes"] > state["window_limit_bytes"]):
+            _reject("ROOT_INVALID", row["tensor_id"], "native adapter shape, finite factors or state bound differs")
+    _admission_from_record(state["admission"], checkpoint_root)
+    expected_pages = {manifest_digest, *state["dataset"], *(item["page_digest"] for item in (*state["adapters"], *state["pending_adapters"]))}
+    if set(root["deltas"][-1]["ordered_page_digests"]) != expected_pages:
+        _reject("ROOT_INVALID", checkpoint_root, "native checkpoint pages differ from its complete state")
+    return state
+
+
+def _native_checkpoint(cartridge, state: dict, payloads: tuple[bytes, ...], owner: CapacityCoordinator,
+                       previous_root: str | None = None, retained_pages: tuple[PageLocation, ...] = ()) -> tuple[str, str]:
+    payload = canonical_bytes(state)
+    if len(payload) > PAGE_BYTES or any(len(item) > PAGE_BYTES for item in payloads):
+        _reject("MEMORY_BUDGET_EXCEEDED", state["job_id"], "one native checkpoint record exceeds its declared page")
+    new_pages = stage_training_pages(cartridge, tuple(dict.fromkeys((*payloads, payload))),
+        capacity_controller=owner, operation_id="native-" + state["job_id"].split(":")[1], boundary_id="native-training-checkpoint")
+    retained = {} if previous_root is None else {item.page_digest: item for item in page_locations(cartridge, previous_root)}
+    retained.update({item.page_digest: item for item in (*retained_pages, *new_pages)})
+    manifest = digest_bytes(payload)
+    ordered = list(dict.fromkeys([manifest, *state["dataset"], *(item["page_digest"] for item in (*state["adapters"], *state["pending_adapters"]))]))
+    candidate = append_staged_training_delta(cartridge, state["parent_root"], "adapter",
+        tuple(retained[key] for key in ordered), manifest, capacity_controller=owner, operation_id="native-" + state["job_id"].split(":")[1])
+    native_training_state(cartridge, candidate, manifest)
+    return candidate, manifest
+
+
+def prepare_native_training(cartridge, parent_root: str, operation: str, adapters: dict,
+                            dataset, *, epochs: int, learning_rate: float,
+                            precision: str, seed: int, window_limit_bytes: int,
+                            reference_root: str | None, beta: float,
+                            capacity_controller: CapacityCoordinator, resource_profile: TrainingResourceProfile,
+                            memory_peak_bytes: int) -> tuple[str, str]:
+    """Q21/Q23/Q25: freeze sequence records and shape-derived adapter windows on the cartridge."""
+    if operation not in _TIER_A or precision not in _DELTA_PRECISIONS:
+        _reject("TRAINING_UNSUPPORTED", operation, "native training objective or delta precision is unsupported")
+    if not capacity_controller.owns(cartridge):
+        _reject("INVALID_REQUEST", parent_root, "native training requires the cartridge capacity owner")
+    if (type(epochs) is not int or not 0 < epochs <= _MAX_STEPS
+            or type(learning_rate) not in (int, float) or not math.isfinite(learning_rate) or learning_rate <= 0
+            or type(window_limit_bytes) is not int or window_limit_bytes <= 0
+            or type(seed) is not int or not 0 <= seed < 2**32
+            or type(beta) not in (int, float) or not math.isfinite(beta) or beta <= 0):
+        _reject("INVALID_REQUEST", parent_root, "native training schedule or numerical bounds are invalid")
+    if isinstance(dataset, (bytes, str, dict)):
+        _reject("INVALID_REQUEST", parent_root, "dataset requires an iterable of bounded immutable sequence records")
+    if (operation == "OFFLINE_ADAPTER_DPO") != (reference_root is not None):
+        _reject("INVALID_REQUEST", parent_root, "only DPO requires one frozen reference root")
+    root = load_root(cartridge, parent_root)
+    maps = {item["semantic_tensor_id"]: item for item in root["tensor_maps"]}
+    rows, payloads = [], []
+    if not isinstance(adapters, dict) or not 0 < len(adapters) <= _MAX_PARAMETERS:
+        _reject("INVALID_REQUEST", parent_root, "native adapter catalog must contain bounded source windows")
+    for name, adapter in sorted(adapters.items()):
+        shape = maps.get(name, {}).get("shape", [])
+        if len(shape) != 2 or set(adapter) != {"a", "b", "scale"}:
+            _reject("TRAINING_UNSUPPORTED", name, "adapter does not name a source matrix and LoRA factors")
+        a, b = adapter["a"], adapter["b"]
+        rank = len(a)
+        if (not 0 < rank <= min(shape) or len(b) != shape[0] or any(len(row) != shape[1] for row in a)
+                or any(len(row) != rank for row in b)
+                or any(type(value) not in (int, float) or not math.isfinite(value) for row in (*a, *b) for value in row)
+                or type(adapter["scale"]) not in (int, float) or not math.isfinite(adapter["scale"])):
+            _reject("INVALID_REQUEST", name, "adapter factors or scale differ from the source matrix")
+        state_bytes = rank * sum(shape) * 4
+        if state_bytes * 3 > window_limit_bytes:
+            _reject("MEMORY_BUDGET_EXCEEDED", name, "adapter, gradient and SGD result exceed the current window limit")
+        payload = canonical_bytes(adapter)
+        rows.append({"tensor_id": name, "shape": shape, "rank": rank, "page_digest": digest_bytes(payload),
+                     "state_bytes": state_bytes})
+        payloads.append(payload)
+    dataset_pages = []
+    dataset_bytes = 0
+    def records():
+        nonlocal dataset_bytes
+        for item in dataset:
+            if not isinstance(item, bytes) or not 0 < len(item) <= PAGE_BYTES or len(dataset_pages) >= _MAX_STEPS:
+                _reject("INVALID_REQUEST", parent_root, "dataset record or count exceeds its finite admission")
+            dataset_pages.append(digest_bytes(item))
+            dataset_bytes += len(item)
+            yield item
+    locations = stage_training_pages(cartridge, records(), capacity_controller=capacity_controller,
+        operation_id="native-dataset-" + parent_root.split(":")[1], boundary_id="native-dataset")
+    dataset_digest = digest_bytes(canonical_bytes(dataset_pages))
+    body = {"parent_root": parent_root, "operation": operation, "adapters": rows,
+            "dataset": dataset_pages, "dataset_digest": dataset_digest,
+            "epochs": epochs, "learning_rate": learning_rate, "precision": precision, "seed": seed,
+            "window_limit_bytes": window_limit_bytes, "reference_root": reference_root, "beta": beta}
+    state = {"version": "native-training-v1", **body, "job_id": digest_bytes(canonical_bytes(body)),
+             "cursor": 0, "window": 0, "step": 0, "losses": [], "complete": False, "pending_adapters": []}
+    updates = epochs * len(dataset_pages) * len(rows)
+    if updates > _MAX_UPDATES:
+        _reject("TRAINING_UNSUPPORTED", parent_root, "native update count exceeds its finite schedule")
+    parameters = sum(row["state_bytes"] // 4 for row in rows)
+    committed = sum(item.length for item in page_locations(cartridge, parent_root))
+    # Bound JSON encodings, root/index publication and one manifest per durable window.
+    encoded_state_bound = len(canonical_bytes(state)) + parameters * 32 + updates * 32
+    root_bound = len(canonical_bytes(root)) + len(page_locations(cartridge, parent_root)) * 128 + encoded_state_bound * 2
+    workload = TrainingWorkload(state["job_id"], committed, committed, dataset_bytes,
+        updates * max(root_bound, parameters * 4), updates * 8, 0,
+        (updates + 1) * encoded_state_bound, (updates + 1) * committed,
+        memory_peak_bytes, updates, parameters, 4)
+    admission = admit_training(workload, resource_profile, capacity_coordinator=capacity_controller)
+    state["admission"] = admission.record()
+    return _native_checkpoint(cartridge, state, tuple(payloads), capacity_controller, retained_pages=locations)
+
+
+def native_training_inputs(cartridge, checkpoint_root: str, manifest_digest: str) -> tuple[dict, dict, dict]:
+    """Q23: decode only the current sequence and its small adapter catalog from verified pages."""
+    state = native_training_state(cartridge, checkpoint_root, manifest_digest)
+    if state["complete"]:
+        _reject("INVALID_REQUEST", state["job_id"], "completed training has no next sequence")
+    batch = _decode(read_training_page(cartridge, checkpoint_root, state["dataset"][state["cursor"]]),
+                    state["job_id"], "language-model sequence")
+    adapters = {row["tensor_id"]: _decode(read_training_page(cartridge, checkpoint_root, row["page_digest"]),
+                 state["job_id"], "adapter factors") for row in state["adapters"]}
+    return state, batch, adapters
+
+
+def native_training_context(state: dict, manifest_digest: str) -> dict:
+    """Q25/Q70/Q72: bind one gradient to its frozen optimizer and durable cursor."""
+    return {**{name: state[name] for name in ("job_id", "cursor", "window", "step", "precision", "seed", "learning_rate")},
+            "manifest_digest": manifest_digest}
+
+
+def advance_native_training(cartridge, checkpoint_root: str, manifest_digest: str, result: dict, *,
+                            capacity_controller: CapacityCoordinator) -> tuple[str, str]:
+    """Q21/Q25: apply one generated SGD update and checkpoint its exact next cursor."""
+    state, batch, adapters = native_training_inputs(cartridge, checkpoint_root, manifest_digest)
+    admission = restore_training_admission(state["admission"], capacity_coordinator=capacity_controller)
+    if result.get("execution_mode") != "EXACT_SOURCE_TRAINING" or result.get("objective_dispatch_digest") != digest_bytes(canonical_bytes(NATIVE_OBJECTIVES)):
+        _reject("UNSUPPORTED_OPERATOR", state["job_id"], "gradient did not use the generated objective dispatch")
+    if result.get("declared_peak_bytes", math.inf) > admission.workload.memory_peak_bytes:
+        _reject("MEMORY_BUDGET_EXCEEDED", state["job_id"], "gradient peak exceeds the frozen training admission")
+    row = state["adapters"][state["window"]]
+    name = row["tensor_id"]
+    expected_binding = {"root_digest": state["parent_root"], "operation": state["operation"],
+                        "batch": batch, "adapters": adapters, "window": name,
+                        "reference_root": state["reference_root"], "beta": state["beta"],
+                        "training_context": native_training_context(state, manifest_digest),
+                        "source_binding": {"plan": digest_bytes(canonical_bytes(load_root(cartridge, state["parent_root"])["plans"][0])),
+                                           "deltas": digest_bytes(canonical_bytes(load_root(cartridge, state["parent_root"])["deltas"]))},
+                        "execution_mode": "EXACT_SOURCE_TRAINING"}
+    if result.get("input_digest") != digest_bytes(canonical_bytes(expected_binding)):
+        _reject("GRADIENT_INVALID", name, "gradient receipt differs from the frozen model, batch, adapter window or reference")
+    if result.get("receipt_digest") != digest_bytes(canonical_bytes({key: value for key, value in result.items() if key != "receipt_digest"})):
+        _reject("GRADIENT_INVALID", name, "gradient receipt contents changed before checkpoint")
+    mx, optim = _runtime()
+    parameters = {key: mx.array(adapters[name][key], dtype=mx.float32) for key in ("a", "b")}
+    gradients = {key: mx.array(result["gradients"][key], dtype=mx.float32) for key in ("a", "b")}
+    if any(parameters[key].shape != gradients[key].shape or not bool(mx.all(mx.isfinite(gradients[key])).item()) for key in parameters) or not math.isfinite(result["loss"]):
+        _reject("GRADIENT_INVALID", name, "native gradient shape or finite loss differs from its window")
+    optimizer = optim.SGD(learning_rate=state["learning_rate"])
+    updated = optimizer.apply_gradients(gradients, parameters)
+    mx.eval(updated)
+    if any(not bool(mx.all(mx.isfinite(value)).item()) for value in updated.values()):
+        _reject("GRADIENT_INVALID", name, "SGD produced nonfinite adapter parameters")
+    if state["precision"] == "BF16":
+        updated = {key: value.astype(mx.bfloat16).astype(mx.float32) for key, value in updated.items()}
+        mx.eval(updated)
+        if any(not bool(mx.all(mx.isfinite(value)).item()) for value in updated.values()):
+            _reject("GRADIENT_INVALID", name, "BF16 storage conversion produced nonfinite adapter parameters")
+    adapter = {**{key: value.tolist() for key, value in updated.items()}, "scale": adapters[name]["scale"]}
+    payload = canonical_bytes(adapter)
+    state["pending_adapters"].append({**row, "page_digest": digest_bytes(payload)})
+    state["losses"].append(result["loss"])
+    state["window"] += 1
+    if state["window"] == len(state["adapters"]):
+        state["adapters"] = state["pending_adapters"]
+        state["pending_adapters"] = []
+        state["window"] = 0
+        state["cursor"] += 1
+        if state["cursor"] == len(state["dataset"]):
+            state["cursor"] = 0
+            state["step"] += 1
+            state["complete"] = state["step"] == state["epochs"]
+    return _native_checkpoint(cartridge, state, (payload,), capacity_controller, checkpoint_root)

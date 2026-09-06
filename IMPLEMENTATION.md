@@ -2078,7 +2078,7 @@ phase_live_queue:
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: TODO
+    status: IN_PROGRESS
     attempts: []
   - id: L04
     title: Complete campaign tooling and the machine-to-drive handoff

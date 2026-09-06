@@ -18,6 +18,9 @@ from types import MappingProxyType
 
 from compiler import (
     PreparedRevision,
+    prepare_native_training_child,
+    prepare_native_compiled,
+    prepare_native_effective_source,
     decode_native_tokens,
     render_native_input,
     verify_native_bundle,
@@ -27,7 +30,7 @@ from compiler import (
     verify_bundle_structure,
 )
 from errors import CassetteError
-from pager import CertifiedSchedule, NativeTransformer, admit_schedule, merge_adapter_material
+from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
@@ -52,7 +55,7 @@ from store import (
     pause_capacity_claim,
     verify_root_content,
 )
-from trainer import adapter_merge_material
+from trainer import (adapter_merge_material, advance_native_training, native_training_inputs, native_training_state, native_training_context)
 
 PROTOCOL_VERSION = "1"
 PREPARE_OPERATION = "prepare"
@@ -574,6 +577,7 @@ class CanonicalBroker:
         self._owner_fd = descriptor
         self._execution_locks: dict[str, asyncio.Lock] = {}
         self._control_signals: dict[str, asyncio.Event] = {}
+        self._event_signals: dict[str, asyncio.Event] = {}
         self._active: dict[str, bool] = {}
         self._profiles: dict[str, dict] = {}
         self._profile_activators: dict[str, Callable[[ScheduledLease, dict], object]] = {}
@@ -1461,8 +1465,13 @@ class CanonicalBroker:
             if emitted != tokens[:len(emitted)]:
                 _reject("ROOT_INVALID", operation_id, "broker token events differ from the committed context")
             for index in range(len(emitted), len(tokens)):
+                previous_text = decode_native_tokens(cartridge, root_digest, tokens[:index])
+                current_text = decode_native_tokens(cartridge, root_digest, tokens[:index + 1])
+                if not current_text.startswith(previous_text):
+                    _reject("CAPABILITY_MISMATCH", operation_id, "source tokenizer cannot emit a stable append-only text delta")
                 record = self._append(record, "output_delta", {
                     "token_index": index, "token": tokens[index], "committed_root": root_digest,
+                    "text": current_text[len(previous_text):],
                 })
 
         async def generate():
@@ -1480,8 +1489,8 @@ class CanonicalBroker:
                 if len(tokens) >= maximum:
                     return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
                             "root_digest": pin.root_digest, "position": runtime.state["position"],
-                            "execution_mode": "NATIVE"}
-                candidate = runtime.step(rendered["token_ids"], seed=arguments["seed"],
+                            "execution_mode": "COMPILED_CERTIFIED" if runtime.compiled else "NATIVE"}
+                candidate = await runtime.execute_step(rendered["token_ids"], seed=arguments["seed"],
                                          temperature=arguments["temperature"], pixels=arguments.get("pixels"))
                 pin = await _await_completion(asyncio.to_thread(
                     commit_runtime_state, cartridge, pin.root_digest, operation_id, candidate["payload"],
@@ -1492,6 +1501,219 @@ class CanonicalBroker:
 
         async with self._model_execution_lock:
             return await self.execute(request, generate)
+
+    async def train_native(self, request: dict, cartridge, profile: dict,
+                           capacity_controller: CapacityCoordinator) -> dict:
+        """Q5/Q21/Q25/Q73: own objective evaluation, durable windows and child publication."""
+        arguments = request.get("arguments", {})
+        if (request.get("operation") != "train" or set(arguments) != {"checkpoint_root", "manifest_digest"}
+                or not capacity_controller.owns(cartridge)):
+            _reject("INVALID_REQUEST", "native-training", "training requires a prepared checkpoint and its capacity owner")
+        operation_id = self.operation_id(request)
+        async def train():
+            checkpoint, manifest = arguments["checkpoint_root"], arguments["manifest_digest"]
+            record = self._load(operation_id)
+            if record["checkpoint"]:
+                checkpoint, manifest = record["checkpoint"]["checkpoint_root"], record["checkpoint"]["manifest_digest"]
+            state = native_training_state(cartridge, checkpoint, manifest)
+            parent = load_root(cartridge, state["parent_root"])
+            if request.get("target") != parent["identity"]:
+                _reject("IDENTITY_MISMATCH", operation_id, "training target differs from the frozen parent")
+            verify_native_bundle(cartridge, state["parent_root"], exact_source=True)
+            runtime = NativeTransformer(cartridge, state["parent_root"], profile, operation_id, state["job_id"], purpose="EXACT_SOURCE_TRAINING")
+            reference = None
+            if state["reference_root"]:
+                verify_native_bundle(cartridge, state["reference_root"], exact_source=True)
+                reference = NativeTransformer(cartridge, state["reference_root"], profile, operation_id, state["job_id"], purpose="EXACT_SOURCE_TRAINING")
+            while not state["complete"]:
+                state, batch, adapters = native_training_inputs(cartridge, checkpoint, manifest)
+                result = runtime.objective(state["operation"], batch, adapters,
+                    differentiate=state["adapters"][state["window"]]["tensor_id"], reference=reference, beta=state["beta"],
+                    training_context=native_training_context(state, manifest))
+                checkpoint, manifest = await _await_completion(asyncio.to_thread(
+                    advance_native_training, cartridge, checkpoint, manifest, result, capacity_controller=capacity_controller))
+                self._write({**self._load(operation_id), "checkpoint": {
+                    "checkpoint_root": checkpoint, "manifest_digest": manifest}})
+                state = native_training_state(cartridge, checkpoint, manifest)
+                await asyncio.sleep(0)
+            compiled_parent = parent["plans"][0].get("compiled")
+            if compiled_parent:
+                teacher = NativeTransformer(cartridge, checkpoint, profile, operation_id, state["job_id"], purpose="EXACT_SOURCE_OBSERVATION")
+                tensor_id = teacher.graph["nodes"][-1]["weights"][0]
+                source, target = prepare_native_effective_source(cartridge, checkpoint, tensor_id, teacher.effective_tensor(tensor_id),
+                    capacity_controller=capacity_controller, operation_id=operation_id)
+                workload = json.loads(canonical_bytes(compiled_parent["observations"]["workload"]))
+                workload["baseline"]["root_digest"] = source
+                observations = capture_native(cartridge, source, profile, workload)
+                child = prepare_native_compiled(cartridge, source, observations, compiled_parent["horizon"],
+                    compiled_parent["profile"], compiled_parent["prior_failures"], capacity_controller=capacity_controller,
+                    operation_id=operation_id, effective_target=target, rank_budget=compiled_parent["rank_budget"],
+                    read_deadline_ns=compiled_parent["read_deadline_ns"])
+            else:
+                child = prepare_native_training_child(cartridge, state["parent_root"], checkpoint, manifest,
+                    capacity_controller=capacity_controller, operation_id=operation_id)
+            pin = await _await_completion(asyncio.to_thread(commit_generation, cartridge, operation_id, child,
+                expected_parent_root=state["parent_root"], capacity_controller=capacity_controller, operation_id=operation_id))
+            return {"root_digest": pin.root_digest, "identity": pin.child_id, "manifest_digest": manifest}
+        async with self._model_execution_lock:
+            return await self.execute(request, train)
+
+    def native_capability(self, cartridge) -> dict:
+        """Q31/Q77: describe only the currently published graph and implemented client behavior."""
+        pin = recover_generation(cartridge)
+        if pin is None:
+            _reject("IDENTITY_MISMATCH", "capabilities", "cartridge has no published model")
+        root = load_root(cartridge, pin.root_digest)
+        graph = verify_native_bundle(cartridge, pin.root_digest)
+        result = {"protocol_version": "1", "model_refs": [root["identity"]], "modalities": ["text"],
+                  "context": {"maximum_tokens": graph["context_limit"], "history": "EXPLICIT_MESSAGES"},
+                  "reasoning": False, "tools": {"prompt_definitions": True, "generated_calls": False},
+                  "structured_output": {"supported": False}, "streaming": True, "cancellation": True,
+                  "training": {"operations": ["ADAPTER_SFT", "ADAPTER_CONTINUED_PRETRAINING", "OFFLINE_ADAPTER_DPO"],
+                               "preparation": "IMMUTABLE_CHECKPOINT", "compiled_recovery": "compiled" in root["plans"][0]},
+                  "source": {"identity": root["identity"], "root_digest": pin.root_digest,
+                             "execution_mode": "COMPILED_CERTIFIED" if "compiled" in root["plans"][0] else "NATIVE"},
+                  "performance_tiers": []}
+        defects = validate("capability_profile", result)
+        if defects:
+            _reject("ROOT_INVALID", root["identity"], "; ".join(defects[:8]))
+        return result
+
+    def client_request(self, request: dict) -> dict:
+        """Q31/Q76: route a canonical client request through actual committed model execution."""
+        defects = validate("run_request", request)
+        if defects:
+            _reject("INVALID_REQUEST", "client-run", "; ".join(defects[:8]))
+        if any(name in request for name in ("reasoning", "output_schema", "context_ref", "extensions")):
+            _reject("CAPABILITY_MISMATCH", request["idempotency_key"], "runtime cannot silently consume an unimplemented reasoning, schema, context or extension contract")
+        messages = request["input"]
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+        generation = request.get("generation", {})
+        options = generation.get("options", {})
+        allowed = {"max_output_tokens", "max_completion_tokens", "temperature", "seed", "stream", "options"}
+        if set(generation) - allowed or not isinstance(options, dict) or set(options) - {"temperature", "seed", "num_predict"}:
+            _reject("CAPABILITY_MISMATCH", request["idempotency_key"], "client generation settings have no exact implemented runtime meaning")
+        for names, values in ((('seed',), [generation.get('seed'), options.get('seed')]),
+                              (('temperature',), [generation.get('temperature'), options.get('temperature')]),
+                              (('maximum output tokens',), [generation.get('max_output_tokens'), generation.get('max_completion_tokens'), options.get('num_predict')])):
+            present = [value for value in values if value is not None]
+            if present and any(value != present[0] for value in present):
+                _reject("CAPABILITY_MISMATCH", request["idempotency_key"], f"conflicting client values for {names[0]}")
+        if generation.get("stream", True) is not True:
+            _reject("CAPABILITY_MISMATCH", request["idempotency_key"], "listener currently requires streaming output")
+        arguments = {"messages": messages, "tools": request.get("tools", []),
+            "seed": generation.get("seed", options.get("seed", 0)),
+            "temperature": generation.get("temperature", options.get("temperature", 0.0)),
+            "max_tokens": generation.get("max_output_tokens", generation.get("max_completion_tokens", options.get("num_predict", 1)))}
+        canonical = {"protocol_version": "1", "operation": "run", "idempotency_key": request["idempotency_key"],
+                     "target": request["model_ref"], "arguments": arguments}
+        return canonical
+
+    async def run_client(self, request: dict, cartridge, profile: dict,
+                         capacity_controller: CapacityCoordinator) -> tuple[dict, list[dict]]:
+        canonical = self.client_request(request)
+        result = await self.generate_native(canonical, cartridge, profile, capacity_controller)
+        return result, list(self.events(self.operation_id(canonical)))
+
+    async def stream_client(self, request: dict, cartridge, profile: dict,
+                            capacity_controller: CapacityCoordinator):
+        """Q5/Q31: stream each committed event while the owned generation is still running."""
+        canonical = self.client_request(request)
+        operation_id = self.operation_id(canonical)
+        signal = self._event_signals.setdefault(operation_id, asyncio.Event())
+        self.issue(canonical)
+        task = asyncio.create_task(self.generate_native(canonical, cartridge, profile, capacity_controller))
+        cursor = -1
+        try:
+            while True:
+                signal.clear()
+                for event in self.events(operation_id, after=cursor):
+                    cursor = event["sequence"]
+                    yield event
+                if task.done():
+                    await task
+                    for event in self.events(operation_id, after=cursor):
+                        yield event
+                    break
+                waiter = asyncio.create_task(signal.wait())
+                try:
+                    await asyncio.wait((waiter, task), return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    waiter.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await waiter
+        finally:
+            if not task.done():
+                task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._event_signals.pop(operation_id, None)
+
+    async def listen(self, handler, *, port: int = 0):
+        """Q5/Q76: stream bounded HTTP or JSONL requests on this process's loopback socket."""
+        async def connection(reader, writer):
+            jsonl, started = False, False
+            responses = None
+            try:
+                first = await asyncio.wait_for(reader.readline(), 10)
+                if len(first) > 65536:
+                    _reject("INVALID_REQUEST", "loopback", "request line exceeds 64 KiB")
+                jsonl = first.startswith(b"{")
+                if jsonl:
+                    wire = {"encoding": "jsonl", "record": json.loads(first)}
+                else:
+                    method, path, version = first.decode('ascii').strip().split(' ')
+                    if version != "HTTP/1.1" or method not in {"POST", "GET"}:
+                        _reject("INVALID_REQUEST", "loopback", "listener requires a declared HTTP/1.1 GET or POST surface")
+                    headers, total = {}, len(first)
+                    while True:
+                        line = await asyncio.wait_for(reader.readline(), 10)
+                        total += len(line)
+                        if total > 65536 or not line:
+                            _reject("INVALID_REQUEST", "loopback", "headers exceed their bound or ended before the body")
+                        if line == b"\r\n":
+                            break
+                        name, value = line.decode('ascii').split(':', 1)
+                        if name.lower() in {item.lower() for item in headers}:
+                            _reject("INVALID_REQUEST", "loopback", "duplicate request header")
+                        headers[name] = value.strip()
+                    lower = {name.lower(): value for name, value in headers.items()}
+                    length = int(lower.get("content-length", "0"))
+                    if "transfer-encoding" in lower or not 0 <= length <= 1048576 or (method == "POST" and not length):
+                        _reject("INVALID_REQUEST", "loopback", "body requires one bounded explicit content length")
+                    body = json.loads(await asyncio.wait_for(reader.readexactly(length), 10)) if length else {}
+                    translated = {name: value for name, value in headers.items() if name.lower() not in {"host", "content-length", "connection"}}
+                    wire = {"method": method, "path": path, "headers": translated, "body": body}
+                responses = handler(wire)
+                async for response in responses:
+                    encoding = response["encoding"]
+                    if not started and not jsonl:
+                        content_type = {"sse": "text/event-stream", "json": "application/json"}.get(encoding, "application/x-ndjson")
+                        writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".encode())
+                    started = True
+                    for frame in response.get("frames", response.get("records", [])):
+                        payload = (b"data: " + canonical_bytes(frame) + b"\n\n") if encoding == "sse" else canonical_bytes(frame) + b"\n"
+                        writer.write(payload if jsonl else f"{len(payload):x}\r\n".encode() + payload + b"\r\n")
+                        await writer.drain()
+                if not jsonl:
+                    writer.write(b"0\r\n\r\n")
+                    await writer.drain()
+            except (CassetteError, ValueError, UnicodeError, asyncio.IncompleteReadError, TimeoutError) as error:
+                failure = error if isinstance(error, CassetteError) else CassetteError("INVALID_REQUEST", "loopback", "Q6: bounded request parsing", "terminal", str(error))
+                payload = canonical_bytes({"error": failure.payload()}) + b"\n"
+                if not started:
+                    writer.write(payload if jsonl else f"HTTP/1.1 400 Bad Request\r\nContent-Length: {len(payload)}\r\nConnection: close\r\n\r\n".encode() + payload)
+                    await writer.drain()
+            except (ConnectionError, BrokenPipeError):
+                pass
+            finally:
+                if responses is not None:
+                    await responses.aclose()
+                writer.close()
+                with suppress(ConnectionError, BrokenPipeError):
+                    await writer.wait_closed()
+        return await asyncio.start_server(connection, "127.0.0.1", port, limit=65537)
 
     async def export_revision(
         self,
@@ -1654,6 +1876,12 @@ class CanonicalBroker:
         """Return only a store-verified generation whose broker phase reached PUBLISHED."""
 
         record = self._load(operation_id)
+        if record["kind"] == "train" and record["state"] == "SUCCEEDED":
+            pin = recover_generation(cartridge)
+            if pin is None or pin.root_digest != record["result"]["root_digest"] or pin.child_id != record["result"]["identity"]:
+                _reject("ROOT_INVALID", operation_id, "training result differs from its published generation")
+            verify_native_bundle(cartridge, pin.root_digest)
+            return pin
         if record["phase"] not in {"PUBLISHED", "ACTIVE"}:
             _reject(
                 "OPERATION_NOT_FOUND",
@@ -2028,8 +2256,13 @@ class CanonicalBroker:
             if record["phase"] == "ACTIVE" and record["state"] != "SUCCEEDED":
                 _reject("ROOT_INVALID", object_id, "ACTIVE preparation must be successful")
             self._verify_checkpoint(record, object_id)
+        elif record["kind"] == "train" and record["checkpoint"]:
+            if record["phase"] != "EMPTY" or set(record["checkpoint"]) != {"checkpoint_root", "manifest_digest"}:
+                _reject("ROOT_INVALID", object_id, "training checkpoint fields or phase differ")
+            for field, value in record["checkpoint"].items():
+                _exact_digest(value, object_id, field)
         elif record["phase"] != "EMPTY" or record["checkpoint"]:
-            _reject("ROOT_INVALID", object_id, "non-preparation operation must retain EMPTY phase and checkpoint")
+            _reject("ROOT_INVALID", object_id, "operation has an unowned checkpoint")
         return record
 
     def _verify_checkpoint(self, record: dict, object_id: str) -> None:
@@ -2205,6 +2438,9 @@ class CanonicalBroker:
         event = self._event(record["operation_id"], len(record["events"]), event_type, payload)
         updated = {**record, **changes, "events": [*record["events"], event]}
         self._write(updated)
+        signal = self._event_signals.get(record["operation_id"])
+        if signal is not None:
+            signal.set()
         return updated
 
     @staticmethod

@@ -2953,18 +2953,30 @@ def derive_root(
     *,
     capacity_controller: CapacityTransitionController | None = None,
     operation_id: str | None = None,
+    additional_pages: tuple[PageLocation, ...] = (),
 ) -> str:
     """Publish one child revision or same-identity plan manifest over verified existing pages."""
 
     cartridge, parent, identity_record, canonical_plans, locations = _derived_root_inputs(
         cartridge, parent_root_digest, material, plans
     )
+    if not isinstance(additional_pages, tuple) or any(not isinstance(page, PageLocation) for page in additional_pages):
+        _q57_reject(parent_root_digest, "derived content pages require exact store locations", "INVALID_REQUEST")
+    for page in additional_pages:
+        _read_page(cartridge, page)
+    maps = {row["semantic_tensor_id"]: row for row in parent["tensor_maps"]}
+    existing = {page.page_digest for page in locations}
+    for page in additional_pages:
+        if page.page_digest not in existing:
+            name = "state.compiled." + page.page_digest.split(":")[1]
+            maps[name] = TensorMap(name, (page.length,), "U8", (TensorSpan(page.page_digest, 0, page.length, 0),)).record()
+    locations = tuple(sorted({page.page_digest: page for page in (*locations, *additional_pages)}.values(), key=lambda page: page.page_digest))
     return _write_cartridge_root(
         cartridge,
         material,
         identity_record,
         parent["provenance"]["containers"],
-        parent["tensor_maps"],
+        sorted(maps.values(), key=lambda row: row["semantic_tensor_id"]),
         locations,
         canonical_plans,
         parent["deltas"],
@@ -3500,27 +3512,35 @@ def repack_segments(
     return root_digest
 
 
-def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str) -> bytes:
-    """Resolve every Q57 span for one semantic tensor and return its exact source bytes."""
-
+def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str,
+                *, offset: int = 0, length: int | None = None) -> bytes:
+    """Resolve verified Q57 spans for one tensor or one bounded byte interval."""
     cartridge = Path(cartridge)
     root = load_root(cartridge, root_digest)
-    matches = [
-        tensor_map for tensor_map in root["tensor_maps"]
-        if tensor_map["semantic_tensor_id"] == semantic_tensor_id
-    ]
+    matches = [row for row in root["tensor_maps"] if row["semantic_tensor_id"] == semantic_tensor_id]
     if len(matches) != 1:
         _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} is absent or duplicated")
+    spans = matches[0]["spans"]
+    size = sum(span["length"] for span in spans)
+    length = size-offset if length is None else length
+    if type(offset) is not int or type(length) is not int or offset < 0 or length < 0 or offset+length > size:
+        _q57_reject(root_digest, "tensor byte interval is outside its verified span map", "INVALID_REQUEST")
     locations = _read_index(cartridge, root_digest)
     output = bytearray()
-    for span in matches[0]["spans"]:
-        if span["tensor_offset"] != len(output) or span["page_digest"] not in locations:
-            _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} has a discontinuous span map")
+    for span in spans:
+        start = max(offset, span["tensor_offset"])
+        end = min(offset+length, span["tensor_offset"]+span["length"])
+        if end <= start:
+            continue
+        if start != offset+len(output) or span["page_digest"] not in locations:
+            _q57_reject(root_digest, "tensor interval has a discontinuous or absent span")
         page = _read_page(cartridge, locations[span["page_digest"]])
-        end = span["offset"] + span["length"]
-        if end > len(page):
-            _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} exceeds its content page")
-        output.extend(page[span["offset"]:end])
+        source = span["offset"] + start-span["tensor_offset"]
+        if source+end-start > len(page):
+            _q57_reject(root_digest, "tensor interval exceeds its verified content page")
+        output.extend(page[source:source+end-start])
+    if len(output) != length:
+        _q57_reject(root_digest, "tensor interval has incomplete source coverage")
     return bytes(output)
 
 
@@ -6138,7 +6158,7 @@ def _verify_generation_binding(cartridge: Path, record: dict, root: dict) -> Non
         _transaction_reject(object_id, "child identity does not match the Q73 preimage")
 
 
-def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[GenerationPin, ...]:
+def _valid_generations(cartridge: Path, verify_dependencies: bool, *, highest_only: bool = False) -> tuple[GenerationPin, ...]:
     pins = []
     failures = []
     for path in _generation_files(cartridge):
@@ -6148,6 +6168,8 @@ def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[Gene
                     if verify_dependencies else load_root(cartridge, record["root_digest"]))
             _verify_generation_binding(cartridge, record, root)
             pins.append(GenerationPin(record["generation"], record["child_id"], record["root_digest"]))
+            if highest_only:
+                break
         except CassetteError as error:
             failures.append(error)
     if not pins and failures:
@@ -6158,14 +6180,14 @@ def _valid_generations(cartridge: Path, verify_dependencies: bool) -> tuple[Gene
 def pin_generation(cartridge: str | Path) -> GenerationPin | None:
     """Pin the highest callable generation without allowing a later commit to change this reader."""
 
-    generations = _valid_generations(Path(cartridge), False)
+    generations = _valid_generations(Path(cartridge), False, highest_only=True)
     return generations[0] if generations else None
 
 
 def recover_generation(cartridge: str | Path) -> GenerationPin | None:
     """Rehash every dependency and select the highest valid generation after mount or process death."""
 
-    generations = _valid_generations(Path(cartridge), True)
+    generations = _valid_generations(Path(cartridge), True, highest_only=True)
     return generations[0] if generations else None
 
 

@@ -1845,3 +1845,45 @@ async def transfer_artifact(
         reset_checkpoint(header, header["generation"], "whole-digest")
         _transfer_fail("IDENTITY_MISMATCH", artifact.path, "whole source digest differs after all ranges completed")
     return _partial(header, chunk_digests)
+
+
+def training_records(artifact: Artifact, extent: TransferExtent, state: PartialState,
+                     *, record_limit_bytes: int):
+    """Q23/Q51: stream verified NDJSON records from a completed store-granted source extent."""
+    if (not isinstance(artifact, Artifact) or not isinstance(state, PartialState)
+            or state.object_size != artifact.size or state.contiguous_source_hash_offset != artifact.size
+            or state.completed_interval_set != ((0, artifact.size),)
+            or type(record_limit_bytes) is not int or not 0 < record_limit_bytes <= 4194304):
+        _transfer_fail("INVALID_REQUEST", "training-dataset", "dataset requires a complete transfer and a bounded record size")
+    _extent(extent, artifact.size, artifact.path, "dataset")
+    hasher = artifact_hasher(artifact.digest, artifact.path)
+    for offset in range(0, artifact.size, 65536):
+        hasher.update(_pread_exact(extent, offset, min(65536, artifact.size-offset), artifact.path))
+    if hasher.hexdigest() != artifact.digest.split(":")[1]:
+        _transfer_fail("IDENTITY_MISMATCH", artifact.path, "dataset bytes differ from their immutable source digest")
+    if len(state.chunk_digests) != _chunk_count(artifact.size):
+        _transfer_fail("INVALID_REQUEST", artifact.path, "dataset checkpoint lacks its complete chunk digest sequence")
+    buffer = bytearray()
+    for index, offset in enumerate(range(0, artifact.size, _TRANSFER_CHUNK_BYTES)):
+        chunk = _pread_exact(extent, offset, min(_TRANSFER_CHUNK_BYTES, artifact.size-offset), artifact.path)
+        if digest_bytes(chunk) != state.chunk_digests[index]:
+            _transfer_fail("IDENTITY_MISMATCH", artifact.path, "dataset chunk changed before record consumption")
+        buffer.extend(chunk)
+        del chunk
+        while b"\n" in buffer:
+            end = buffer.index(b"\n")
+            if not 0 < end <= record_limit_bytes:
+                _transfer_fail("INVALID_REQUEST", artifact.path, "dataset record is empty or exceeds its bound")
+            record = bytes(buffer[:end])
+            del buffer[:end+1]
+            try:
+                value = json.loads(record)
+                if canonical_bytes(value) != record:
+                    raise ValueError("record is not canonical JSON")
+            except (ValueError, TypeError) as error:
+                _transfer_fail("INVALID_REQUEST", artifact.path, str(error))
+            yield record
+        if len(buffer) > record_limit_bytes:
+            _transfer_fail("INVALID_REQUEST", artifact.path, "dataset record exceeds its bound")
+    if buffer:
+        _transfer_fail("INVALID_REQUEST", artifact.path, "dataset must end at a complete NDJSON record boundary")

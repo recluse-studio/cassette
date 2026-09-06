@@ -8,6 +8,7 @@ import importlib.metadata
 import json
 import math
 import platform
+import secrets
 import struct
 import sys
 from collections.abc import Sequence
@@ -16,9 +17,9 @@ from fractions import Fraction
 from pathlib import Path
 
 from errors import CassetteError
-from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, NATIVE_OPERATORS, OPERATOR_DISPATCH, Q40_MODES
+from schema.tables import DISPATCH_ROWS, MLX_RUNTIME, NATIVE_OBJECTIVES, NATIVE_OPERATORS, OPERATOR_DISPATCH, Q40_MODES
 from schema.validator import validate
-from store import _read_page, canonical_bytes, digest_bytes, load_root, page_locations, read_tensor
+from store import _read_page, canonical_bytes, digest_bytes, load_root, page_locations, read_tensor, read_training_page
 
 _CASES = {row["case_id"]: row for row in DISPATCH_ROWS}
 _ADAPTER_MERGE_CASE = "mlx.adapter_merge.i8_f32.rank1.2x3"
@@ -2283,7 +2284,7 @@ def _bind_runtime_steps(
                 row["exact_pages"], expected.atom_id, "exact description pages"
             )
         )
-        if not exact_pages or len(exact_pages) != len(set(exact_pages)):
+        if len(exact_pages) != len(set(exact_pages)):
             raise _runtime_error(
                 "CAPABILITY_MISMATCH",
                 expected.atom_id,
@@ -2449,7 +2450,7 @@ def _draw_units(
             block = digest_bytes(canonical_bytes({
                 "certificate_id": certificate_id,
                 "step": step.schedule.step,
-                "seed": seed_or_schedule,
+                "seed": seed_or_schedule if seed_or_schedule <= 2**53-1 else format(seed_or_schedule, "016x"),
                 "draw": draw,
                 "attempt": attempt,
             }))
@@ -2458,7 +2459,7 @@ def _draw_units(
                 block = digest_bytes(canonical_bytes({
                     "certificate_id": certificate_id,
                     "step": step.schedule.step,
-                    "seed": seed_or_schedule,
+                    "seed": seed_or_schedule if seed_or_schedule <= 2**53-1 else format(seed_or_schedule, "016x"),
                     "draw": draw,
                     "attempt": attempt,
                     "word": word,
@@ -3664,23 +3665,60 @@ class NativeTransformer:
     """Q7/Q20/Q30/Q63: execute a committed source graph and recover its exact native context."""
 
     def __init__(self, cartridge: str | Path, root_digest: str, profile: dict,
-                 session_id: str, request_digest: str):
+                 session_id: str, request_digest: str, *, purpose: str = "INFERENCE"):
         self.cartridge, self.root_digest = Path(cartridge), root_digest
         self.session_id, self.request_digest = session_id, request_digest
         root = load_root(cartridge, root_digest)
         bundle = root["plans"][0] if root["plans"] else {}
-        if bundle.get("version") != "native-v1" or _digest(bundle) != root["provenance"]["identity_material"]["transform_manifest_digest"]:
+        if bundle.get("version") != "native-v1" or _digest(root["deltas"] if root["provenance"]["revision_kind"] == "tuned" else bundle) != root["provenance"]["identity_material"]["transform_manifest_digest"]:
             raise _error("ROOT_INVALID", root_digest, "Q33: native source plan", "native plan is absent or differs from executable identity")
+        self.source_binding = {"plan": _digest(bundle), "deltas": _digest(root["deltas"])}
         self.graph = bundle["graph"]
+        if purpose not in {"INFERENCE", "EXACT_SOURCE_TRAINING", "EXACT_SOURCE_OBSERVATION"}:
+            raise _error("INVALID_REQUEST", root_digest, "Q21/Q70: execution purpose", "execution purpose is not admitted")
+        self.purpose = purpose
+        self.compiled_binding = bundle.get("compiled")
+        self.compiled = self.compiled_binding if purpose == "INFERENCE" else None
+        if self.compiled and root["provenance"]["revision_kind"] == "tuned":
+            raise _error("CAPABILITY_MISMATCH", root_digest, "Q70/Q75: compiled training invalidation", "trained compiled parent requires certificate regeneration before inference")
+        self.training = []
+        for delta in root["deltas"]:
+            manifest = json.loads(read_training_page(cartridge, root_digest, delta["manifest_digest"]))
+            if validate("native_training_manifest", manifest) or manifest.get("complete") is not True:
+                raise _error("ROOT_INVALID", root_digest, "Q25: callable training", "native training delta is malformed or incomplete")
+            if manifest["pending_adapters"] or manifest["step"] != manifest["epochs"] or manifest["window"] or manifest["cursor"]:
+                raise _error("ROOT_INVALID", root_digest, "Q25: callable training", "native training delta has an unfinished update")
+            self.training.append(manifest)
         if self.graph.get("dispatch_digest") != _digest(NATIVE_OPERATORS):
             raise _error("UNSUPPORTED_OPERATOR", root_digest, "Q30: generated native dispatch", "native dispatch identity is stale")
         self.maps = {row["semantic_tensor_id"]: row for row in root["tensor_maps"]}
         self.mx, _ = _mlx_runtime()
         _require_runtime(root_digest, self.mx)
         self._admit(profile)
+        self.declared_peak_bytes += 4 * sum(row["state_bytes"] for manifest in self.training for row in manifest["adapters"])
+        if self.declared_peak_bytes > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", root_digest, "Q47: ordered adapters", "adapter state exceeds the graph admission")
+        self.compiled_windows = []
+        if self.compiled:
+            if self.compiled.get("complete") is not True:
+                raise _error("ROOT_INVALID", root_digest, "Q25: compiled publication", "incomplete compilation cannot execute")
+            self.declared_peak_bytes += (len(canonical_bytes(bundle)) + sum(row["metadata_bytes"] for row in self.compiled["windows"])) * 8
+            if self.declared_peak_bytes > self.available_bytes:
+                raise _error("MEMORY_BUDGET_EXCEEDED", root_digest, "Q19/Q47: compiled catalog residency", "complete description and metadata residency exceeds admitted memory")
+            effective = self.compiled.get("effective_target")
+            if effective is not None and self.effective_tensor(effective["tensor_id"]) != read_training_page(cartridge, self.compiled["source_root"], effective["page_digest"]):
+                raise _error("ROOT_INVALID", root_digest, "Q70/Q75: regenerated effective target", "compiled target differs from the exact ordered adapter action")
+            self.compiled_windows = [json.loads(read_training_page(cartridge, root_digest, row["page_digest"])) for row in self.compiled["windows"]]
+            self.compiled_pagers = []
+            for window in self.compiled_windows:
+                self.compiled_pagers.append(CertifiedPager(cartridge, window["plan"], window["certificate"],
+                    window["evidence"], self.compiled["profile"], window["page_map"]))
+        self.compiled_reads = []
         self.image_peak_bytes = 0
         self.state = {"version": "native-context-v1", "request_digest": request_digest,
                       "graph_digest": _digest(self.graph), "position": 0, "generated_tokens": [], "kv_shapes": []}
+        if self.compiled:
+            self.state["correction_key"] = None
         self.kv = {}
         name = "state." + session_id
         if name in self.maps:
@@ -3692,6 +3730,8 @@ class NativeTransformer:
                     raise ValueError("state field set or version differs")
                 if state["request_digest"] != request_digest or state["graph_digest"] != self.state["graph_digest"]:
                     raise ValueError("state belongs to another request or graph")
+                if self.compiled and (not isinstance(state["correction_key"], str) or len(state["correction_key"]) != 16 or any(c not in "0123456789abcdef" for c in state["correction_key"])):
+                    raise ValueError("compiled state has no recorded private correction key")
                 position = state["position"]
                 if type(position) is not int or not 0 < position <= self.graph["context_limit"]:
                     raise ValueError("state position is outside the declared horizon")
@@ -3736,16 +3776,360 @@ class NativeTransformer:
         if self.declared_peak_bytes > self.available_bytes:
             raise _error("MEMORY_BUDGET_EXCEEDED", self.root_digest, "Q7/Q47: native active representation", "complete native weights, context, semantics and activation bound do not fit")
 
-    def _weight(self, name: str):
+    def _weight(self, name: str, *, exact_source: bool = False):
         row = self.maps[name]
         if row["dtype"] != "F32":
             raise _error("UNSUPPORTED_OPERATOR", name, "Q30: native weight representation", "native float32 dispatch cannot consume this source dtype")
-        payload = read_tensor(self.cartridge, self.root_digest, name)
-        return self.mx.array(memoryview(payload).cast("f")).reshape(row["shape"])
+        prepared = self.compiled and not exact_source
+        if prepared:
+            pages = getattr(self, "compiled_exact_payloads", {})
+            if any(span["page_digest"] not in pages for span in row["spans"]):
+                raise _error("PAGE_CORRUPT", name, "Q20: complete graph readiness", "exact graph operand was not acquired by the compiled plan")
+            payload = b"".join(pages[span["page_digest"]][span["offset"]:span["offset"]+span["length"]] for span in row["spans"])
+        else:
+            payload = read_tensor(self.cartridge, self.root_digest, name)
+        value = self.mx.array(memoryview(payload).cast("f")).reshape(row["shape"])
+        for manifest in self.training:
+            matches = [item for item in manifest["adapters"] if item["tensor_id"] == name]
+            if matches:
+                if len(matches) != 1:
+                    raise _error("ROOT_INVALID", name, "Q24: adapter ownership", "source matrix has duplicate adapter windows")
+                page = matches[0]["page_digest"]
+                if prepared and page not in pages:
+                    raise _error("PAGE_CORRUPT", name, "Q20: adapter readiness", "ordered adapter was not acquired by the compiled plan")
+                factors = json.loads(pages[page] if prepared else read_training_page(self.cartridge, self.root_digest, page))
+                self._factor_shape(name, factors)
+                a, b = self.mx.array(factors["a"], dtype=self.mx.float32), self.mx.array(factors["b"], dtype=self.mx.float32)
+                value = value + factors["scale"] * self.mx.matmul(b, a)
+        return value
+
+    def effective_tensor(self, tensor_id: str) -> bytes:
+        """Q26/Q70: encode the exact source-plus-ordered-adapter operand for regeneration."""
+        shape = self.maps.get(tensor_id, {}).get("shape", [])
+        if not shape or 4 * math.prod(shape) > 4_194_304:
+            raise _error("MEMORY_BUDGET_EXCEEDED", tensor_id, "Q26/Q47: bounded merge operand", "effective tensor exceeds one admitted store page before allocation")
+        value = self._weight(tensor_id, exact_source=True)
+        self.mx.eval(value)
+        return struct.pack("<" + "f" * value.size, *value.reshape(-1).tolist())
+
+    def _factor_shape(self, name: str, record: dict) -> int:
+        shape = self.maps.get(name, {}).get("shape", [])
+        if (len(shape) != 2 or validate("native_adapter_factors", record)
+                or not 0 < len(record["a"]) <= min(shape)
+                or len(record["b"]) != shape[0]
+                or any(len(row) != shape[1] for row in record["a"])
+                or any(len(row) != len(record["a"]) for row in record["b"])):
+            raise _error("ROOT_INVALID", name, "Q24: finite source adapter", "adapter dimensions or finite factors differ from the source matrix")
+        return len(record["a"]) * sum(shape) * 4
 
     def _linear(self, value, weights: list[str]):
         result = self.mx.matmul(value, self._weight(weights[0]).T)
         return self.mx.add(result, self._weight(weights[1])) if len(weights) == 2 else result
+
+    def forward(self, tokens: list[int], *, pixels=None, position: int = 0,
+                kv=None, weights=None, capture: bool = False, exact_source: bool = False) -> dict:
+        """Q18/Q21/Q30: share the generated graph across inference, capture and differentiation."""
+        mx = self.mx
+        if (not isinstance(tokens, list) or not tokens or any(type(token) is not int or
+                not 0 <= token < self.graph["vocabulary_size"] for token in tokens)
+                or type(position) is not int or position < 0
+                or position + len(tokens) > self.graph["context_limit"]):
+            raise _error("INVALID_REQUEST", self.session_id, "Q10/Q63: graph input", "tokens or position exceed the source graph contract")
+        kv = {} if kv is None else kv
+        weight = self._weight if weights is None else weights
+
+        def linear(value, names):
+            if self.compiled and not exact_source and names[0] in self.compiled["transformed_tensors"]:
+                result = self._compiled_linear(value, names[0], position)
+                return mx.add(result, weight(names[1])) if len(names) == 2 else result
+            result = mx.matmul(value, weight(names[0]).T)
+            return mx.add(result, weight(names[1])) if len(names) == 2 else result
+
+        values = {"tokens": tokens, "pixels": pixels}
+        pending_kv = dict(kv)
+        routes, usage, activations = [], [], {}
+        for node in self.graph["nodes"]:
+            operator, names, parameters = node["operator"], node["weights"], node["parameters"]
+            if operator not in NATIVE_OPERATORS:
+                raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: generated native operator", "source graph names an absent operator")
+            inputs = [values[name] for name in node["inputs"]]
+            if operator == "image":
+                if position:
+                    output = None
+                else:
+                    output = self._image(inputs[0], names, parameters, weight=weight)
+            elif operator == "embedding":
+                ids = mx.array(inputs[0], dtype=mx.int32)
+                output = mx.take(weight(names[0]), ids, axis=0)
+                if len(inputs) == 2 and not position:
+                    marker = parameters["image_token_index"]
+                    if inputs[0].count(marker) != 1 or inputs[1] is None:
+                        raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: image control-token binding", "one image requires exactly one source image token")
+                    index = inputs[0].index(marker)
+                    output = mx.concatenate((output[:index], inputs[1], output[index + 1:]), axis=0)
+                if position + output.shape[0] > self.graph["context_limit"]:
+                    raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "expanded native input exceeds context; truncation is forbidden")
+            elif operator == "linear":
+                output = linear(inputs[0], names)
+            elif operator == "norm":
+                output = mx.fast.rms_norm(inputs[0], weight(names[0]), parameters["eps"])
+            elif operator == "attention":
+                layer, dimension = parameters["layer"], parameters["head_dim"]
+                q, k, v = [value.reshape(1, value.shape[0], heads, dimension).transpose(0, 2, 1, 3)
+                           for value, heads in zip(inputs, (parameters["heads"], parameters["kv_heads"], parameters["kv_heads"]), strict=True)]
+                q = mx.fast.rope(q, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
+                k = mx.fast.rope(k, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
+                if layer in kv:
+                    k, v = [mx.concatenate((old, new), axis=2) for old, new in zip(kv[layer], (k, v), strict=True)]
+                pending_kv[layer] = (k, v)
+                output = mx.fast.scaled_dot_product_attention(q, k, v, scale=dimension**-0.5, mask="causal")
+                output = output.transpose(0, 2, 1, 3).reshape(inputs[0].shape)
+            elif operator == "add":
+                output = mx.add(*inputs)
+            elif operator == "multiply":
+                output = mx.multiply(*inputs)
+            elif operator == "silu":
+                output = _activation(inputs, {})
+            elif operator == "experts":
+                probabilities = mx.softmax(inputs[1], axis=-1)
+                indices = mx.argsort(-probabilities, axis=-1)[:, :parameters["top_k"]]
+                selected = indices.tolist()
+                pieces = []
+                for token_index, chosen in enumerate(selected):
+                    mixture = mx.zeros((1, self.graph["hidden_size"]), dtype=mx.float32)
+                    scores = mx.take(probabilities[token_index], indices[token_index])
+                    scores = scores / mx.sum(scores)
+                    for rank, expert in enumerate(chosen):
+                        gate, up, down = names[3 * expert:3 * expert + 3]
+                        value = inputs[0][token_index:token_index + 1]
+                        gated = _activation((linear(value, [gate]),), {}) * linear(value, [up])
+                        mixture = mixture + scores[rank] * linear(gated, [down])
+                    pieces.append(mixture)
+                output = mx.concatenate(pieces, axis=0)
+                routes.append({"node": node["id"], "experts": selected})
+            else:
+                raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: source graph executor", "operator has no source-graph execution rule")
+            if isinstance(output, mx.array):
+                mx.eval(output)
+            if capture and isinstance(output, mx.array):
+                activations[node["id"]] = output.tolist()
+            values[node["id"]] = output
+            usage.append(node["id"])
+            # A graph value survives only until its last declared consumer.
+            remaining = {name for later in self.graph["nodes"][len(usage):] for name in later["inputs"]}
+            for name in tuple(values):
+                if name not in remaining and name != "logits":
+                    del values[name]
+        return {"logits": values["logits"], "kv": pending_kv, "routes": routes,
+                "executed_nodes": usage, "activations": activations}
+
+    async def execute_step(self, prompt_tokens: list[int], *, seed: int,
+                           temperature: float = 0.0, pixels=None) -> dict:
+        """Q20/Q64: acquire the selected compiled pages before the graph consumes them."""
+        if not self.compiled:
+            return self.step(prompt_tokens, seed=seed, temperature=temperature, pixels=pixels)
+        conditions = [case["condition_id"] for case in self.compiled["observations"]["workload"]["cases"]
+                      if case["tokens"] == prompt_tokens and case["pixels"] == pixels]
+        if len(conditions) != 1:
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q64: protected condition selection", "input has no unique protected condition")
+        position = self.state["position"]
+        count = 1 if position else len(prompt_tokens)
+        if position + count > self.compiled["horizon"]:
+            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q19: compiled horizon", "query exceeds the certified token horizon")
+        if type(seed) is not int or not 0 <= seed < 2**32:
+            raise _error("INVALID_REQUEST", self.session_id, "Q20: compiled seed", "compiled execution requires an unsigned 32-bit seed")
+        read_bound = count * self.compiled["resources"]["fresh_traffic_max"]
+        if self.declared_peak_bytes + read_bound*4 > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: compiled query pages", "complete prepared-query bound exceeds memory before page acquisition")
+        if self.state["correction_key"] is None:
+            self.state["correction_key"] = secrets.token_hex(8)
+        self.compiled_payloads = {}
+        self.compiled_reads = []
+        self.compiled_exact_transitions = []
+        self.compiled_exact_payloads = {}
+        try:
+            names = set(self.compiled["identity_tensors"])
+            expected = {span["page_digest"] for name in names for span in self.maps[name]["spans"]}
+            expected.update(row["page_digest"] for manifest in self.training for row in manifest["adapters"] if row["tensor_id"] in names)
+            locations = {row.page_digest: row for row in page_locations(self.cartridge, self.root_digest)}
+            exact = [{"page_digest": page, "bytes": locations[page].length} for page in sorted(expected)]
+            if exact != self.compiled["exact_pages"]:
+                raise _error("ROOT_INVALID", self.root_digest, "Q19/Q20: complete graph pages", "exact graph page map differs from the source operands")
+            self.compiled_exact_payloads = await _acquire_pages(Path(self.cartridge), locations, tuple(sorted(expected)),
+                self.compiled["read_deadline_ns"] / 1e9, None, self.session_id, self.compiled_exact_transitions)
+            self.compiled_reads.extend({"page_digest": page, "bytes": len(payload), "position": position} for page, payload in self.compiled_exact_payloads.items())
+            for offset in range(count):
+                for index, (window, pager) in enumerate(zip(self.compiled_windows, self.compiled_pagers, strict=True)):
+                    pager._next_step = position + offset
+                    step = pager._steps[pager._next_step]
+                    key = int(self.state["correction_key"], 16)
+                    selection = CompiledSelection(conditions[0], step.schedule.atom_id, step.service_face,
+                        pager._certificate_id, step.description_digest,
+                        key if step.sampling_kind != "EXACT" else step.exact_schedule, step.schedule.load_bytes)
+                    transitions = []
+                    _, units, _, pages, payloads = await pager._prepare_execution(selection,
+                        window["evidence"]["physical_conversion"]["conversion_rows"][0]["latency_ns_peak"] / 1e9 or None,
+                        None, transitions)
+                    self.compiled_payloads[(position+offset, index)] = (units, payloads, transitions)
+                    self.compiled_reads.extend({"page_digest": page, "bytes": len(payloads[page]), "position": position+offset} for page in pages)
+            retained = sum(row["bytes"] for row in self.compiled_reads)
+            if self.declared_peak_bytes + retained*4 > self.available_bytes:
+                raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: compiled query pages", "prepared query pages exceed the admitted graph memory")
+            states = {page: "RESIDENT" for page in self.compiled_exact_payloads}
+            for page in states:
+                _move_page(states, self.compiled_exact_transitions, page, "GPU_SUBMITTED")
+            result = self.step(prompt_tokens, seed=seed, temperature=temperature, pixels=pixels)
+            for page in states:
+                _move_page(states, self.compiled_exact_transitions, page, "RECLAIMABLE")
+            return result
+        finally:
+            self.compiled_payloads = {}
+            self.compiled_exact_payloads = {}
+
+    def _compiled_linear(self, inputs, tensor_id: str, position: int):
+        """Q19/Q64: execute descriptions plus fresh addressed residual columns for each query."""
+        mx = self.mx
+        locations = {item.page_digest: item for item in page_locations(self.cartridge, self.root_digest)}
+        windows = [window for window in self.compiled_windows if window["tensor_id"] == tensor_id]
+        rows, columns = self.maps[tensor_id]["shape"]
+        outputs = []
+        for token_index in range(inputs.shape[0]):
+            parts = []
+            for row_start in range(0, rows, 2):
+                result = mx.zeros((2,), dtype=mx.float32)
+                for index, window in enumerate(windows):
+                    if window["row"] != row_start:
+                        continue
+                    evidence = window["evidence"]
+                    description = evidence["atoms"][0]["description"]
+                    b = mx.array([[float(Fraction(value)) for value in row] for row in description["reconstruction"]], dtype=mx.float32)
+                    start = window["column"]
+                    query = inputs[token_index, start:min(start + 2, columns)]
+                    if query.size < 2:
+                        query = mx.concatenate((query, mx.zeros((2 - query.size,), dtype=mx.float32)))
+                    # Padding the second query column uses the exact generated 2x2 matmul tuple.
+                    product = dispatch("mlx.matmul.f32.2x2_2x2", (b, mx.stack((query, mx.zeros_like(query)), axis=1)))[:, 0]
+                    samples = window["certificate"]["resources"]["fresh_samples_max"]
+                    if samples:
+                        law = evidence["execution_contract"]["sampling_laws"][0]["law"]["atom_distributions"][0]["columns"]
+                        probabilities = {item["column"]: float(Fraction(item["probability"])) for item in law}
+                        prepared = getattr(self, "compiled_payloads", {}).get((position+token_index, index))
+                        if prepared is None:
+                            raise _error("CAPABILITY_MISMATCH", tensor_id, "Q20: compiled page readiness", "compiled execution requires the admitted async page preparation")
+                        chosen, payloads, transitions = prepared
+                        correction = mx.zeros((2,), dtype=mx.float32)
+                        for column in chosen:
+                            source = [0.0, 0.0]
+                            for address in window["addresses"]:
+                                if address["column"] == column:
+                                    source[address["row"]] = struct.unpack_from('<f', payloads[address["page_digest"]], address["offset"])[0]
+                            residual = mx.array(source, dtype=mx.float32) - b[:, column]
+                            correction = correction + residual * query[column] / probabilities[column]
+                        product = product + correction / samples
+                    result = result + product
+                    if samples:
+                        states = {page: "RESIDENT" for page in payloads}
+                        for page in payloads:
+                            _move_page(states, transitions, page, "GPU_SUBMITTED")
+                    mx.eval(result)
+                    if samples:
+                        for page in payloads:
+                            _move_page(states, transitions, page, "RECLAIMABLE")
+                parts.append(result[:min(2, rows - row_start)])
+            outputs.append(mx.concatenate(parts))
+        return mx.stack(outputs)
+
+    def observe(self, tokens: list[int], *, pixels=None, ablate: tuple[str, ...] = ()) -> dict:
+        """Q18/Q40: return actual activations, logits and routes from the shared source graph."""
+        if not isinstance(ablate, tuple) or len(set(ablate)) != len(ablate) or any(name not in self.graph["contributions"] for name in ablate):
+            raise _error("INVALID_REQUEST", self.session_id, "Q18: contribution ablation", "ablation must name unique source contributions")
+        capture_peak = self.declared_peak_bytes * (len(self.graph["nodes"]) + 1)
+        if capture_peak > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: teacher capture", "retained activation bound exceeds the capture memory profile")
+        def weight(name):
+            value = self._weight(name)
+            return self.mx.zeros_like(value) if name in ablate else value
+        execution = self.forward(tokens, pixels=pixels, weights=weight, capture=True, exact_source=True)
+        return {"logits": execution["logits"].tolist(), "activations": execution["activations"],
+                "routes": execution["routes"], "executed_nodes": execution["executed_nodes"],
+                "graph_digest": _digest(self.graph), "root_digest": self.root_digest,
+                "ablated_contributions": list(ablate), "declared_peak_bytes": capture_peak}
+
+    def objective(self, operation: str, batch: dict, adapters: dict, *,
+                  differentiate: str | None = None, reference=None, beta: float = 0.1,
+                  training_context: dict | None = None) -> dict:
+        """Q21/Q24: differentiate one LoRA window through the complete causal source graph."""
+        mx = self.mx
+        if operation not in NATIVE_OBJECTIVES or operation == "primitives":
+            raise _error("TRAINING_UNSUPPORTED", operation, "Q21/Q30: objective admission", "language-model objective is absent from generated dispatch")
+        if not isinstance(adapters, dict) or not adapters or (differentiate is not None and differentiate not in adapters):
+            raise _error("INVALID_REQUEST", operation, "Q21: adapter windows", "one declared adapter catalog and an owned gradient window are required")
+        total_bytes = sum(self._factor_shape(name, record) for name, record in adapters.items())
+        training_peak = self.declared_peak_bytes * 4 + total_bytes * 4
+        if training_peak > self.available_bytes:
+            raise _error("MEMORY_BUDGET_EXCEEDED", operation, "Q23/Q47: full-graph gradient memory", "declared activation and adapter-gradient peak exceeds admitted memory")
+        windows = {name: {key: mx.array(record[key], dtype=mx.float32) for key in ("a", "b")}
+                   for name, record in adapters.items()}
+        required = {"chosen", "rejected"} if operation == "OFFLINE_ADAPTER_DPO" else {"sequence"}
+        if not isinstance(batch, dict) or set(batch) != required:
+            raise _error("INVALID_REQUEST", operation, "Q21: sequence objective", "batch fields differ from the admitted objective")
+        for sequence in batch.values():
+            if not isinstance(sequence, dict) or set(sequence) != {"tokens", "mask"}:
+                raise _error("INVALID_REQUEST", operation, "Q21: causal labels", "each sequence requires exact token and label-mask fields")
+            tokens, mask = sequence["tokens"], sequence["mask"]
+            if (not isinstance(tokens, list) or not 2 <= len(tokens) <= self.graph["context_limit"]
+                    or any(type(token) is not int or not 0 <= token < self.graph["vocabulary_size"] for token in tokens)
+                    or not isinstance(mask, list) or len(mask) != len(tokens) or mask[0] != 0
+                    or any(type(value) is not int or value not in (0, 1) for value in mask) or not sum(mask)):
+                raise _error("INVALID_REQUEST", operation, "Q21: causal labels", "tokens and masks must preserve a nonempty shifted sequence without padding loss")
+        if operation == "OFFLINE_ADAPTER_DPO" and (reference is None or type(beta) not in (int, float)
+                or not math.isfinite(beta) or beta <= 0):
+            raise _error("INVALID_REQUEST", operation, "Q21: frozen DPO reference", "preference training requires its frozen reference runtime and positive beta")
+
+        def probability(runtime, sequence, weight=None):
+            logits = runtime.forward(sequence["tokens"][:-1], weights=weight, exact_source=True)["logits"]
+            labels = mx.array(sequence["tokens"][1:], dtype=mx.int32)[:, None]
+            selected = mx.take_along_axis(logits, labels, axis=-1)[:, 0]
+            logp = selected - mx.logsumexp(logits, axis=-1)
+            return mx.sum(logp * mx.array(sequence["mask"][1:], dtype=mx.float32))
+
+        reference_margin = None
+        if reference is not None:
+            if operation != "OFFLINE_ADAPTER_DPO":
+                raise _error("INVALID_REQUEST", operation, "Q21: reference ownership", "only DPO consumes a reference model")
+            reference_margin = probability(reference, batch["chosen"]) - probability(reference, batch["rejected"])
+            mx.eval(reference_margin)
+
+        def loss(window):
+            def weight(name):
+                base = self._weight(name)
+                if name not in windows:
+                    return base
+                factors = window if name == differentiate else windows[name]
+                return base + adapters[name]["scale"] * mx.matmul(factors["b"], factors["a"])
+            if operation == "OFFLINE_ADAPTER_DPO":
+                margin = probability(self, batch["chosen"], weight) - probability(self, batch["rejected"], weight)
+                return mx.logaddexp(mx.array(0.0), -beta * (margin - reference_margin))
+            return -probability(self, batch["sequence"], weight) / sum(batch["sequence"]["mask"])
+
+        if differentiate is None:
+            value, gradient = loss({}), {}
+        else:
+            value, gradient = mx.value_and_grad(loss)(windows[differentiate])
+        mx.eval(value, gradient)
+        result = {"loss": float(value.item()), "gradients": {name: item.tolist() for name, item in gradient.items()},
+                  "declared_peak_bytes": training_peak, "objective_dispatch_digest": _digest(NATIVE_OBJECTIVES),
+                  "execution_mode": "EXACT_SOURCE_TRAINING"}
+        if not math.isfinite(result["loss"]) or any(not bool(mx.all(mx.isfinite(item)).item()) for item in gradient.values()):
+            raise _error("GRADIENT_INVALID", operation, "Q21: finite loss and gradients", "full-graph objective produced a nonfinite value")
+        binding = {"root_digest": self.root_digest, "operation": operation, "batch": batch,
+                   "adapters": adapters, "window": differentiate,
+                   "reference_root": None if reference is None else reference.root_digest, "beta": beta,
+                   "training_context": training_context, "source_binding": self.source_binding,
+                   "execution_mode": "EXACT_SOURCE_TRAINING"}
+        result["input_digest"] = _digest(binding)
+        result["receipt_digest"] = _digest(result)
+        return result
 
     def step(self, prompt_tokens: list[int], *, seed: int, temperature: float = 0.0,
              pixels: object = None) -> dict:
@@ -3758,86 +4142,20 @@ class NativeTransformer:
         if len(prompt_tokens) > self.graph["context_limit"]:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "prompt exceeds context; truncation is forbidden")
         position = self.state["position"]
+        if self.compiled:
+            allowed = [case["tokens"] for case in self.compiled["observations"]["workload"]["cases"]]
+            if prompt_tokens not in allowed:
+                raise _error("CAPABILITY_MISMATCH", self.session_id, "Q19: protected observation support", "compiled selector has no qualified condition for this token sequence")
+            if position + (1 if position else len(prompt_tokens)) > self.compiled["horizon"]:
+                raise _error("CAPABILITY_MISMATCH", self.session_id, "Q19/Q63: compiled horizon", "compiled trace has exhausted its certified token horizon")
         tokens = [self.state["generated_tokens"][-1]] if position else prompt_tokens
         has_image = any(node["operator"] == "image" for node in self.graph["nodes"])
         if pixels is not None and not has_image:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source modalities", "source graph does not accept image input")
-        values = {"tokens": tokens, "pixels": pixels}
-        pending_kv = dict(self.kv)
-        routes = []
-        usage = []
         try:
-            for node in self.graph["nodes"]:
-                operator, names, parameters = node["operator"], node["weights"], node["parameters"]
-                if operator not in NATIVE_OPERATORS:
-                    raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: generated native operator", "source graph names an absent operator")
-                inputs = [values[name] for name in node["inputs"]]
-                if operator == "image":
-                    if position:
-                        output = None
-                    else:
-                        output = self._image(inputs[0], names, parameters)
-                elif operator == "embedding":
-                    ids = mx.array(inputs[0], dtype=mx.int32)
-                    output = mx.take(self._weight(names[0]), ids, axis=0)
-                    if len(inputs) == 2 and not position:
-                        marker = parameters["image_token_index"]
-                        if inputs[0].count(marker) != 1 or inputs[1] is None:
-                            raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: image control-token binding", "one image requires exactly one source image token")
-                        index = inputs[0].index(marker)
-                        output = mx.concatenate((output[:index], inputs[1], output[index + 1:]), axis=0)
-                    if position + output.shape[0] > self.graph["context_limit"]:
-                        raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "expanded native input exceeds context; truncation is forbidden")
-                elif operator == "linear":
-                    output = self._linear(inputs[0], names)
-                elif operator == "norm":
-                    output = mx.fast.rms_norm(inputs[0], self._weight(names[0]), parameters["eps"])
-                elif operator == "attention":
-                    layer, dimension = parameters["layer"], parameters["head_dim"]
-                    q, k, v = [value.reshape(1, value.shape[0], heads, dimension).transpose(0, 2, 1, 3)
-                               for value, heads in zip(inputs, (parameters["heads"], parameters["kv_heads"], parameters["kv_heads"]), strict=True)]
-                    q = mx.fast.rope(q, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
-                    k = mx.fast.rope(k, dims=dimension, traditional=False, base=parameters["base"], scale=1.0, offset=position)
-                    if layer in self.kv:
-                        k, v = [mx.concatenate((old, new), axis=2) for old, new in zip(self.kv[layer], (k, v), strict=True)]
-                    pending_kv[layer] = (k, v)
-                    output = mx.fast.scaled_dot_product_attention(q, k, v, scale=dimension**-0.5, mask="causal")
-                    output = output.transpose(0, 2, 1, 3).reshape(inputs[0].shape)
-                elif operator == "add":
-                    output = mx.add(*inputs)
-                elif operator == "multiply":
-                    output = mx.multiply(*inputs)
-                elif operator == "silu":
-                    output = _activation(inputs, {})
-                elif operator == "experts":
-                    probabilities = mx.softmax(inputs[1], axis=-1)
-                    indices = mx.argsort(-probabilities, axis=-1)[:, :parameters["top_k"]]
-                    selected = indices.tolist()
-                    pieces = []
-                    for token_index, chosen in enumerate(selected):
-                        mixture = mx.zeros((1, self.graph["hidden_size"]), dtype=mx.float32)
-                        scores = mx.take(probabilities[token_index], indices[token_index])
-                        scores = scores / mx.sum(scores)
-                        for rank, expert in enumerate(chosen):
-                            gate, up, down = names[3 * expert:3 * expert + 3]
-                            value = inputs[0][token_index:token_index + 1]
-                            gated = _activation((self._linear(value, [gate]),), {}) * self._linear(value, [up])
-                            mixture = mixture + scores[rank] * self._linear(gated, [down])
-                        pieces.append(mixture)
-                    output = mx.concatenate(pieces, axis=0)
-                    routes.append({"node": node["id"], "experts": selected})
-                else:
-                    raise _error("UNSUPPORTED_OPERATOR", node["id"], "Q30: source graph executor", "operator has no source-graph execution rule")
-                if isinstance(output, mx.array):
-                    mx.eval(output)
-                values[node["id"]] = output
-                usage.append(node["id"])
-                # A graph value survives only until its last declared consumer.
-                remaining = {name for later in self.graph["nodes"][len(usage):] for name in later["inputs"]}
-                for name in tuple(values):
-                    if name not in remaining and name != "logits":
-                        del values[name]
-            logits = values["logits"][-1]
+            execution = self.forward(tokens, pixels=pixels, position=position, kv=self.kv)
+            pending_kv, routes, usage = execution["kv"], execution["routes"], execution["executed_nodes"]
+            logits = execution["logits"][-1]
             mx.eval(logits)
             plain_logits = logits.tolist()
             if not all(math.isfinite(value) for value in plain_logits):
@@ -3858,7 +4176,7 @@ class NativeTransformer:
         except Exception as error:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q20/Q30: native graph execution", f"{type(error).__name__}: {error}") from error
 
-    def _image(self, pixels: object, names: list[str], parameters: dict):
+    def _image(self, pixels: object, names: list[str], parameters: dict, *, weight=None):
         mx = self.mx
         if not isinstance(pixels, list) or not pixels:
             raise _error("INVALID_REQUEST", self.session_id, "Q66: declared image processor", "image graph requires nonempty NHWC pixel data")
@@ -3883,5 +4201,46 @@ class NativeTransformer:
             image = mx.multiply(image, processor["rescale_factor"])
         if processor["do_normalize"]:
             image = mx.divide(mx.subtract(image, mx.array(processor["image_mean"])), mx.array(processor["image_std"]))
-        projection = self._weight(names[0]).transpose(0, 2, 3, 1)
+        projection = (self._weight if weight is None else weight)(names[0]).transpose(0, 2, 3, 1)
         return mx.conv2d(image, projection, stride=patch).reshape(-1, self.graph["hidden_size"])
+
+
+def capture_native(cartridge, root_digest: str, profile: dict, workload: dict) -> dict:
+    """Q13/Q16/Q18/Q40: bind frozen cases to actual native activations and ablations."""
+    if validate("native_workload", workload):
+        raise _error("INVALID_REQUEST", root_digest, "Q13/Q18: exact finite workload", "capture requires one complete deterministic census with ablations and gradients")
+    baseline = workload["baseline"]
+    if not isinstance(baseline, dict) or baseline.get("root_digest") != root_digest or baseline.get("equivalence") != "EXACT_FIXTURE":
+        raise CassetteError("INVALID_REQUEST", root_digest, "Q13/Q18: frozen native workload", "terminal", "Q13: baseline must bind this exact fixture root before observation")
+    cases = workload["cases"]
+    if (not isinstance(cases, list) or not cases or
+            sorted(workload["support"]) != sorted(case["condition_id"] for case in cases)
+            or len(set(workload["support"])) != len(cases)):
+        raise CassetteError("INVALID_REQUEST", root_digest, "Q13/Q18: frozen native workload", "terminal", "Q18: each protected condition requires exactly one frozen case")
+    workload_digest = digest_bytes(canonical_bytes(workload))
+    baseline_digest = digest_bytes(canonical_bytes(baseline))
+    runtime = NativeTransformer(cartridge, root_digest, profile, "teacher-capture", workload_digest, purpose="EXACT_SOURCE_OBSERVATION")
+    traces = []
+    for case in cases:
+        if set(case) != {"condition_id", "stratum", "tokens", "pixels", "ablations", "gradient"}:
+            raise CassetteError("INVALID_REQUEST", root_digest, "Q13/Q18: frozen native workload", "terminal", "Q18/Q40: case must name its stratum, tokens, modality, ablations and gradient request")
+        for trial, seed in enumerate(workload["seeds"]):
+            full = runtime.observe(case["tokens"], pixels=case["pixels"])
+            ablations = []
+            for names in case["ablations"]:
+                removed = runtime.observe(case["tokens"], pixels=case["pixels"], ablate=tuple(names))
+                ablations.append({"contributions": names, "logits": removed["logits"],
+                                  "changed": removed["logits"] != full["logits"]})
+            gradient = case["gradient"]
+            if set(gradient) != {"operation", "batch", "adapters", "window"}:
+                raise _error("INVALID_REQUEST", root_digest, "Q18: gradient observation", "gradient request must bind the objective, batch, factors and differentiated window")
+            observed_gradient = runtime.objective(
+                gradient["operation"], gradient["batch"], gradient["adapters"],
+                differentiate=gradient["window"])
+            traces.append({"condition_id": case["condition_id"], "stratum": case["stratum"],
+                           "trial": trial, "seed": seed, "full": full, "ablations": ablations,
+                           "gradient": observed_gradient})
+    body = {"version": "native-observations-v1", "source_root": root_digest,
+            "workload": workload, "workload_digest": workload_digest,
+            "baseline_digest": baseline_digest, "traces": traces}
+    return {**body, "corpus_digest": digest_bytes(canonical_bytes(body))}

@@ -169,6 +169,11 @@ def capture() -> dict:
     return {**body, "corpus_digest": digest_bytes(canonical_bytes(body))}
 
 
+def capture_native(cartridge, root_digest: str, profile: dict, workload: dict) -> dict:
+    """Q18/Q40: capture through the single numerical observation authority."""
+    return pager.capture_native(cartridge, root_digest, profile, workload)
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: capture_fixture.py OUTPUT.json")

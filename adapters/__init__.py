@@ -1,4 +1,4 @@
-# __init__.py — generated-map protocol translation for Q31/Q76 named agents; depends on errors.py, schema/.
+# __init__.py — generated-map protocol translation for Q31/Q76 named agents; depends on broker.py, errors.py, schema/.
 """Translate canonical Cassette records without owning model or operation lifecycle."""
 
 from __future__ import annotations
@@ -6,6 +6,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 
+from broker import CanonicalBroker
 from errors import CassetteError
 from schema.tables import ADAPTER_EVENT_FORMATS, ADAPTER_PROTOCOLS
 from schema.validator import validate
@@ -273,6 +274,48 @@ class NamedAdapter:
         self._aliases = dict(aliases)
         self._reverse_aliases = {value: key for key, value in aliases.items()}
         self._server_contract = server_contract
+
+    async def listen(self, broker: CanonicalBroker, cartridge, profile: dict, capacity_controller,
+                     *, surface: str | None = None, port: int = 0):
+        """Q31/Q76: connect the generated client mapping to the broker's loopback execution."""
+        selected = self._surface(surface)
+        if selected.get("method") == "WS":
+            raise _fail("CAPABILITY_MISMATCH", self.name, "this listener requires an HTTP or canonical JSONL client surface")
+        async def handle(wire):
+            discovery = self._definition["discovery"]
+            canonical_discovery = wire.get("record") == {"operation": "capabilities"}
+            if canonical_discovery or (wire.get("method") == discovery["method"] and wire.get("path") == discovery["path"]):
+                result = self.to_wire_capabilities([broker.native_capability(cartridge)])
+                yield {"encoding": "jsonl" if canonical_discovery else "json", "records": [result.get("record", result.get("body"))]}
+                return
+            record = wire.get("record", {})
+            if wire.get("encoding") == "jsonl" and isinstance(record, dict) and record.get("operation") in {"cancel", "train"}:
+                action = "cancel" if record["operation"] == "cancel" else "training"
+                request = self.from_wire_operation(action, {**wire, "action": action})
+                result = broker.cancel(request["target"]) if action == "cancel" else await broker.train_native(request, cartridge, profile, capacity_controller)
+                yield {"encoding": "jsonl", "records": [result]}
+                return
+            for action in ("cancel", "training"):
+                route = self._definition["operations"][action]
+                prefix, _, suffix = route["path"].partition("{run_id}")
+                if (wire.get("method") == route["method"] and isinstance(wire.get("path"), str)
+                        and wire["path"].startswith(prefix) and wire["path"].endswith(suffix)):
+                    control = {key: value for key, value in wire.items() if key != "headers"}
+                    control["transport"] = route["transport"]
+                    if route["transport"] == "native":
+                        control["headers"] = wire.get("headers", {})
+                    request = self.from_wire_operation(action, control)
+                    result = broker.cancel(request["target"]) if action == "cancel" else await broker.train_native(request, cartridge, profile, capacity_controller)
+                    yield {"encoding": "json", "records": [result]}
+                    return
+            request = self.from_wire_request(wire, surface=surface)
+            events = broker.stream_client(request, cartridge, profile, capacity_controller)
+            try:
+                async for event in events:
+                    yield self.to_wire_events([event], surface=surface)
+            finally:
+                await events.aclose()
+        return await broker.listen(handle, port=port)
 
     @property
     def definition(self) -> dict:

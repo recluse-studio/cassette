@@ -33,8 +33,9 @@ def _sha(payload):
     return 'sha256:' + hashlib.sha256(payload).hexdigest()
 
 
-def _model(*, hidden=8, layers=2, experts=0, image=False):
-    config = dict(architectures=['SourceDecoder'], hidden_size=hidden, vocab_size=len(WORDS),
+def _model(*, hidden=8, layers=2, experts=0, image=False, vocabulary_size=len(WORDS)):
+    words = WORDS[:vocabulary_size]
+    config = dict(architectures=['SourceDecoder'], hidden_size=hidden, vocab_size=len(words),
                   num_hidden_layers=layers, num_attention_heads=2, num_key_value_heads=1,
                   intermediate_size=12, max_position_embeddings=24, hidden_act='silu',
                   rms_norm_eps=1e-5, rope_theta=10000.0, tie_word_embeddings=False)
@@ -47,8 +48,8 @@ def _model(*, hidden=8, layers=2, experts=0, image=False):
         values = list(struct.unpack('<' + 'f' * len(values), struct.pack('<' + 'f' * len(values), *values)))
         weights[name] = (shape, values)
 
-    add('model.embed_tokens.weight', [len(WORDS), hidden])
-    add('model.norm.weight', [hidden]); add('lm_head.weight', [len(WORDS), hidden])
+    add('model.embed_tokens.weight', [len(words), hidden])
+    add('model.norm.weight', [hidden]); add('lm_head.weight', [len(words), hidden])
     for layer in range(layers):
         prefix = f'model.layers.{layer}.'
         for name in ('input_layernorm', 'post_attention_layernorm'):
@@ -70,7 +71,7 @@ def _model(*, hidden=8, layers=2, experts=0, image=False):
         add('vision.patch_embedding.weight', [hidden, 3, 2, 2])
         assets['preprocessor_config.json'] = dict(do_rescale=True, rescale_factor=1/255,
                                                  do_normalize=True, image_mean=[.5]*3, image_std=[.25]*3)
-    tokenizer = Tokenizer(models.WordLevel(dict(zip(WORDS, range(len(WORDS)))), unk_token='[UNK]'))
+    tokenizer = Tokenizer(models.WordLevel(dict(zip(words, range(len(words)))), unk_token='[UNK]'))
     tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
     assets.update({'config.json': config, 'tokenizer.json': json.loads(tokenizer.to_str()),
                    'tokenizer_config.json': {'chat_template': TEMPLATE}})

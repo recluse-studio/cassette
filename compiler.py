@@ -48,6 +48,7 @@ from store import (
     page_index_byte_count,
     page_locations,
     read_training_page,
+    stage_training_pages,
     read_tensor,
 )
 
@@ -4140,10 +4141,14 @@ def _prepare_native(source: dict, descriptors: dict, manifest: dict, tensors: li
 
 
 def verify_native_bundle(cartridge: str | Path, root_digest: str,
-                         source_identity: str | None = None, plan_digest: str | None = None) -> dict:
+                         source_identity: str | None = None, plan_digest: str | None = None, *, exact_source: bool = False) -> dict:
     """Q1/Q33/Q58: reconstruct the native graph from committed semantics and exact tensor maps."""
     root = load_root(cartridge, root_digest)
     bundle = root["plans"][0] if root["plans"] else {}
+    if root["provenance"]["revision_kind"] == "tuned":
+        return _verify_native_training_bundle(cartridge, root_digest, exact_source=exact_source)
+    if "compiled" in bundle:
+        return verify_native_compiled_bundle(cartridge, root_digest)
     if set(bundle) != {"version", "source_identity", "source_root", "preparation_plan_digest", "graph"} or bundle["version"] != _NATIVE_VERSION:
         _reject("ROOT_INVALID", root_digest, "native preparation bundle has an incorrect field set or version")
     if source_identity is not None and bundle["source_identity"] != source_identity:
@@ -4217,3 +4222,341 @@ def render_native_input(cartridge: str | Path, root_digest: str, messages: list[
 def decode_native_tokens(cartridge: str | Path, root_digest: str, tokens: list[int]) -> str:
     tokenizer = _native_tokenizer(_native_json(read_tensor(cartridge, root_digest, "asset.tokenizer.json"), root_digest))
     return tokenizer.decode(tokens, skip_special_tokens=False)
+
+
+
+def _verify_native_training_bundle(cartridge, root_digest: str, *, exact_source: bool = False) -> dict:
+    """Q26/Q73: bind the callable graph to its completed immutable adapter delta."""
+    root = load_root(cartridge, root_digest)
+    if not root["deltas"]:
+        _reject("ROOT_INVALID", root_digest, "trained native root lacks its ordered delta")
+    if "compiled" in root["plans"][0] and not exact_source:
+        _reject("CAPABILITY_MISMATCH", root_digest, "trained compiled parent requires regenerated certificates")
+    delta = root["deltas"][-1]
+    manifest = _native_json(read_training_page(cartridge, root_digest, delta["manifest_digest"]), root_digest)
+    if validate("native_training_manifest", manifest) or manifest.get("complete") is not True:
+        _reject("ROOT_INVALID", root_digest, "incomplete training cannot become callable")
+    base = load_root(cartridge, manifest["parent_root"])
+    graph = verify_native_bundle(cartridge, manifest["parent_root"], exact_source=exact_source)
+    if (root["plans"] != base["plans"] or root["parents"] != [base["identity"]]
+            or delta["base_identity"] != base["identity"]
+            or root["deltas"][:-1] != base["deltas"]
+            or _digest(root["deltas"]) != root["provenance"]["identity_material"]["transform_manifest_digest"]):
+        _reject("ROOT_INVALID", root_digest, "trained child differs from its frozen parent graph or ordered delta")
+    if [item for item in root["tensor_maps"] if not item["semantic_tensor_id"].startswith("state.")] != [item for item in base["tensor_maps"] if not item["semantic_tensor_id"].startswith("state.")]:
+        _reject("ROOT_INVALID", root_digest, "trained child changes a frozen source tensor")
+    expected = {delta["manifest_digest"], *manifest["dataset"], *(row["page_digest"] for row in manifest["adapters"])}
+    if set(delta["ordered_page_digests"]) != expected:
+        _reject("ROOT_INVALID", root_digest, "trained child omits a manifest-owned dataset or adapter page")
+    for page in expected:
+        read_training_page(cartridge, root_digest, page)
+    maps = {row["semantic_tensor_id"]: row for row in root["tensor_maps"]}
+    names = [row["tensor_id"] for row in manifest["adapters"]]
+    if (names != sorted(set(names)) or manifest["pending_adapters"] or manifest["cursor"] or manifest["window"]
+            or manifest["step"] != manifest["epochs"]
+            or len(manifest["losses"]) != manifest["epochs"] * len(manifest["dataset"]) * len(names)
+            or manifest["dataset_digest"] != _digest(manifest["dataset"])):
+        _reject("ROOT_INVALID", root_digest, "trained child has an incomplete schedule or altered dataset")
+    for row in manifest["adapters"]:
+        factors = _native_json(read_training_page(cartridge, root_digest, row["page_digest"]), root_digest)
+        shape = maps.get(row["tensor_id"], {}).get("shape", [])
+        if (validate("native_adapter_factors", factors) or len(shape) != 2 or row["shape"] != shape
+                or row["rank"] != len(factors["a"]) or row["rank"] > min(shape)
+                or len(factors["b"]) != shape[0] or any(len(item) != shape[1] for item in factors["a"])
+                or any(len(item) != row["rank"] for item in factors["b"])
+                or row["state_bytes"] != row["rank"] * sum(shape) * 4):
+            _reject("ROOT_INVALID", row["tensor_id"], "trained adapter has invalid finite factors, dimensions or accounting")
+    return graph
+
+
+def prepare_native_training_child(cartridge, base_root: str, checkpoint_root: str,
+                                  manifest_digest: str, *, capacity_controller: CapacityCoordinator,
+                                  operation_id: str) -> str:
+    """Q26/Q73: verify the completed delta before the broker publishes its generation."""
+    if not capacity_controller.owns(cartridge):
+        _reject("INVALID_REQUEST", operation_id, "training publication requires its capacity owner")
+    root = load_root(cartridge, checkpoint_root)
+    state = _native_json(read_training_page(cartridge, checkpoint_root, manifest_digest), checkpoint_root)
+    if state.get("parent_root") != base_root or root["deltas"][-1]["manifest_digest"] != manifest_digest:
+        _reject("ROOT_INVALID", checkpoint_root, "training publication differs from its requested parent or checkpoint")
+    _verify_native_training_bundle(cartridge, checkpoint_root)
+    return checkpoint_root
+
+
+def _native_head_windows(cartridge, source_root: str, observations: dict, horizon: int,
+                         profile: dict, prior_failures: list[dict], effective_target: dict | None = None,
+                         rank_budget: int = 2, read_deadline_ns: int = 1_000_000_000):
+    """Q19/Q40: derive bounded output-matrix witnesses from frozen native activations."""
+    graph = verify_native_bundle(cartridge, source_root, exact_source=True)
+    if (observations.get("version") != "native-observations-v1" or observations.get("source_root") != source_root
+            or observations.get("corpus_digest") != _digest({key: value for key, value in observations.items() if key != "corpus_digest"})
+            or observations.get("workload_digest") != _digest(observations.get("workload"))
+            or type(horizon) is not int or not 0 < horizon <= graph["context_limit"]):
+        _reject("ROOT_INVALID", source_root, "native observations or compiled horizon differ from their frozen identities")
+    workload = observations["workload"]
+    if (validate("native_workload", workload) or type(rank_budget) is not int or rank_budget not in (1, 2)
+            or type(read_deadline_ns) is not int or not 0 < read_deadline_ns < 2**64):
+        _reject("INVALID_REQUEST", source_root, "frozen observation, rank budget or read deadline is invalid")
+    conditions = sorted(workload["support"])
+    traces = observations["traces"]
+    if (not conditions or len(conditions) != len(set(conditions)) or workload["off_support"] != "REJECT"
+            or {trace["condition_id"] for trace in traces} != set(conditions)
+            or observations["baseline_digest"] != _digest(workload["baseline"])):
+        _reject("CAPABILITY_MISMATCH", source_root, "observation support, baseline or protected conditions are incomplete")
+    if (len(traces) != len(conditions) or any(trace["trial"] != 0 or trace["seed"] != workload["seeds"][0]
+            for trace in traces)):
+        _reject("ROOT_INVALID", source_root, "finite census must observe each frozen condition exactly once")
+    root = load_root(cartridge, source_root)
+    tensor_id = graph["nodes"][-1]["weights"][0]
+    tensor = next(item for item in root["tensor_maps"] if item["semantic_tensor_id"] == tensor_id)
+    rows, columns = tensor["shape"]
+    effective_bytes = None
+    if effective_target is not None:
+        if (set(effective_target) != {"tensor_id", "shape", "page_digest", "adapter_catalog_digest"}
+                or effective_target["tensor_id"] != tensor_id or effective_target["shape"] != tensor["shape"]
+                or effective_target["adapter_catalog_digest"] != _digest(root["deltas"])):
+            _reject("ROOT_INVALID", source_root, "effective target differs from the complete ordered adapter relation")
+        effective_bytes = read_training_page(cartridge, source_root, effective_target["page_digest"])
+        if len(effective_bytes) != rows*columns*4:
+            _reject("ROOT_INVALID", source_root, "effective target byte shape differs")
+        tensor = {**tensor, "spans": [{"tensor_offset": 0, "offset": 0, "length": len(effective_bytes), "page_digest": effective_target["page_digest"]}]}
+    page_sizes = {item.page_digest: item.length for item in page_locations(cartridge, source_root)}
+    count = ((rows + 1) // 2) * ((columns + 1) // 2)
+    delta = Fraction(1, 100 * count * horizon)
+    for row_start in range(0, rows, 2):
+        for column_start in range(0, columns, 2):
+            matrix, addresses = [], []
+            for r in range(2):
+                matrix_row = []
+                for c in range(2):
+                    row, column = row_start + r, column_start + c
+                    value = (struct.unpack_from("<f", effective_bytes, (row*columns+column)*4)[0] if effective_bytes is not None else struct.unpack("<f", read_tensor(cartridge, source_root, tensor_id, offset=(row*columns+column)*4, length=4))[0]) if row < rows and column < columns else 0.0
+                    matrix_row.append(str(Fraction(value)))
+                    if row < rows and column < columns:
+                        offset = (row * columns + column) * 4
+                        span = next(item for item in tensor["spans"] if item["tensor_offset"] <= offset and offset + 4 <= item["tensor_offset"] + item["length"])
+                        addresses.append({"row": r, "column": c, "page_digest": span["page_digest"],
+                                          "offset": span["offset"] + offset - span["tensor_offset"], "length": 4})
+                matrix.append(matrix_row)
+            metrics = []
+            for condition in conditions:
+                selected = [trace for trace in traces if trace["condition_id"] == condition]
+                diagonal = []
+                for coordinate in range(4):
+                    column = column_start + coordinate % 2
+                    observed = [Fraction(value[column]) for trace in selected for value in trace["full"]["activations"]["final_norm"] if column < columns]
+                    diagonal.append(1 + sum(value * value for value in observed))
+                metrics.append({"condition_id": condition, "metric": [[str(diagonal[r]) if r == c else "0" for c in range(4)] for r in range(4)],
+                                "provenance": {"corpus_digest": observations["corpus_digest"], "condition": condition, "column_start": column_start}})
+            target_matrix = matrix
+            eta = Fraction(0)
+            if rank_budget == 1:
+                candidates = [[[value if c == keep else "0" for c, value in enumerate(row)] for row in matrix] for keep in range(2)]
+                losses = [max(sum(Fraction(metric["metric"][i][i]) * (Fraction(sum(target_matrix, [])[i])-Fraction(sum(atom, [])[i]))**2 for i in range(4)) for metric in metrics) for atom in candidates]
+                chosen = min(range(2), key=lambda index: losses[index])
+                matrix, eta = candidates[chosen], losses[chosen]
+            reconstruction = [[str(Fraction(struct.unpack('<f', struct.pack('<f', round(float(Fraction(value)), 4)))[0])) for value in row] for row in matrix]
+            residual_norms = [sum((Fraction(matrix[r][c]) - Fraction(reconstruction[r][c]))**2 for r in range(2)) for c in range(2)]
+            distortion = sum(residual_norms)
+            norm = sum(Fraction(value)**2 for row in matrix for value in row)
+            if not norm:
+                _reject("CAPABILITY_MISMATCH", tensor_id, "zero output windows require an explicit zero-operator description")
+            samples = math.ceil(distortion / (delta * norm)) if distortion else 0
+            epsilon, risk = (1, delta) if distortion else (0, Fraction(0))
+            law = {"family": "NO_RESIDUAL", "atom_ids": ["atom"]} if not distortion else {
+                "family": "FROBENIUS_RESIDUAL_COLUMNS", "adversary": "FIXED_QUERY_BEFORE_PRIVATE_COINS",
+                "coins": "FRESH_INDEPENDENT", "atom_distributions": [{"atom_id": "atom", "columns": [
+                    {"column": c, "probability": str(value / distortion)} for c, value in enumerate(residual_norms) if value]}]}
+            evidence = {
+                "target": {"field": "REAL", "source_shape": [2, 2], "shape": [2, 2], "flattening_order": list(range(4)), "source_values": sum(target_matrix, [])},
+                "conditions": metrics,
+                "atoms": [{"atom_id": "atom", "matrix": matrix, "service_face_id": "face", "description": {
+                    "class": "BLOCK" if distortion else "EXACT", "description_bytes": 16,
+                    "metadata_bytes": len(canonical_bytes({"addresses": addresses, "law": law})), "reconstruction": reconstruction,
+                    "estimator": {"kind": "FRESH_RESIDUAL_COLUMN_AVERAGE" if distortion else "NONE"},
+                    "estimator_calibration": {"distortion": str(distortion), "atom_norm_squared": str(norm)}, "sampling_law_id": "law"}}],
+                "description_contract": {"description_family": {"kind": "DECLARED_RECONSTRUCTION"}, "distortion_metric": {"kind": "FROBENIUS_SQUARED"},
+                    "estimator_family": {"kind": "RESIDUAL_COLUMN_OR_EXACT"}, "residual_family": {"relation": "ATOM_MINUS_RECONSTRUCTION"}},
+                "observation_contract": {"kind": "PROTECTED_DECISION_FAMILY", "experiment": {"corpus_digest": observations["corpus_digest"],
+                        "rule": "EXACT_FINITE_CENSUS", "observation": "EXACT_INPUT_IDENTITY",
+                        "decision_rule": "TOTAL_DECLARED_SELECTOR", "confidence_rule": "DETERMINISTIC_COMPLETE_ENUMERATION"},
+                    "support": conditions, "selector": [{"condition_id": condition, "atom_id": "atom"} for condition in conditions],
+                    "loss_family": {"kind": "condition-quadratic-loss"}, "sample_count": len(traces), "confidence": workload["confidence"], "off_support": "REJECT"},
+                "execution_contract": {"sampling_laws": [{"sampling_law_id": "law", "kind": "FRESH_RANDOM" if distortion else "EXACT", "law": law,
+                    "work_unit": "COLUMNS", "seed_policy": "RECORDED_COUNTER_KEY" if distortion else "NONE"}],
+                    "operations": [{"operation_id": "linear", "operator_case_id": "mlx.matmul.f32.2x2_2x2", "rank_accounting": {"kind": "ATOM_BOUND", "maximum_rank": rank_budget},
+                        "loss_propagation": {"coefficient": "1", "remainder_bound": "0"}, "sampling_law_id": "law"}],
+                    "risk_composition": {"kind": "UNION_BOUND" if distortion else "DETERMINISTIC", "proof": {"rule": "one frozen query per step"}}},
+                "trace_contract": {"protected_trace_family": {"corpus_digest": observations["corpus_digest"], "horizon": horizon},
+                    "prefix_policy": "COHERENT_RESTRICTION", "fresh_traffic_unit": "SCALARS",
+                    "steps": [{"step": step, "operation_id": "linear", "atom_id": "atom", "fresh_samples": samples, "fresh_traffic": 2 * samples} for step in range(horizon)]},
+                "physical_conversion": {"conversion_rows": [{"operation_id": "linear", "probe_unit": "COLUMNS", "probes": samples,
+                    "page_reads": len(addresses) * samples, "bytes": sum(page_sizes[item["page_digest"]] for item in addresses) * samples,
+                    "memory_bytes_peak": sum(page_sizes[item["page_digest"]] for item in addresses) + 16 + len(canonical_bytes({"addresses": addresses, "law": law})),
+                    "latency_ns_peak": read_deadline_ns if samples else 0}]},
+                "minimal_nonface_proofs": [], "excluded_conditions": [{"condition_id": "off-support", "cause": "OFF_SUPPORT", "evidence": {"decision": "REJECT"}}],
+            }
+            certificate = _certificate(evidence, str(eta), rank_budget, [{"operation_id": "linear", "epsilon_exec": epsilon, "delta_exec": str(risk)}])
+            plan = _execution_plan(root, source_root, certificate, profile, {"tensor": tensor_id, "addresses": addresses},
+                                   [{"case_id": "mlx.matmul.f32.2x2_2x2"}], prior_failures, cartridge)
+            page_map = {"root_digest": source_root, "steps": [{
+                "step": step, "operation_id": "linear", "atom_id": "atom",
+                "description_digest": _digest(certificate["atoms"][0]["description"]), "exact_pages": [],
+                "sample_units": [{"unit": item["column"], "page_digests": sorted({address["page_digest"] for address in addresses if address["column"] == item["column"]})}
+                                 for item in law.get("atom_distributions", [{"columns": []}])[0]["columns"]],
+            } for step in range(horizon)]}
+            plan["page_map_digest"] = _digest(page_map)
+            plan["plan_id"] = _digest({key: value for key, value in plan.items() if key != "plan_id"})
+            yield {"row": row_start, "column": column_start, "tensor_id": tensor_id,
+                   "addresses": addresses, "evidence": evidence, "certificate": certificate, "plan": plan, "page_map": page_map}
+
+
+def _compiled_resources(windows, horizon: int, exact_pages=()) -> dict:
+    """Q19: triangle composition uses no centering or independence premise."""
+    total = sum(row["description_bytes"] for row in windows)
+    metadata = sum(row["metadata_bytes"] for row in windows)
+    coefficient_squared = len(windows) * sum(Fraction(row["error_coefficient_squared"]) for row in windows)
+    return {"description_bytes_peak": total, "description_bytes_total": total,
+            "metadata_bytes_peak": metadata, "metadata_bytes_total": metadata,
+            "fresh_traffic_max": sum(row["fresh_bytes"] for row in windows) + sum(row["bytes"] for row in exact_pages),
+            "exact_source_bytes_per_step": sum(row["bytes"] for row in exact_pages),
+            "fresh_traffic_total": horizon * (sum(row["fresh_bytes"] for row in windows) + sum(row["bytes"] for row in exact_pages)),
+            "delta_exec_total": str(min(Fraction(1), sum(Fraction(row["risk"]) for row in windows))),
+            "error_coefficient_squared": str(coefficient_squared),
+            "representation_error_coefficient_squared": str(len(windows) * sum(Fraction(row["representation_loss_bound"]) for row in windows)),
+            "rank_sum_bound": sum(row["rank"] for row in windows),
+            "composition": "TRIANGLE_THEN_CAUCHY_SCHWARZ", "horizon": horizon}
+
+
+def _native_window_ref(window: dict) -> dict:
+    payload = canonical_bytes(window)
+    certificate = window["certificate"]
+    return {"page_digest": digest_bytes(payload), "row": window["row"], "column": window["column"],
+           "tensor_id": window["tensor_id"], "description_bytes": certificate["resources"]["description_bytes_total"],
+           "metadata_bytes": len(payload), "fresh_bytes": max(row["bytes"] for row in window["evidence"]["physical_conversion"]["conversion_rows"]),
+           "risk": certificate["resources"]["delta_exec_total"], "rank": certificate["atoms"][0]["rank"],
+           "representation_loss_bound": certificate["resources"]["eta_rep"],
+           "error_coefficient_squared": str(Fraction(certificate["resources"]["epsilon_exec"])**2 * sum(Fraction(value)**2 for row in window["evidence"]["atoms"][0]["matrix"] for value in row))}
+
+
+
+def _native_exact_pages(cartridge, source_root: str) -> list[dict]:
+    """Q19/Q20: bind every untransformed graph operand and ordered adapter to exact pages."""
+    root = load_root(cartridge, source_root)
+    graph = root["plans"][0]["graph"]
+    transformed = graph["nodes"][-1]["weights"][0]
+    names = set(graph["contributions"]) - {transformed}
+    pages = {span["page_digest"] for tensor in root["tensor_maps"] if tensor["semantic_tensor_id"] in names for span in tensor["spans"]}
+    for delta in root["deltas"]:
+        manifest = json.loads(read_training_page(cartridge, source_root, delta["manifest_digest"]))
+        pages.update(row["page_digest"] for row in manifest["adapters"] if row["tensor_id"] in names)
+    lengths = {row.page_digest: row.length for row in page_locations(cartridge, source_root)}
+    return [{"page_digest": page, "bytes": lengths[page]} for page in sorted(pages)]
+
+def prepare_native_compiled(cartridge, source_root: str, observations: dict, horizon: int,
+                            profile: dict, prior_failures: list[dict], *,
+                            capacity_controller: CapacityCoordinator, operation_id: str,
+                            checkpoint_root: str | None = None, max_windows: int | None = None,
+                            effective_target: dict | None = None, rank_budget: int = 2,
+                            read_deadline_ns: int = 1_000_000_000) -> str:
+    """Q19/Q25/Q58: checkpoint each constructed window through the established durable store."""
+    source = load_root(cartridge, source_root)
+    if source["deltas"] and effective_target is None:
+        _reject("CAPABILITY_MISMATCH", source_root, "trained compilation requires its exact effective target")
+    if max_windows is not None and (type(max_windows) is not int or max_windows <= 0):
+        _reject("INVALID_REQUEST", source_root, "compile window budget must be positive")
+    binding = {"source_root": source_root, "observations": observations, "horizon": horizon,
+               "profile": profile, "prior_failures": prior_failures, "effective_target": effective_target,
+               "rank_budget": rank_budget, "read_deadline_ns": read_deadline_ns,
+               "exact_pages": _native_exact_pages(cartridge, source_root)}
+    refs, retained = [], []
+    if checkpoint_root:
+        checkpoint = load_root(cartridge, checkpoint_root)
+        prior = checkpoint["plans"][0].get("compiled", {})
+        if any(prior.get(key) != value for key, value in binding.items()):
+            _reject("ROOT_INVALID", checkpoint_root, "compile checkpoint differs from the frozen construction inputs")
+        refs = prior["windows"]
+        retained = list(page_locations(cartridge, checkpoint_root))
+    candidate, added = checkpoint_root, 0
+    original_count = len(refs)
+    for index, window in enumerate(_native_head_windows(cartridge, source_root, observations, horizon, profile, prior_failures, effective_target, rank_budget, read_deadline_ns)):
+        payload = canonical_bytes(window)
+        ref = _native_window_ref(window)
+        if index < original_count:
+            if refs[index] != ref or read_training_page(cartridge, checkpoint_root, ref["page_digest"]) != payload:
+                _reject("ROOT_INVALID", checkpoint_root, "compile checkpoint window differs from independent reconstruction")
+            continue
+        if max_windows is not None and added == max_windows:
+            break
+        retained.extend(stage_training_pages(cartridge, (payload,), capacity_controller=capacity_controller,
+            operation_id=operation_id, boundary_id="compile-window"))
+        refs.append(ref)
+        compiled = {**binding, "windows": refs, "complete": False,
+                    "transformed_tensors": [window["tensor_id"]],
+                    "identity_tensors": [name for name in source["plans"][0]["graph"]["contributions"] if name != window["tensor_id"]],
+                    "resources": _compiled_resources(refs, horizon, binding["exact_pages"])}
+        bundle = {**source["plans"][0], "compiled": compiled}
+        material = replace(_compiled_identity_material(source), revision_kind="executable",
+                           parent_ids=(source["identity"],), transform_manifest_digest=_digest(bundle))
+        candidate = derive_root(cartridge, source_root, material, (bundle,), capacity_controller=capacity_controller,
+                                operation_id=operation_id, additional_pages=tuple({row.page_digest: row for row in retained}.values()))
+        added += 1
+    else:
+        bundle = load_root(cartridge, candidate)["plans"][0]
+        bundle["compiled"]["complete"] = True
+        material = replace(_compiled_identity_material(source), revision_kind="executable",
+                           parent_ids=(source["identity"],), transform_manifest_digest=_digest(bundle))
+        candidate = derive_root(cartridge, source_root, material, (bundle,), capacity_controller=capacity_controller,
+                                operation_id=operation_id, additional_pages=tuple({row.page_digest: row for row in retained}.values()))
+        verify_native_compiled_bundle(cartridge, candidate)
+    return candidate
+
+
+def verify_native_compiled_bundle(cartridge, root_digest: str) -> dict:
+    """Q19/Q58: recompute every paged window, graph relation and aggregate before admission."""
+    root = load_root(cartridge, root_digest)
+    bundle, compiled = root["plans"][0], root["plans"][0]["compiled"]
+    source = load_root(cartridge, compiled["source_root"])
+    graph = verify_native_bundle(cartridge, compiled["source_root"], exact_source=True)
+    if (compiled.get("complete") is not True or bundle["graph"] != graph or root["parents"] != [source["identity"]]
+            or _digest(bundle) != root["provenance"]["identity_material"]["transform_manifest_digest"]
+            or {key: value for key, value in bundle.items() if key != "compiled"} != {key: value for key, value in source["plans"][0].items() if key != "compiled"}
+            or [row for row in root["tensor_maps"] if not row["semantic_tensor_id"].startswith("state.")]
+                != [row for row in source["tensor_maps"] if not row["semantic_tensor_id"].startswith("state.")]):
+        _reject("ROOT_INVALID", root_digest, "compiled graph, source maps, completion or lineage differs")
+    if compiled["exact_pages"] != _native_exact_pages(cartridge, compiled["source_root"]):
+        _reject("ROOT_INVALID", root_digest, "exact graph page map differs from its source and ordered adapters")
+    expected = _native_head_windows(cartridge, compiled["source_root"], compiled["observations"],
+                                    compiled["horizon"], compiled["profile"], compiled["prior_failures"], compiled["effective_target"],
+                                    compiled["rank_budget"], compiled["read_deadline_ns"])
+    seen = 0
+    for window in expected:
+        if seen >= len(compiled["windows"]):
+            _reject("ROOT_INVALID", root_digest, "compiled window catalog is truncated")
+        ref = compiled["windows"][seen]
+        payload = read_training_page(cartridge, root_digest, ref["page_digest"])
+        if canonical_bytes(window) != payload or ref != _native_window_ref(window):
+            _reject("ROOT_INVALID", root_digest, "compiled window fails exact reconstruction")
+        seen += 1
+    if not seen or seen != len(compiled["windows"]) or compiled["resources"] != _compiled_resources(compiled["windows"], compiled["horizon"], compiled["exact_pages"]):
+        _reject("ROOT_INVALID", root_digest, "compiled aggregate differs from its window composition")
+    target = graph["nodes"][-1]["weights"][0]
+    if compiled["transformed_tensors"] != [target] or compiled["identity_tensors"] != [name for name in graph["contributions"] if name != target]:
+        _reject("ROOT_INVALID", root_digest, "compiled contribution accounting omits or duplicates a graph tensor")
+    return graph
+
+
+def prepare_native_effective_source(cartridge, source_root: str, tensor_id: str, payload: bytes, *,
+                                    capacity_controller: CapacityCoordinator, operation_id: str) -> tuple[str, dict]:
+    """Q26/Q70: commit the broker-dispatched exact target before certificate construction."""
+    source = load_root(cartridge, source_root)
+    graph = verify_native_bundle(cartridge, source_root, exact_source=True)
+    shape = next(row["shape"] for row in source["tensor_maps"] if row["semantic_tensor_id"] == tensor_id)
+    if tensor_id != graph["nodes"][-1]["weights"][0] or len(payload) != math.prod(shape)*4:
+        _reject("ROOT_INVALID", source_root, "effective tensor differs from the source output operator")
+    pages = stage_training_pages(cartridge, (payload,), capacity_controller=capacity_controller,
+                                 operation_id=operation_id, boundary_id="effective-compiled-target")
+    candidate = derive_root(cartridge, source_root, _compiled_identity_material(source), tuple(source["plans"]),
+        capacity_controller=capacity_controller, operation_id=operation_id, additional_pages=pages)
+    return candidate, {"tensor_id": tensor_id, "shape": shape, "page_digest": digest_bytes(payload),
+                       "adapter_catalog_digest": _digest(source["deltas"])}

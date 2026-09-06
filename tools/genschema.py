@@ -1124,6 +1124,14 @@ NATIVE_OPERATORS = {
     "image": ["mlx.core.subtract", "mlx.core.multiply", "mlx.core.divide", "mlx.core.conv2d"],
     "sample": ["mlx.core.divide", "mlx.core.argmax", "mlx.core.random.categorical", "mlx.core.random.key"],
 }
+# Q21/Q30: language-model objectives reuse MLX autodiff and stable log probabilities.
+NATIVE_OBJECTIVES = {
+    "ADAPTER_SFT": "MASKED_CAUSAL_LOG_PROBABILITY",
+    "ADAPTER_CONTINUED_PRETRAINING": "MASKED_CAUSAL_LOG_PROBABILITY",
+    "OFFLINE_ADAPTER_DPO": "REFERENCE_SEQUENCE_LOGISTIC",
+    "primitives": ["mlx.core.value_and_grad", "mlx.core.logsumexp", "mlx.core.take_along_axis",
+                   "mlx.core.logaddexp", "mlx.core.sum", "mlx.core.matmul", "mlx.optimizers.SGD"],
+}
 NATIVE_GRAPH_RECIPES = {
     "attention": [
         ["norm", "norm", ["$input"], ["input_layernorm.weight"]],
@@ -1149,6 +1157,13 @@ NATIVE_GRAPH_RECIPES = {
         ["output", "add", ["residual", "down"], []],
     ],
 }
+# Q19/Q30: a padded two-by-two linear window has no model-dimension restriction.
+DISPATCH_ROWS.append({
+    "case_id": "mlx.matmul.f32.2x2_2x2", "operator": "matmul",
+    "input_dtypes": ["float32", "float32"], "input_shapes": [[2, 2], [2, 2]],
+    "output_dtype": "float32", "output_shape": [2, 2], "parameters": {},
+    "runtime_symbols": ["mlx.core.matmul"], "absolute_tolerance": 1e-6, "relative_tolerance": 1e-6,
+})
 DISPATCH_DIGEST = "sha256:" + hashlib.sha256(
     json.dumps(
         {"runtime": MLX_RUNTIME, "rows": DISPATCH_ROWS},
@@ -2055,7 +2070,48 @@ def verify_certificate_dimensions(dimensions: dict[str, list[str]]) -> None:
                 f"authority_only={sorted(authority - schema)}, schema_only={sorted(schema - authority)}"
             )
 
+NATIVE_FACTOR = record("Native LoRA factors", "Q21/Q24/Q33", {
+    "a": bounded_array(bounded_array({"type": "number", "minimum": -3.4028234663852886e38, "maximum": 3.4028234663852886e38}, minimum=1), minimum=1),
+    "b": bounded_array(bounded_array({"type": "number", "minimum": -3.4028234663852886e38, "maximum": 3.4028234663852886e38}, minimum=1), minimum=1),
+    "scale": {"type": "number", "minimum": -3.4028234663852886e38, "maximum": 3.4028234663852886e38},
+})
+NATIVE_WINDOW = record("Native parameter window", "Q24/Q25/Q33", {
+    "tensor_id": bounded_text(), "shape": bounded_array(integer(minimum=1), minimum=2, maximum=2),
+    "rank": integer(minimum=1), "page_digest": digest(), "state_bytes": integer(minimum=1),
+})
+NATIVE_TRAINING = with_bounded_json(record("Native training checkpoint", "Q21/Q23/Q25/Q33", {
+    "version": text(enum=["native-training-v1"]), "parent_root": digest(), "job_id": digest(),
+    "operation": text(enum=["ADAPTER_SFT", "ADAPTER_CONTINUED_PRETRAINING", "OFFLINE_ADAPTER_DPO"]),
+    "adapters": bounded_array(NATIVE_WINDOW, minimum=1), "pending_adapters": bounded_array(NATIVE_WINDOW),
+    "dataset": bounded_array(digest(), minimum=1), "dataset_digest": digest(),
+    "cursor": integer(), "window": integer(), "step": integer(), "epochs": integer(minimum=1),
+    "learning_rate": {"type": "number", "minimum": 0, "maximum": 3.4028234663852886e38}, "precision": text(enum=["FP32", "BF16"]),
+    "seed": integer(maximum=2**32-1), "reference_root": nullable(digest()),
+    "beta": {"type": "number", "minimum": 0, "maximum": 3.4028234663852886e38}, "losses": bounded_array({"type": "number", "minimum": -3.4028234663852886e38, "maximum": 3.4028234663852886e38}),
+    "window_limit_bytes": integer(minimum=1), "complete": {"type": "boolean"}, "admission": bounded_json_object(),
+}))
+
+
+NATIVE_WORKLOAD = with_bounded_json(record("Frozen finite native workload", "Q13/Q18/Q33/Q40", {
+    "version": text(enum=["native-workload-v1"]),
+    "baseline": record("Frozen native baseline", "Q13", {"root_digest": digest(), "equivalence": text(enum=["EXACT_FIXTURE"])}),
+    "cases": bounded_array(record("Frozen observation case", "Q18/Q40", {
+        "condition_id": bounded_text(), "stratum": bounded_text(),
+        "tokens": bounded_array(integer(), minimum=1), "pixels": nullable(bounded_json_value()),
+        "ablations": bounded_array(bounded_array(bounded_text(), minimum=1), minimum=1),
+        "gradient": bounded_json_object(),
+    }), minimum=1),
+    "seeds": bounded_array(integer(maximum=2**32-1), minimum=1, maximum=1),
+    "trials": integer(minimum=1, maximum=1), "scorer": text(enum=["TOKEN_LOGIT_VECTOR"]),
+    "confidence": {"type": "number", "minimum": 1, "maximum": 1},
+    "support": bounded_array(bounded_text(), minimum=1), "off_support": text(enum=["REJECT"]),
+}))
+
+
 CONTRACTS: dict[str, dict] = {
+    "native_workload": NATIVE_WORKLOAD,
+    "native_adapter_factors": NATIVE_FACTOR,
+    "native_training_manifest": NATIVE_TRAINING,
     "error": record(
         "Canonical error",
         "Q6/Q32",
@@ -2080,6 +2136,8 @@ CONTRACTS: dict[str, dict] = {
                 "Q6",
                 {
                     "source": ref("source_descriptor"),
+                    "checkpoint_root": blake3_digest(),
+                    "manifest_digest": blake3_digest(),
                     "messages": array(bounded_json_object(), minimum=1, maximum=64),
                     "tools": array(bounded_json_object(), maximum=64),
                     "seed": {"type": "integer", "minimum": 0, "maximum": 2**32 - 1},
@@ -2096,7 +2154,7 @@ CONTRACTS: dict[str, dict] = {
                     ),
                 },
                 optional=(
-                    "source", "context_ref", "negotiation_id", "tier", "delta_digest",
+                    "checkpoint_root", "manifest_digest", "source", "context_ref", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
                     "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),
@@ -2451,6 +2509,7 @@ def emit(outdir: Path) -> dict[str, str]:
         f"OPERATOR_DISPATCH = {pprint.pformat(OPERATOR_DISPATCH_RECORD, sort_dicts=True, width=100)}\n"
         f"DISPATCH_ROWS = {pprint.pformat(DISPATCH_ROWS, sort_dicts=True, width=100)}\n"
         f"NATIVE_OPERATORS = {pprint.pformat(NATIVE_OPERATORS, sort_dicts=True, width=100)}\n"
+        f"NATIVE_OBJECTIVES = {pprint.pformat(NATIVE_OBJECTIVES, sort_dicts=True, width=100)}\n"
         f"NATIVE_GRAPH_RECIPES = {pprint.pformat(NATIVE_GRAPH_RECIPES, sort_dicts=True, width=100)}\n"
         f"Q40_MODES = {pprint.pformat(Q40_MODES, sort_dicts=True, width=100)}\n"
         f"EXPORT_TARGETS = {pprint.pformat(EXPORT_TARGETS, sort_dicts=True, width=100)}\n"
