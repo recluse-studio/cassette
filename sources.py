@@ -1625,11 +1625,14 @@ async def transfer_artifact(
     capacity_coordinator: CapacityCoordinator,
     *,
     authoritative_chunk_digests: tuple[str, ...] | None = None,
+    checkpoint_committed=None,
 ) -> PartialState:
     """Resume one Q51 artifact and return only after its durable final proof is complete."""
 
     if not isinstance(adapter, SourceAdapter):
         _transfer_fail("INVALID_REQUEST", "transfer:unidentified", "SourceAdapter is required")
+    if checkpoint_committed is not None and not callable(checkpoint_committed):
+        _transfer_fail("INVALID_REQUEST", artifact.path, "checkpoint control must be callable")
     adapter._revision(revision)
     if not isinstance(artifact, Artifact) or artifact not in (*revision.artifacts, *revision.metadata_assets):
         _transfer_fail("INVALID_REQUEST", revision.locator, "artifact must belong to the resolved source revision")
@@ -1747,6 +1750,8 @@ async def transfer_artifact(
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
 
     completed = header["completed_count"]
+    if completed and checkpoint_committed is not None:
+        await checkpoint_committed()
     while completed < header["chunk_count"]:
         indices = tuple(range(completed, min(completed + _TRANSFER_PARALLEL_RANGES, header["chunk_count"])))
         results = await asyncio.gather(*(
@@ -1840,6 +1845,8 @@ async def transfer_artifact(
             completed = next_completed
             chunk_digests += (chunk.blake3_digest,)
             header = next_header
+            if checkpoint_committed is not None:
+                await checkpoint_committed()
 
     if header["contiguous_source_hash_digest"] != artifact.digest:
         reset_checkpoint(header, header["generation"], "whole-digest")

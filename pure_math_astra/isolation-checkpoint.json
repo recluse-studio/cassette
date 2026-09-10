@@ -1,0 +1,84 @@
+{
+  "checked_at_utc": "2026-09-06T03:44:42.474718+00:00",
+  "tracked_files_checked": 103,
+  "head_unchanged": true,
+  "changed_tracked_files": [
+    {
+      "path": "AGENTS.md",
+      "baseline_sha256": "604639b8963684d741b97e257326aba7770f833fcad64c4217dc553e610b9955",
+      "current_sha256": "10d39d55f74319398129481226582d76c5fc0f3a41dc30069991d58516dbd808"
+    },
+    {
+      "path": "BUILD_STORY.md",
+      "baseline_sha256": "9624d6aceac74c5adef642956154340fdd1fe1b867c4acc771eff761a02b2509",
+      "current_sha256": "be3ec87c155796673bbdc59aae03bc7249999b9e29cc11d7824f683f03924d1e"
+    },
+    {
+      "path": "IMPLEMENTATION.md",
+      "baseline_sha256": "a05bbf06eb010f3e3da3a629ca3bf12f623016f6c1057aa42bc13fc7ba44d5dd",
+      "current_sha256": "d96fec8a1955e35943e0e8a530f2d45b5164a26da097d41607c0e6496205451d"
+    },
+    {
+      "path": "PHASE_LIVE_RUNBOOK.md",
+      "baseline_sha256": "df9f41b71da22c6c5ad9c7ebd96cfe3a3962b512199a0cd6b15a232fcf6385f2",
+      "current_sha256": "d448f5ef840c582f73c890e5ccb6687f3bcd409d7bfe6b6e2fccb8f3627106f1"
+    },
+    {
+      "path": "adapters/__init__.py",
+      "baseline_sha256": "7497a20010e0866bd75b0abf74f565fa23dd37b4ee76c738a4753bf6b14fc1e8",
+      "current_sha256": "c76ed19c1dfa8ec62fec2e3b83b1c84d8ec22c3f6ab2cfa4d7b75304ebefb7e1"
+    },
+    {
+      "path": "broker.py",
+      "baseline_sha256": "2a495b6969518090a5821a2e17346f24086a9eb975292d042ccf554de9333d35",
+      "current_sha256": "4898689c27ca322f48e162f51f29d29bfba798a8aab0437de495ffca1cae1ebc"
+    },
+    {
+      "path": "compiler.py",
+      "baseline_sha256": "79a144e61d08c63debbf75e9746cb4697dcf757a3eb7ea74f6fb20e9c05a7e3c",
+      "current_sha256": "f68436b79a6d935e8954ce56cbb0fe72e6969890a7c7ba340557fa0c18d1517d"
+    },
+    {
+      "path": "pager.py",
+      "baseline_sha256": "d06cff18366336706d863a8e3c9d21c3df619e0866199b8ada368d08f85ec59f",
+      "current_sha256": "ef1b4ad44e7a4d95de41e7167fc781d7a36a41ddfb0dc9c73a4e5c3983153dd4"
+    },
+    {
+      "path": "pyproject.toml",
+      "baseline_sha256": "cf05dc76f663c39013c2cd4a60549d66c7ffffb45c0537597faffe7cebb8d231",
+      "current_sha256": "bda6e54af29c6a8da2f5239e74723739e0277a30756553b49400d1aafc0d0b7e"
+    },
+    {
+      "path": "schema/MANIFEST.json",
+      "baseline_sha256": "b3656c4198038491dfd695976e9128de00cd88ce27821901ebcfd2ce1ad9a273",
+      "current_sha256": "e861ae92d7da7fbf75fa1cc6ffd49f22f35315049e4ef6680d8f205604ec5d43"
+    },
+    {
+      "path": "schema/tables.py",
+      "baseline_sha256": "2a9dc4eaba2649b21fd34d653723b9eaeb5ee2f0c1387c0e83fc6e06e130524b",
+      "current_sha256": "b721a4f1ab9ad121a32a96d5e4f75388e9520ce8546e3304cde4ae5896edd874"
+    },
+    {
+      "path": "tests/test_l03_execution.py",
+      "baseline_sha256": "c1ec3068611be866ae878cfd99be190f1de9f5a5d20f84856337f9aeccf37d91",
+      "current_sha256": "e7927793bfdcc1781b8673892868bbe98882bc51c1816a6b134dc1f8473824ab"
+    },
+    {
+      "path": "tools/genschema.py",
+      "baseline_sha256": "2cc885ac4c9f8c1c6c684a150bfd147cf51a40dea2ae93cd82e9dc28d318988c",
+      "current_sha256": "22c3e41928f31247971e4f3ef736113fd64c4dba77e436d714bd6409c6e79a8b"
+    },
+    {
+      "path": "trainer.py",
+      "baseline_sha256": "f60d13d443e6b90d34f6a359d322ba5a30d688069e5a1c0ad64dd0e504ed2ffa",
+      "current_sha256": "20087d6141dcb9787efc27279917d78c1005130a7c206aa79023c01be1fc2ae2"
+    },
+    {
+      "path": "uv.lock",
+      "baseline_sha256": "41c0c55c9c090ec0c6a5dc1015538f7654899cb9d990249e5faead4fdc124666",
+      "current_sha256": "17c3fc27f10a4766541c1c159d01227a419ac52a6e74e5e674ac3efca10c446a"
+    }
+  ],
+  "scope": "This investigation wrote only pure_math_astra. The origin of other checkout changes was not determined.",
+  "goal_status": "unfinished; no candidate has passed correctness, originality, and significance together"
+}

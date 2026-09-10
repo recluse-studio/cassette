@@ -1,0 +1,30 @@
+{
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "seed": 20260906,
+  "fixed_energy": {
+    "cases": 700,
+    "largest_upper_excess": 2.0192181260370035e-15,
+    "smallest_random_law_minus_lower": 0.02695982067697965
+  },
+  "rank_two": {
+    "evaluations": 1473171,
+    "conjectured_minimum": 2.732050807568877,
+    "best": {
+      "value": 2.732050807568877,
+      "angles": [
+        0.0,
+        0.0,
+        1.5707963267948966
+      ],
+      "law": [
+        0.3660254037844386,
+        0.3660254037844386,
+        0.2679491924311228
+      ],
+      "source": "analytic duplicated-pair construction"
+    },
+    "counterexample_found": false
+  },
+  "boundary": "Finite floating-point counterexample search; not a proof."
+}

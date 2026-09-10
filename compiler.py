@@ -4297,6 +4297,9 @@ def _native_head_windows(cartridge, source_root: str, observations: dict, horizo
     if (validate("native_workload", workload) or type(rank_budget) is not int or rank_budget not in (1, 2)
             or type(read_deadline_ns) is not int or not 0 < read_deadline_ns < 2**64):
         _reject("INVALID_REQUEST", source_root, "frozen observation, rank budget or read deadline is invalid")
+    input_keys = [_digest({"tokens": case["tokens"], "pixels": case["pixels"]}) for case in workload["cases"]]
+    if len(set(input_keys)) != len(input_keys):
+        _reject("CAPABILITY_MISMATCH", source_root, "protected conditions require distinct observable token and pixel inputs before certification")
     conditions = sorted(workload["support"])
     traces = observations["traces"]
     if (not conditions or len(conditions) != len(set(conditions)) or workload["off_support"] != "REJECT"

@@ -2858,14 +2858,14 @@ def prepare_native_training(cartridge, parent_root: str, operation: str, adapter
 
 
 def native_training_inputs(cartridge, checkpoint_root: str, manifest_digest: str) -> tuple[dict, dict, dict]:
-    """Q23: decode only the current sequence and its small adapter catalog from verified pages."""
+    """Q23: decode the current sequence and pass immutable adapter page references."""
     state = native_training_state(cartridge, checkpoint_root, manifest_digest)
     if state["complete"]:
         _reject("INVALID_REQUEST", state["job_id"], "completed training has no next sequence")
     batch = _decode(read_training_page(cartridge, checkpoint_root, state["dataset"][state["cursor"]]),
                     state["job_id"], "language-model sequence")
-    adapters = {row["tensor_id"]: _decode(read_training_page(cartridge, checkpoint_root, row["page_digest"]),
-                 state["job_id"], "adapter factors") for row in state["adapters"]}
+    adapters = {row["tensor_id"]: {"root_digest": checkpoint_root, "page_digest": row["page_digest"]}
+                for row in state["adapters"]}
     return state, batch, adapters
 
 
@@ -2897,8 +2897,11 @@ def advance_native_training(cartridge, checkpoint_root: str, manifest_digest: st
         _reject("GRADIENT_INVALID", name, "gradient receipt differs from the frozen model, batch, adapter window or reference")
     if result.get("receipt_digest") != digest_bytes(canonical_bytes({key: value for key, value in result.items() if key != "receipt_digest"})):
         _reject("GRADIENT_INVALID", name, "gradient receipt contents changed before checkpoint")
+    if result.get("adapter_window_peak_bytes", math.inf) > state["window_limit_bytes"]:
+        _reject("MEMORY_BUDGET_EXCEEDED", name, "gradient adapter frontier exceeds the admitted window")
+    adapter = _decode(read_training_page(cartridge, checkpoint_root, row["page_digest"]), name, "current adapter factors")
     mx, optim = _runtime()
-    parameters = {key: mx.array(adapters[name][key], dtype=mx.float32) for key in ("a", "b")}
+    parameters = {key: mx.array(adapter[key], dtype=mx.float32) for key in ("a", "b")}
     gradients = {key: mx.array(result["gradients"][key], dtype=mx.float32) for key in ("a", "b")}
     if any(parameters[key].shape != gradients[key].shape or not bool(mx.all(mx.isfinite(gradients[key])).item()) for key in parameters) or not math.isfinite(result["loss"]):
         _reject("GRADIENT_INVALID", name, "native gradient shape or finite loss differs from its window")
@@ -2912,7 +2915,7 @@ def advance_native_training(cartridge, checkpoint_root: str, manifest_digest: st
         mx.eval(updated)
         if any(not bool(mx.all(mx.isfinite(value)).item()) for value in updated.values()):
             _reject("GRADIENT_INVALID", name, "BF16 storage conversion produced nonfinite adapter parameters")
-    adapter = {**{key: value.tolist() for key, value in updated.items()}, "scale": adapters[name]["scale"]}
+    adapter = {**{key: value.tolist() for key, value in updated.items()}, "scale": adapter["scale"]}
     payload = canonical_bytes(adapter)
     state["pending_adapters"].append({**row, "page_digest": digest_bytes(payload)})
     state["losses"].append(result["loss"])

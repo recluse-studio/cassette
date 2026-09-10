@@ -3934,6 +3934,10 @@ class NativeTransformer:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q64: protected condition selection", "input has no unique protected condition")
         position = self.state["position"]
         count = 1 if position else len(prompt_tokens)
+        if not position and pixels is not None:
+            image_node = next(node for node in self.graph["nodes"] if node["operator"] == "image")
+            patch = image_node["parameters"]["patch_size"]
+            count += (len(pixels[0]) // patch) * (len(pixels[0][0]) // patch) - 1
         if position + count > self.compiled["horizon"]:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q19: compiled horizon", "query exceeds the certified token horizon")
         if type(seed) is not int or not 0 <= seed < 2**32:
@@ -4064,17 +4068,24 @@ class NativeTransformer:
             raise _error("TRAINING_UNSUPPORTED", operation, "Q21/Q30: objective admission", "language-model objective is absent from generated dispatch")
         if not isinstance(adapters, dict) or not adapters or (differentiate is not None and differentiate not in adapters):
             raise _error("INVALID_REQUEST", operation, "Q21: adapter windows", "one declared adapter catalog and an owned gradient window are required")
-        total_bytes = sum(self._factor_shape(name, record) for name, record in adapters.items())
-        training_peak = self.declared_peak_bytes * 4 + total_bytes * 4
+        def factors(name):
+            record = adapters[name]
+            if isinstance(record, dict) and set(record) == {"root_digest", "page_digest"}:
+                record = json.loads(read_training_page(self.cartridge, record["root_digest"], record["page_digest"]))
+            self._factor_shape(name, record)
+            return record
+        window_bytes = max(self._factor_shape(name, factors(name)) for name in adapters)
+        training_peak = self.declared_peak_bytes * 4 + window_bytes * 3
         if training_peak > self.available_bytes:
             raise _error("MEMORY_BUDGET_EXCEEDED", operation, "Q23/Q47: full-graph gradient memory", "declared activation and adapter-gradient peak exceeds admitted memory")
-        windows = {name: {key: mx.array(record[key], dtype=mx.float32) for key in ("a", "b")}
-                   for name, record in adapters.items()}
+        active_record = {} if differentiate is None else factors(differentiate)
+        active = {key: mx.array(active_record[key], dtype=mx.float32) for key in ("a", "b")} if active_record else {}
+        mx.eval(active)
         required = {"chosen", "rejected"} if operation == "OFFLINE_ADAPTER_DPO" else {"sequence"}
         if not isinstance(batch, dict) or set(batch) != required:
             raise _error("INVALID_REQUEST", operation, "Q21: sequence objective", "batch fields differ from the admitted objective")
         for sequence in batch.values():
-            if not isinstance(sequence, dict) or set(sequence) != {"tokens", "mask"}:
+            if not isinstance(sequence, dict) or set(sequence) not in ({"tokens", "mask"}, {"tokens", "mask", "pixels"}):
                 raise _error("INVALID_REQUEST", operation, "Q21: causal labels", "each sequence requires exact token and label-mask fields")
             tokens, mask = sequence["tokens"], sequence["mask"]
             if (not isinstance(tokens, list) or not 2 <= len(tokens) <= self.graph["context_limit"]
@@ -4087,7 +4098,19 @@ class NativeTransformer:
             raise _error("INVALID_REQUEST", operation, "Q21: frozen DPO reference", "preference training requires its frozen reference runtime and positive beta")
 
         def probability(runtime, sequence, weight=None):
-            logits = runtime.forward(sequence["tokens"][:-1], weights=weight, exact_source=True)["logits"]
+            tokens = sequence["tokens"]
+            logits = runtime.forward(tokens[:-1], pixels=sequence.get("pixels"), weights=weight, exact_source=True)["logits"]
+            image_nodes = [node for node in runtime.graph["nodes"] if node["operator"] == "embedding" and len(node["inputs"]) == 2]
+            if image_nodes:
+                marker = image_nodes[0]["parameters"]["image_token_index"]
+                if tokens.count(marker) != 1 or tokens[-1] == marker or sequence["mask"][tokens.index(marker)] != 0:
+                    raise _error("INVALID_REQUEST", operation, "Q21/Q66: image label alignment", "one unlabelled image marker must occur before the final target token")
+                marker_position = tokens.index(marker)
+                expansion = logits.shape[0] - (len(tokens) - 1)
+                positions = [index + (expansion if index >= marker_position else 0) for index in range(len(tokens)-1)]
+                logits = mx.take(logits, mx.array(positions, dtype=mx.int32), axis=0)
+            elif sequence.get("pixels") is not None:
+                raise _error("CAPABILITY_MISMATCH", operation, "Q21/Q66: modality objective", "text graph cannot consume image pixels")
             labels = mx.array(sequence["tokens"][1:], dtype=mx.int32)[:, None]
             selected = mx.take_along_axis(logits, labels, axis=-1)[:, 0]
             logp = selected - mx.logsumexp(logits, axis=-1)
@@ -4103,10 +4126,17 @@ class NativeTransformer:
         def loss(window):
             def weight(name):
                 base = self._weight(name)
-                if name not in windows:
+                if name not in adapters:
                     return base
-                factors = window if name == differentiate else windows[name]
-                return base + adapters[name]["scale"] * mx.matmul(factors["b"], factors["a"])
+                if name == differentiate:
+                    return base + active_record["scale"] * mx.matmul(window["b"], window["a"])
+                # Freeze each other operand before its consumer; its factors never enter the gradient tape.
+                record = factors(name)
+                a = mx.array(record["a"], dtype=mx.float32)
+                b = mx.array(record["b"], dtype=mx.float32)
+                frozen = mx.stop_gradient(base + record["scale"] * mx.matmul(b, a))
+                mx.eval(frozen)
+                return frozen
             if operation == "OFFLINE_ADAPTER_DPO":
                 margin = probability(self, batch["chosen"], weight) - probability(self, batch["rejected"], weight)
                 return mx.logaddexp(mx.array(0.0), -beta * (margin - reference_margin))
@@ -4115,10 +4145,10 @@ class NativeTransformer:
         if differentiate is None:
             value, gradient = loss({}), {}
         else:
-            value, gradient = mx.value_and_grad(loss)(windows[differentiate])
+            value, gradient = mx.value_and_grad(loss)(active)
         mx.eval(value, gradient)
         result = {"loss": float(value.item()), "gradients": {name: item.tolist() for name, item in gradient.items()},
-                  "declared_peak_bytes": training_peak, "objective_dispatch_digest": _digest(NATIVE_OBJECTIVES),
+                  "declared_peak_bytes": training_peak, "adapter_window_peak_bytes": window_bytes * 3, "objective_dispatch_digest": _digest(NATIVE_OBJECTIVES),
                   "execution_mode": "EXACT_SOURCE_TRAINING"}
         if not math.isfinite(result["loss"]) or any(not bool(mx.all(mx.isfinite(item)).item()) for item in gradient.values()):
             raise _error("GRADIENT_INVALID", operation, "Q21: finite loss and gradients", "full-graph objective produced a nonfinite value")
@@ -4234,8 +4264,11 @@ def capture_native(cartridge, root_digest: str, profile: dict, workload: dict) -
             gradient = case["gradient"]
             if set(gradient) != {"operation", "batch", "adapters", "window"}:
                 raise _error("INVALID_REQUEST", root_digest, "Q18: gradient observation", "gradient request must bind the objective, batch, factors and differentiated window")
+            batch = gradient["batch"]
+            if case["pixels"] is not None:
+                batch = {name: {**sequence, "pixels": sequence.get("pixels", case["pixels"])} for name, sequence in batch.items()}
             observed_gradient = runtime.objective(
-                gradient["operation"], gradient["batch"], gradient["adapters"],
+                gradient["operation"], batch, gradient["adapters"],
                 differentiate=gradient["window"])
             traces.append({"condition_id": case["condition_id"], "stratum": case["stratum"],
                            "trial": trial, "seed": seed, "full": full, "ablations": ablations,

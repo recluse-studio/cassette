@@ -754,6 +754,9 @@ def install_generator(root: Path) -> None:
     shutil.copy2(REPO / "tools" / "genschema.py", root / "tools" / "genschema.py")
     shutil.copy2(REPO / "errors.py", root / "errors.py")
     shutil.copy2(REPO / "MATHS.md", root / "MATHS.md")
+    shutil.copy2(REPO / "IMPLEMENTATION.md", root / "IMPLEMENTATION.md")
+    (root / "research").mkdir(exist_ok=True)
+    shutil.copy2(REPO / "research" / "ACCEPTANCE_MATRIX.yaml", root / "research" / "ACCEPTANCE_MATRIX.yaml")
 
 
 def run_generator(root: Path) -> subprocess.CompletedProcess:

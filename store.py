@@ -5581,6 +5581,119 @@ def _transactions_path(cartridge: Path) -> Path:
     return cartridge / "transactions"
 
 
+def campaign_head(cartridge: str | Path, key: str) -> dict | None:
+    """Q44/Q60/Q80: read a verified campaign head and its immutable predecessor chain."""
+    if not isinstance(key, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,160}", key) is None:
+        _transaction_reject(str(key), "campaign key must be a bounded path-free identifier", "INVALID_REQUEST")
+    directory = Path(cartridge) / "campaign"
+    for path in (Path(cartridge), directory, directory / "objects", directory / "heads"):
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            _transaction_reject(key, "campaign directory is not an ordinary directory")
+    head = directory / "heads" / key
+    if not head.exists() and not head.is_symlink():
+        return None
+
+    def read(path: Path) -> bytes:
+        try:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(descriptor, "rb") as handle:
+                metadata = os.fstat(handle.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    _transaction_reject(key, "campaign object is linked or nonregular")
+                return handle.read()
+        except OSError as error:
+            _transaction_reject(key, f"campaign object is unavailable: {error}")
+
+    try:
+        digest = read(head).decode("ascii")
+        first, seen = None, set()
+        while digest is not None:
+            _digest("campaign digest", digest, key)
+            if digest in seen:
+                _transaction_reject(key, "campaign predecessor chain contains a cycle")
+            seen.add(digest)
+            payload = read(directory / "objects" / digest.split(":", 1)[1])
+            record = json.loads(payload)
+            if digest_bytes(payload) != digest or canonical_bytes(record) != payload or record["key"] != key:
+                _transaction_reject(key, "campaign record identity or content changed")
+            if first is None:
+                first = {"digest": digest, **record}
+            digest = record["previous"]
+        return first
+    except (ValueError, KeyError, UnicodeError) as error:
+        _transaction_reject(key, f"campaign head is malformed: {error}")
+
+
+def compare_campaign_head(
+    capacity_controller: CapacityCoordinator, key: str, expected: str | None, value: dict,
+) -> dict:
+    """Q44/Q53/Q80: publish one immutable record under a process-exclusive head CAS."""
+    cartridge = Path(capacity_controller.cartridge)
+    descriptor = os.open(cartridge, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        current = campaign_head(cartridge, key)
+        if (current["digest"] if current else None) != expected:
+            _transaction_reject(key, "campaign head differs from the expected predecessor", "IDEMPOTENCY_CONFLICT")
+        record = {"key": key, "previous": expected, "value": value}
+        payload = canonical_bytes(record)
+        digest = digest_bytes(payload)
+        directory = cartridge / "campaign"
+        object_path = directory / "objects" / digest.split(":", 1)[1]
+        if object_path.exists() or object_path.is_symlink():
+            if object_path.is_symlink() or object_path.stat().st_nlink != 1 or object_path.read_bytes() != payload:
+                _transaction_reject(key, "existing immutable campaign object differs")
+        else:
+            _claimed_durable_replace(capacity_controller, key, "campaign-object", object_path,
+                                     payload, digest, "journal_bytes")
+        _claimed_durable_replace(capacity_controller, key, "campaign-head", directory / "heads" / key,
+                                 digest.encode("ascii"), key, "pointer_bytes")
+        _fullsync_file(directory / "heads" / key, key)
+        return campaign_head(cartridge, key)
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def write_campaign_artifact(owner: CapacityCoordinator, attempt: str, name: str, payload: bytes) -> Path:
+    """Q44/Q53: grant and publish one immutable off-drive campaign capture extent."""
+    for value in (attempt, name):
+        if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", value) is None or value in {'.', '..'}:
+            _transaction_reject(str(value), "capture name is not a bounded literal filename", "INVALID_REQUEST")
+    path = owner.cartridge / "captures" / attempt / name
+    if path.exists() or path.is_symlink():
+        _transaction_reject(attempt, "immutable capture file already exists", "IDEMPOTENCY_CONFLICT")
+    _claimed_durable_replace(owner, attempt, "capture-artifact", path, payload, name, "payload_bytes")
+    return path
+
+
+def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: dict) -> dict:
+    """Q42/Q44/Q53: perform one measured scratch write, readback and full-sync boundary."""
+    import time
+    if set(pattern) != {"write_bytes", "read_bytes", "payload_digest"}:
+        _transaction_reject(operation_id, "profile pattern requires exact write/read bytes and payload digest")
+    write_bytes, read_bytes = pattern["write_bytes"], pattern["read_bytes"]
+    if type(write_bytes) is not int or type(read_bytes) is not int or not 0 < read_bytes <= write_bytes <= 16 * 1024 * 1024:
+        _transaction_reject(operation_id, "profile atom exceeds its bounded positive extent", "INVALID_REQUEST")
+    payload = bytes(write_bytes)
+    if digest_bytes(payload) != pattern["payload_digest"]:
+        _transaction_reject(operation_id, "profile payload digest differs from its planned atom")
+    started = time.monotonic_ns()
+    path = write_campaign_artifact(owner, operation_id, "profile.bin", payload)
+    written = time.monotonic_ns()
+    with path.open("rb") as handle:
+        observed = handle.read(read_bytes)
+    read_done = time.monotonic_ns()
+    _fullsync_file(path, operation_id)
+    finished = time.monotonic_ns()
+    if observed != payload[:read_bytes]:
+        _transaction_reject(operation_id, "profile readback differs from written bytes")
+    return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
+            "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
+            "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
+            "physical_write_bytes": None, "path": str(path)}
+
+
 def _journal_path(cartridge: Path, transaction_id: str) -> Path:
     return _transactions_path(cartridge) / f"{transaction_id}.json"
 

@@ -10,9 +10,11 @@ the source-entry L01.5 gate; they make no live header request and move no model 
 row remains `NOT_RUN`.
 
 IMPLEMENTATION.md contains four non-drive preparation stages, L01-L04, followed by six drive/live
-stages, L05-L10. L01-L03 are DONE; L04 is next. L02 closes ordinary-source native execution;
-L03 closes compiled execution, training, certificate recovery and client delivery at the
-fixture/integration boundary. Their completed recovery evidence remains retained.
+stages, L05-L10. L01-L04 are DONE; L05 is next when requested. The principal supplied Sol's
+independent L04 review, the builder repaired all six findings, and the final snapshot passed
+328 tests, thirteen removal/bypass triples and the ordinary ledger with its current J report.
+The supplied-review and remediation sequence requires no additional review. Commit and push are
+authorized for the complete worktree, including the preserved independent research and TUI studies.
 Physical drive qualification and acquisition belong to L05, measured baselines to L06, F4 to L07,
 F5 to L08, the full runtime matrix to L09 and clean replay to L10. These execution-stage numbers are
 separate from the matrix phase labels used below. Consolidated preparation has no verified duration
@@ -31,7 +33,8 @@ physical drive.
 | Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
 | Deferred-live projection, `s26-deferred-live-v4` | `blake3:21a64f61e1c68a444c6b8ef5903caf2d9451ad1ba652d33820fac3e0e4a19f6c` |
 | Amended S26 machine fixture | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
-| S27 complete J report | `sha256:15b81c535a4aada190ae31a1ed4ae2d273b827118901f220167a8c1fb4edf184` |
+| Historical S27 complete J report | `sha256:15b81c535a4aada190ae31a1ed4ae2d273b827118901f220167a8c1fb4edf184` |
+| Current complete J report after L04 remediation | `sha256:37fe5e7a7ff26735843d38ff99ebb95d352415aa2f539089563f2d951b91a660` |
 
 The live claim is `DEFERRED_TO_PHASE_LIVE_NOT_RUN`. The matrix-declared deferral outcome is
 `CONTRACT_AMENDMENT_REQUIRES_L01_25_MACHINE_PROOF`; the retained machine-baseline claim is

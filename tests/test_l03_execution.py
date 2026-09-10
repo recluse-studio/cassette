@@ -32,7 +32,7 @@ def _probability(config, weights, sequence):
     value = 0
     for position, selected in enumerate(sequence['mask'][1:], 1):
         if selected:
-            logits, _ = _oracle(config, weights, sequence['tokens'][:position])
+            logits, _ = _oracle(config, weights, sequence['tokens'][:position], sequence.get('pixels'))
             maximum = max(logits)
             value += logits[sequence['tokens'][position]] - maximum - math.log(sum(math.exp(x-maximum) for x in logits))
     return value
@@ -180,16 +180,29 @@ async def _clients(cartridge, owner, identity, label):
         assert capability['reasoning'] is False and capability['structured_output']['supported'] is False
         assert capability['performance_tiers'] == []
         assert capability['tools'] == {'prompt_definitions': True, 'generated_calls': False}
-        for name in ('codex', 'custom', 'hermes', 'ollama', 'openclaw'):
+        for name, surface in (('codex', None), ('custom', None), ('hermes', None), ('hermes', 'chat'), ('ollama', None), ('openclaw', None)):
             adapter = NamedAdapter(name, server_contract=True, model_aliases={identity: 'openclaw:fixture'})
             if name == 'custom' and label == 'native':
                 await _client_controls(adapter, broker, cartridge, owner, identity)
-            request = {'idempotency_key': label+'-'+name, 'model_ref': identity, 'input': messages, 'tools': tools, 'generation': {}}
-            wire = adapter.to_wire_request(request)
-            assert adapter.from_wire_request(wire) == request
-            server = await adapter.listen(broker, cartridge, PROFILE, owner)
+            request = {'idempotency_key': label+'-'+name+'-'+str(surface), 'model_ref': identity, 'input': messages, 'tools': tools, 'generation': {}}
+            wire = adapter.to_wire_request(request, surface=surface)
+            assert adapter.from_wire_request(wire, surface=surface) == request
+            server = await adapter.listen(broker, cartridge, PROFILE, owner, surface=surface)
             writer = None
             try:
+                if name == 'ollama':
+                    detail_reader, detail_writer = await asyncio.open_connection('127.0.0.1', server.sockets[0].getsockname()[1])
+                    detail = canonical_bytes({'model': identity})
+                    detail_writer.write(b'POST /api/show HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: '+str(len(detail)).encode()+b'\r\n\r\n'+detail)
+                    await detail_writer.drain()
+                    response_bytes = await detail_reader.read()
+                    detail_writer.close(); await detail_writer.wait_closed()
+                    headers, chunks = response_bytes.split(b'\r\n\r\n', 1)
+                    assert headers.startswith(b'HTTP/1.1 200 OK'), response_bytes
+                    size, chunks = chunks.split(b'\r\n', 1)
+                    detail_body = json.loads(chunks[:int(size,16)])
+                    assert detail_body['capabilities'] == ['completion']
+                    assert detail_body['x_cassette']['model_refs'] == [identity]
                 reader, writer = await asyncio.open_connection('127.0.0.1', server.sockets[0].getsockname()[1])
                 if wire.get('encoding') == 'jsonl':
                     writer.write(canonical_bytes(wire['record'])+b'\n')
@@ -218,7 +231,25 @@ async def _clients(cartridge, owner, identity, label):
                     sse = raw.startswith(b'data: ')
                     frames = [json.loads(line[6:] if sse else line) for line in raw.splitlines() if line]
                     response = {'encoding': 'sse' if sse else 'ndjson', 'frames': frames}
-                events = adapter.from_wire_events(response)
+                # Independent provider-shape checks use neither generated paths nor reverse mappings.
+                if surface == 'chat':
+                    assert len({frame['id'] for frame in frames}) == 1
+                    assert len({frame['created'] for frame in frames}) == 1
+                    for frame in frames:
+                        assert frame['object'] == 'chat.completion.chunk'
+                        assert isinstance(frame['choices'], list) and frame['model'] == identity
+                        assert isinstance(frame['created'], int)
+                        choice = frame['choices'][0]
+                        assert choice['index'] == 0 and isinstance(choice['delta'], dict)
+                        assert 'finish_reason' in choice
+                    assert frames[-1]['choices'][0]['finish_reason'] == 'length', frames
+                elif name in ('codex', 'hermes', 'openclaw'):
+                    for frame in frames:
+                        if frame['type'] == 'response.output_text.delta':
+                            assert isinstance(frame['delta'], str) and isinstance(frame['item_id'], str)
+                            assert frame['output_index'] == frame['content_index'] == 0
+                            assert isinstance(frame['sequence_number'], int)
+                events = adapter.from_wire_events(response, surface=surface)
                 assert events[-1]['type'] == 'completed', events
                 assert any(event['type'] == 'output_delta' and event['payload'].get('text') for event in events), events
                 assert events[-1]['payload']['execution_mode'] == ('COMPILED_CERTIFIED' if label.startswith('compiled') else 'NATIVE')
@@ -248,6 +279,15 @@ def test_q19_q20_q25_q31_q40_q58_q64_q76_compiled_source_and_clients(tmp_path, m
         observations = capture_native(cartridge, root, PROFILE, workload)
         assert observations == capture_native(cartridge, root, PROFILE, workload)
         assert observations['traces'][0]['ablations'][0]['changed']
+        duplicate = copy.deepcopy(workload)
+        duplicate['cases'].append({**copy.deepcopy(duplicate['cases'][0]), 'condition_id': 'same-input'})
+        duplicate['support'].append('same-input')
+        duplicate_observations = capture_native(cartridge, root, PROFILE, duplicate)
+        with pytest.raises(CassetteError) as ambiguity:
+            next(_native_head_windows(cartridge, root, duplicate_observations, 12, {}, []))
+        assert ambiguity.value.code == 'CAPABILITY_MISMATCH'
+        assert 'distinct observable' in str(ambiguity.value)
+
         _false_cover_and_composition()
         plan, _, _, profile = _fixture(); profile['context_bytes'] = 0
         rank_one = next(_native_head_windows(cartridge, root, observations, 12, profile, plan['prior_mode_failures'], rank_budget=1))
@@ -259,13 +299,14 @@ def test_q19_q20_q25_q31_q40_q58_q64_q76_compiled_source_and_clients(tmp_path, m
             altered['observation_contract'][field] = value
             with pytest.raises(CassetteError):
                 admit_schedule(rank_one['plan'], rank_one['certificate'], altered, profile)
+        # Client correctness has a declared 30-second read bound; Q20 timeout fixtures test deadline failure.
         partial = prepare_native_compiled(cartridge, root, observations, 12, profile, plan['prior_mode_failures'],
-            capacity_controller=owner, operation_id='compile', max_windows=2)
+            capacity_controller=owner, operation_id='compile', max_windows=2, read_deadline_ns=30_000_000_000)
         assert load_root(cartridge, partial)['plans'][0]['compiled']['complete'] is False
         with pytest.raises(CassetteError):
             NativeTransformer(cartridge, partial, PROFILE, 'partial', 'blake3:'+'0'*64)
         candidate = prepare_native_compiled(cartridge, root, observations, 12, profile, plan['prior_mode_failures'],
-            capacity_controller=owner, operation_id='compile', checkpoint_root=partial)
+            capacity_controller=owner, operation_id='compile', checkpoint_root=partial, read_deadline_ns=30_000_000_000)
         runtime = NativeTransformer(cartridge, candidate, PROFILE, 'compiled-step', 'blake3:'+'0'*64)
         from fractions import Fraction as F
         for window in runtime.compiled_windows:
@@ -469,3 +510,87 @@ def _false_cover_and_composition():
             key:value for key,value in hypotheses.items() if key != omitted}
         with pytest.raises(CassetteError):
             _certificate(invalid, .01, 1, bounds)
+
+
+def test_q18_q21_q66_q71_q72_image_gradients_and_adapter_residency(tmp_path):
+    """Q18/Q21/Q66/Q71/Q72: aligned image losses and bounded frozen/differentiated factors."""
+    import sys
+    from pager import capture_native
+    with _case(tmp_path, 'image-windows', hidden=4, layers=1, image=True, vocabulary_size=8) as (cartridge, owner, root, config, weights, *_):
+        runtime = NativeTransformer(cartridge, root, PROFILE, 'image-objective', 'blake3:'+'9'*64)
+        adapters = {name: {'a': [[.01]*shape[1]], 'b': [[.01] for _ in range(shape[0])], 'scale': .7}
+                    for name, (shape, _) in weights.items() if len(shape) == 2}
+        pixels = [[[[20.,40.,60.] for _ in range(4)] for _ in range(2)]]
+        sequence = {'tokens': [1,5,3,4,2], 'mask': [0,0,1,0,1], 'pixels': pixels}
+        batch = {'sequence': sequence}
+        expected = _loss(config, weights, adapters, 'ADAPTER_SFT', batch)
+        checkpoint, manifest = prepare_native_training(cartridge, root, 'ADAPTER_SFT', adapters,
+            [canonical_bytes(batch)], epochs=1, learning_rate=.1, precision='FP32', seed=17,
+            window_limit_bytes=192, reference_root=None, beta=.1, capacity_controller=owner,
+            resource_profile=_profile(), memory_peak_bytes=runtime.declared_peak_bytes*8)
+        state, frozen_batch, references = native_training_inputs(cartridge, checkpoint, manifest)
+        assert len(references) >= 9 and all(set(row) == {'root_digest', 'page_digest'} for row in references.values())
+        peak = 0
+        def observer(frame, event, argument):
+            nonlocal peak
+            if frame.f_code.co_filename == NativeTransformer.objective.__code__.co_filename:
+                arrays = {}
+                current = frame
+                while current:
+                    if current.f_code.co_name in {'objective', 'weight'}:
+                        for name, value in current.f_locals.items():
+                            if name in {'active', 'window', 'windows'} and isinstance(value, dict):
+                                for item in value.values():
+                                    if isinstance(item, dict):
+                                        arrays.update({id(x): x.nbytes for x in item.values() if hasattr(x, 'nbytes')})
+                                    elif hasattr(item, 'nbytes'):
+                                        arrays[id(item)] = item.nbytes
+                            elif name in {'a', 'b'} and hasattr(value, 'nbytes'):
+                                arrays[id(value)] = value.nbytes
+                    current = current.f_back
+                peak = max(peak, sum(arrays.values()))
+            return observer
+        try:
+            sys.settrace(observer)
+            result = runtime.objective('ADAPTER_SFT', frozen_batch, references,
+                differentiate=state['adapters'][0]['tensor_id'], training_context=native_training_context(state, manifest))
+        finally:
+            sys.settrace(None)
+        assert 0 < peak <= 128 < 400
+        assert result['adapter_window_peak_bytes'] <= 192
+        assert abs(result['loss'] - expected) < 2e-6
+        name = state['adapters'][0]['tensor_id']
+        left, right = copy.deepcopy(adapters), copy.deepcopy(adapters)
+        left[name]['a'][0][0] -= .001; right[name]['a'][0][0] += .001
+        gradient = (_loss(config, weights, right, 'ADAPTER_SFT', batch)-_loss(config, weights, left, 'ADAPTER_SFT', batch))/.002
+        assert abs(gradient-result['gradients']['a'][0][0]) < 1e-5
+        checkpoint, manifest = advance_native_training(cartridge, checkpoint, manifest, result, capacity_controller=owner)
+        assert native_training_state(cartridge, checkpoint, manifest)['window'] == 1
+        rejected = {**sequence, 'tokens': [1,5,4,3,2]}
+        preference = {'chosen': sequence, 'rejected': rejected}
+        for operation, records in [('ADAPTER_CONTINUED_PRETRAINING', batch), ('OFFLINE_ADAPTER_DPO', preference)]:
+            result = runtime.objective(operation, records, adapters, differentiate=name,
+                reference=runtime if operation == 'OFFLINE_ADAPTER_DPO' else None)
+            assert abs(result['loss'] - _loss(config, weights, adapters, operation, records)) < 2e-6
+        workload = {'version': 'native-workload-v1', 'baseline': {'root_digest': root, 'equivalence': 'EXACT_FIXTURE'},
+            'cases': [{'condition_id': 'image', 'stratum': 'common', 'tokens': [1,5,3], 'pixels': pixels,
+                'ablations': [['lm_head.weight']], 'gradient': {'operation': 'ADAPTER_SFT',
+                    'batch': {'sequence': {key: value for key, value in sequence.items() if key != 'pixels'}},
+                    'adapters': adapters, 'window': name}}], 'seeds': [17], 'trials': 1,
+            'scorer': 'TOKEN_LOGIT_VECTOR', 'confidence': 1, 'support': ['image'], 'off_support': 'REJECT'}
+        captured = capture_native(cartridge, root, PROFILE, workload)
+        assert len(captured['traces'][0]['full']['logits']) == 4
+        assert abs(captured['traces'][0]['gradient']['loss'] - expected) < 2e-6
+        from compiler import prepare_native_compiled
+        from test_s13_pager import _fixture
+        plan, _, _, compile_profile = _fixture(); compile_profile['context_bytes'] = 0
+        compiled = prepare_native_compiled(cartridge, root, captured, 8, compile_profile, plan['prior_mode_failures'],
+            capacity_controller=owner, operation_id='compile-image')
+        executor = NativeTransformer(cartridge, compiled, PROFILE, 'compiled-image', 'blake3:'+'8'*64)
+        image_result = asyncio.run(executor.execute_step([1,5,3], seed=17, pixels=pixels))
+        assert image_result['state']['position'] == 4
+        oracle, _ = _oracle(config, weights, [1,5,3], pixels)
+        assert max(abs(a-b) for a,b in zip(image_result['logits'], oracle)) < .001
+        with closing(CanonicalBroker(cartridge/'image-capabilities')) as broker:
+            assert broker.native_capability(cartridge)['training']['sequence_inputs'] == ['tokens', 'mask', 'pixels']
+        print({'adapter_array_peak_bytes': peak, 'window_limit_bytes': 192, 'image_loss': expected})

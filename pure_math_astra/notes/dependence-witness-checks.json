@@ -1,0 +1,32 @@
+{
+  "arithmetic": "exact rational; no floating-point tolerance",
+  "scope": "finite witness verification, not a general theorem or production test",
+  "two_block": {
+    "outcomes": 12,
+    "denominator": 25,
+    "cross_covariance": {
+      "(0, 3)": "-2/25",
+      "(1, 4)": "-2/25"
+    }
+  },
+  "five_cycle": {
+    "marginals": [
+      "19/50",
+      "39/100",
+      "2/5",
+      "41/100",
+      "21/50"
+    ],
+    "outcomes": 10,
+    "covariance_support": 5,
+    "smallest_probability": "323/10000"
+  },
+  "seven_cycle": {
+    "outcomes": 35,
+    "smallest_probability": "1/490",
+    "cycle_covariance": "-6/49",
+    "other_covariances": "0",
+    "incidence_minor_size": 21,
+    "incidence_minor_determinant": "1"
+  }
+}

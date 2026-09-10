@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import time
 
 from broker import CanonicalBroker
 from errors import CassetteError
@@ -132,18 +133,24 @@ def _pop(value: object, path: list[object]) -> object:
     return result
 
 
+def _parts(path: str) -> list[object]:
+    return [int(part) if part.isdecimal() else part for part in path.split(".")]
+
+
 def _set_static(target: dict, values: dict[str, object]) -> None:
     for path, value in values.items():
-        _put(target, path.split("."), value)
+        _put(target, _parts(path), value)
 
 
 def _match(target: dict, values: dict[str, object]) -> bool:
-    return all(_get(target, path.split(".")) == value for path, value in values.items())
+    return all(_get(target, _parts(path)) == value for path, value in values.items())
 
 
 def _remove_static(target: dict, values: dict[str, object]) -> None:
-    for path, expected in values.items():
-        parts = path.split(".")
+    for path, expected in reversed(list(values.items())):
+        parts = _parts(path)
+        if expected == {} and _get(target, parts) != {}:
+            continue
         if _get(target, parts) != expected:
             raise _fail("INVALID_REQUEST", path, "provider frame disagrees with its pinned schema")
         _pop(target, parts)
@@ -288,6 +295,21 @@ class NamedAdapter:
                 result = self.to_wire_capabilities([broker.native_capability(cartridge)])
                 yield {"encoding": "jsonl" if canonical_discovery else "json", "records": [result.get("record", result.get("body"))]}
                 return
+            if (discovery.get("detail_path") is not None
+                    and wire.get("method") == discovery.get("detail_method")
+                    and wire.get("path") == discovery.get("detail_path")):
+                capability = broker.native_capability(cartridge)
+                body = wire.get("body", {})
+                if (not isinstance(body, dict) or set(body) - {"model", "verbose"}
+                        or body.get("model") not in capability["model_refs"]
+                        or type(body.get("verbose", False)) is not bool):
+                    raise _fail("INVALID_REQUEST", self.name, "model detail requires a published model and optional boolean verbose")
+                yield {"encoding": "json", "records": [{
+                    "capabilities": ["completion"],
+                    "model_info": {"general.architecture": "cassette",
+                                   "cassette.context_length": capability["context"]["maximum_tokens"]},
+                    "details": {"format": "safetensors"}, "x_cassette": capability}]}
+                return
             record = wire.get("record", {})
             if wire.get("encoding") == "jsonl" and isinstance(record, dict) and record.get("operation") in {"cancel", "train"}:
                 action = "cancel" if record["operation"] == "cancel" else "training"
@@ -309,10 +331,19 @@ class NamedAdapter:
                     yield {"encoding": "json", "records": [result]}
                     return
             request = self.from_wire_request(wire, surface=surface)
+            created = int(time.time())
             events = broker.stream_client(request, cartridge, profile, capacity_controller)
             try:
                 async for event in events:
-                    yield self.to_wire_events([event], surface=surface)
+                    payload = {**event["payload"], "model_ref": request["model_ref"], "created": created}
+                    if event["type"] == "output_delta":
+                        payload.setdefault("text", "")
+                    if event["type"] == "completed":
+                        payload["finish_reason"] = "length"
+                        payload["response_output"] = [{"id": event["run_id"], "type": "message",
+                            "role": "assistant", "status": "completed", "content": [{"type": "output_text",
+                            "text": payload.get("text", ""), "annotations": [], "logprobs": []}]}]
+                    yield self.to_wire_events([{**event, "payload": payload}], surface=surface)
             finally:
                 await events.aclose()
         return await broker.listen(handle, port=port)

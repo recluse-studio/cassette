@@ -1534,7 +1534,7 @@ steps:
 
 ## PREPARATION AND LIVE PROOF — four non-drive stages, then the drive campaign
 
-**L01 and L02 are DONE; L03 is next. There are four non-drive stages, L01-L04, followed by six drive/live
+**L01-L04 are DONE; L05 is next when requested. The principal supplied Sol’s L04 review, all six findings were remediated, and the complete machine gate passed. Commit and push are authorized. There are four non-drive stages, L01-L04, followed by six drive/live
 stages, L05-L10.** This grouping follows the principal's instruction to consolidate preparation.
 The previous count of 31 coding stages is superseded. The larger groups have no verified
 15–20-minute duration estimate.
@@ -1581,7 +1581,10 @@ boundaries are preserved. A renamed owner does not change a matrix phase or esta
 
 ### Execute, verify and resume
 
-Execute the named deliverable using implementation-rigor and run-independent-build-review.
+Execute the named deliverable using implementation-rigor. The principal arranges the independent
+review and supplies its findings. The builder assesses those findings, implements selected
+remediations, appends the build story and commits before advancing. A builder-appointed review
+does not replace this review or authorize stage closure. Reviewers use run-independent-build-review.
 Resolve the required outcome, its existing implementation and the smallest deciding proof before
 editing. Keep the component authorities, pinned primitives and generated-schema rules. Run focused
 proof and directly coupled regressions as each behavior changes. Full suite/ledger/J gates belong
@@ -1619,7 +1622,7 @@ Q38 falsification remains FAIL. Long operations retain durable receipts within t
 ```yaml
 phase_live_queue:
   schema_version: 7
-  next_step: L04
+  next_step: L05
   revision_reason: '2026-09-04 principal instruction: consolidate all non-drive work into at most four stages.
     Preserve completed machine evidence, outstanding requirements, matrix phases and live proof obligations.'
   coding_time_contract:
@@ -2084,7 +2087,24 @@ phase_live_queue:
     evidence_level: INTEGRATION
     record_kind: stage
     status: DONE
+    review_status: PRINCIPAL_REVIEW_REMEDIATED
+    reopening_reason: The original builder-appointed closure was withdrawn. The principal subsequently supplied the independent review; all five supported findings were repaired and verified.
+    next_action: L04 is eligible when requested. Commit and push remain deferred by the principal; no second independent review is required for these completed remediations.
     attempts:
+    - id: L03-remediation-01
+      outcome: PASS
+      evidence_level: INTEGRATION
+      review_profile: bootstrap
+      source_base_commit: 890583f6df8f79f2ee6f529a6bd690d75610ab1c
+      source_snapshot: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-remediation/attempt-01/source
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-remediation/attempt-01
+      inputs_sha256: 55491ddc60aa3c820eaa9ece08e6a3b8e13e306a67d4f4fdd3a8a76c77c1726f
+      review_route: PRINCIPAL_REVIEW_REMEDIATED
+      supplied_review: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-independent-astra-8rg203us/review.md
+      assessment: All five supported defects accepted and repaired; independent wire observation retained as a maintained check. Immutable catalogue caching not selected without a measured performance failure.
+      validation: Ten focused L02/L03, adapter and schema checks passed in 198.50 seconds with zero skips. Observed simultaneous adapter arrays were 112 bytes within the 192-byte window; image objectives and compiled image prefill passed scalar comparisons.
+      ledger_boundary: Full ledger remains non-green because Q29/J and Q78 reports require the L04 gate and unrelated mathematics programs lack removal entries and valid dependency headers. No live or release proof is claimed.
+      publication: No commit or push, following the principal's latest instruction.
     - id: L03-integrated-01
       outcome: FAIL
       review_profile: bootstrap
@@ -2101,12 +2121,15 @@ phase_live_queue:
       source_commit: bcbace411458936ce410a80e02ae8c745e9ca842
       source_tree: 35f69cc8324a00bdfdd61258f110bdde0337676c
       manifest_sha256: dfc68f6665797a80a5609f8302d04741d1659dae7e1b0edf73eeaf6a2dcf6a99
-      review_route: PASS_READY
+      review_route: SUPERSEDED_BY_L03_REMEDIATION_01
+      prior_builder_review_route: PASS_READY
       review_report: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/review-evidence-successor.md
       review_envelope: /Users/drewwiberg/.codex/reviews/cassette/2026-09-05/L03-astra-build/final-review/envelopes/L03-integrated-02-independent-bootstrap-wording-successor.json
       review_envelope_sha256: fb1db0f6252450ca302eb6f4f955359397bdfb56c42fb73596b901ede3d73da9
       note: Inputs froze before execution. A separate Terra reviewer checked the exact source and raw hashes, challenged two failure paths, and advanced the bootstrap review head.
-    closeout:
+    prior_closeout:
+      status: WITHDRAWN_PENDING_INDEPENDENT_REVIEW
+      note: The following records retain the builder's earlier claims and evidence. They do not constitute accepted L03 closure; the principal's independent review must assess them.
       teacher_observations: Actual activations, logits, gradients and ablations reproduce from the frozen finite census; all four expert contributions have measured effects.
       condition_witnesses: Source-derived condition metrics and atoms pass independent rational rank, loss and cover checks; the pairwise-only false cover rejects.
       descriptions_and_addresses: Independent reconstruction verifies description distortion, residual sampling law and every source offset; peak and total bytes remain separate.
@@ -2122,6 +2145,13 @@ phase_live_queue:
       validation: Fifteen focused and coupled tests passed with no failures or skips; static ledger has zero violations. Full suite, J and Q78 remain L04 gates.
       review: Separate Terra reviewer on the same Mac returned PASS_READY for all twelve outcomes. Missing prepared operand rejects PAGE_CORRUPT; contradicted effective target rejects ROOT_INVALID.
       proof_limit: Fixture/integration only. Finite-census support, conservative resource bounds and source-derived output windows are proved; useful real-model covers, physical drives, throughput, Q70 scale calibration and F4/F5 remain unproved.
+    closeout:
+      status: DONE
+      basis: Principal-supplied independent review, builder assessment of all five findings, implemented remediations, ten passing focused checks and build-story append complete the established review/remediation sequence.
+      accepted_attempt: L03-remediation-01
+      validation: Ten focused checks passed in 198.50 seconds with zero skips; source snapshot and raw evidence are retained in the attempt record.
+      scope: Fixture/integration. Full-suite/J/Q78 work remains assigned to L04; physical and real-model claims remain NOT_RUN.
+      publication: Commit and push deferred at the principal's instruction. This does not reopen implementation or require another independent review.
   - id: L04
     title: Complete campaign tooling and the machine-to-drive handoff
     phase: NON_DRIVE_PREPARATION
@@ -2237,13 +2267,71 @@ phase_live_queue:
       results are owned by L05-L10.
     execution_rule: Execute as one deliverable. Reuse working implementations and accepted evidence. Required
       outcomes have no separate stage IDs, attempt quotas, closure reviews or user check-ins.
-    timing_evidence: NOT_RUN
+    timing_evidence:
+      full_suite_seconds: 556.26
+      active_coding: Not measured continuously; suite time is not agent coding time.
     review_profile: bootstrap_then_normal
     env: macos_arm64_fixture_only
     evidence_level: INTEGRATION
     record_kind: stage
-    status: TODO
-    attempts: []
+    status: DONE
+    next_action: Supplied independent review and remediation are complete. L05 is next when requested; no L05 execution is included in this closeout.
+    builder_handoff: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/handoff.md
+    attempts:
+    - id: L04-machine-01
+      outcome: FAIL
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-01
+      validation: 320 passed and five failed. Generated-contract fixtures, admitted-dispatch expectations and seven derived S26 identities required refresh; expected numerical outputs were preserved.
+    - id: L04-machine-02
+      outcome: INCOMPLETE
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-02
+      validation: Interrupted after six passes when the command-binding gap was identified. The child now receives and consumes its fresh execution binding; this run supplies no passing gate.
+    - id: L04-machine-03
+      outcome: FAIL
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-03
+      validation: Six passed and the compiled-client fixture failed with a recorded WORKING_SET_TIMEOUT. The correctness fixture now declares a 30-second read bound; production deadline behavior and the separate Q20 timeout proof remain intact.
+    - id: L04-machine-04
+      outcome: FAIL
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-04
+      validation: 327 passed and the accounting fixture rejected 8425096 correctly counted documentation-asset bytes because it expected zero. The fixture now verifies the counted files against their actual sizes; all three focused accounting checks passed.
+    - id: L04-machine-05
+      historical_builder_outcome: PASS
+      outcome: FAIL
+      disposition: Sol reproduced six false-acceptance defects. Its sealed tests remain historical evidence; the external PASS did not satisfy the ordinary ledger gate.
+      evidence_level: INTEGRATION
+      review_route: QUEUE_ROUTE
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-05
+      source_base_commit: 890583f6df8f79f2ee6f529a6bd690d75610ab1c
+      candidate_tree: 621f0060e7a5c1e85dddc42af124be1f4659e72d
+      candidate_source_archive: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-05/candidate-source.tar.gz
+      archive_sha256: fd8b2673dede91b3a891424243d8c34b466f96f5466b3e7e4b9e1cb4bca4982d
+      source_manifest_sha256: 518d3afef80abaf29e890acdf20cb0830fa8d389aaaf46664462eb3344535ede
+      namespace_seal: /Users/drewwiberg/.codex/reviews/cassette/2026-09-06/L04-builder/attempt-05-seal.json
+      namespace_digest: blake3:bd623c2772bb8a2ce98c375e718bc662d40ad8f0dda487a5236edc4688b57d16
+      validation: All 328 tests passed in 417.22 seconds with zero skips. All 13 current Q78 controls passed; deleting or bypassing each owner failed its cited proof. Static accounting and generated integrity passed on the exact isolated candidate.
+      integrated_capture: The final source archive passed a fresh ordinary-source campaign binding its complete source manifest, lockfile and probe hashes. Two native token events, process telemetry, namespace integrity, protected inventory, graph succession, transitive invalidation and replay reachability passed.
+      recovery: Actual subprocess kill and resume passed at acquisition, generation and training boundaries without repeating committed transfers, token events or training updates.
+      proof_limit: Scratch execution and deterministic boundary fixtures. Device counters and thermal traces remain explicitly simulated where declared; external-drive, real-model, sustained physical and release results remain NOT_RUN.
+      publication: No shared checkout commit or staging occurred. The independent mathematics roots were preserved and accounted separately under AGENTS.md. The candidate archive carries the tested source; the base commit alone is not that source.
+    remediations:
+    - id: L04-remediation-01
+      outcome: PASS
+      independent_reviewer: Sol
+      supplied_review: /Users/drewwiberg/.codex/reviews/cassette/2026-09-09/L04-remediation-01/sol-review.txt
+      assessment: /Users/drewwiberg/.codex/reviews/cassette/2026-09-09/L04-remediation-01/assessment.md
+      findings: All six supported findings accepted and repaired.
+      principal_workflow: Supplied independent review, builder assessment and remediation, build-story append, complete-worktree commit and push. No additional review cycle is required.
+      raw_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-09/L04-remediation-01/proof-candidate
+      source_base_commit: 890583f6df8f79f2ee6f529a6bd690d75610ab1c
+      candidate_tree: fea7dd6feacd8c4e7ea02307f820bff8c508f222
+      archive_sha256: e0d7c65cf9954c0ae0501bf0e7171dfe17be1027e3ab6dae332b78c1c684bd47
+      source_manifest_sha256: 66fd4b57e7edc727d974979349f18b925d614fec42a4d1cce7b6ba8beab4f821
+      namespace_seal: /Users/drewwiberg/.codex/reviews/cassette/2026-09-09/L04-remediation-01/proof-candidate-seal.json
+      namespace_digest: blake3:7dd1484973c30aec99c4c4030cd368f7fb4b22d336908ce2ae4410a121b05da0
+      complete_j_report_sha256: 37fe5e7a7ff26735843d38ff99ebb95d352415aa2f539089563f2d951b91a660
+      validation: 328 passed in 556.26 seconds with zero skips; thirteen control/deletion/bypass triples passed; the ordinary ledger reported zero violations with the freshly generated report inside the candidate.
+      retained_validation_history: Three incomplete snapshots and one snapshot with the isolated-generator fixture failure remain in the remediation evidence root; none supplies passing evidence.
+      proof_limit: Fixture and integration evidence only. External-drive connection inspection is separately authorized; L05 qualification, real-model and sustained live rows remain NOT_RUN.
     review_transition: Use bootstrap review until integrated ownership and graph machinery is proved; use normal
       review on the integrated candidate and subsequent machine attempts.
   - id: L05

@@ -1,0 +1,904 @@
+% spectral_residual_access.tex - isolated mathematical paper; depends on ../report-source.md and ../notes/minimax_residual_access.md.
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=28mm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ink}{HTML}{17212B}
+\definecolor{muted}{HTML}{566573}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=ink,
+  citecolor=ink,
+  urlcolor=muted,
+  pdftitle={Spectral Residual-Access Complexity},
+  pdfauthor={Cassette Pure Mathematics Laboratory},
+  pdfsubject={Exact minimax laws for query-independent categorical matrix execution}
+}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\F}{\mathbb F}
+\newcommand{\D}{\mathcal D}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\ran}{\operatorname{ran}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\E}{\mathbb E}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert}
+\newcommand{\inner}[2]{\left\langle #1,#2\right\rangle}
+
+\title{\textbf{Spectral Residual-Access Complexity}\\
+\large Exact Minimax Laws for Query-Independent Categorical Matrix Execution}
+\author{Cassette Pure Mathematics Laboratory\\
+\small Isolated research manuscript}
+\date{5 September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Let a residual operator be evaluated by drawing one of its columns, or one of its physically
+fixed page components, from a probability law chosen before the query is known.  The present
+squared-energy law supplies a simple Frobenius-scale certificate.  It need not minimize the
+largest query variance.  We determine the latter problem exactly for independent categorical
+sampling with inverse-probability weights.
+
+For a matrix $R$ with nonzero columns $r_j$, column energies $a_j=\norm{r_j}_2^2$, and
+$G=R^*R$, the one-access worst-query value is
+\[
+  \nu(R)=\min_{\pi\in\Delta_q^\circ}
+  \lambda_{\max}\!\left(\diag(a_j/\pi_j)-G\right).
+\]
+We prove the density-matrix dual
+\[
+  \nu(R)=\max_{X\succeq0,\,\tr X=1}
+  \left\{\left(\sum_j\sqrt{a_jX_{jj}}\right)^2-\tr(XG)\right\},
+\]
+derive a finite optimality certificate that remains valid when the largest eigenvalue is
+multiple, and obtain exact laws for two columns, orthogonal columns, and every rank-one residual.
+We also characterize precisely when squared-energy sampling is minimax.  For two orthogonal
+columns, its exact variance can exceed the minimax value by an arbitrarily large factor even at
+fixed Frobenius norm.  The same duality extends to a fixed decomposition into physical page
+operators.
+
+Inverse-probability estimation and E-optimal covariance design are prior art.  The contribution
+claimed here is the exact combined analysis of this reciprocal, fixed-law access problem.  A
+bounded three-wave primary-source search found no earlier source stating that combination; such a
+search cannot establish literature-wide novelty.  This manuscript is pure mathematical research.
+It does not amend Cassette's production mathematics or implementation.
+\end{abstract}
+
+\section{Introduction}
+
+Suppose that a linear residual $R$ is too expensive to keep wholly resident.  One elementary
+unbiased procedure stores an access law, draws a component, and rescales the component by the
+inverse of its probability.  If the query is already known, the probability can follow that
+query.  Our concern is harder and more rigid: one law must be fixed before any query arrives.
+The relevant loss is then the largest mean-square error over the unit sphere.
+
+This distinction changes the geometry.  Squared-column-norm sampling makes a simple Frobenius
+bound available, but that sufficient rule need not be spectrally optimal.  The exact object is not
+$\norm{R}_F^2$ alone.  It is a coordinate-sensitive minimax invariant, denoted $\nu(R)$ below,
+which remembers both column energies and their Gram coherence.
+
+The main results are as follows.
+\begin{enumerate}[label=\textup{(\roman*)},leftmargin=2.1em]
+  \item The exact covariance is a reciprocal diagonal perturbation of $R^*R$, and $s$
+  independent accesses divide the one-access minimax value by exactly $s$.
+  \item The primal problem has an exact dual over density matrices.  Its saddle point gives a
+  global certificate, including at repeated top eigenvalues where a single leading eigenvector
+  is insufficient.
+  \item Two-column residuals have a square-root law; orthogonal residuals have a reciprocal
+  water-filling law.
+  \item The squared-energy law is minimax precisely when its energy vector is the diagonal of a
+  density matrix supported on the minimum eigenspace of $R^*R$.
+  \item Rank-one residuals undergo a complete balanced--dominant phase transition governed by
+  the polygon inequality.
+  \item A normalized two-column family gives an unbounded multiplicative separation from the
+  squared-energy law.
+  \item The covariance-duality framework extends from columns to a physically fixed page
+  decomposition, with a sharp zero-variance characterization.
+\end{enumerate}
+
+Theorems here are exact only inside the declared information class: fresh independent
+categorical draws, ordinary averaging, inverse-probability weights, and a law independent of the
+query.  Adaptive access, sampling without replacement, query-dependent laws, and arbitrary
+randomized linear information are different problems.
+
+\section{Prior work and the claim boundary}
+
+Unequal-probability sampling with replacement and inverse-probability weighting go back at least
+to Hansen and Hurwitz~\cite{HansenHurwitz1943}.  Categorical matrix-product estimators, including
+norm-product probabilities that minimize expected Frobenius error, appear in the randomized
+linear-algebra literature~\cite[\S4.1, Lemmas 3--4]{DrineasKannanMahoney2006}.  Query matching with probabilities
+chosen for an expected-variance objective is studied by Eriksson-Bique et
+al.~\cite[\S\S2--4]{ErikssonBiqueEtAl2011}.  Spectral random approximation of Gram matrices and entrywise
+sparsification address related but different random objects and losses
+\cite[\S\S3--5]{HolodnakIpsen2015}; see also the contextual comparison with entrywise
+sparsification in~\cite{AchlioptasMcSherry2007}.
+
+The closest broad precedent found in the recorded search is the E-optimal inverse-probability
+subsampling formulation of Imberg, Axelson-Fisk, and Jonasson
+\cite[eqs.~(8)--(9), Table~1]{ImbergEtAl2023}.  Their multinomial covariance and
+largest-eigenvalue objective include the ancestry of our problem; their simple-eigenvalue
+stationarity law also anticipates the square-root form of a differentiable optimum
+\cite[Lemma~2(c), Proposition~1, eq.~(13)]{ImbergEtAl2023}.  Classical general equivalence theory
+frames E-optimal design~\cite{Kiefer1974}; a modern treatment explicitly uses trace-one positive
+semidefinite witnesses on an extremal eigenspace~\cite[\S2]{HarmanRosa2018}.  Sion's theorem supplies the minimax interchange used
+here~\cite{Sion1958}.  Schur--Horn geometry and prescribed-norm tight frames supply nearby
+diagonal and balancing ideas~\cite{Horn1954,CasazzaEtAl2006}.  In particular, the latter records
+the prescribed-norm fundamental inequality~\cite[Proposition~1]{CasazzaEtAl2006}.  Novak's
+randomized Hilbert-space operator problem uses a different information class and exhibits related allocation geometry
+\cite{Novak1992}.  Specialized exact E-optimal allocations also occur in factorial design
+\cite[Theorem~1]{RavichandranEtAl2024}.
+
+Our claim is deliberately narrower than these subjects.  Within the three-wave primary-source
+search recorded with this manuscript, with cutoff 5 September 2026, we found no earlier source
+combining a fixed, query-independent, categorical with-replacement residual-access law with the
+reciprocal density-matrix dual, a repeated-top-eigenvalue certificate, the closed forms proved
+below, and the exact squared-energy optimality criterion.  This is evidence from a finite search,
+not proof of universal novelty.  In particular, we do not claim to invent inverse-probability
+sampling, E-optimal covariance design, or density witnesses for extremal eigenvalues.
+
+\section{The categorical access model}
+
+Let $\F$ be $\mathbb R$ or $\mathbb C$.  Let
+$R:\F^q\to\F^p$ be nonzero, with columns $r_1,\ldots,r_q$.  Zero columns are discarded: they
+require neither sampling mass nor residual access.  Put
+\[
+  G=R^*R,\qquad a_j=G_{jj}=\norm{r_j}_2^2>0,
+\]
+and let
+\[
+  \Delta_q^\circ=\left\{\pi\in\mathbb R^q:
+  \pi_j>0,\ \sum_{j=1}^q\pi_j=1\right\}.
+\]
+For $\pi\in\Delta_q^\circ$, draw $J$ with $\Pr(J=j)=\pi_j$.  Given a query
+$x\in\F^q$, return
+\begin{equation}
+  Z_\pi(x)=\frac{r_Jx_J}{\pi_J}.
+  \label{eq:estimator}
+\end{equation}
+The law $\pi$ is fixed independently of $x$.
+
+\begin{proposition}[Exact covariance]
+\label{prop:covariance}
+The estimator in \eqref{eq:estimator} is unbiased and
+\begin{equation}
+  \E\norm{Z_\pi(x)-Rx}_2^2=x^*Q_\pi x,
+  \qquad
+  Q_\pi=\diag\!\left(\frac{a_j}{\pi_j}\right)-G\succeq0.
+  \label{eq:covariance}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Since $Rx=\sum_jr_jx_j$,
+\[
+  \E Z_\pi(x)=\sum_j\pi_j\frac{r_jx_j}{\pi_j}=Rx.
+\]
+Also
+\[
+  \E\norm{Z_\pi(x)}_2^2
+  =\sum_j\pi_j\frac{\norm{r_j}_2^2|x_j|^2}{\pi_j^2}
+  =x^*\diag(a_j/\pi_j)x.
+\]
+Subtracting $\norm{Rx}_2^2=x^*Gx$ proves the identity.  Its left-hand side is nonnegative for
+every $x$, hence $Q_\pi\succeq0$.
+\end{proof}
+
+\begin{definition}[Spectral residual-access complexity]
+\label{def:nu}
+The one-access fixed-law minimax value is
+\begin{equation}
+  \nu(R)=\min_{\pi\in\Delta_q^\circ}\lambda_{\max}(Q_\pi).
+  \label{eq:primal}
+\end{equation}
+\end{definition}
+
+The minimum in \eqref{eq:primal} is attained.  Indeed, the objective is continuous in the open
+simplex, while for every $j$,
+\[
+  \lambda_{\max}(Q_\pi)\ge e_j^*Q_\pi e_j
+  =a_j(\pi_j^{-1}-1)\longrightarrow\infty
+  \quad\text{as }\pi_j\downarrow0.
+\]
+Thus every minimizing sequence stays in a compact subset of $\Delta_q^\circ$.
+
+\begin{theorem}[Exact minimax access law]
+\label{thm:sample-complexity}
+Let $\overline Z_{\pi,s}$ be the arithmetic mean of $s\ge1$ independent copies of
+$Z_\pi$.  Then
+\begin{equation}
+  \min_{\pi\in\Delta_q^\circ}\ 
+  \sup_{\norm{x}_2=1}
+  \E\norm{\overline Z_{\pi,s}(x)-Rx}_2^2
+  =\frac{\nu(R)}{s}.
+  \label{eq:s-samples}
+\end{equation}
+If $R\ne0$, $\varepsilon>0$, and $A\ne0$, the least integer $s\ge1$ for which the left side is
+at most $\varepsilon^2\norm{A}_F^2$ is
+\begin{equation}
+  s_{\min}=\max\left\{1,
+  \left\lceil\frac{\nu(R)}{\varepsilon^2\norm{A}_F^2}\right\rceil\right\}.
+  \label{eq:sample-count}
+\end{equation}
+If $R=0$, zero residual accesses suffice.
+\end{theorem}
+
+\begin{proof}
+The errors of the $s$ copies are independent and centered, so all cross terms vanish and the
+covariance form in Proposition~\ref{prop:covariance} is divided by $s$.  Rayleigh--Ritz gives
+$\sup_{\norm{x}=1}x^*Q_\pi x=\lambda_{\max}(Q_\pi)$.  Minimizing over $\pi$ proves
+\eqref{eq:s-samples}, and the integer inequality gives \eqref{eq:sample-count}.  A nonzero
+residual with $\nu(R)=0$ still needs one exact component access; zero variance does not make the
+residual resident.
+\end{proof}
+
+\section{An exact density-matrix dual}
+
+Let
+\[
+  \D_q=\{X\in\F^{q\times q}:X\succeq0,\ \tr X=1\}.
+\]
+This compact convex set replaces a single leading eigenvector by every convex mixture supported
+on a leading eigenspace.
+
+\begin{theorem}[Reciprocal density dual]
+\label{thm:dual}
+For every nonzero $R$ with zero columns removed,
+\begin{equation}
+  \boxed{
+  \nu(R)=\max_{X\in\D_q}
+  \left[
+    \left(\sum_{j=1}^q\sqrt{a_jX_{jj}}\right)^2-\tr(XG)
+  \right].}
+  \label{eq:dual}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Rayleigh--Ritz in density-matrix form states that, for Hermitian $H$,
+\begin{equation}
+  \lambda_{\max}(H)=\max_{X\in\D_q}\tr(XH).
+  \label{eq:density-rayleigh}
+\end{equation}
+Define
+\[
+  L(\pi,X)=\sum_j\frac{a_jX_{jj}}{\pi_j}-\tr(XG).
+\]
+For $0<\rho<1/q$, let
+$\Delta_{q,\rho}=\{\pi:\pi_j\ge\rho,\ \sum_j\pi_j=1\}$.  On
+$\Delta_{q,\rho}\times\D_q$, the function $L$ is continuous, convex in $\pi$, and affine in
+$X$.  Sion's minimax theorem therefore gives
+\begin{equation}
+  \min_{\pi\in\Delta_{q,\rho}}\max_{X\in\D_q}L(\pi,X)
+  =\max_{X\in\D_q}\min_{\pi\in\Delta_{q,\rho}}L(\pi,X).
+  \label{eq:sion}
+\end{equation}
+The coercivity noted after Definition~\ref{def:nu} places a primal minimizer in the interior;
+hence the left side of \eqref{eq:sion} equals $\nu(R)$ for all sufficiently small $\rho$.
+
+Fix $X\in\D_q$ and write $c_j=a_jX_{jj}\ge0$.  Cauchy--Schwarz gives
+\[
+  \left(\sum_j\sqrt{c_j}\right)^2
+  =\left(\sum_j\sqrt{c_j/\pi_j}\sqrt{\pi_j}\right)^2
+  \le\sum_j\frac{c_j}{\pi_j}.
+\]
+Equality is approached, and is attained when every $c_j>0$, by
+$\pi_j=\sqrt{c_j}/\sum_k\sqrt{c_k}$.  Consequently
+\begin{equation}
+  \inf_{\pi\in\Delta_q^\circ}\sum_j\frac{c_j}{\pi_j}
+  =\left(\sum_j\sqrt{c_j}\right)^2.
+  \label{eq:cs-inner}
+\end{equation}
+To pass from the restricted simplexes to the open simplex without a hidden boundary step, choose
+any sequence $\rho_n\downarrow0$.  The restricted inner-value functions are continuous on the
+compact set $\D_q$, decrease pointwise to the continuous right side of
+\eqref{eq:cs-inner} minus $\tr(XG)$, and therefore converge uniformly by Dini's theorem.  Their
+maxima converge to the maximum in \eqref{eq:dual}.  Equation~\eqref{eq:sion} now proves the
+claim.
+\end{proof}
+
+\begin{theorem}[Repeated-eigenvalue-safe certificate]
+\label{thm:certificate}
+A probability vector $\pi\in\Delta_q^\circ$ is minimax with value $t$ if and only if there is
+$X\in\D_q$ with positive diagonal such that
+\begin{align}
+  Q_\pi&\preceq tI,                                      \label{eq:cert-upper}\\
+  X(tI-Q_\pi)&=0,                                        \label{eq:cert-support}\\
+  \pi_j&=\frac{\sqrt{a_jX_{jj}}}
+  {\sum_k\sqrt{a_kX_{kk}}}\quad(1\le j\le q).           \label{eq:cert-law}
+\end{align}
+\end{theorem}
+
+\begin{proof}
+Assume first that the displayed conditions hold.  The first gives the primal bound
+$\nu(R)\le t$.  Taking the trace in \eqref{eq:cert-support} gives
+$\tr(XQ_\pi)=t$.  By \eqref{eq:cert-law},
+\[
+  \sum_j\frac{a_jX_{jj}}{\pi_j}
+  =\left(\sum_j\sqrt{a_jX_{jj}}\right)^2.
+\]
+Thus the dual objective at $X$ equals $t$.  Weak duality gives $\nu(R)\ge t$, so equality holds
+and $\pi$ is minimax.
+
+Conversely, take a primal minimizer.  For sufficiently small $\rho$, it is also optimal in the
+compact game \eqref{eq:sion}, which has a saddle point $(\pi,X)$.  Maximization in $X$ places
+$\ran X$ in the top eigenspace of $Q_\pi$, yielding \eqref{eq:cert-upper} and
+\eqref{eq:cert-support}.  Interior stationarity in $\pi$ gives
+$a_jX_{jj}/\pi_j^2$ independent of $j$.  This common value cannot vanish because
+$\tr X=1$ and every $a_j>0$; hence every $X_{jj}>0$, and normalization gives
+\eqref{eq:cert-law}.
+\end{proof}
+
+The certificate is finite and exact.  A rank-one matrix $X=vv^*$ suffices when a simple top
+eigenvalue exposes the optimum.  When the top eigenvalue is repeated, the required $X$ may be a
+nontrivial mixture; using a single arbitrarily selected eigenvector can then miss the saddle
+condition.
+
+\begin{proposition}[Exact conic representation]
+\label{prop:conic}
+The dual is an exact semidefinite/second-order-cone optimization problem.  Let
+$A_j=a_je_je_j^*$ and $B=G$.  Introduce
+$b_j=\tr(XA_j)$ and nonnegative $z_{jk}$ subject to
+$z_{jk}^2\le b_jb_k$.  Then \eqref{eq:dual} equals the maximum of
+\begin{equation}
+  \sum_jb_j+2\sum_{j<k}z_{jk}-\tr(XB)
+  \label{eq:conic-objective}
+\end{equation}
+over $X\succeq0$, $\tr X=1$, the defining equations for $b_j$, and the stated rotated-cone
+constraints.
+\end{proposition}
+
+\begin{proof}
+For fixed nonnegative $b_j$, every coefficient of $z_{jk}$ in
+\eqref{eq:conic-objective} is positive.  Therefore every maximizing solution has
+$z_{jk}=\sqrt{b_jb_k}$.  The objective becomes
+$(\sum_j\sqrt{b_j})^2-\tr(XB)$, exactly \eqref{eq:dual}.  No relaxation has been introduced.
+\end{proof}
+
+\section{Closed forms}
+
+\subsection{Two columns}
+
+\begin{theorem}[Two-column law]
+\label{thm:two-column}
+Let $R$ have two nonzero columns, and put
+\[
+  a=\norm{r_1}_2^2,\qquad b=\norm{r_2}_2^2,
+  \qquad c=\inner{r_1}{r_2}.
+\]
+Then the unique minimax law and value are
+\begin{equation}
+  \pi^*=\frac{(\sqrt a,\sqrt b)}{\sqrt a+\sqrt b},
+  \qquad
+  \nu(R)=\sqrt{ab}+|c|.
+  \label{eq:two-column}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Write $u=\pi_1/(1-\pi_1)>0$.  Directly from \eqref{eq:covariance},
+\[
+  Q_\pi=
+  \begin{pmatrix}
+    a/u&-c\\
+    -\overline c&bu
+  \end{pmatrix}.
+\]
+Its determinant is $ab-|c|^2$, independent of $u$, while its trace is $a/u+bu$.  For a
+positive semidefinite $2\times2$ matrix with fixed nonnegative determinant, the larger eigenvalue
+is strictly increasing in the trace on the feasible interval, and here its minimum is unique because
+\[
+  a/u+bu\ge2\sqrt{ab},
+\]
+with equality only at $u=\sqrt{a/b}$.  At that point the eigenvalues are
+$\sqrt{ab}\pm|c|$.  The larger one and the corresponding probability give
+\eqref{eq:two-column}.
+\end{proof}
+
+The probability depends only on the two column norms.  Their coherence enters the value but not
+the law.  This separation is special to two columns.
+
+\subsection{Orthogonal columns}
+
+\begin{theorem}[Reciprocal water filling]
+\label{thm:orthogonal}
+If the nonzero columns of $R$ are pairwise orthogonal, there is a unique $u\ge0$ satisfying
+\begin{equation}
+  \sum_{j=1}^q\frac{a_j}{a_j+u}=1.
+  \label{eq:water-equation}
+\end{equation}
+The minimax value is $\nu(R)=u$, and the unique minimax law is
+\begin{equation}
+  \pi_j^*=\frac{a_j}{a_j+u}.
+  \label{eq:water-law}
+\end{equation}
+For $q=1$, these formulas mean $u=0$ and $\pi_1=1$.
+\end{theorem}
+
+\begin{proof}
+Now $G=\diag(a_j)$ and
+\[
+  Q_\pi=\diag\bigl(a_j(\pi_j^{-1}-1)\bigr).
+\]
+The inequality $Q_\pi\preceq uI$ is equivalent to
+$\pi_j\ge a_j/(a_j+u)$ for every $j$.  A probability vector satisfying these lower bounds
+exists precisely when their sum is at most one.  If $q\ge2$, that sum is continuous and strictly
+decreasing from $q$ to $0$ as $u$ runs from $0$ to infinity, so the least feasible $u$ is the
+unique solution of \eqref{eq:water-equation}.  At the least value, the lower bounds sum to one
+and force \eqref{eq:water-law}; hence the law is unique.  The one-column boundary is immediate.
+\end{proof}
+
+\section{When squared-energy sampling is exact}
+
+Let
+\[
+  T=\tr G=\sum_ja_j=\norm{R}_F^2,
+  \qquad \pi_j^{\mathrm F}=\frac{a_j}{T}.
+\]
+This is the squared-column-norm, or energy, law.  It makes
+\begin{equation}
+  Q_{\pi^{\mathrm F}}=TI-G.
+  \label{eq:frob-covariance}
+\end{equation}
+Let $E_{\min}(G)$ denote the eigenspace belonging to $\lambda_{\min}(G)$.
+
+\begin{theorem}[Exact energy-law criterion]
+\label{thm:energy-criterion}
+The squared-energy law $\pi^{\mathrm F}$ is minimax if and only if there exists $X\in\D_q$ such
+that
+\begin{equation}
+  \ran X\subseteq E_{\min}(G),
+  \qquad
+  \diag X=\left(\frac{a_1}{T},\ldots,\frac{a_q}{T}\right).
+  \label{eq:energy-criterion}
+\end{equation}
+When this condition holds,
+\begin{equation}
+  \nu(R)=T-\lambda_{\min}(G).
+  \label{eq:energy-value}
+\end{equation}
+When it fails, the minimax law has strictly smaller worst-query variance than the energy law.
+\end{theorem}
+
+\begin{proof}
+Equation~\eqref{eq:frob-covariance} shows that its largest eigenvalue is the right side of
+\eqref{eq:energy-value} and its top eigenspace is $E_{\min}(G)$.  Suppose first that $X$ satisfies
+\eqref{eq:energy-criterion}.  Then
+\[
+  \frac{\sqrt{a_jX_{jj}}}{\sum_k\sqrt{a_kX_{kk}}}
+  =\frac{a_j/\sqrt T}{\sqrt T}=\frac{a_j}{T}.
+\]
+Together with the support condition, Theorem~\ref{thm:certificate} proves minimaxity and
+\eqref{eq:energy-value}.
+
+Conversely, suppose $\pi^{\mathrm F}$ is minimax.  The necessary half of
+Theorem~\ref{thm:certificate} supplies $X\in\D_q$ supported on the top eigenspace of
+$Q_{\pi^{\mathrm F}}$, namely $E_{\min}(G)$.  Its stationarity equation says
+\[
+  \frac{a_jX_{jj}}{(a_j/T)^2}=\gamma
+  \quad\text{for every }j
+\]
+for some common $\gamma>0$.  Hence $X_{jj}=\gamma a_j/T^2$.  Summing the diagonal and using
+$\tr X=1$ yields $\gamma=T$, which is precisely \eqref{eq:energy-criterion}.  Thus failure of
+that condition means the displayed energy law is not a minimizer; the minimum is then strictly
+below its value.
+\end{proof}
+
+The criterion separates two questions that a Frobenius norm merges.  The vector
+$(a_j/T)_j$ records marginal energy.  The minimum eigenspace records how the columns can cancel
+under the worst query.  Energy sampling is exact only when one density matrix realizes both at
+once.
+
+\section{The complete rank-one phase transition}
+
+Assume now that $\rank R=1$.  Then $G=zz^*$ for some $z\in\F^q$, with
+$|z_j|^2=a_j$.  Put $T=\sum_ja_j$, let $a=\max_ja_j$, and put $b=T-a$.
+
+\begin{theorem}[Rank-one law]
+\label{thm:rank-one}
+If $R$ has at least two nonzero columns, then
+\begin{equation}
+  \nu(R)=
+  \begin{cases}
+    T,&a\le T/2,\\[2mm]
+    2\sqrt{ab},&a>T/2.
+  \end{cases}
+  \label{eq:rank-one-value}
+\end{equation}
+In the balanced regime $a\le T/2$, the unique minimax law is
+$\pi_j^*=a_j/T$.  In the dominant regime $a>T/2$, let $h$ be the unique index with $a_h=a$.
+Then the unique minimax law is
+\begin{equation}
+  \pi_h^*=\frac{\sqrt a}{\sqrt a+\sqrt b},
+  \qquad
+  \pi_j^*=\frac{a_j}{\sqrt b(\sqrt a+\sqrt b)}\quad(j\ne h).
+  \label{eq:rank-one-law}
+\end{equation}
+For a single nonzero column, $\nu(R)=0$ and the sole probability is one.
+\end{theorem}
+
+\begin{proof}
+First suppose $a\le T/2$.  We construct a certificate for the energy law.  The polygon
+inequality says that planar vectors of prescribed lengths $a_j/\sqrt T$ can sum to zero exactly
+when their largest length does not exceed half their total length.  Choose unit vectors $w_j$ in
+a real plane so that
+\[
+  \sum_j\frac{a_j}{\sqrt T}w_j=0.
+\]
+Put $\sigma_j=z_j/|z_j|$, so $|\sigma_j|=1$ and $\sigma_j\in\{-1,1\}$ in the real case, and set
+\[
+  v_j=\overline{\sigma_j}\sqrt{\frac{a_j}{T}}w_j.
+\]
+Let $V$ have columns $v_j$ and put $X=V^*V$.  Then $X\succeq0$,
+$\tr X=\sum_j\norm{v_j}^2=1$, and $X_{jj}=a_j/T$.  Moreover
+\[
+  Vz=\sum_jz_jv_j
+  =\sum_j\frac{a_j}{\sqrt T}w_j=0.
+\]
+Thus $Xz=0$ and $\ran X\subseteq z^\perp=E_{\min}(G)$.  Since $q\ge2$ and $G$ has rank one,
+$\lambda_{\min}(G)=0$.  Theorem~\ref{thm:energy-criterion} gives
+$\nu(R)=T$ and the energy law is minimax.
+
+We now prove the dominant branch directly.  Let $t=\pi_h$ and let
+$w=z_{-h}/\sqrt b$ be the unit tail direction.  Multiplying $z$ by one global unit phase does not
+change $G=zz^*$, so take $z_h=\sqrt a$ before forming the compression.  Compress $Q_\pi$ to
+$\operatorname{span}\{e_h,w\}$.  Its first diagonal entry and off-diagonal magnitude are
+\[
+  \frac{a(1-t)}{t},\qquad \sqrt{ab}.
+\]
+For the second diagonal entry, Cauchy--Schwarz gives
+\[
+  \sum_{j\ne h}\frac{a_j^2}{b\pi_j}-b
+  \ge\frac{b}{1-t}-b=\frac{bt}{1-t}.
+\]
+Consequently, by compression and Loewner monotonicity,
+\begin{align*}
+  \lambda_{\max}(Q_\pi)
+  &\ge
+  \lambda_{\max}
+  \begin{pmatrix}
+    a(1-t)/t&-\sqrt{ab}\\
+    -\sqrt{ab}&bt/(1-t)
+  \end{pmatrix}\\
+  &=\frac{a(1-t)}{t}+\frac{bt}{1-t}
+  \ge2\sqrt{ab}.
+\end{align*}
+The $2\times2$ matrix has determinant zero, which gives the equality on the second line.
+The final inequality is sharp only when
+$t=\sqrt a/(\sqrt a+\sqrt b)$.
+
+Take the law in \eqref{eq:rank-one-law}.  Put
+$d_h=a/\pi_h^*=a+\sqrt{ab}$ and
+$d_T=a_j/\pi_j^*=b+\sqrt{ab}$ for every $j\ne h$.  On
+$\operatorname{span}\{e_h,w\}$, the covariance is
+\[
+  \begin{pmatrix}
+    \sqrt{ab}&-\sqrt{ab}\\
+    -\sqrt{ab}&\sqrt{ab}
+  \end{pmatrix},
+\]
+whose eigenvalues are $0$ and $2\sqrt{ab}$.  On the tail subspace orthogonal to $w$, the
+eigenvalue is $b+\sqrt{ab}<2\sqrt{ab}$ because $a>b$.  Thus this law attains the lower bound.
+Equality in the lower-bound proof forces both the unique value of $t$ and equality in the tail
+Cauchy--Schwarz inequality, hence $\pi_j\propto a_j$ on the tail.  The dominant law is unique.
+
+Finally, uniqueness in the balanced case follows from its positive-diagonal dual certificate.
+For that certificate the reciprocal inner objective is strictly convex in $\pi$; every primal
+optimum must minimize the same inner objective and therefore equals the energy law.
+\end{proof}
+
+\begin{remark}[The threshold]
+At $a=T/2$, the polygon may close degenerately and the balanced formula remains valid.  Above
+the threshold, one column cannot be cancelled by all the others.  The optimum then treats the
+entire tail as one opposing block.  The phase transition is geometric, not numerical.
+\end{remark}
+
+\section{An unbounded separation from the Frobenius law}
+
+\begin{corollary}[No universal multiplicative bound]
+\label{cor:unbounded}
+There is no finite constant $C$ such that the exact worst-query variance of squared-energy
+sampling is at most $C\nu(R)$ for every residual $R$ with at least two nonzero columns, even under
+the normalization $\norm{R}_F=1$.
+\end{corollary}
+
+\begin{proof}
+Take two orthogonal columns with energies $a\ge b>0$ and $a+b=1$.  Under the squared-energy law
+$(a,b)$, the two diagonal covariance entries are $b$ and $a$, so its exact worst-query variance is
+$a$.  Theorem~\ref{thm:two-column} gives $\nu(R)=\sqrt{ab}$.  Their ratio is
+\[
+  \frac{a}{\sqrt{ab}}=\sqrt{\frac ab},
+\]
+which tends to infinity as $b\downarrow0$.
+\end{proof}
+
+The conclusion is stronger than a constant-factor sharpening of an existing estimate.  A
+description chosen to minimize Frobenius residual energy need not minimize the exact fixed-law
+access complexity.  If $\mathcal C_{d,m}(A)$ denotes a declared family of resident descriptions
+of $A$ under description and metadata budgets $(d,m)$, the corresponding mathematical objective
+is
+\begin{equation}
+  D_A^{\mathrm{mm}}(d,m)
+  =\inf_{B\in\mathcal C_{d,m}(A)}\nu(A-B).
+  \label{eq:minimax-distortion}
+\end{equation}
+Equation~\eqref{eq:minimax-distortion} is a proposed mathematical foundation, not a production
+contract.  It says what would need to replace a Frobenius-only objective if exact worst-query
+mean-square access were adopted.
+
+\section{Physically fixed page components}
+
+Columns are the clearest model, but a physical system may access aligned groups.  Let a declared
+decomposition
+\begin{equation}
+  R=\sum_{g=1}^mR_g
+  \label{eq:page-decomposition}
+\end{equation}
+be fixed before optimization, with every $R_g\ne0$.  On drawing $J\sim\pi$, return
+$R_Jx/\pi_J$.
+
+Put $A_g=R_g^*R_g$ and $B=R^*R$.  For $\pi\in\Delta_m^\circ$, define
+\begin{equation}
+  Q_\pi=\sum_{g=1}^m\frac{A_g}{\pi_g}-B
+  \label{eq:page-covariance}
+\end{equation}
+and
+\begin{equation}
+  \nu(R_1,\ldots,R_m)=
+  \min_{\pi\in\Delta_m^\circ}\lambda_{\max}(Q_\pi).
+  \label{eq:page-primal}
+\end{equation}
+
+\begin{theorem}[Page-component dual]
+\label{thm:page-dual}
+The estimator has exact covariance $Q_\pi$, and the one-access minimax value is
+\begin{equation}
+  \nu(R_1,\ldots,R_m)
+  =\max_{X\succeq0,\,\tr X=1}
+  \left[
+    \left(\sum_{g=1}^m\sqrt{\tr(XA_g)}\right)^2-\tr(XB)
+  \right].
+  \label{eq:page-dual}
+\end{equation}
+A primal law $\pi\in\Delta_m^\circ$ and value $t$ are optimal if and only if they admit a density
+matrix $X$ with $\tr(XA_g)>0$ for every $g$ and
+\begin{equation}
+  Q_\pi\preceq tI,\quad X(tI-Q_\pi)=0,\quad
+  \pi_g=\frac{\sqrt{\tr(XA_g)}}{\sum_h\sqrt{\tr(XA_h)}}.
+  \label{eq:page-certificate}
+\end{equation}
+In particular, at least one positive-radicand certificate exists at every optimum; not every dual
+optimizer must have this property.
+\end{theorem}
+
+\begin{proof}
+Unbiasedness follows from \eqref{eq:page-decomposition}.  Expanding the second moment gives
+\[
+  \E\norm{R_Jx/\pi_J-Rx}^2
+  =x^*\left(\sum_gA_g/\pi_g-B\right)x,
+\]
+which proves \eqref{eq:page-covariance} and its positive semidefiniteness.  The proof of
+Theorem~\ref{thm:dual} now applies word for word with
+$a_jX_{jj}$ replaced by $\tr(XA_g)$.  Coercivity remains valid because
+\[
+  \lambda_{\max}(Q_\pi)
+  \ge \frac{\lambda_{\max}(A_g)}{\pi_g}-\norm{B}_2
+\]
+for each nonzero $A_g$.  The sufficiency proof of Theorem~\ref{thm:certificate} gives the reverse
+bound from any witness satisfying \eqref{eq:page-certificate}.
+
+For necessity, a saddle-point witness obeys
+$\tr(XA_g)/\pi_g^2=\gamma$ independently of $g$.  If the optimal value $t$ is positive, then
+$\gamma>0$: otherwise $R_gX^{1/2}=0$ for every $g$, hence $RX^{1/2}=0$ and
+$t=\tr(XQ_\pi)=0$, a contradiction.  Thus every radicand is positive and normalization gives
+\eqref{eq:page-certificate}.  If $t=0$, the covariance identity is a sum of nonnegative squared
+errors and forces $R_g=\pi_gR$ for every $g$.  Choose a unit vector $u$ with $Ru\ne0$ and set
+$X=uu^*$.  Then $Q_\pi=0$ and
+$\tr(XA_g)=\pi_g^2\norm{Ru}_2^2>0$, so the same certificate equation holds.
+\end{proof}
+
+\begin{theorem}[Zero-variance page decompositions]
+\label{thm:page-zero}
+The value $\nu(R_1,\ldots,R_m)$ is zero if and only if there is a probability vector
+$\pi\in\Delta_m^\circ$ such that
+\begin{equation}
+  R_g=\pi_gR\qquad(1\le g\le m).
+  \label{eq:proportional-pages}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+For every $x$,
+\begin{align*}
+  x^*Q_\pi x
+  &=\sum_g\pi_g
+  \norm{R_gx/\pi_g-Rx}_2^2.
+\end{align*}
+If \eqref{eq:proportional-pages} holds, every summand vanishes.  Conversely, if the minimax value
+is zero, attainment gives a law with $Q_\pi=0$.  The displayed sum then vanishes for every $x$.
+Every term is nonnegative and every $\pi_g$ is positive, so
+$R_gx/\pi_g=Rx$ for every $g$ and every $x$, which is \eqref{eq:proportional-pages}.
+\end{proof}
+
+The decomposition in \eqref{eq:page-decomposition} must be physical data, not a free algebraic
+choice.  Otherwise one could split $R$ into proportional replicas and force the invariant to
+zero without changing the actual access mechanism.
+
+\section{Boundaries of the theorem}
+
+The invariant is homogeneous of degree two.  It is unchanged by output isometries, column
+permutations, and coordinatewise input phases.  It is not invariant under a general right-unitary
+change of basis, nor should it be: the addressable coordinates are part of the information model.
+
+In the column model, $\nu(R)=0$ if and only if $R$ has exactly one nonzero column.  Indeed,
+$Q_\pi=0$ forces the off-diagonal entries of $G$ to vanish and then forces $\pi_j=1$ for every
+nonzero column, possible only for one column.  The page model is less rigid because distinct page
+operators can be proportional to the same $R$.
+
+Allowing a different independent law at each of $s$ times does not improve the ordinary mean.
+If the laws are $\pi^{(1)},\ldots,\pi^{(s)}$ and
+$\bar\pi=s^{-1}\sum_t\pi^{(t)}$, convexity of $u\mapsto1/u$ gives
+\[
+  \frac1s\sum_{t=1}^sQ_{\pi^{(t)}}\succeq Q_{\bar\pi}.
+\]
+Therefore the covariance of their arithmetic mean has largest eigenvalue at least $\nu/s$.
+The common optimal law already attains $\nu/s$.
+
+Sampling without replacement can do better.  For $R=I_2$, two deterministic distinct column
+accesses reconstruct $Rx$ exactly, while two independent categorical samples have minimax
+worst-query mean-square error $\nu(I_2)/2=1/2$.  No theorem above claims otherwise.
+
+\section{Computational falsification}
+
+A standard-library program accompanies the manuscript.  It is a counterexample search, not a
+proof.  Its fixed-seed checks compare:
+\begin{enumerate}[label=\textup{(\alph*)},leftmargin=2.1em]
+  \item direct enumeration of sampling outcomes with the covariance quadratic form;
+  \item the two-column closed form with a primal simplex grid and a signed rank-one
+  density-witness boundary grid;
+  \item the asserted and reported orthogonal equalization residual and a three-coordinate simplex
+  search; and
+  \item both branches of the rank-one formula with a three-coordinate simplex grid.
+\end{enumerate}
+The search covers 400 covariance identities, 160 two-column residuals, 30 orthogonal triples,
+and 80 rank-one triples, for 670 fixed-seed cases, plus the embedded grid comparisons.  The primal
+grid denominators are 600, 120, and 160; the dual-boundary denominator is 4000.  These finite
+grids give no off-grid optimality guarantee.  The covariance, primal-grid, and closed-form
+evaluations share a Gram helper and a floating Jacobi eigensolver; the dual-boundary and
+equalization checks are separate scalar computations.  Agreement is diagnostic only.  The
+program also illustrates Corollary~\ref{cor:unbounded} at seven finite ratios; the limiting claim is
+proved above.  Numerical agreement cannot replace any proof above; disagreement would falsify the
+corresponding formula or the program.
+
+One boundary error was found during this process.  An early statement assigned zero accesses
+whenever $\nu(R)=0$.  A one-column nonzero residual disproved it: its estimator has zero variance
+after one exact access, but zero accesses do not evaluate the residual.  The corrected distinction
+appears in Theorem~\ref{thm:sample-complexity}.
+
+\section{Consequences for Cassette}
+
+The mathematical consequence is exact and conditional.  If Cassette retains the declared
+query-independent, with-replacement estimator, then $\nu$ is the necessary and sufficient
+worst-unit-query mean-square constant.  The present squared-energy law is exact precisely under
+Theorem~\ref{thm:energy-criterion}; outside that geometry, it can be strictly and even
+unboundedly worse.
+
+A later adoption would require more than replacing one formula.  The resident-description
+objective would become \eqref{eq:minimax-distortion}; a plan would carry the physical decomposition;
+and a certificate would carry the primal law, value, and density witness.  Those are mathematical
+implications, not implementation instructions.
+
+Nothing in this paper is integrated into Cassette production.  The production mathematics,
+schemas, plans, tests, and stage status remain unchanged.  The result is presented for separate
+review before any adoption decision.
+
+\section{Conclusion}
+
+The fixed-law categorical residual problem has an exact spectral geometry.  Its covariance is a
+reciprocal diagonal perturbation of a Gram matrix; its minimax value is dual to a density-matrix
+balancing problem; and its optimal law can differ without bound from squared-energy sampling.
+The dual resolves repeated eigenvalues, the closed forms expose the controlling geometry, and the
+page extension ties the invariant to a physical decomposition.  The narrow result is a candidate
+foundation for exact worst-query residual-access certificates.  Whether Cassette adopts that
+foundation is a separate engineering and governance decision.
+
+\begin{thebibliography}{99}
+
+\bibitem{HansenHurwitz1943}
+M. H. Hansen and W. N. Hurwitz,
+``On the theory of sampling from finite populations,''
+\emph{Annals of Mathematical Statistics}, vol.~14, no.~4, pp.~333--362, 1943.
+\href{https://doi.org/10.1214/aoms/1177731356}{doi:10.1214/aoms/1177731356}.
+
+\bibitem{DrineasKannanMahoney2006}
+P. Drineas, R. Kannan, and M. W. Mahoney,
+``Fast Monte Carlo algorithms for matrices I: Approximating matrix multiplication,''
+\emph{SIAM Journal on Computing}, vol.~36, no.~1, pp.~132--157, 2006.
+\href{https://doi.org/10.1137/S0097539704442684}{doi:10.1137/S0097539704442684}.
+
+\bibitem{ErikssonBiqueEtAl2011}
+S. Eriksson-Bique, M. Solbrig, M. Stefanelli, S. Warkentin, R. Abbey, and I. C. F. Ipsen,
+``Importance sampling for a Monte Carlo matrix multiplication algorithm, with application to
+information retrieval,''
+\emph{SIAM Journal on Scientific Computing}, vol.~33, no.~4, pp.~1689--1706, 2011.
+\href{https://doi.org/10.1137/10080659X}{doi:10.1137/10080659X}.
+
+\bibitem{HolodnakIpsen2015}
+J. T. Holodnak and I. C. F. Ipsen,
+``Randomized approximation of the Gram matrix: Exact computation and probabilistic bounds,''
+\emph{SIAM Journal on Matrix Analysis and Applications}, vol.~36, no.~1, pp.~110--137, 2015.
+\href{https://doi.org/10.1137/130940116}{doi:10.1137/130940116}.
+
+\bibitem{AchlioptasMcSherry2007}
+D. Achlioptas and F. McSherry,
+``Fast computation of low-rank matrix approximations,''
+\emph{Journal of the ACM}, vol.~54, no.~2, article 9, 2007.
+\href{https://doi.org/10.1145/1219092.1219097}{doi:10.1145/1219092.1219097}.
+
+\bibitem{ImbergEtAl2023}
+H. Imberg, M. Axelson-Fisk, and J. Jonasson,
+``Optimal subsampling designs,'' arXiv:2304.03019, 2023.
+\href{https://arxiv.org/abs/2304.03019}{arXiv:2304.03019}.
+
+\bibitem{Kiefer1974}
+J. Kiefer,
+``General equivalence theory for optimum designs (approximate theory),''
+\emph{Annals of Statistics}, vol.~2, no.~5, pp.~849--879, 1974.
+\href{https://doi.org/10.1214/aos/1176342810}{doi:10.1214/aos/1176342810}.
+
+\bibitem{HarmanRosa2018}
+R. Harman and S. Rosa,
+``Removal of the points that do not support an E-optimal experimental design,''
+arXiv:1808.00731v1, 2018.
+\href{https://arxiv.org/abs/1808.00731v1}{arXiv:1808.00731v1}.
+
+\bibitem{Sion1958}
+M. Sion,
+``On general minimax theorems,''
+\emph{Pacific Journal of Mathematics}, vol.~8, no.~1, pp.~171--176, 1958.
+\href{https://doi.org/10.2140/pjm.1958.8.171}{doi:10.2140/pjm.1958.8.171}.
+
+\bibitem{Horn1954}
+A. Horn,
+``Doubly stochastic matrices and the diagonal of a rotation matrix,''
+\emph{American Journal of Mathematics}, vol.~76, no.~3, pp.~620--630, 1954.
+\href{https://doi.org/10.2307/2372705}{doi:10.2307/2372705}.
+
+\bibitem{CasazzaEtAl2006}
+P. G. Casazza, M. Fickus, J. Kova\v{c}evi\'c, M. T. Leon, and J. C. Tremain,
+``A physical interpretation of tight frames,'' in
+\emph{Harmonic Analysis and Applications}, pp.~51--76, Birkh\"auser, 2006.
+\href{https://doi.org/10.1007/0-8176-4504-7_4}{doi:10.1007/0-8176-4504-7\_4}.
+
+\bibitem{Novak1992}
+E. Novak,
+``Optimal linear randomized methods for linear operators in Hilbert spaces,''
+\emph{Journal of Complexity}, vol.~8, no.~1, pp.~22--36, 1992.
+\href{https://doi.org/10.1016/0885-064X(92)90032-7}{doi:10.1016/0885-064X(92)90032-7}.
+
+\bibitem{RavichandranEtAl2024}
+A. Ravichandran, N. E. Pashley, B. Libgober, and T. Dasgupta,
+``Optimal allocation of sample size for randomization-based inference from $2^K$ factorial
+designs,''
+\emph{Journal of Causal Inference}, vol.~12, no.~1, article 20230046, 2024.
+\href{https://doi.org/10.1515/jci-2023-0046}{doi:10.1515/jci-2023-0046}.
+
+\end{thebibliography}
+
+\end{document}

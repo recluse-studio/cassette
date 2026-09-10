@@ -1402,6 +1402,40 @@ class CanonicalBroker:
         self._signal(operation_id).clear()
         return self._operation(record)
 
+    def request_hold(self, operation_id: str, boundary: str) -> dict:
+        """Q5/Q25: arm one durable hold before the named operation boundary."""
+        record = self._load(operation_id)
+        if record["state"] in _TERMINAL_STATES or not boundary or any(
+                "hold" in event["payload"] for event in record["events"]):
+            _reject("INVALID_REQUEST", operation_id, "hold requires a nonterminal operation with no prior hold")
+        self._append(record, "output_delta", {"hold": "REQUESTED", "boundary": boundary})
+        return self.status(operation_id)
+
+    def release_hold(self, operation_id: str, boundary: str) -> dict:
+        """Release only the exact acknowledged boundary; the event survives process restart."""
+        record = self._load(operation_id)
+        holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
+        if not holds or holds[-1] != {"hold": "ACKNOWLEDGED", "boundary": boundary}:
+            _reject("INVALID_REQUEST", operation_id, "release requires the exact acknowledged hold")
+        self._append(record, "output_delta", {"hold": "RELEASED", "boundary": boundary})
+        return self.status(operation_id)
+
+    async def hold_boundary(self, operation_id: str, boundary: str) -> None:
+        """Remain at a committed boundary until its durable release is observed."""
+        while True:
+            record = self._load(operation_id)
+            holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
+            if not holds or holds[-1]["hold"] == "RELEASED":
+                return
+            hold = holds[-1]
+            if hold["boundary"] != boundary:
+                if hold["hold"] == "ACKNOWLEDGED":
+                    _reject("ROOT_INVALID", operation_id, "operation moved beyond its unreleased hold")
+                return
+            if hold["hold"] == "REQUESTED":
+                self._append(record, "output_delta", {"hold": "ACKNOWLEDGED", "boundary": boundary})
+            await asyncio.sleep(0.02)
+
     async def execute(
         self,
         request: dict,
@@ -1433,6 +1467,7 @@ class CanonicalBroker:
                 if not isinstance(result, dict):
                     _reject("INVALID_REQUEST", operation_id, "operation worker must return one result object")
                 _json_digest(result, operation_id, "operation result")
+                await self.hold_boundary(operation_id, "result")
                 return self._operation(self._success(self._load(operation_id), result))
             except _ControlStop as stopped:
                 return self._operation(self._stop(self._load(operation_id), stopped.action))
@@ -1486,6 +1521,8 @@ class CanonicalBroker:
                 runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
                 tokens = runtime.state["generated_tokens"]
                 expose(tokens, pin.root_digest)
+                if tokens:
+                    await self.hold_boundary(operation_id, "runtime-commit")
                 if len(tokens) >= maximum:
                     return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
                             "root_digest": pin.root_digest, "position": runtime.state["position"],
@@ -1516,6 +1553,8 @@ class CanonicalBroker:
             if record["checkpoint"]:
                 checkpoint, manifest = record["checkpoint"]["checkpoint_root"], record["checkpoint"]["manifest_digest"]
             state = native_training_state(cartridge, checkpoint, manifest)
+            if record["checkpoint"]:
+                await self.hold_boundary(operation_id, "training-checkpoint")
             parent = load_root(cartridge, state["parent_root"])
             if request.get("target") != parent["identity"]:
                 _reject("IDENTITY_MISMATCH", operation_id, "training target differs from the frozen parent")
@@ -1535,6 +1574,7 @@ class CanonicalBroker:
                 self._write({**self._load(operation_id), "checkpoint": {
                     "checkpoint_root": checkpoint, "manifest_digest": manifest}})
                 state = native_training_state(cartridge, checkpoint, manifest)
+                await self.hold_boundary(operation_id, "training-checkpoint")
                 await asyncio.sleep(0)
             compiled_parent = parent["plans"][0].get("compiled")
             if compiled_parent:
@@ -1570,7 +1610,8 @@ class CanonicalBroker:
                   "reasoning": False, "tools": {"prompt_definitions": True, "generated_calls": False},
                   "structured_output": {"supported": False}, "streaming": True, "cancellation": True,
                   "training": {"operations": ["ADAPTER_SFT", "ADAPTER_CONTINUED_PRETRAINING", "OFFLINE_ADAPTER_DPO"],
-                               "preparation": "IMMUTABLE_CHECKPOINT", "compiled_recovery": "compiled" in root["plans"][0]},
+                               "preparation": "IMMUTABLE_CHECKPOINT", "compiled_recovery": "compiled" in root["plans"][0],
+                               "sequence_inputs": ["tokens", "mask"] + (["pixels"] if any(node["operator"] == "image" for node in graph["nodes"]) else [])},
                   "source": {"identity": root["identity"], "root_digest": pin.root_digest,
                              "execution_mode": "COMPILED_CERTIFIED" if "compiled" in root["plans"][0] else "NATIVE"},
                   "performance_tiers": []}
@@ -1853,7 +1894,12 @@ class CanonicalBroker:
                     raise _ControlStop("cancel")
                 if record["pause_requested"]:
                     raise _ControlStop("pause")
-                return self._operation(await self._advance(record, request, context))
+                await self.hold_boundary(operation_id, record["phase"])
+                record = self._load(operation_id)
+                advanced = await self._advance(record, request, context)
+                if advanced["state"] not in _TERMINAL_STATES:
+                    await self.hold_boundary(operation_id, advanced["phase"])
+                return self.status(operation_id)
             except _ControlStop as stopped:
                 return self._operation(self._stop(self._load(operation_id), stopped.action))
             except asyncio.CancelledError:
@@ -1953,6 +1999,7 @@ class CanonicalBroker:
                         extents[0],
                         extents[1],
                         context.capacity_controller,
+                        checkpoint_committed=lambda: self.hold_boundary(operation_id, "source-checkpoint"),
                     ))
                 return [
                     _partial_record(artifact.path, partial)
@@ -2368,6 +2415,9 @@ class CanonicalBroker:
         checkpoint: dict | None = None,
         event_payload: dict | None = None,
     ) -> dict:
+        holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
+        if holds and holds[-1]["hold"] != "RELEASED":
+            _reject("INVALID_REQUEST", record["operation_id"], "operation cannot finish before its requested hold and release")
         changes = {}
         if phase is not None:
             if PHASES.index(phase) != PHASES.index(record["phase"]) + 1:

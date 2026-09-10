@@ -1,0 +1,27 @@
+{
+  "seed": 2026090604,
+  "cases": 420,
+  "largest_observed_gap": {
+    "ratio_upper": 1.060660171779821,
+    "ratio_lower": 1.06065911122875,
+    "matrix": [
+      [
+        -0.5773502691896258,
+        -0.5773502691896257,
+        0.5773502691896258
+      ]
+    ],
+    "fixed_interval": [
+      0.9999990001028611,
+      1.0
+    ],
+    "adaptive_value": 0.9428090415820636,
+    "signs": [
+      1,
+      -1,
+      1
+    ]
+  },
+  "rank_one_sharp_ratio": 1.0606601717798212,
+  "boundary": "Real-field finite floating-point search; not an exact proof or bound over all matrices."
+}

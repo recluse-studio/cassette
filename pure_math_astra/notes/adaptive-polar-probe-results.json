@@ -1,0 +1,49 @@
+{
+  "status": "NUMERICAL_WITNESSES_ONLY",
+  "program": "pure_math_astra/programs/adaptive_polar_probe.py",
+  "model": "real q=4, s=2, two diagonal 2x2 blocks with eigenvalues 1 and eta",
+  "limits": [
+    "The outer query search is local and provides no upper bound on Psi.",
+    "The two values at each selected query are floating-point evaluations of primal and Lagrange-dual bounds, not interval-arithmetic certificates.",
+    "The finite samples do not prove equality, an asymptotic rate, or optimality over bases."
+  ],
+  "selected_results": [
+    {
+      "eta": 0.01,
+      "angle_1_over_sqrt_eta": 0,
+      "angle_2_over_sqrt_eta": 0,
+      "outer_iterations": 35,
+      "risk_lower_witness": 0.09999997200139965,
+      "risk_at_query_upper": 0.10000000616153792,
+      "query": [0.5, -0.5, -0.5, -0.5],
+      "known_Psi": 0.1
+    },
+    {
+      "eta": 0.01,
+      "angle_1_over_sqrt_eta": 4,
+      "angle_2_over_sqrt_eta": 4,
+      "outer_iterations": 35,
+      "risk_lower_witness": 0.09999997182129083,
+      "risk_at_query_upper": 0.10000000597721936,
+      "query": [0.6222157856857705, 0.33593481060704256, 0.3358978922002844, -0.6222281937370373]
+    },
+    {
+      "eta": 0.01,
+      "angle_1_over_sqrt_eta": 4,
+      "angle_2_over_sqrt_eta": 0,
+      "outer_iterations": 50,
+      "risk_lower_witness": 0.09530293636628384,
+      "risk_at_query_upper": 0.09530296955090123,
+      "query": [0.3399450412061552, -0.6352532647549468, 0.6864092704137863, 0.09865582632333804]
+    },
+    {
+      "eta": 0.0001,
+      "angle_1_over_sqrt_eta": 4,
+      "angle_2_over_sqrt_eta": 0,
+      "outer_iterations": 60,
+      "risk_lower_witness": 0.009825787770859795,
+      "risk_at_query_upper": 0.009875949421935648,
+      "query": [0.35819708711526016, -0.6058938871386291, 0.6088203131688709, -0.3659580175144999]
+    }
+  ]
+}

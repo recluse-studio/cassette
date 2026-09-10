@@ -1,0 +1,20 @@
+{
+  "scope": "Exact enumeration on integer queries in [-3,3]^4; finite verification, not the general proof.",
+  "vectors": 2401,
+  "selected_rule_counts": {
+    "zero": 1,
+    "uniform_pair": 702,
+    "sign_flow": 1698
+  },
+  "largest_selected_risk_ratio": "5/3",
+  "ratio_witness": [
+    -3,
+    -1,
+    -1,
+    1
+  ],
+  "largest_expected_random_bits_on_grid": "88/9",
+  "sampler_source_bytes": 7431,
+  "randomness_contract": "Independent uniform integer tickets, or independent uniform bit blocks with rejection.",
+  "native_cassette_execution": "NOT_RUN"
+}

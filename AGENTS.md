@@ -65,6 +65,8 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   | Integrity repair manifests, verified replicas, parity objects, and quarantined extents | `store.py` |
   | Derivative export artifacts, export manifests, and revision-removal tombstones | `store.py` |
   | Canonical broker operation logs, live ownership, and ordered operation events | `broker.py` |
+  | Immutable campaign control records and compare-and-swap heads | `store.py` |
+  | Immutable campaign evidence captures and bounded storage-profile atoms | `store.py` |
 
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),
   through the generated Q30 dispatch table. An mx.* reference anywhere else fails the ledger.
@@ -85,6 +87,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     "store.py": ["Q57"],
     "trainer.py": ["Q21"],
     "tools/capture_fixture.py": ["Q40"],
+    "tools/campaign.py": ["Q80"],
     "tools/genschema.py": ["Q33"],
     "tools/ledger.py": ["Q29"],
     "tools/resource_frontier.py": ["Q37"]
@@ -168,6 +171,18 @@ not whitespace.
 - Every error is one of the canonical typed errors (Q6). Inventing an error shape is a defect.
 
 ## Accounting and deletion proof
+
+The independent research roots below are outside the Cassette executable and shipped-binary
+closure. The ledger reports their paths separately. Product and tool code may not import them;
+an import reopens the boundary instead of silently excluding a dependency. Their owners retain
+their files and research checks. This boundary implements the principal's instruction to work
+around the independent mathematics research without modifying it.
+
+<!-- CASSETTE_RESEARCH_ROOTS_BEGIN -->
+```json
+["pure_math_astra", "pure_math_lab"]
+```
+<!-- CASSETTE_RESEARCH_ROOTS_END -->
 
 - tools/ledger recomputes J from a clean checkout: authored LOC, deps with declared subsets,
   processes, branches, binary closure, and file-header dependency verification. Any commit that

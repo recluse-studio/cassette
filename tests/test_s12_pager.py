@@ -31,7 +31,7 @@ from tools.ledger import run as run_ledger
 
 REPO = Path(__file__).resolve().parent.parent
 RUNTIME_COMMIT = "365d6f29b47686a9f5401f6a9ec5825fee162d69"
-DISPATCH_DIGEST = "sha256:431f63af600822fc10d9566dd3e5de250a1768008a83dac7d5af77a96020d4fe"
+DISPATCH_DIGEST = "sha256:3907eb9c6011d84e550857937d5b007ae3d5c4969fe50fa70e2bafe72fd51e22"
 CASE_IDS = [
     "mlx.matmul.f32.2x3_3x2",
     "mlx.matmul.f32.2x4_4x4",
@@ -55,6 +55,7 @@ CASE_IDS = [
     "mlx.sgd.f32.1",
     "mlx.matmul.f32.3x2_2x2",
     "mlx.adapter_merge.i8_f32.rank1.2x3",
+    "mlx.matmul.f32.2x2_2x2",
 ]
 MODES = [
     "BYTE_IDENTICAL_LAYOUT",
@@ -596,6 +597,11 @@ def golden_cases() -> dict[str, tuple[list[mx.array], object]]:
                 mx.array([0], dtype=mx.int8),
             ],
             [[-1.875, -1.25, 0.375], [0.9375, 2.125, 2.8125]],
+        ),
+        CASE_IDS[22]: (
+            [mx.array([[1, 2], [3, 4]], dtype=mx.float32),
+             mx.array([[5, 6], [7, 8]], dtype=mx.float32)],
+            [[19.0, 22.0], [43.0, 50.0]],
         ),
     }
 

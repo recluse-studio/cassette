@@ -1,0 +1,49 @@
+{
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "seed": 2026090602,
+  "rank_envelope_cases": 108,
+  "largest_numerical_duality_gap": 9.998981298497966e-07,
+  "smallest_sampled_value_minus_envelope": -4.440892098500626e-16,
+  "largest_canonical_attainment_error": 2.836742954981375e-07,
+  "weighted_description_separation": {
+    "trial": 20,
+    "matrix": [
+      [
+        0.2385352918305338,
+        0.12836813087232837,
+        -0.029058635297236936,
+        -0.5243323955290196
+      ],
+      [
+        -0.270490914840789,
+        0.5747460415407168,
+        -0.04052943946661335,
+        -0.02223617713017366
+      ],
+      [
+        0.2669530892302069,
+        0.08680397958326892,
+        -0.07964919693352218,
+        0.4000941947003953
+      ]
+    ],
+    "surrogate": 0.5219459830638845,
+    "selected_spectral_interval": [
+      0.3632208760509288,
+      0.36322105210748046
+    ],
+    "choice": [
+      3,
+      0.6042963902381329
+    ],
+    "competitor_upper": 0.32351601947456426,
+    "competitor_direction": [
+      -0.09049011585122738,
+      -0.9798921531742942,
+      -0.17782830787216292
+    ],
+    "lower_minus_competitor_upper": 0.03970485657636452
+  },
+  "boundary": "Finite floating-point falsification. Numerical intervals are not exact certificates."
+}

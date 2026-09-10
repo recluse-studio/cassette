@@ -26,13 +26,16 @@ Output is deterministic. Exit 0 when clean, 1 when any violation exists. Usage:
 from __future__ import annotations
 
 import ast
+import difflib
 import hashlib
 import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tokenize
 from pathlib import Path
@@ -131,6 +134,24 @@ def classify(path: Path) -> str:
     return "product"
 
 
+def research_roots(root: Path) -> set[str]:
+    """Read the explicit non-product research boundary from the repository authority."""
+    if not (root / "AGENTS.md").is_file():
+        return set()
+    source = (root / "AGENTS.md").read_text()
+    begin, end = "<!-- CASSETTE_RESEARCH_ROOTS_BEGIN -->", "<!-- CASSETTE_RESEARCH_ROOTS_END -->"
+    if begin not in source:
+        return set()
+    if source.count(begin) != 1 or source.count(end) != 1:
+        raise ValueError("independent research roots require one authority block")
+    body = source.split(begin)[1].split(end)[0].strip().removeprefix("```json").removesuffix("```")
+    roots = json.loads(body)
+    if not isinstance(roots, list) or len(set(roots)) != len(roots) or any(
+            not isinstance(value, str) or re.fullmatch(r"pure_math_[a-z_]+", value) is None for value in roots):
+        raise ValueError("independent research roots must be unique literal mathematics directories")
+    return set(roots)
+
+
 def discover(root: Path) -> list[Path]:
     """Return Git-owned and intentionally introduced Python source, not foreign environments."""
 
@@ -160,12 +181,14 @@ def discover(root: Path) -> list[Path]:
             path.relative_to(root)
             for path in sorted(root.rglob("*.py"))
             if not any(part in UNTRACKED_CACHE_DIRS for part in path.relative_to(root).parts)
+            and path.relative_to(root).parts[0] not in research_roots(root)
             and not foreign_environment(path.relative_to(root))
         ]
 
-    owned = {rel for rel in tracked if eligible(rel)}
+    excluded = research_roots(root)
+    owned = {rel for rel in tracked if eligible(rel) and rel.parts[0] not in excluded}
     for rel in untracked:
-        if not eligible(rel) or any(part in UNTRACKED_CACHE_DIRS for part in rel.parts):
+        if rel.parts[0] in excluded or not eligible(rel) or any(part in UNTRACKED_CACHE_DIRS for part in rel.parts):
             continue
         if foreign_environment(rel):
             continue
@@ -613,7 +636,7 @@ def _imports(tree: ast.AST) -> set[str]:
 
 
 def removal_proof_node(root: Path, target: str, authority: str) -> str | None:
-    """Find the first test that cites the mapped authority and directly imports its owner."""
+    """Prefer a foundation fixture that cites the mapped authority and directly imports its owner."""
     module = _module_name(target)
     candidates = []
     for path in sorted((root / "tests").glob("test_*.py")):
@@ -626,14 +649,18 @@ def removal_proof_node(root: Path, target: str, authority: str) -> str | None:
             cited = set(CITATION_RE.findall(node.name)) | set(CITATION_RE.findall(ast.get_docstring(node) or ""))
             if authority in cited:
                 candidates.append(f"{path.relative_to(root).as_posix()}::{node.name}")
-    return min(candidates) if candidates else None
+    return min(candidates, key=lambda name: (name.startswith("tests/test_l"), name)) if candidates else None
 
 
-def _pytest(root: Path, node: str | None = None) -> subprocess.CompletedProcess:
-    command = [sys.executable, "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+def _pytest(root: Path, node: str | None = None, *, log_path: Path | None = None) -> subprocess.CompletedProcess:
+    command = [sys.executable, "-B", "-m", "pytest", "-v" if log_path else "-q", "-p", "no:cacheprovider"]
     if node:
         command.append(node)
-    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", PYTHONUNBUFFERED="1")
+    if log_path is not None:
+        with log_path.open('w') as output:
+            result = subprocess.run(command,cwd=root,stdout=output,stderr=subprocess.STDOUT,text=True,timeout=3600,env=environment)
+        return subprocess.CompletedProcess(command,result.returncode,log_path.read_text(),'')
     return subprocess.run(
         command, cwd=root, capture_output=True, text=True, timeout=3600, env=environment
     )
@@ -654,19 +681,22 @@ def _bypass_source(source: bytes, marker: str) -> bytes:
     return (ast.unparse(ast.fix_missing_locations(Bypass().visit(tree))) + "\n").encode()
 
 
-def removal_experiment(root: Path, target: str, authority: str) -> dict:
+def removal_experiment(root: Path, target: str, authority: str, *, evidence: Path | None = None) -> dict:
     """Require one cited proof to fail under physical deletion and executable bypass."""
     node = removal_proof_node(root, target, authority)
     if node is None:
         raise ValueError(f"Q78 {target} -> {authority} has no direct cited proof")
-    control = _pytest(root, node)
+    if evidence is not None: evidence.mkdir(parents=True,exist_ok=True)
+    def execute(label):
+        return _pytest(root,node,log_path=evidence/f'{label}.log' if evidence is not None else None)
+    control = execute('control')
     if control.returncode:
         raise ValueError(f"Q78 control failed for {target} -> {authority}: {control.stdout}{control.stderr}")
     path = root / target
     original, mode = path.read_bytes(), path.stat().st_mode
     path.unlink()
     try:
-        removed = _pytest(root, node)
+        removed = execute('deleted')
     finally:
         path.write_bytes(original)
         path.chmod(mode)
@@ -680,7 +710,7 @@ def removal_experiment(root: Path, target: str, authority: str) -> dict:
     marker = f"Q78_BYPASS_{_module_name(target).replace('.', '_')}"
     path.write_bytes(_bypass_source(original, marker))
     try:
-        bypassed = _pytest(root, node)
+        bypassed = execute('bypassed')
     finally:
         path.write_bytes(original)
         path.chmod(mode)
@@ -710,10 +740,12 @@ def _owned_files(root: Path) -> list[Path]:
         return sorted(
             path.relative_to(root) for path in root.rglob("*")
             if path.is_file() and not foreign_environment(path.relative_to(root))
+            and path.relative_to(root).parts[0] not in research_roots(root)
         )
+    excluded = research_roots(root)
     return sorted(
         Path(name) for name in proc.stdout.split("\0")
-        if name and (root / name).is_file() and not foreign_environment(Path(name))
+        if name and Path(name).parts[0] not in excluded and (root / name).is_file() and not foreign_environment(Path(name))
     )
 
 
@@ -962,6 +994,8 @@ def run(root: Path, *, verify_report: bool = True) -> dict:
         if header_violation:
             violations.append(header_violation)
         imported = top_level_imports(root, rel)
+        for dependency in sorted(imported & research_roots(root)):
+            violations.append(f"{rel}: imports independent research root {dependency}; dependency must enter product accounting")
         actual = imported & repo_modules
         if cls in {"product", "tools"} and declared is not None and declared != actual:
             violations.append(
@@ -1004,11 +1038,153 @@ def run(root: Path, *, verify_report: bool = True) -> dict:
         "accounting": accounting,
         "j": report["j"] if report is not None and not report_violations else None,
         "files_checked": [str(f) for f in files],
+        "independent_research_roots": sorted(research_roots(root)),
         "violations": sorted(violations),
     }
 
 
+def remediation_diff(root: Path, parent: str, child: str) -> dict:
+    """Q80: count changed executable statements between exact Git trees, excluding docstrings."""
+    removal_map, errors = load_removal_map(root)
+    if errors:
+        raise ValueError(str(errors))
+    revisions = []
+    for revision in (parent, child):
+        result = _git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")
+        if result is None or result.returncode:
+            raise ValueError("remediation revisions must resolve to exact commits")
+        revisions.append(result.stdout.strip())
+    result = _git(root, "diff", "--name-status", "--no-renames", *revisions)
+    if result is None or result.returncode:
+        raise ValueError("remediation diff could not read changed files")
+    changes = []
+    def statements(source):
+        tree = ast.parse(source)
+        excluded = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
+                first = node.body[0]
+                if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                    excluded.update(range(first.lineno, first.end_lineno + 1))
+        rows, row = [], []
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.start[0] in excluded or token.type in {tokenize.COMMENT, tokenize.NL, tokenize.INDENT, tokenize.DEDENT, tokenize.ENDMARKER}:
+                continue
+            if token.type == tokenize.NEWLINE:
+                if row: rows.append(tuple(row)); row = []
+            else: row.append((token.type, token.string))
+        return rows
+    added = deleted = 0
+    for line in result.stdout.splitlines():
+        change, path = line.split('\t')
+        if change != 'M' or path not in removal_map or not path.endswith('.py') or classify(Path(path)) not in {'product', 'tools'}:
+            raise ValueError(f"remediation changes disallowed path or file membership: {path}")
+        sources = []
+        for revision in revisions:
+            source = _git(root, "show", f"{revision}:{path}")
+            if source is None or source.returncode: raise ValueError(f"remediation source unavailable: {path}")
+            sources.append(statements(source.stdout))
+        a = d = 0
+        for operation, i, j, k, l in difflib.SequenceMatcher(a=sources[0], b=sources[1], autojunk=False).get_opcodes():
+            if operation != 'equal': d += j-i; a += l-k
+        added += a; deleted += d
+        changes.append({'path':path, 'added':a, 'deleted':d})
+    body = {'parent':revisions[0], 'child':revisions[1], 'files':changes, 'added':added, 'deleted':deleted,
+            'executable_line_changes':added+deleted, 'within_limit':added+deleted <= 40}
+    return {**body, 'sha256': hashlib.sha256(_canonical_json(body)).hexdigest()}
+
+
+def prove_candidate(root: Path, destination: Path) -> dict:
+    """Q29/Q78: test an exact isolated worktree snapshot without committing the shared checkout."""
+    if destination.exists() or destination.resolve().is_relative_to(root.resolve()):
+        raise ValueError('candidate evidence destination must be a new directory outside the repository')
+    destination.mkdir(parents=True)
+    files = _owned_files(root)
+    source_manifest = {str(path): hashlib.sha256((root/path).read_bytes()).hexdigest() for path in files}
+    (destination/'source-manifest.json').write_bytes(_canonical_json(source_manifest))
+    with tempfile.TemporaryDirectory(prefix='cassette-l04-candidate-') as temporary:
+        snapshot = Path(temporary)/'repo'
+        result = subprocess.run(['git','clone','--shared','--no-checkout',str(root),str(snapshot)],capture_output=True,text=True)
+        if result.returncode: raise ValueError(f'candidate checkout failed: {result.stderr}')
+        for path in files:
+            target = snapshot/path
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(root/path,target)
+        copied = {str(path):hashlib.sha256((snapshot/path).read_bytes()).hexdigest() for path in files}
+        if copied != source_manifest: raise ValueError('candidate source changed while its snapshot was copied')
+        baseline = run(snapshot,verify_report=False)
+        (destination/'ledger.json').write_bytes(_canonical_json(baseline))
+        if baseline['violations']: raise ValueError(f'candidate ledger failed: {baseline["violations"]}')
+        suite = _pytest(snapshot,log_path=destination/'suite.log')
+        if suite.returncode: raise ValueError(f'candidate suite failed; see {destination / "suite.log"}')
+        summary = re.search(r'(\d+) passed',suite.stdout)
+        if summary is None or re.search(r'\d+ (skipped|xfailed|xpassed)',suite.stdout):
+            raise ValueError('candidate suite did not prove an exact pass population with zero skips')
+        proofs = []
+        removal_map, errors = load_removal_map(snapshot)
+        if errors: raise ValueError(str(errors))
+        for target, rows in sorted(removal_map.items()):
+            proof = removal_experiment(snapshot,target,rows[0],evidence=destination/'removal-output'/target.removesuffix('.py'))
+            proofs.append(proof)
+            (destination/'removals.json').write_bytes(_canonical_json(proofs))
+        after = {str(path):hashlib.sha256((snapshot/path).read_bytes()).hexdigest() for path in files}
+        if after != source_manifest: raise ValueError('candidate source changed during its proof')
+        complete = {'accounting':baseline['accounting'], 'evidence_digest':_evidence_digest(snapshot),
+                    'j':{'labels':J_LABELS, 'values':_j_values(baseline['accounting'],0)},
+                    'removal_proofs':proofs, 'schema_version':1,
+                    'suite':{'command':' '.join(suite.args),
+                             'failed_acceptance_rows':[], 'passed':int(summary.group(1)), 'skipped':0}}
+        (snapshot/J_REPORT).write_bytes(_canonical_json(complete))
+        (destination/'complete-j-report.json').write_bytes(_canonical_json(complete))
+        verified = run(snapshot)
+        (destination/'ledger.json').write_bytes(_canonical_json(verified))
+        if verified['violations']:
+            raise ValueError(f'ordinary candidate ledger failed: {verified["violations"]}')
+        source_manifest = {str(path):hashlib.sha256((snapshot/path).read_bytes()).hexdigest() for path in files}
+        (destination/'source-manifest.json').write_bytes(_canonical_json(source_manifest))
+        archive = destination/'candidate-source.tar.gz'
+        with tarfile.open(archive,'w:gz') as bundle:
+            for path in files: bundle.add(snapshot/path,arcname=str(path),recursive=False)
+        staged = _git(snapshot,'add','-A')
+        tree = _git(snapshot,'write-tree')
+        if staged is None or staged.returncode or tree is None or tree.returncode:
+            raise ValueError('isolated candidate tree could not be recorded')
+        inputs = {'candidate_tree':tree.stdout.strip(), 'base_commit':_git(snapshot,'rev-parse','HEAD').stdout.strip(),
+                  'source_manifest_sha256':hashlib.sha256(_canonical_json(source_manifest)).hexdigest(),
+                  'archive_sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),
+                  'python':sys.version, 'evidence_level':'INTEGRATION', 'physical_drive':'NOT_RUN',
+                  'independent_review':'SUPPLIED_REVIEW_REMEDIATION', 'publication':'PENDING'}
+        (destination/'inputs.json').write_bytes(_canonical_json(inputs))
+        report = {'status':'PASS', 'scope':'immutable candidate snapshot with passing ordinary ledger',
+                  'source_manifest_sha256':hashlib.sha256(_canonical_json(source_manifest)).hexdigest(),
+                  'suite_passed':int(summary.group(1)), 'removal_proofs':proofs,
+                  'accounting':baseline['accounting'], 'j':dict(zip(J_LABELS,_j_values(baseline['accounting'],0)))}
+        (destination/'result.json').write_bytes(_canonical_json(report))
+        return report
+
+
 def main() -> int:
+    if len(sys.argv) == 4 and sys.argv[1] == '--prove-candidate':
+        try:
+            print(json.dumps(prove_candidate(Path(sys.argv[2]).resolve(),Path(sys.argv[3]).resolve()),sort_keys=True))
+            return 0
+        except (ValueError,OSError,subprocess.TimeoutExpired) as error:
+            print(str(error),file=sys.stderr)
+            return 1
+    if len(sys.argv) > 1 and sys.argv[1] == "remediation-diff":
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('action')
+        parser.add_argument('--parent', required=True)
+        parser.add_argument('--child', required=True)
+        args = parser.parse_args()
+        try:
+            report = remediation_diff(Path.cwd(), args.parent, args.child)
+            print(json.dumps(report, sort_keys=True))
+            return 0 if report['within_limit'] else 1
+        except (ValueError, SyntaxError) as error:
+            print(str(error), file=sys.stderr)
+            return 1
     if len(sys.argv) > 1 and sys.argv[1] == "--prove-j":
         root = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(".")
         output = Path(sys.argv[3]) if len(sys.argv) > 3 else root / J_REPORT
