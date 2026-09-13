@@ -196,6 +196,7 @@ def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "x"\nrequires-python = "==3.13.*"\n'
         'dependencies = ["requests>=2,==2.*", "foo==2.*"]\n'
+        '[build-system]\nrequires = ["build>=1", "setuptools==84.*"]\n'
     )
     (tmp_path / "store.py").write_text("import os\n")
     (tmp_path / ".git").write_text("")  # git present but broken: checks must fail closed, not pass
@@ -205,6 +206,8 @@ def test_ledger_rejects_header_pin_and_failed_check_violations(tmp_path):
     assert any("line 1 must be" in v for v in report["violations"])
     assert any("'requests>=2,==2.*' is not an exact" in v for v in report["violations"])
     assert any("'foo==2.*' is not an exact" in v for v in report["violations"])
+    assert any("'build>=1' is not an exact" in v for v in report["violations"])
+    assert any("'setuptools==84.*' is not an exact" in v for v in report["violations"])
     assert any("tracked-artifact check could not run (fail-closed)" in v for v in report["violations"])
     assert any("commit-law check could not run (fail-closed)" in v for v in report["violations"])
 

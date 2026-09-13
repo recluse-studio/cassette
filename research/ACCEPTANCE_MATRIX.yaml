@@ -117,11 +117,12 @@ immutable_models:
       - structured_output
       - multi_turn
       - long_context
-  llama_4_scout:
+  qwen3_30b_a3b:
     source: huggingface
-    locator: meta-llama/Llama-4-Scout-17B-16E-Instruct
-    revision: 92f3b1597a195b523d8d9e5700e57e4fbb8f20d3
-    repository_artifact_bytes: 217315712145
+    locator: Qwen/Qwen3-30B-A3B
+    revision: ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+    repository_artifact_bytes: 61084187391
+    selection_record_digest: blake3:a1f6fa611aaff0af7b565250476455f672dd33da69d147c98406c78f105a941e
     required_capabilities:
       - text
       - reasoning
@@ -235,7 +236,7 @@ physical_storage_qualification:
     - exact_drive_operation_plan_profile_recorded
     - every_physical_drive_used_by_a_required_row_has_its_own_exact_drive_operation_plan_profile_before_that_operation_begins
     - optional_reference_profiles_do_not_gate_qualification
-    - no_live_source_or_model_byte_before_L02
+    - no_model_bearing_header_or_payload_before_qualified_L02_path
   qualification_cardinality: >-
     one record per exact physical drive, assembled path, Apple host, operation, and plan; a missing
     record blocks only that operation, and a failed tuple does not make the drive ineligible for a
@@ -243,7 +244,9 @@ physical_storage_qualification:
   phase_gate_semantics:
     source_entry_pass: >-
       after L01.25, inventory and campaign-root proof plus the exact header, acquisition, and Ollama
-      physical profiles pass before L02 makes any live source request or moves any model byte
+      physical profiles pass before L02 reads model-bearing headers or transfers model payload;
+      user-triggered authorization, catalogue and bounded non-payload metadata are permitted earlier
+      within L05 under acquisition_entry_contract
     later_profiles: >-
       compile, inference, training, execution, failure, export, repair, and removal profiles retain
       the L01.5 label but gate only their exact consumer; they do not postpone or redefine the
@@ -273,9 +276,9 @@ fixture_gate_rows:
     blocks_completion: true
     contract: Q36 F4 GATE
     model_class: 3-8B dense, permissive license
-    model: required_at_F4_SELECTION
-    source_revision: required_at_F4_SELECTION
-    selection_record_digest: required_at_F4_SELECTION
+    model: Qwen/Qwen3-4B
+    source_revision: 1cfa9a7208912126459214e8b04321603b3df60c
+    selection_record_digest: blake3:b8abcca8f6da0b32ef473d8a2644663d95c3f008c8bccefcafb4452bc6f42a89
     pass_condition: >-
       Q19-certified compiled revision covers the frozen Q15/Q16 protected conditions, independently
       recomputes every atom/rank field, every per-atom and per-step resource table, every peak and
@@ -290,8 +293,8 @@ fixture_gate_rows:
     blocks_completion: true
     contract: Q36 F5 GATE plus Q37 curves
     model_class: 20-120B sparse
-    model: llama_4_scout
-    source_revision: 92f3b1597a195b523d8d9e5700e57e4fbb8f20d3
+    model: qwen3_30b_a3b
+    source_revision: ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
     pass_condition: >-
       F4 predicates at scale; train_sparse_fixture_tier_a and train_sparse_fixture_tier_b have PASS
       outcomes; plus
@@ -299,13 +302,79 @@ fixture_gate_rows:
       clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget
     failure_consequence: Q38 record and mechanism revision; frontier compiled rows remain refused
 
+acquisition_entry_contract:
+  authority: Principal clarification on 2026-09-12; backend operations with basic CLI triggers
+  owner_stage: L05
+  contracts: [Q5, Q6, Q9, Q31, Q44, Q49, Q50, Q51, Q52, Q53, Q79]
+  status: NOT_RUN
+  entrypoint: >-
+    Implement and package a basic Cassette CLI over the canonical broker. Source connection,
+    catalogue search, model selection, drive discovery, access request and Go are product
+    operations. A later TUI reuses them. No rendered app interface is required for L05.
+  test_order: >-
+    Bind each new behavior to the assertions below, demonstrate its missing or failing path,
+    implement the smallest complete change and pass its focused fixture/integration checks before
+    live execution. Then test the actual supported-launch CLI on the real source and drive. Retain
+    the established principal-supplied independent review, selected remediation, build-story and
+    authorized commit sequence. This amendment supplies requirements, not implementation evidence;
+    no existing result is relabeled to satisfy it and no extra review cycle is introduced.
+  source_connection: >-
+    Connect invokes provider-supported authorization when needed; public access remains available.
+    Hugging Face uses a registered public OAuth client with device authorization and read scopes,
+    or an explicitly selected masked read-token input. Qualify the exact flow and scopes before
+    claiming it works. Ollama distinguishes public/local access from private registry access;
+    local /api/tags lists installed models, not the complete downloadable catalogue. Qualify a
+    real catalogue/registry route and its authentication without using cloud inference as acquisition.
+    Cassette receives tokens, not provider passwords; saved tokens use macOS Keychain. Only opaque
+    references enter broker records; secrets never enter CLI arguments, evidence, logs or cartridges.
+  model_selection: >-
+    List searchable, paginated provider results with access and downloadability. Recheck access
+    and freeze an immutable revision or manifest digest when selected. Catalogue presence does
+    not prove access, complete downloadable weights, execution compatibility or live performance.
+  drive_access: >-
+    Discover locally attached mounted volumes and show name, APFS UUID, mount path, filesystem,
+    available bytes and observed access. Selecting a destination triggers the platform access
+    operation when required and records the user's scoped intent. Establish and verify access in
+    the actual process that owns the store write. Identify its executable, launch host and macOS
+    permission context; a terminal-host permission is not a grant to a future packaged app.
+    Reuse supported macOS authorization facilities and account for any required binding under Q29.
+    A selected path or os.access result alone is not write proof. Distinguish an OS consent denial
+    from filesystem permissions using observed evidence. A picker does not override POSIX or ACL
+    restrictions. Provide the supported user action and retry; cancellation retains selection and
+    performs no write. Never require Codex access or a manual shell permission patch as product setup.
+  go: >-
+    One Go action binds the selected immutable model, opaque credential reference, exact volume
+    identity, destination root and operation idempotency key. It authorizes the displayed ordinary
+    acquisition scope, including bounded qualification writes inside that root. The broker checks
+    the preserved inventory, creates the root through store, verifies access and required physical
+    profiles, then streams artifacts through sources into store-granted external extents. Repeated
+    Go or process restart reconciles the same durable operation rather than duplicating downloads.
+    Show qualification, received bytes, verified bytes, checkpoint and terminal outcome. Only final
+    digest verification establishes Download verified; callable-model readiness remains separate.
+  boundaries: >-
+    Source sign-in, catalogue queries and bounded non-payload metadata may precede source-entry
+    qualification. Model-bearing header ranges and payload transfers require their qualified path.
+    Go does not authorize formatting, partitioning, physical fault injection, modification of
+    existing user content or spending. Q53 admits the next atomic claim, never whole-campaign fit.
+    Preserve Python, broker/source/store ownership and one process; admit platform dependencies only
+    against a reproduced required-path failure. No helper becomes a second downloader or writer.
+  proof: >-
+    Retain an actual supported-launch CLI journey for each required source path, joined by operation
+    identity to final external-byte and digest receipts. Exercise a provider-validated authenticated
+    connection as well as public access. Use generated boundary cases for denied/revoked credentials,
+    cancelled/denied access, stale or replaced mounts, duplicate Go, restart and interrupted transfer;
+    run against real broker/source/store code. Recheck saved access and credentials on restart and
+    remount. A lower-level probe, fixture pass, manual folder creation or agent-driven download is
+    supporting evidence only. Product-entry live evidence and independent review remain mandatory.
+
 source_rows:
   - id: source_huggingface_all_immutable_models
     required: true
     operation: direct_to_cartridge_acquisition
+    entry_contract: acquisition_entry_contract
     model_set:
       - kimi_k3
-      - llama_4_scout
+      - qwen3_30b_a3b
       - qwen3_235b_a22b
     assertions:
       - immutable_revision_locked
@@ -313,15 +382,24 @@ source_rows:
       - ranged_resume_pass
       - final_source_digest_pass
       - no_internal_model_file
+      - product_cli_connection_catalogue_selection_and_go_reach_verified_external_download
+      - selected_drive_access_is_established_and_rechecked_in_the_actual_writer_context
+      - provider_credentials_remain_os_held_or_session_only_and_opaque_in_durable_records
+      - entry_restart_denial_revocation_and_duplicate_go_preserve_identity_and_verified_progress
   - id: source_ollama_content_addressed_reimport
     required: true
     operation: direct_to_cartridge_acquisition
-    input: pinned_ollama_manifest_and_blobs_generated_from_llama_4_scout_revision
+    entry_contract: acquisition_entry_contract
+    input: pinned_ollama_manifest_and_blobs_generated_from_qwen3_30b_a3b_revision
     generated_identity_digest: required_at_run
     assertions:
       - manifest_and_blob_digests_preserved
       - semantic_manifest_complete
       - no_source_specific_lifecycle_fork
+      - product_cli_connection_catalogue_selection_and_go_reach_verified_external_download
+      - selected_drive_access_is_established_and_rechecked_in_the_actual_writer_context
+      - provider_credentials_remain_os_held_or_session_only_and_opaque_in_durable_records
+      - entry_restart_denial_revocation_and_duplicate_go_preserve_identity_and_verified_progress
   - id: source_tinker_export_reimport
     required: true
     operation: direct_to_cartridge_acquisition
@@ -360,13 +438,13 @@ execution_rows:
     training_tiers:
       - A
       - B
-  - id: exec_c1_scout_least_invasive
+  - id: exec_c1_qwen3_30b_least_invasive
     required: true
     role: CONSUMER_GENERAL
     apple_class: c1_air_32
     storage_profile_family: external_apfs_measured
     operation_plan_profile_digest: required_at_run
-    model: llama_4_scout
+    model: qwen3_30b_a3b
     mode: LEAST_INVASIVE_PASSING_Q40_MODE
     allowed_q40_modes: [1, 2, 3]
     on_no_passing_mode: FAIL_ROW_WITH_Q38_RECORD
@@ -519,9 +597,9 @@ training_rows:
       - compiled_condition_atom_description_estimator_recovery_32768_traces
       - observation_and_composition_certificate_revalidation
       - every_precision_tier_recovery
-  - id: train_c1_scout_tier_a
+  - id: train_c1_qwen3_30b_tier_a
     required: true
-    execution_row: exec_c1_scout_least_invasive
+    execution_row: exec_c1_qwen3_30b_least_invasive
     operations:
       - adapter_sft_131072_tokens
       - offline_adapter_dpo_1024_pairs

@@ -582,7 +582,7 @@ def _scan_containment(value: object, object_id: str, label: str = "manifest") ->
             _reject("CONTAINMENT_REJECTED", object_id, f"{label} requests code, network, or filesystem execution")
 
 
-def _source(value: object) -> dict:
+def _source(value: object, *, identity_required: bool = True) -> dict:
     source = _record(value, _SOURCE_FIELDS, "source:compile", "source lock")
     for field in ("source_kind", "source_alias", "locator"):
         if not isinstance(source[field], str) or not source[field]:
@@ -592,7 +592,11 @@ def _source(value: object) -> dict:
     ):
         _reject("INVALID_REQUEST", "source:compile", "requested_revision must be null or nonempty text")
     for field in ("immutable_revision", "identity", "license_digest"):
+        if field == "identity" and source[field] is None and not identity_required:
+            continue
         _exact_digest(source[field], "source:compile", field)
+    if source["identity"] is None:
+        source = {**source, "identity": source["locator"]}
     artifacts = _items(source["artifacts"], source["identity"], "source artifacts")
     normalized = []
     for item in artifacts:
@@ -4119,7 +4123,7 @@ def _native_tokenizer(document: dict):
 
 def inspect_source_identity(source: object, extents: object, cartridge: str | Path) -> IdentityTuple:
     """Q1/Q50: derive identity from complete verified ordinary source bytes before source lock."""
-    record = _source(source)
+    record = _source(source, identity_required=False)
     descriptors = _extent_descriptors(record, extents, cartridge)
     manifest, tensors = _manifest(record, descriptors)
     return _source_material(record, manifest, tensors, check_identity=False)

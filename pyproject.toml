@@ -1,4 +1,21 @@
 # pyproject.toml — project identity and the J dependency record (AGENTS.md: pins are part of J); depends on (none).
+# Q31 admits only setuptools.build_meta.build_wheel at the exact cached 84.0.0 release.
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["broker", "cli", "compiler", "errors", "pager", "sources", "store", "trainer"]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["adapters*", "schema*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+schema = ["*.json", "campaign/*.json"]
+
 [project]
 name = "cassette"
 version = "0.0.1"
@@ -25,6 +42,9 @@ dependencies = [
     # Q33/Q80: PyYAML safe_load of the authoritative matrix and execution queue (MIT).
     "pyyaml==6.0.3",
 ]
+
+[project.scripts]
+cassette = "cli:main"
 
 [dependency-groups]
 dev = [

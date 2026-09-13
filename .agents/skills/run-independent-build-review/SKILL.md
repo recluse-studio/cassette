@@ -1,10 +1,18 @@
 ---
 name: run-independent-build-review
-description: Adversarially review a build by tracing implementation, executing reviewer-designed challenges, and identifying supported defects and improvements. Use for code, build, machine-stage, and live-attempt review before acceptance, release, or handoff. One entrypoint covers live and non-live evidence; default to read-only work.
+description: Adversarially review one build stage or a declared ordered stage batch by tracing implementation, executing reviewer-designed challenges, and identifying supported defects and improvements. Use for code, build, machine-stage, and live-attempt review before acceptance, release, or handoff. One entrypoint covers live and non-live evidence; default to read-only work.
 ---
 
 <!-- This skill defines a portable independent-review procedure; dependencies: the active request, repository instructions, governing authorities, frozen target state, and replayable evidence. -->
 # Run Independent Build Review
+
+## Select the review evidence
+
+Start with the named claim and frozen candidate. A candidate may be one stage or a declared ordered
+batch. Use read-only implementation and contract tracing by default. Run reviewer-designed mutation
+work only when the claim cannot be decided otherwise; cross the live boundary only with explicit
+authority. Use `references/machine-attempts.md` or `references/live-attempts.md` only for the
+corresponding attempt class.
 
 Review the declared result, not the implementer's confidence. A review is independent only when its questions, evidence, environment, and conclusion can expose a false green result.
 
@@ -35,6 +43,8 @@ permits bounded remediation; an available repair procedure does not itself grant
 - Use mutations, fault injection, or destructive probes only in an isolated disposable copy, worktree, container, fixture, or environment that cannot affect the target.
 - Keep implementer, reviewer, and executor roles distinct when the review requires independence. If they share a machine, account, or environment, disclose that limitation.
 - Do not access live credentials, accounts, external services, or production systems unless the requester separately authorizes that boundary.
+- A batch preserves every member's scope, acceptance, evidence, and verdict. Shared setup may run
+  once, but a later green result cannot conceal a failed or unreviewed earlier member.
 
 ## Adversarial examination
 
@@ -86,18 +96,18 @@ bounded review was performed, not that the code is perfect or that a defect quot
 
 ## Workflow
 
-1. Freeze review scope. Record the requested decision, target revision, governing authorities in precedence order, finite questions, acceptance conditions, excluded areas, and external-state boundary.
+1. Freeze review scope. Record the requested decision, target revision, governing authorities in precedence order, finite questions, acceptance conditions, excluded areas, and external-state boundary. For a batch, also freeze its ID, exact ordered members, per-stage close records, and dependency graph; reject gaps, reordering, missing builder evidence, or cross-stage scope expansion.
 2. Snapshot target state before any probe:
    - repository root, branch, HEAD, remotes if relevant, index state, and worktree status;
    - changed and untracked paths, including user-owned paths;
    - hashes or comparable identities for files and evidence that the review will rely on;
    - reviewer environment and executor environment identities.
-3. Turn each review question into a claim with a named predicate, entrypoint, expected observation, and nearest false pass. Use a control or contradiction pair when it can discriminate the result.
+3. Turn each review question into a claim with a named predicate, owning stage, entrypoint, expected observation, and nearest false pass. Use a control or contradiction pair when it can discriminate the result.
 4. Inspect authorities and implementation separately. Record facts from each, then state only the inference the facts support. Do not accept comments, test names, dashboard counts, or closeout prose as proof without replayable evidence.
 5. Replay the smallest credible proof for each claim. Prefer direct entry probes, independently constructed inputs, boundary observations, and negative controls. Record commands, inputs, outputs, environment identity, and result provenance.
 6. When the claim depends on a failure boundary, test the intended failure in a disposable environment. Verify that the mutation applied, that the probe used the mutated target, and that the observed failure occurs for the named reason. A failed or misleading review instrument is a review finding, not automatically a production defect.
 7. Classify every result as static, fixture, integration, platform, or live evidence. Do not represent fixture or platform evidence as live proof.
-8. Reconcile results against the frozen acceptance conditions. Trace each failing foundation to dependent claims. Record untested claims as `NOT_RUN` and environmental prerequisites as `BLOCKED`.
+8. Reconcile results against the frozen acceptance conditions. Trace each failing foundation to dependent claims. In a batch, invalidate every later verdict whose proof depends on an earlier accepted finding until the affected evidence is replayed. Record untested claims as `NOT_RUN` and environmental prerequisites as `BLOCKED`.
 9. Clean only disposable artifacts that the reviewer created and whose evidence has been retained. Re-read the target branch, HEAD, index, worktree status, and recorded file identities. Report any difference; do not repair it without authorization.
 
 ## Acceptance Checks
@@ -112,6 +122,7 @@ An independent review is complete only when:
 - Controls, mutations, and adversarial probes ran only in a disposable environment and their reach was verified.
 - The report distinguishes a production defect, an unproved claim, an environment limitation, and a defective review instrument.
 - Evidence levels and remaining live gaps are explicit.
+- Every batch member has its own questions, findings, evidence status, disposition, and verdict; the batch verdict cannot be cleaner than its least-complete member.
 
 ## Evidence Status Rules
 
@@ -129,9 +140,9 @@ Return a bounded review report with these sections:
 
 1. **Scope** — decision, target revision, authority order, questions, exclusions, and external boundary.
 2. **State preservation** — before and after snapshots; identify every difference or state that could not be compared.
-3. **Findings** — one row per review question with status, evidence level, facts, inference, probe or replay, false pass/control, and exact gap.
+3. **Findings** — one row per review question, labelled with its owning stage, with status, evidence level, facts, inference, probe or replay, false pass/control, and exact gap.
 4. **Defect classification** — production defects, unproved claims, environment limitations, and review-instrument defects as separate lists.
 5. **Evidence ledger** — source traces, reviewer-designed attacks, expected and observed results, commands, inputs, outputs, identities, environment, and retention location. Include supported improvements with their benefit, tradeoff, and verification method, plus rejected candidates and reasons.
-6. **Conclusion** — accepted conditions, failed conditions, `NOT_RUN` and `BLOCKED` conditions, dependent claims invalidated, and explicitly unreviewed areas. State whether the review itself is complete; any missing required source examination or challenge makes it incomplete even if the supplied tests passed.
+6. **Conclusion** — a separate verdict for every stage, the aggregate batch verdict when applicable, accepted conditions, failed conditions, `NOT_RUN` and `BLOCKED` conditions, dependent claims invalidated, and explicitly unreviewed areas. State whether the review itself is complete; any missing required source examination or challenge makes it incomplete even if the supplied tests passed.
 
 State explicitly that the review made no implementation, repository, or external-state change unless separate authorization covered one.

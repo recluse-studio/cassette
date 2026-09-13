@@ -35,7 +35,7 @@
       "PROTOCOL-.+"
     ],
     "source_rows[id=source_huggingface_all_immutable_models]": [
-      "ACQ-(kimi_k3|llama_4_scout|qwen3_235b_a22b)-VERIFY"
+      "ACQ-(kimi_k3|qwen3_30b_a3b|qwen3_235b_a22b)-VERIFY"
     ],
     "source_rows[id=source_ollama_content_addressed_reimport]": [
       "OLLAMA-VERIFY"
@@ -146,7 +146,7 @@
       "matrix_phase": "L01.5",
       "owner_stage": "inherit_consumer_stage",
       "path_change_rule": "Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new request and blocks resumed I/O until its VERIFY record passes.",
-      "principal_action": "On START, attach or move the named drive when cued, confirm exact identity, and approve this one profile card. VERIFY requires none.",
+      "principal_action": "Attach or move hardware only when needed; resolve identity only if the agent cannot match it unambiguously. From L06 onward, ordinary START and VERIFY use existing campaign authority; bind each exact profile card without requesting fresh approval for measurement.",
       "records_per_request": [
         "START",
         "VERIFY"
@@ -191,14 +191,14 @@
       "materialized_by": "SOURCE-QUALIFICATION-REQUESTS",
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "Approve the exact HEADER CAMPAIGN_DIRECTORY_WRITE card; accept a source license in the browser only when the service requests it.",
+      "principal_action": "Accept source terms or supply credentials only when the service requires a new human action. From L06 onward, bind HEADER writes to existing campaign authority without another prompt.",
       "records_per_instance": [
         "RUN"
       ],
       "status_per_record": "TODO",
       "timing_evidence": "NOT_RUN",
       "verification_rule": "Every terminal VERIFY expands verification_work before closure; no raw recomputation is omitted.",
-      "work": "After approval, exercise live resolve, enumerate, metadata, license, authentication, and header-range paths; land only header bytes; inventory dtypes, shapes, operators, semantics, and execute no remote code."
+      "work": "With the required source and campaign authority recorded, exercise live resolve, enumerate, metadata, license, authentication and header-range paths; land only header bytes; inventory dtypes, shapes, operators and semantics, and execute no remote code."
     },
     {
       "attempts_per_record": [],
@@ -221,12 +221,12 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "START requires the exact drive and write card; a different drive first requires its own physical-qualification request and PASS. VERIFY requires none.",
+      "principal_action": "From L06 onward, START binds the exact write card to existing campaign authority. A different drive requires target authorization if absent and its own qualification PASS. VERIFY requires none.",
       "records_per_instance": [
         "START",
         "VERIFY"
       ],
-      "start_work": "After approval, launch direct-to-cartridge ranged acquisition with a durable receipt, first-boundary hold and no internal model file. checkpoint_proof performs kill/resume separately.",
+      "start_work": "Under the recorded source and campaign authority, launch direct-to-cartridge ranged acquisition with a durable receipt, first-boundary hold and no internal model file. checkpoint_proof performs kill/resume separately.",
       "status_per_record": "TODO",
       "timing_evidence": "NOT_RUN",
       "verification_rule": "Every terminal VERIFY expands verification_work before closure; no raw recomputation is omitted.",
@@ -237,7 +237,7 @@
       "checkpoint_rule": "Every long-operation START expands checkpoint_proof; qualification and recovery preserve exact operation lineage.",
       "dependencies": {
         "START": [
-          "ACQ-llama_4_scout-VERIFY",
+          "ACQ-qwen3_30b_a3b-VERIFY",
           "QUALIFY-OLLAMA-VERIFY"
         ],
         "VERIFY": [
@@ -254,12 +254,12 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "START requires the exact bounded drive-write card. VERIFY requires none.",
+      "principal_action": "From L06 onward, START binds its exact bounded write card to existing campaign authority; no new confirmation is required. VERIFY requires none.",
       "records_per_instance": [
         "START",
         "VERIFY"
       ],
-      "start_work": "After approval, launch content-addressed production-adapter reacquisition of the pinned Scout identity with a durable receipt and first-boundary hold.",
+      "start_work": "Under the recorded campaign authority, launch content-addressed production-adapter reacquisition of the pinned Qwen3-30B-A3B identity with a durable receipt and first-boundary hold.",
       "status_per_record": "TODO",
       "timing_evidence": "NOT_RUN",
       "verification_rule": "Every terminal VERIFY expands verification_work before closure; no raw recomputation is omitted.",
@@ -313,13 +313,13 @@
         "START": [
           "F5-CERTIFICATE",
           "QUALIFY-F5-INFERENCE-VERIFY",
-          "REFERENCE-llama_4_scout-ALL-PASS"
+          "REFERENCE-qwen3_30b_a3b-ALL-PASS"
         ],
         "VERIFY": [
           "matching-START"
         ]
       },
-      "expand_over": "frozen_Q15_Q16_conditions_for_pinned_Scout_F5",
+      "expand_over": "frozen_Q15_Q16_conditions_for_pinned_Qwen3-30B-A3B_F5",
       "family": "f5_inference",
       "id_format": "F5-INFERENCE-<condition-digest>-<record>",
       "invariants": [
@@ -366,8 +366,8 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L09",
-      "principal_action": "QUALIFY_START and START each require their own exact bounded card; the other records require none.",
-      "qualify_start_work": "After approval, begin the exact export and re-import profile measurement.",
+      "principal_action": "none for in-scope local qualification and export/reimport; bind both exact cards to existing authority. Ask only for an uncovered external account, disclosure, spend or action scope.",
+      "qualify_start_work": "Under existing campaign authority, begin the exact export and re-import profile measurement.",
       "qualify_verify_work": "Verify the terminal Q41-Q44 and Q74 profile.",
       "records_per_instance": [
         "QUALIFY_START",
@@ -375,7 +375,7 @@
         "START",
         "VERIFY"
       ],
-      "start_work": "After approval, launch the dense Tier-A export and production-wire Tinker re-import with a durable receipt and first-boundary hold for each long operation.",
+      "start_work": "Under recorded source and campaign authority, launch the dense Tier-A export and production-wire Tinker re-import with a durable receipt and first-boundary hold for each long operation.",
       "status_per_record": "TODO",
       "timing_evidence": "NOT_RUN",
       "verification_rule": "Every terminal VERIFY expands verification_work before closure; no raw recomputation is omitted.",
@@ -412,8 +412,8 @@
       ],
       "matrix_phase": "L03_or_L04_from_matrix_row",
       "owner_stage": "by_training_row",
-      "principal_action": "QUALIFY_START binds its profile card. START binds the exact drive-operation-plan card and network-off cue. VERIFY may restore networking only after terminal evidence and all overlapping offline leases are closed; capture at START never restores networking.",
-      "qualify_start_work": "After approval, begin the exact training-plan Q41-Q44 and Q74 profile.",
+      "principal_action": "none for ordinary in-scope qualification and training; bind exact profile and operation cards to existing authority. Apply the live participation policy to network controls. VERIFY restores networking only after terminal evidence and all overlapping offline leases close; START never restores it.",
+      "qualify_start_work": "Under existing campaign authority, begin the exact training-plan Q41-Q44 and Q74 profile.",
       "qualify_verify_work": "Verify terminal profile, writes, health, endurance, and inventory evidence.",
       "records_per_coordinate": [
         "QUALIFY_START",
@@ -428,8 +428,8 @@
         "train_c1_frontier_tier_b": [
           "TRAIN-train_c1_frontier_tier_a-ALL-PASS"
         ],
-        "train_c1_scout_tier_a": [
-          "EXEC-exec_c1_scout_least_invasive-RUN_VERIFY"
+        "train_c1_qwen3_30b_tier_a": [
+          "EXEC-exec_c1_qwen3_30b_least_invasive-RUN_VERIFY"
         ],
         "train_c3_frontier_tier_a": [
           "EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY"
@@ -498,7 +498,7 @@
       "owner_stage": "L09",
       "prepare_start_work": "Launch the intended Q40 preparation or full-scale F6 compilation with a durable receipt and first-boundary hold. The separately expanded checkpoint_proof proves kill/resume.",
       "prepare_verify_work": "Verify terminal native or immutable prepared revision, prior-mode Q38 records, total map, and independent Q19 certificate when compiled.",
-      "principal_action": "QUALIFY_START, PREPARE_START, RUN_QUALIFY_START and RUN_START each bind their own exact card. Runtime START and its descendants retain the network restriction until terminal verification.",
+      "principal_action": "none within existing campaign scope; QUALIFY_START, PREPARE_START, RUN_QUALIFY_START and RUN_START retain separate exact cards without separate approvals. Apply the live participation policy to network controls and retain restrictions through terminal verification.",
       "qualify_start_work": "Qualify only the intended preparation plan, derived from immutable acquired semantics and applicable teacher observations.",
       "qualify_verify_work": "Verify terminal Q41-Q44 and applicable Q74 evidence.",
       "records_per_row": [
@@ -518,8 +518,8 @@
           "F5-GATE@PASS",
           "REFERENCE-kimi_k3-ALL-PASS"
         ],
-        "exec_c1_scout_least_invasive": [
-          "ACQ-llama_4_scout-VERIFY"
+        "exec_c1_qwen3_30b_least_invasive": [
+          "ACQ-qwen3_30b_a3b-VERIFY"
         ],
         "exec_c2_qwen_least_invasive": [
           "ACQ-qwen3_235b_a22b-VERIFY"
@@ -663,7 +663,7 @@
       "expand_over": "phase_live_injections_x_failure_operations",
       "family": "live_failure",
       "id_format": "FAILURE-<injection>-<operation>-<record>",
-      "inject_work": "After exact approval, apply one injection and capture the immediate typed result.",
+      "inject_work": "Once the exact injection authority and any required physical cue are recorded, apply one injection and capture the immediate typed result.",
       "injection_precondition": "Before the separate INJECT cue, verify the same logical operation, live access and barrier are still armed. If terminal, stale, quiesced at the wrong locus or unacknowledged, do not inject; create a new ARM attempt.",
       "invariants": [
         "Q80"
@@ -681,15 +681,15 @@
       "matrix_phase": "L04",
       "operation_subjects": "matrix.failure_rows.phase_live_operation_bindings",
       "owner_stage": "L09",
-      "principal_action": "ARM requires the exact coordinate's CAMPAIGN_DIRECTORY_WRITE card before creating its fresh durable operation. INJECT always requires its separate exact injection card. RECOVER requires a separate exact card when it changes physical state. REQUALIFY_START requires its own profile card. Perform only the printed cue; a general campaign approval never applies.",
-      "recover_work": "After an exact recovery card when physical action is required, restore or refuse the named identity and seal the resulting boundary.",
+      "principal_action": "ARM and ordinary REQUALIFY_START use existing campaign authority with exact cards. INJECT retains the matrix-required exact injection approval; RECOVER retains exact recovery scope. Ask for physical interventions at their cues or for uncovered fault/recovery scope. An already authorized nonphysical injection needs no second confirmation. Ordinary campaign approval never authorizes an injection.",
+      "recover_work": "Bind the exact recovery card and request the physical intervention only when required; restore or refuse the named identity and seal the resulting boundary.",
       "requalification_field_rule": "requalification_required is true exactly for an injection listed in matrix.failure_rows.requalification_after_recovery.required_for and false exactly for one listed in not_applicable_for; no runtime observation may change the materialized value",
       "requalification_records": [
         "REQUALIFY_START",
         "REQUALIFY_VERIFY"
       ],
       "requalification_rule": "Materialize both requalification records exactly when the injection appears in matrix.failure_rows.requalification_after_recovery.required_for; omit both exactly when it appears in not_applicable_for. An injection in neither or both lists rejects expansion. This produces 320 base records plus 112 requalification records from the current matrix.",
-      "requalify_start_work": "After path-profile approval, start a new exact Q41-Q44 profile for any changed drive, cable, port, host, path, plan, or mechanism.",
+      "requalify_start_work": "After the changed physical path is authorized and established, start its new exact Q41-Q44 profile under that authority; a changed plan or mechanism still requires its own measured profile.",
       "requalify_verify_work": "Verify the terminal replacement profile before any resumed I/O.",
       "starting_profile_requests": "FAILURE-MATERIALIZE creates the eight exact QUALIFY-FAILURE-<operation> profile requests; each profile START depends on FAILURE-MATERIALIZE and its literal source artifact. Every VERIFY must pass before the matching ARM records become eligible.",
       "status_per_record": "TODO",
@@ -716,7 +716,7 @@
       ],
       "matrix_phase": "L04",
       "owner_stage": "L09",
-      "principal_action": "START requires the exact network-off cue; VERIFY requires the exact network-restore cue.",
+      "principal_action": "none for restrictions confined to agent-owned test processes. Obtain authorization for an uncovered host-wide change, then execute the recorded network-off and network-restore sequence without another prompt; restore only after terminal evidence and the last overlapping lease closes.",
       "records_per_row": [
         "START",
         "VERIFY"
@@ -810,7 +810,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "No live source in this record; remote input acquisition uses its own exact source card.",
+      "principal_action": "none for workload documents and frozen-input verification; remote input acquisition binds its exact source card to existing authority and asks only for uncovered scope.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "FREEZE"
@@ -853,7 +853,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L06",
-      "principal_action": "Exact reference host, source and any qualification/write cards; network disabled during local reference execution.",
+      "principal_action": "none within the recorded reference host, source and campaign scope; prepare exact qualification/write cards and execute automatically. Disable networking during local reference execution under the live participation policy; ask only for a missing human action or uncovered scope.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "PLAN",
@@ -944,7 +944,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L06",
-      "principal_action": "Exact reference account/compute, source and write scope; opaque credentials only.",
+      "principal_action": "Supply an unavailable opaque credential or authorize uncovered account, compute, disclosure or spending scope. Reuse existing authority for all contained reference requests and writes.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "PLAN",
@@ -983,7 +983,7 @@
       ],
       "matrix_phase": "L01.5",
       "owner_stage": "inherit_consumer_stage",
-      "principal_action": "Exact plan-specific qualification card.",
+      "principal_action": "none for in-scope measurement; bind the exact plan-specific qualification card to existing campaign authority. A new plan requires measurement, not renewed approval.",
       "records_per_instance": [
         "START",
         "VERIFY"
@@ -1032,7 +1032,7 @@
       "materialized_by": "the_training_coordinate_materializer_before_any_coordinate_member_executes",
       "matrix_phase": "L04",
       "owner_stage": "inherit_training_stage",
-      "principal_action": "Separate exact endurance/duty-cycle and write approval; retain network restriction through terminal VERIFY and all overlapping offline leases. Each separately materialized above-duty experiment carries its own exact action scope; no general campaign approval authorizes endurance stress.",
+      "principal_action": "Ordinary qualified training and its passive thermal capture use existing authority. Obtain exact approval for each uncovered above-duty/endurance-stress experiment before execution; reuse an unchanged approved experiment scope without another confirmation. Retain every exact card and network restriction through terminal VERIFY and all overlapping leases; ordinary approval excludes stress.",
       "records_per_coordinate": [
         "PLAN",
         "QUALIFY_START",
@@ -1063,7 +1063,7 @@
       ],
       "matrix_phase": "inherit_operation",
       "owner_stage": "inherit_target_stage",
-      "principal_action": "Exact approved interruption/resume card for the named operation; never a physical-fault substitute.",
+      "principal_action": "none for required process interruption/resume of an agent-owned campaign job; bind its exact card to the stage authority. User-owned processes and physical faults require separate authority.",
       "records_per_operation": [
         "RECOVERABILITY"
       ],
@@ -1092,7 +1092,7 @@
       ],
       "matrix_phase": "inherit_target",
       "owner_stage": "inherit_target_stage",
-      "principal_action": "Inherit only the exact target read/write authority. Any additional model-bearing scratch storage or physical action needs its own declared card; metadata-only review has no principal action.",
+      "principal_action": "none for verification, evidence documents or agent-owned scratch within the authorized campaign root; retain exact cards and model-byte placement. Ask only for a physical intervention or additional storage outside existing authority.",
       "records_per_target": [
         "START",
         "RESULT"
@@ -1119,7 +1119,7 @@
       "matrix_phase": "L05",
       "membership_rule": "Start with every required original matrix and supplemental terminal owner plus FINAL-PROVENANCE. Traverse all predecessor nodes regardless of evidence level. Keep LIVE product/physical nodes, including checkpoint and independent verification producers, and their aggregates. Freeze only explicitly declared REFERENCE_ONLY nodes and machine/selection proofs as immutable inputs. No unlabelled LIVE producer may be omitted. Exclude the replay family itself. Expected replay count equals this exact retained vertex set.",
       "owner_stage": "L10",
-      "principal_action": "Mirror the original record's one exact action template, or none when the original required none.",
+      "principal_action": "Apply the live participation policy to the original action. Reuse ordinary authority for fresh agent-owned roots under the authorized campaign root, with exact cards and fresh identities. Physical cues and uncovered exceptional action scopes still require the principal.",
       "records_per_member": [
         "REPLAY"
       ],
@@ -1269,7 +1269,7 @@
       },
       {
         "owns": "research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]",
-        "selector": "ACQ-<kimi_k3|llama_4_scout|qwen3_235b_a22b>-VERIFY"
+        "selector": "ACQ-<kimi_k3|qwen3_30b_a3b|qwen3_235b_a22b>-VERIFY"
       },
       {
         "owns": "research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_ollama_content_addressed_reimport].assertions[*]",

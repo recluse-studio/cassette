@@ -7542,3 +7542,64 @@ research files and terminal studies. The current J tuple is
 acquisition, measured baselines, F4/F5, the runtime matrix and clean replay. Their live results
 remain NOT_RUN. Drew also requested a final external-drive connection check; that check does not
 substitute for L05's qualification work.
+
+## Codex account, continued
+
+**GPT-6 Astra, builder in live-stage-build; L05 in-progress checkpoint**
+
+#### Entry 86 — 2026-09-13, the installed application writes to LaCie
+
+Drew asked me to continue L05 until its work was complete or a physical barrier required him.
+The immediate problem was ordinary application behavior. Cassette needed to connect a model
+source, bind the chosen model and drive, and act on a Go command through a basic CLI. Repeated
+requests for permission to perform routine work had delayed that implementation. Drew authorized
+those actions and asked me to question any contract wording that turned their evidence records
+into another approval request.
+
+The first root-level write had failed before creating `/Volumes/LaCie/Cassette`. That failure
+established the launched process's inability to write at that location. My earlier account had
+expanded it into a claim about Drew's general ability to use his drive. Further inspection found
+the existing, writable `/Volumes/LaCie/drewwiberg-lacie` directory. The product now accepts a scoped
+destination beneath an existing parent, verifies that parent against the selected volume, and
+creates only the final Cassette directory. It retains the store's ownership of durable writes and
+does not change the drive's permissions, partitions, or format.
+
+I integrated work from three GPT-5.6 Terra builder agents. Their assignments covered native drive
+identity and storage, provider wire formats and package installation, and credentials and resumed
+acquisition. The CLI routes through the canonical broker; macOS Keychain stores credentials behind
+opaque references, and source selection binds an immutable revision. Hugging Face and Ollama now
+have provider-specific wire handling within the source authority. The live public-source checks
+establish only the endpoints and selections actually observed. Ollama catalogue coverage, private
+Ollama authentication, and complete real-model acquisition remain unproved.
+
+The first candidate run stopped when I found that an installed development copy could conceal a
+deleted source module in the component-removal checks. I removed that installed copy and made the
+CLI control exercise its actual source. The next full run produced 327 passes and twelve failures.
+Those failures exposed stale schema and accounting expectations and a test helper that reported
+different paused acquisition errors as a capacity error. I corrected the expectations, regenerated
+the machine evidence through its producer, and made the helper read the durable error event.
+The retained third candidate passed all 339 tests in 327.69 seconds with zero skips. All fourteen
+component controls passed and failed under both deletion and executable bypass; the ordinary
+ledger reported zero violations. These are builder checks, with independent review still NOT_RUN.
+
+I then launched the installed Cassette CLI outside the checkout, with `PYTHONPATH` unset. Its Go
+operation created `/Volumes/LaCie/drewwiberg-lacie/Cassette`, wrote and verified a 4,096-byte probe,
+and committed the durable pointer. A fresh CLI process recovered the same operation, and repeating
+Go preserved the cartridge namespace. The protected inventory matched before and after the write;
+that inventory compares names, types, and aggregate logical byte counts, not every file's contents.
+The operation correctly paused for physical reconnect verification, with zero model payload bytes
+downloaded. A read-only watcher is waiting to observe the selected volume disappear and return.
+
+The machine record is retained at
+`/Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-candidate-03`, with candidate tree
+`96649d980053256a8dedef314e223b772b64241c`. The installed Go capture is
+`/Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control/captures/21c4abe2-c6db-43cb-96d5-06033048e0a6`;
+its sibling `installed-go-assessment-01/assessment.json` records recovery, inventory, and the
+remaining boundaries. Runtime and test files still match the passing candidate. The later queue,
+runbook, and story edits record its result without changing that implementation.
+
+Drew explicitly requested a local commit and remote push before L05 was fully done. This entry
+records that checkpoint authorization. L05 remains IN_PROGRESS, with physical reconnect,
+source qualification, the remaining Go-to-acquisition integration, real downloads, and Drew's
+independent review still ahead. The checkpoint includes the current local review-skill revisions
+without treating their presence as a review of this work.

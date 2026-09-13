@@ -7,17 +7,21 @@ import asyncio
 from collections import deque
 from collections.abc import Callable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+import ctypes
+from dataclasses import asdict, dataclass, replace
 import fcntl
 import inspect
 import json
 import os
 from pathlib import Path
 import re
+import sys
 from types import MappingProxyType
+import uuid
 
 from compiler import (
     PreparedRevision,
+    inspect_source_identity,
     prepare_native_training_child,
     prepare_native_compiled,
     prepare_native_effective_source,
@@ -33,22 +37,38 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact
+from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
     CapacityCoordinator,
     CapacityTransition,
+    CartridgeLifecycle,
+    DriveSelection,
+    DriveVolume,
+    WriterContext,
     GenerationPin,
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
+    campaign_head,
+    compare_campaign_head,
+    verify_campaign_artifact,
+    write_campaign_artifact,
     commit_generation,
     commit_runtime_state,
     complete_capacity_claim,
     digest_bytes,
+    create_selected_root,
+    inventory_step,
+    compare_inventory,
+    list_external_apfs_volumes,
+    revalidate_external_apfs_volume,
+    select_external_apfs_volume,
     execute_claimed_write,
     export_revision as export_store_revision,
+    grant_transfer_extent,
     load_root,
+    model_identity,
     page_locations,
     recover_generation,
     remove_revision as remove_store_revision,
@@ -59,6 +79,7 @@ from trainer import (adapter_merge_material, advance_native_training, native_tra
 
 PROTOCOL_VERSION = "1"
 PREPARE_OPERATION = "prepare"
+ACQUIRE_OPERATION = "acquire"
 PHASES = (
     "EMPTY",
     "RESOLVED",
@@ -139,7 +160,7 @@ class AcquisitionContext:
 
     adapter: SourceAdapter
     capacity_controller: CapacityCoordinator
-    transfers: Mapping[str, tuple[TransferExtent, TransferExtent]]
+    transfers: Mapping[str, tuple[TransferExtent, TransferExtent]] | None
     cartridge: str | Path
 
     def __post_init__(self) -> None:
@@ -367,12 +388,14 @@ def _source_from(record: object, object_id: str) -> ResolvedSource:
         return tuple(result)
 
     text_fields = (
-        "source_kind", "locator", "immutable_revision", "identity", "auth_scope", "license_digest",
+        "source_kind", "locator", "immutable_revision", "auth_scope", "license_digest",
     )
     if any(not isinstance(record[field], str) or not record[field] for field in text_fields):
         _reject("ROOT_INVALID", object_id, "source lock contains empty or non-text identity material")
     for field in ("immutable_revision", "identity", "license_digest"):
-        if _SOURCE_DIGEST.fullmatch(record[field]) is None:
+        if field == "identity" and record[field] is None:
+            continue
+        if not isinstance(record[field], str) or _SOURCE_DIGEST.fullmatch(record[field]) is None:
             _reject("ROOT_INVALID", object_id, f"source lock {field} is not a canonical digest")
     for field in ("credential_ref", "license_acceptance_ref"):
         if record[field] is not None and (not isinstance(record[field], str) or not record[field]):
@@ -409,19 +432,42 @@ def _partial_record(path: str, partial: PartialState) -> dict:
 
 def _compiler_artifacts(revision: ResolvedSource) -> tuple[Artifact, ...]:
     """Include the source tokenizer's admitted semantic files in the same verified transfer."""
-    objects = (*revision.artifacts, *revision.metadata_assets)
-    if len({item.path for item in objects}) != len(objects):
-        _reject("SOURCE_REVISION_CHANGED", revision.identity, "model and metadata paths overlap")
+    objects = _acquisition_artifacts(revision)
     if any(item.path == "tokenizer.json" for item in objects):
         return tuple(sorted((*revision.artifacts, *(item for item in revision.metadata_assets
                                                     if item.path.endswith(".json"))), key=lambda item: item.path))
     return revision.artifacts
 
 
-def _partials_from(records: object, revision: ResolvedSource, object_id: str) -> tuple[PartialState, ...]:
-    if not isinstance(records, list) or len(records) != len(_compiler_artifacts(revision)):
+def _acquisition_artifacts(revision: ResolvedSource) -> tuple[Artifact, ...]:
+    """Return every immutable model and metadata object in one canonical transfer order."""
+
+    objects = (*revision.artifacts, *revision.metadata_assets)
+    if len({item.path for item in objects}) != len(objects):
+        _reject("SOURCE_REVISION_CHANGED", revision.locator, "model and metadata paths overlap")
+    return tuple(sorted(objects, key=lambda item: item.path))
+
+
+def _transfer_extent_id(operation_id: str, path: str, role: str) -> str:
+    """Derive one restart-stable store extent name for a verified source object."""
+
+    return "acquire-" + digest_bytes(canonical_bytes({
+        "operation_id": operation_id,
+        "path": path,
+        "role": role,
+    })).removeprefix("blake3:")
+
+
+def _partials_from(
+    records: object,
+    revision: ResolvedSource,
+    object_id: str,
+    artifacts: tuple[Artifact, ...] | None = None,
+) -> tuple[PartialState, ...]:
+    artifacts = _compiler_artifacts(revision) if artifacts is None else artifacts
+    if not isinstance(records, list) or len(records) != len(artifacts):
         _reject("ROOT_INVALID", object_id, "source verification must contain one record per artifact")
-    by_path = {artifact.path: artifact for artifact in _compiler_artifacts(revision)}
+    by_path = {artifact.path: artifact for artifact in artifacts}
     result = []
     for record in records:
         if not isinstance(record, dict) or set(record) != {
@@ -1476,6 +1522,231 @@ class CanonicalBroker:
             except CassetteError as error:
                 return self._operation(self._failed(self._load(operation_id), error))
 
+    async def discover_models(self, request: dict) -> dict:
+        """Q9/Q52: own discovery admission and record the source adapter's result."""
+        if request.get('operation') != 'source.discover':
+            _reject('INVALID_REQUEST', 'source.discover', 'discovery requires its named operation')
+        self.operation_id(request)
+        if set(request['arguments']) != {'discovery'}:
+            _reject('INVALID_REQUEST', 'source.discover', 'discovery requires only its generated argument record')
+        args = request['arguments']['discovery']
+        credential_ref = None
+        if args.get('connection_id'):
+            connection = self._entry_result(args['connection_id'], 'source.connect')
+            if (args['source'], args['endpoint']) != (connection['source'], connection['endpoint']):
+                _reject('INVALID_REQUEST', 'source.discover', 'catalogue endpoint differs from its connection')
+            credential_ref = connection['credential_ref']
+        adapter = SourceAdapter(args['source'], args['endpoint'],
+            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(args['source'], args['endpoint']))
+        async def discover():
+            return await adapter.discover(args['query'], limit=args['limit'], cursor=args['cursor'],
+                                          credential_ref=credential_ref)
+        return await self.execute(request, discover)
+
+    def _entry_result(self, operation_id: str, kind: str) -> dict:
+        record = self._load(operation_id)
+        if record['kind'] != kind or record['state'] != 'SUCCEEDED':
+            _reject('INVALID_REQUEST', operation_id, f'{kind} requires a successful recorded operation')
+        return _json_copy(record['result'], operation_id, 'entry result')
+
+    async def connect_source(self, request: dict, *, token: str | None = None) -> dict:
+        """Q9/Q52: validate source access and record only an opaque credential reference."""
+        self.operation_id(request)
+        if request['operation'] != 'source.connect' or set(request['arguments']) != {'connection'}:
+            _reject('INVALID_REQUEST', 'source.connect', 'connection requires its generated argument record')
+        args = request['arguments']['connection']
+        if args['mode'] == 'public' and (token is not None or args['credential_ref'] is not None):
+            _reject('INVALID_REQUEST', 'source.connect', 'public connection cannot contain a credential')
+        adapter = SourceAdapter(args['source'], args['endpoint'])
+        async def connect():
+            if args['mode'] == 'public':
+                await adapter.discover('', limit=1)
+                credential_ref = None
+                authentication = {'authenticated': False, 'scope': 'public'}
+            else:
+                vault = MacOSKeychainCredentialProvider()
+                credential_ref = args['credential_ref']
+                if token is None or credential_ref is not None:
+                    _reject('INVALID_REQUEST', 'source.connect', 'token connection requires masked input and no caller-supplied reference')
+                authenticated_adapter = SourceAdapter(args['source'], args['endpoint'], credential_lookup=lambda _: token)
+                authentication = await authenticated_adapter._validate_credential('session:connect')
+                credential_ref = await asyncio.to_thread(vault.save, args['source'], args['endpoint'], token)
+            return {'source': args['source'], 'endpoint': args['endpoint'],
+                    'credential_ref': credential_ref, 'authentication': authentication}
+        return await self.execute(request, connect)
+
+    async def select_model(self, request: dict) -> dict:
+        """Q5/Q9: freeze immutable source evidence without acquiring model payload."""
+        self.operation_id(request)
+        if request['operation'] != 'source.select' or set(request['arguments']) != {'selection'}:
+            _reject('INVALID_REQUEST', 'source.select', 'selection requires its generated argument record')
+        args = request['arguments']['selection']
+        connection = self._entry_result(args['connection_id'], 'source.connect')
+        adapter = SourceAdapter(connection['source'], connection['endpoint'],
+            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(connection['source'], connection['endpoint']))
+        async def select():
+            descriptor = {'kind': connection['source'], 'locator': args['locator']}
+            for field, value in (('revision', args['revision']),
+                                 ('credential_ref', connection['credential_ref']),
+                                 ('license_acceptance_ref', args['license_acceptance_ref'])):
+                if value is not None:
+                    descriptor[field] = value
+            revision = await adapter.resolve(descriptor)
+            if await adapter.enumerate(revision) != revision.artifacts:
+                _reject('SOURCE_REVISION_CHANGED', revision.locator, 'model artifacts changed during selection')
+            requirements = await adapter.license_and_auth(revision)
+            descriptor['revision'] = revision.immutable_revision
+            return {'connection_id': args['connection_id'], 'endpoint': connection['endpoint'],
+                    'descriptor': descriptor, 'source_lock': _source_record(revision),
+                    'requirements': requirements.record(), 'downloaded_bytes': 0,
+                    'execution_compatibility': 'NOT_VERIFIED'}
+        return await self.execute(request, select)
+
+    async def discover_drives(self, request: dict) -> dict:
+        """Q49: expose native mounted-volume observations through the canonical broker."""
+        self.operation_id(request)
+        if request['operation'] != 'drive.discover' or request['arguments']:
+            _reject('INVALID_REQUEST', 'drive.discover', 'drive discovery takes no arguments')
+        async def discover():
+            return {'volumes': [asdict(volume) for volume in await asyncio.to_thread(list_external_apfs_volumes)]}
+        return await self.execute(request, discover)
+
+    async def _protected_inventory(self, selection: DriveSelection, folder: str) -> dict:
+        checkpoint = None
+        while True:
+            revalidate_external_apfs_volume(selection)
+            result = await asyncio.to_thread(inventory_step, selection.volume.mount_path,
+                excluded=('.Spotlight-V100', '.Trashes', '.fseventsd', folder), checkpoint=checkpoint)
+            if result['inventory'] is not None:
+                return result['inventory']
+            checkpoint = result['checkpoint']
+
+    async def select_drive(self, request: dict) -> dict:
+        """Q44/Q49: retain destination intent and a protected inventory before any drive write."""
+        self.operation_id(request)
+        if request['operation'] != 'drive.select' or set(request['arguments']) != {'drive'}:
+            _reject('INVALID_REQUEST', 'drive.select', 'drive selection requires its generated argument record')
+        args = request['arguments']['drive']
+        if (len(args['folder']) > 512 or any(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', part) is None
+                                             for part in args['folder'].split('/'))):
+            _reject('INVALID_REQUEST', 'drive.select', 'destination must be a relative folder path without traversal')
+        async def select():
+            selection = await asyncio.to_thread(select_external_apfs_volume, args['volume_uuid'])
+            inventory = await self._protected_inventory(selection, args['folder'])
+            return {'selection': _json_copy(asdict(selection), args['volume_uuid'], 'drive selection'), 'folder': args['folder'],
+                    'cartridge_uuid': args['cartridge_uuid'] or str(uuid.uuid4()),
+                    'protected_inventory': inventory,
+                    'inventory_digest': digest_bytes(canonical_bytes(inventory)), 'drive_write_proof': 'NOT_RUN'}
+        return await self.execute(request, select)
+
+    async def start_download(self, request: dict) -> dict:
+        """Q5/Q44/Q49: bind Go to its selections and reach the physical durability hold."""
+        self.operation_id(request)
+        if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
+            _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
+        args = request['arguments']['acquisition']
+        model = self._entry_result(args['model_selection_id'], 'source.select')
+        destination = self._entry_result(args['drive_selection_id'], 'drive.select')
+        descriptor = model['descriptor']
+        request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
+        operation = self.issue(request)
+        operation_id = operation['operation_id']
+        if operation['state'] in _TERMINAL_STATES or operation['state'] == 'PAUSED':
+            return operation
+        try:
+            selected = destination['selection']
+            selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
+            selection = await asyncio.to_thread(revalidate_external_apfs_volume, selection)
+            adapter = SourceAdapter(descriptor['kind'], model['endpoint'],
+                credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
+            revision = await adapter.resolve(descriptor)
+            if _source_record(revision) != model['source_lock']:
+                _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable model')
+            await adapter.license_and_auth(revision)
+            observed_inventory = destination['protected_inventory']
+            if digest_bytes(canonical_bytes(observed_inventory)) != destination['inventory_digest']:
+                _reject('ROOT_INVALID', operation_id, 'selected protected inventory digest does not verify')
+            cartridge, cartridge_uuid = await asyncio.to_thread(create_selected_root, selection,
+                destination['folder'], operation_id=operation_id, cartridge_uuid=destination['cartridge_uuid'])
+            owner = CapacityCoordinator(cartridge)
+            key = 'go-durability-' + operation_id.removeprefix('op-')
+            binding = {'operation_id': operation_id, 'source_revision': revision.immutable_revision,
+                'model_selection_id': args['model_selection_id'], 'drive_selection_id': args['drive_selection_id'],
+                'volume_uuid': selection.volume.volume_uuid, 'cartridge_uuid': cartridge_uuid,
+                'folder': destination['folder'], 'inventory_digest': destination['inventory_digest']}
+            head = await asyncio.to_thread(campaign_head, cartridge, key)
+            if head is None:
+                probe_id = str(uuid.uuid4())
+                await asyncio.to_thread(write_campaign_artifact, owner, probe_id, 'integrity.bin', bytes(4096))
+                probe = await asyncio.to_thread(verify_campaign_artifact, cartridge, probe_id,
+                                               'integrity.bin', digest_bytes(bytes(4096)), 4096)
+                head = await asyncio.to_thread(compare_campaign_head, owner, key, None, {**binding, 'probe': probe})
+            if {field: value for field, value in head['value'].items() if field != 'probe'} != binding:
+                _reject('ROOT_INVALID', operation_id, 'durability pointer belongs to another Go binding')
+            binding = head['value']
+            probe = binding['probe']
+            await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                   probe['digest'], probe['bytes'])
+            compare_inventory(observed_inventory, await self._protected_inventory(selection, destination['folder']))
+            record = self._load(operation_id)
+            if not any('drive_prepared' in event['payload'] for event in record['events']):
+                self._append(record, 'output_delta', {'drive_prepared': {
+                    'root': str(cartridge), 'cartridge_uuid': cartridge_uuid, 'campaign_key': key,
+                    'campaign_digest': head['digest'], 'binding': binding,
+                    'selection': _json_copy(asdict(selection), operation_id, 'writer selection'),
+                    'protected_inventory': observed_inventory,
+                    'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}})
+            self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
+            self._append(self._load(operation_id), 'output_delta',
+                         {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+            return self._operation(self._paused(self._load(operation_id)))
+        except CassetteError as error:
+            return self._operation(self._failed(self._load(operation_id), error))
+
+    async def watch_drive_remount(self, request: dict) -> dict:
+        """Q44/Q49: observe disconnection and verify the same cartridge after physical reconnection."""
+        self.operation_id(request)
+        if request['operation'] != 'drive.remount' or set(request['arguments']) != {'context_ref'}:
+            _reject('INVALID_REQUEST', 'drive.remount', 'remount requires the held Go operation')
+        operation_id = request['arguments']['context_ref']
+        record = self._load(operation_id)
+        prepared = [event['payload']['drive_prepared'] for event in record['events'] if 'drive_prepared' in event['payload']]
+        holds = [event['payload'] for event in record['events'] if 'hold' in event['payload']]
+        if record['kind'] != 'acquire' or not prepared or not holds or holds[-1] != {
+                'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}:
+            _reject('INVALID_REQUEST', operation_id, 'Go has no acknowledged physical durability hold')
+        proof = prepared[-1]
+        binding = proof['binding']
+        async def verify():
+            disconnected = any('drive_disconnected' in event['payload'] for event in self.events(operation_id))
+            while True:
+                volumes = await asyncio.to_thread(list_external_apfs_volumes)
+                matches = [volume for volume in volumes if volume.volume_uuid == binding['volume_uuid']]
+                if not matches and not disconnected:
+                    self._append(self._load(operation_id), 'output_delta', {'drive_disconnected': binding['volume_uuid']})
+                    disconnected = True
+                elif disconnected and len(matches) == 1:
+                    break
+                await asyncio.sleep(0.25)
+            selection = await asyncio.to_thread(select_external_apfs_volume, binding['volume_uuid'])
+            cartridge = Path(selection.volume.mount_path) / binding['folder']
+            lifecycle = CartridgeLifecycle(binding['cartridge_uuid'])
+            await asyncio.to_thread(lifecycle.mount, cartridge, binding['volume_uuid'])
+            head = await asyncio.to_thread(campaign_head, cartridge, proof['campaign_key'])
+            if head is None or head['digest'] != proof['campaign_digest'] or head['value'] != binding:
+                _reject('ROOT_INVALID', operation_id, 'campaign object or pointer changed across remount')
+            probe = binding['probe']
+            await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                   probe['digest'], probe['bytes'])
+            compare_inventory(proof['protected_inventory'], await self._protected_inventory(selection, binding['folder']))
+            result = {'go_operation_id': operation_id, 'campaign_digest': head['digest'],
+                      'selection': _json_copy(asdict(selection), operation_id, 'remounted selection'),
+                      'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}
+            self._append(self._load(operation_id), 'output_delta', {'drive_remounted': result})
+            self.release_hold(operation_id, 'CARTRIDGE-DURABILITY')
+            return result
+        return await self.execute(request, verify)
+
     async def generate_native(
         self, request: dict, cartridge: str | Path, profile: dict,
         capacity_controller: CapacityCoordinator,
@@ -1883,8 +2154,8 @@ class CanonicalBroker:
 
         operation = self.issue(request)
         operation_id = operation["operation_id"]
-        if request["operation"] != PREPARE_OPERATION:
-            _reject("INVALID_REQUEST", operation_id, "acquisition requires operation='prepare'")
+        if request["operation"] not in {PREPARE_OPERATION, ACQUIRE_OPERATION}:
+            _reject("INVALID_REQUEST", operation_id, "acquisition requires operation='prepare' or operation='acquire'")
         async with self._lock(operation_id):
             record = self._load(operation_id)
             if record["state"] in _TERMINAL_STATES or record["state"] == "PAUSED":
@@ -1905,12 +2176,12 @@ class CanonicalBroker:
             except asyncio.CancelledError:
                 raise
             except CassetteError as error:
-                if error.code == "CAPACITY_EXCEEDED" and error.retryability == "retryable":
-                    return self._operation(self._paused(self._load(operation_id)))
+                if error.retryability == "retryable":
+                    return self._operation(self._paused(self._load(operation_id), error))
                 return self._operation(self._failed(self._load(operation_id), error))
 
     async def run_acquisition(self, request: dict, context: AcquisitionContext) -> dict:
-        """Resume Q5 until ACTIVE or one typed terminal result, never past the last durable phase."""
+        """Resume Q5 until its operation-specific terminal phase or one typed terminal result."""
 
         for _ in range(len(PHASES) + 1):
             operation = await self.advance_acquisition(request, context)
@@ -1983,34 +2254,107 @@ class CanonicalBroker:
             return self._phase(record, "ACQUIRING", checkpoint)
         if phase == "ACQUIRING":
             async def acquire():
-                if not isinstance(context.transfers, Mapping) or set(context.transfers) != {
-                    artifact.path for artifact in _compiler_artifacts(revision)
-                }:
-                    _reject("INVALID_REQUEST", operation_id, "transfers must name every source artifact exactly once")
+                artifacts = (
+                    _acquisition_artifacts(revision)
+                    if request["operation"] == ACQUIRE_OPERATION
+                    else _compiler_artifacts(revision)
+                )
+                if context.transfers is None and request["operation"] != ACQUIRE_OPERATION:
+                    _reject(
+                        "INVALID_REQUEST",
+                        operation_id,
+                        "prepare requires caller-granted source transfer extents",
+                    )
+                if context.transfers is not None and (
+                        not isinstance(context.transfers, Mapping)
+                        or set(context.transfers) != {artifact.path for artifact in artifacts}):
+                    _reject("INVALID_REQUEST", operation_id, "transfers must name every required source artifact exactly once")
                 partials = []
-                for artifact in _compiler_artifacts(revision):
-                    extents = context.transfers[artifact.path]
-                    if not isinstance(extents, tuple) or len(extents) != 2:
-                        _reject("INVALID_REQUEST", operation_id, f"{artifact.path} requires data and state extents")
-                    partials.append(await transfer_artifact(
-                        context.adapter,
-                        revision,
-                        artifact,
-                        extents[0],
-                        extents[1],
-                        context.capacity_controller,
-                        checkpoint_committed=lambda: self.hold_boundary(operation_id, "source-checkpoint"),
-                    ))
+                for artifact in artifacts:
+                    owned_extents = context.transfers is None
+                    if owned_extents:
+                        data_extent = await asyncio.to_thread(
+                            grant_transfer_extent,
+                            context.cartridge,
+                            operation_id,
+                            _transfer_extent_id(operation_id, artifact.path, "data"),
+                            artifact.size,
+                            capacity_controller=context.capacity_controller,
+                        )
+                        try:
+                            state_extent = await asyncio.to_thread(
+                                grant_transfer_extent,
+                                context.cartridge,
+                                operation_id,
+                                _transfer_extent_id(operation_id, artifact.path, "state"),
+                                transfer_state_bytes(artifact.size),
+                                capacity_controller=context.capacity_controller,
+                            )
+                        except Exception:
+                            os.close(data_extent.fd)
+                            raise
+                    else:
+                        extents = context.transfers[artifact.path]
+                        if (not isinstance(extents, tuple) or len(extents) != 2
+                                or not all(isinstance(extent, TransferExtent) for extent in extents)):
+                            _reject("INVALID_REQUEST", operation_id, f"{artifact.path} requires data and state extents")
+                        data_extent, state_extent = extents
+                    try:
+                        partials.append(await transfer_artifact(
+                            context.adapter,
+                            revision,
+                            artifact,
+                            data_extent,
+                            state_extent,
+                            context.capacity_controller,
+                            checkpoint_committed=lambda: self.hold_boundary(operation_id, "source-checkpoint"),
+                        ))
+                    finally:
+                        if owned_extents:
+                            os.close(state_extent.fd)
+                            os.close(data_extent.fd)
                 return [
                     _partial_record(artifact.path, partial)
-                    for artifact, partial in zip(_compiler_artifacts(revision), partials, strict=True)
+                    for artifact, partial in zip(artifacts, partials, strict=True)
                 ]
 
             checkpoint["partials"] = await self._controlled(operation_id, acquire, cancellable=True)
-            _partials_from(checkpoint["partials"], revision, operation_id)
+            artifacts = (
+                _acquisition_artifacts(revision)
+                if request["operation"] == ACQUIRE_OPERATION
+                else _compiler_artifacts(revision)
+            )
+            _partials_from(checkpoint["partials"], revision, operation_id, artifacts)
+            if request["operation"] == ACQUIRE_OPERATION:
+                result = {
+                    "immutable_revision": revision.immutable_revision,
+                    "verified_artifacts": [
+                        {"path": artifact.path, "size": artifact.size, "digest": artifact.digest}
+                        for artifact in artifacts
+                    ],
+                    "verified_bytes": sum(artifact.size for artifact in artifacts),
+                }
+                return self._success(
+                    record,
+                    result,
+                    phase="SOURCE_VERIFIED",
+                    checkpoint=checkpoint,
+                    event_payload={"phase": "SOURCE_VERIFIED", "result": result},
+                )
             return self._phase(record, "SOURCE_VERIFIED", checkpoint)
         partials = _partials_from(checkpoint["partials"], revision, operation_id)
         if phase == "SOURCE_VERIFIED":
+            material = await self._controlled(operation_id,
+                lambda: asyncio.to_thread(inspect_source_identity,
+                    _compiler_source(revision, descriptor),
+                    _compiler_extents(revision, context.transfers, operation_id), context.cartridge),
+                cancellable=True)
+            identity = model_identity(material)
+            if any(expected is not None and expected != identity
+                   for expected in (revision.identity, descriptor.get("expected_identity"))):
+                _reject("IDENTITY_MISMATCH", operation_id, "verified source bytes differ from the expected full-model identity")
+            revision = replace(revision, identity=identity)
+            checkpoint["source_lock"] = _source_record(revision)
             plan_digest = await self._controlled(
                 operation_id,
                 lambda: asyncio.to_thread(
@@ -2209,6 +2553,7 @@ class CanonicalBroker:
             if waiter is not None:
                 waiter.cancel()
             self._active.pop(operation_id, None)
+            self._control_signals.pop(operation_id, None)
 
     def _verify_record(self, record: object, object_id: str) -> dict:
         if not isinstance(record, dict) or set(record) != _RECORD_FIELDS:
@@ -2258,6 +2603,8 @@ class CanonicalBroker:
             expected_payload = (
                 {"phase": "ACTIVE", "result": record["result"]}
                 if record["kind"] == PREPARE_OPERATION
+                else {"phase": "SOURCE_VERIFIED", "result": record["result"]}
+                if record["kind"] == ACQUIRE_OPERATION
                 else record["result"]
             )
             if events[-1]["payload"] != expected_payload:
@@ -2282,7 +2629,7 @@ class CanonicalBroker:
             record["result"] is not None or record["error"] is not None
         ):
             _reject("ROOT_INVALID", object_id, "nonterminal operation carries a terminal payload")
-        if record["kind"] == PREPARE_OPERATION:
+        if record["kind"] in {PREPARE_OPERATION, ACQUIRE_OPERATION}:
             if set(record["checkpoint"]) != _CHECKPOINT_FIELDS[record["phase"]]:
                 _reject("ROOT_INVALID", object_id, f"checkpoint does not match phase {record['phase']}")
             transitions = [
@@ -2292,16 +2639,19 @@ class CanonicalBroker:
             ]
             if transitions != list(PHASES[:PHASES.index(record["phase"]) + 1]):
                 _reject("ROOT_INVALID", object_id, "event phases do not form the exact Q5 prefix")
+            maximum_phase = "SOURCE_VERIFIED" if record["kind"] == ACQUIRE_OPERATION else "ACTIVE"
+            if PHASES.index(record["phase"]) > PHASES.index(maximum_phase):
+                _reject("ROOT_INVALID", object_id, "acquisition-only operation advanced past SOURCE_VERIFIED")
             if record["phase"] == "EMPTY" and record["state"] not in {
                 "PENDING", "PAUSED", "CANCELLED", "FAILED",
             }:
                 _reject("ROOT_INVALID", object_id, "EMPTY preparation has an impossible operation state")
-            if record["phase"] in PHASES[1:-1] and record["state"] not in {
+            if record["phase"] in PHASES[1:PHASES.index(maximum_phase)] and record["state"] not in {
                 "RUNNING", "PAUSED", "CANCELLED", "FAILED",
             }:
                 _reject("ROOT_INVALID", object_id, "preparation phase has an impossible operation state")
-            if record["phase"] == "ACTIVE" and record["state"] != "SUCCEEDED":
-                _reject("ROOT_INVALID", object_id, "ACTIVE preparation must be successful")
+            if record["phase"] == maximum_phase and record["state"] != "SUCCEEDED":
+                _reject("ROOT_INVALID", object_id, f"{maximum_phase} acquisition terminal must be successful")
             self._verify_checkpoint(record, object_id)
         elif record["kind"] == "train" and record["checkpoint"]:
             if record["phase"] != "EMPTY" or set(record["checkpoint"]) != {"checkpoint_root", "manifest_digest"}:
@@ -2322,9 +2672,17 @@ class CanonicalBroker:
             _exact_digest(checkpoint["parent_root"], object_id, "parent root")
         _exact_digest(checkpoint["metadata_digest"], object_id, "metadata digest")
         _exact_digest(checkpoint["requirements_digest"], object_id, "requirements digest")
+        artifacts = (
+            _acquisition_artifacts(revision)
+            if record["kind"] == ACQUIRE_OPERATION
+            else _compiler_artifacts(revision)
+        )
         if phase >= PHASES.index("SOURCE_VERIFIED"):
-            _partials_from(checkpoint["partials"], revision, object_id)
+            _partials_from(checkpoint["partials"], revision, object_id, artifacts)
+        if record["kind"] == ACQUIRE_OPERATION:
+            return
         if phase >= PHASES.index("PLANNED"):
+            _exact_digest(revision.identity, object_id, "parsed source identity")
             _exact_digest(checkpoint["plan_digest"], object_id, "plan digest")
         if phase >= PHASES.index("EXEC_VERIFIED"):
             verification = checkpoint["source_verification"]
@@ -2460,11 +2818,14 @@ class CanonicalBroker:
             pause_requested=False,
         )
 
-    def _paused(self, record: dict) -> dict:
+    def _paused(self, record: dict, error: CassetteError | None = None) -> dict:
+        payload = {"phase": record["phase"], "state": "PAUSED"}
+        if error is not None:
+            payload["error"] = error.payload()
         return self._append(
             record,
             "output_delta",
-            {"phase": record["phase"], "state": "PAUSED"},
+            payload,
             state="PAUSED",
             pause_requested=False,
         )
@@ -2592,3 +2953,220 @@ class CanonicalBroker:
 
     def _signal(self, operation_id: str) -> asyncio.Event:
         return self._control_signals.setdefault(operation_id, asyncio.Event())
+
+
+_KEYCHAIN_SERVICE = "org.cassette.source-credential.v1"
+_KEYCHAIN_REF_PREFIX = "keychain:v1:"
+_ERR_SEC_AUTH_FAILED = -25293
+_ERR_SEC_ITEM_NOT_FOUND = -25300
+_ERR_SEC_INTERACTION_NOT_ALLOWED = -25308
+_ERR_SEC_INTERACTION_REQUIRED = -25315
+_ERR_SEC_USER_CANCELED = -128
+
+
+class _CFDictionaryCallbacks(ctypes.Structure):
+    """Match CoreFoundation's six-field CFDictionary callback records."""
+
+    _fields_ = (
+        ("version", ctypes.c_long),
+        ("retain", ctypes.c_void_p),
+        ("release", ctypes.c_void_p),
+        ("copy_description", ctypes.c_void_p),
+        ("equal", ctypes.c_void_p),
+        ("hash", ctypes.c_void_p),
+    )
+
+
+class MacOSKeychainCredentialProvider:
+    """Store source tokens in macOS Keychain and expose provider-bound lookups."""
+
+    def __init__(self) -> None:
+        if sys.platform != "darwin":
+            _reject("CAPABILITY_MISMATCH", "keychain", "macOS Keychain is unavailable on this platform")
+        try:
+            self._core_foundation = ctypes.CDLL(
+                "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+            )
+            self._security = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
+            self._configure()
+            self._keys = _CFDictionaryCallbacks.in_dll(
+                self._core_foundation, "kCFTypeDictionaryKeyCallBacks"
+            )
+            self._values = _CFDictionaryCallbacks.in_dll(
+                self._core_foundation, "kCFTypeDictionaryValueCallBacks"
+            )
+        except (AttributeError, OSError, ValueError):
+            _reject("CAPABILITY_MISMATCH", "keychain", "macOS Keychain is unavailable in this process")
+
+    def save(self, provider: str, endpoint: str, token: str) -> str:
+        """Save one nonempty token and return its opaque credential reference."""
+        binding = self._binding(provider, endpoint)
+        if not isinstance(token, str) or not token:
+            _reject("INVALID_REQUEST", "keychain", "credential token must be a nonempty string")
+        reference = _KEYCHAIN_REF_PREFIX + uuid.uuid4().hex
+        attributes = self._dictionary((
+            (self._constant("kSecClass"), self._constant("kSecClassGenericPassword")),
+            (self._constant("kSecAttrService"), self._text(_KEYCHAIN_SERVICE)),
+            (self._constant("kSecAttrAccount"), self._text(reference)),
+            (self._constant("kSecAttrGeneric"), self._data(binding)),
+            (self._constant("kSecValueData"), self._data(token.encode("utf-8"))),
+            (self._constant("kSecUseAuthenticationUI"), self._constant("kSecUseAuthenticationUIFail")),
+        ))
+        try:
+            self._require(self._security.SecItemAdd(attributes, None), reference)
+            return reference
+        finally:
+            self._release(attributes)
+
+    def lookup_callback(self, provider: str, endpoint: str) -> Callable[[str], str | None]:
+        """Return the one-argument credential lookup callback SourceAdapter accepts."""
+        self._binding(provider, endpoint)
+        return lambda reference: self.load(reference, provider, endpoint)
+
+    def load(self, reference: str, provider: str, endpoint: str) -> str | None:
+        """Resolve one reference only when its stored provider and endpoint binding matches."""
+        binding = self._binding(provider, endpoint)
+        self._reference(reference)
+        query = self._query(reference, binding, return_data=True)
+        result = ctypes.c_void_p()
+        try:
+            status = self._security.SecItemCopyMatching(query, ctypes.byref(result))
+        finally:
+            self._release(query)
+        if status == _ERR_SEC_ITEM_NOT_FOUND:
+            if self._exists(reference):
+                _reject("CAPABILITY_MISMATCH", reference, "credential reference belongs to a different provider endpoint")
+            _reject("AUTH_REQUIRED", reference, "credential reference is absent or revoked", retryability="retryable")
+        self._require(status, reference)
+        try:
+            length = self._core_foundation.CFDataGetLength(result)
+            pointer = self._core_foundation.CFDataGetBytePtr(result)
+            token = ctypes.string_at(pointer, length).decode("utf-8")
+        except UnicodeDecodeError:
+            _reject("AUTH_REQUIRED", reference, "credential token cannot be read", retryability="retryable")
+        finally:
+            self._release(result)
+        return token or None
+
+    def revoke(self, reference: str, provider: str, endpoint: str) -> None:
+        """Delete one matching Cassette credential without enumerating Keychain items."""
+        binding = self._binding(provider, endpoint)
+        self._reference(reference)
+        query = self._query(reference, binding, return_data=False)
+        try:
+            status = self._security.SecItemDelete(query)
+        finally:
+            self._release(query)
+        if status == _ERR_SEC_ITEM_NOT_FOUND:
+            if self._exists(reference):
+                _reject("CAPABILITY_MISMATCH", reference, "credential reference belongs to a different provider endpoint")
+            _reject("AUTH_REQUIRED", reference, "credential reference is absent or revoked", retryability="retryable")
+        self._require(status, reference)
+
+    def _configure(self) -> None:
+        self._core_foundation.CFStringCreateWithCString.argtypes = (
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32
+        )
+        self._core_foundation.CFStringCreateWithCString.restype = ctypes.c_void_p
+        self._core_foundation.CFDataCreate.argtypes = (
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_ubyte), ctypes.c_long
+        )
+        self._core_foundation.CFDataCreate.restype = ctypes.c_void_p
+        self._core_foundation.CFDictionaryCreate.argtypes = (
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
+            ctypes.c_long, ctypes.POINTER(_CFDictionaryCallbacks), ctypes.POINTER(_CFDictionaryCallbacks),
+        )
+        self._core_foundation.CFDictionaryCreate.restype = ctypes.c_void_p
+        self._core_foundation.CFDataGetLength.argtypes = (ctypes.c_void_p,)
+        self._core_foundation.CFDataGetLength.restype = ctypes.c_long
+        self._core_foundation.CFDataGetBytePtr.argtypes = (ctypes.c_void_p,)
+        self._core_foundation.CFDataGetBytePtr.restype = ctypes.POINTER(ctypes.c_ubyte)
+        self._core_foundation.CFRelease.argtypes = (ctypes.c_void_p,)
+        self._security.SecItemAdd.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
+        self._security.SecItemAdd.restype = ctypes.c_int32
+        self._security.SecItemCopyMatching.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
+        self._security.SecItemCopyMatching.restype = ctypes.c_int32
+        self._security.SecItemDelete.argtypes = (ctypes.c_void_p,)
+        self._security.SecItemDelete.restype = ctypes.c_int32
+
+    @staticmethod
+    def _binding(provider: str, endpoint: str) -> bytes:
+        if (not isinstance(provider, str) or not provider or not isinstance(endpoint, str)
+                or not endpoint):
+            _reject("INVALID_REQUEST", "keychain", "provider and endpoint must be nonempty strings")
+        return canonical_bytes({"endpoint": endpoint, "provider": provider})
+
+    @staticmethod
+    def _reference(reference: str) -> None:
+        if (not isinstance(reference, str) or not reference.startswith(_KEYCHAIN_REF_PREFIX)
+                or len(reference) != len(_KEYCHAIN_REF_PREFIX) + 32):
+            _reject("INVALID_REQUEST", "keychain", "credential reference is not a Cassette Keychain reference")
+        try:
+            uuid.UUID(hex=reference[len(_KEYCHAIN_REF_PREFIX):])
+        except ValueError:
+            _reject("INVALID_REQUEST", "keychain", "credential reference is not a Cassette Keychain reference")
+
+    def _query(self, reference: str, binding: bytes | None, *, return_data: bool) -> ctypes.c_void_p:
+        pairs = [
+            (self._constant("kSecClass"), self._constant("kSecClassGenericPassword")),
+            (self._constant("kSecAttrService"), self._text(_KEYCHAIN_SERVICE)),
+            (self._constant("kSecAttrAccount"), self._text(reference)),
+            (self._constant("kSecUseAuthenticationUI"), self._constant("kSecUseAuthenticationUIFail")),
+        ]
+        if binding is not None:
+            pairs.append((self._constant("kSecAttrGeneric"), self._data(binding)))
+        if return_data:
+            pairs.append((self._constant("kSecReturnData"), self._boolean("kCFBooleanTrue")))
+        return self._dictionary(tuple(pairs))
+
+    def _exists(self, reference: str) -> bool:
+        query = self._query(reference, None, return_data=False)
+        try:
+            status = self._security.SecItemCopyMatching(query, None)
+        finally:
+            self._release(query)
+        if status == _ERR_SEC_ITEM_NOT_FOUND:
+            return False
+        self._require(status, reference)
+        return True
+
+    def _constant(self, name: str) -> int:
+        return ctypes.c_void_p.in_dll(self._security, name).value
+
+    def _boolean(self, name: str) -> int:
+        return ctypes.c_void_p.in_dll(self._core_foundation, name).value
+
+    def _text(self, value: str) -> int:
+        return self._core_foundation.CFStringCreateWithCString(None, value.encode("utf-8"), 0x08000100)
+
+    def _data(self, value: bytes) -> int:
+        raw = (ctypes.c_ubyte * len(value)).from_buffer_copy(value)
+        return self._core_foundation.CFDataCreate(None, raw, len(value))
+
+    def _dictionary(self, pairs: tuple[tuple[int, int], ...]) -> ctypes.c_void_p:
+        keys = (ctypes.c_void_p * len(pairs))(*(key for key, _ in pairs))
+        values = (ctypes.c_void_p * len(pairs))(*(value for _, value in pairs))
+        result = self._core_foundation.CFDictionaryCreate(
+            None, keys, values, len(pairs), ctypes.byref(self._keys), ctypes.byref(self._values)
+        )
+        for _, value in pairs:
+            if value not in {
+                self._constant("kSecClassGenericPassword"),
+                self._constant("kSecUseAuthenticationUIFail"),
+                self._boolean("kCFBooleanTrue"),
+            }:
+                self._release(value)
+        return result
+
+    def _release(self, value: ctypes.c_void_p | int | None) -> None:
+        if value:
+            self._core_foundation.CFRelease(value)
+
+    @staticmethod
+    def _require(status: int, reference: str) -> None:
+        if status == 0:
+            return
+        if status in {_ERR_SEC_AUTH_FAILED, _ERR_SEC_INTERACTION_NOT_ALLOWED,
+                      _ERR_SEC_INTERACTION_REQUIRED, _ERR_SEC_USER_CANCELED}:
+            _reject("AUTH_REQUIRED", reference, "macOS Keychain access was denied", retryability="retryable")
+        _reject("CAPABILITY_MISMATCH", reference, "macOS Keychain cannot complete this credential operation")

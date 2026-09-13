@@ -212,10 +212,12 @@ def _capture(entrypoint, invocation, receipt):
             {},
         )
     if isinstance(result, dict) and result.get("state") == "PAUSED":
+        error = result.get("error")
         return _Call(
             f"{entrypoint.__module__}.{entrypoint.__qualname__}",
             hit,
-            "CAPACITY_EXCEEDED",
+            error["code"] if isinstance(error, dict) and isinstance(error.get("code"), str)
+            else "CAPACITY_EXCEEDED",
             {},
         )
     return _Call(
@@ -384,9 +386,15 @@ def _acquisition_route(directory: Path, monkeypatch) -> _Route:
             pathlike,
         )
         try:
+            def run_acquisition():
+                result = asyncio.run(broker.run_acquisition(request, context))
+                if result.get("state") == "PAUSED":
+                    result = {**result, "error": broker.events(operation_id)[-1]["payload"]["error"]}
+                return result
+
             return _capture(
                 CanonicalBroker.run_acquisition,
-                lambda: asyncio.run(broker.run_acquisition(request, context)),
+                run_acquisition,
                 lambda result: {
                     "phase": "ACTIVE",
                     "root_digest": broker.callable_revision(

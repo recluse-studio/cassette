@@ -121,6 +121,35 @@ def _requirements(kind: str) -> dict:
     return {"authorization": {"scope": fixture["auth_scope"], "required": True}, "license": {"sha256": fixture["license"], "acceptance_required": True}}
 
 
+def _ollama_registry(artifacts: tuple[tuple[str, bytes, str], ...] | None = None) -> tuple[bytes, dict[str, bytes]]:
+    fixture = _FIXTURES["ollama"]
+    models = artifacts or (fixture["artifact"],)
+    config = b'{"model_type":"ollama-fixture"}'
+    template = fixture["asset"][1]
+    license_bytes = b"ollama-license"
+    blobs = {_sha(config): config, _sha(template): template, _sha(license_bytes): license_bytes}
+    layers = []
+    for name, payload, _ in models:
+        digest = _sha(payload)
+        blobs[digest] = payload
+        layers.append({"mediaType": "application/vnd.ollama.image.model", "digest": digest, "size": len(payload),
+                       "annotations": {"org.opencontainers.image.title": name}})
+    layers.extend((
+        {"mediaType": "application/vnd.ollama.image.license", "digest": _sha(license_bytes), "size": len(license_bytes)},
+        {"mediaType": "application/vnd.ollama.image.template", "digest": _sha(template), "size": len(template)},
+    ))
+    manifest = json.dumps({
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+        "config": {"mediaType": "application/vnd.docker.container.image.v1+json", "digest": _sha(config), "size": len(config)},
+        "layers": layers,
+    }, sort_keys=True, separators=(",", ":")).encode()
+    return manifest, blobs
+
+
+_FIXTURES["ollama"]["revision"] = _sha(_ollama_registry()[0])
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, _format, *_args):
         return
@@ -135,6 +164,33 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _json(self, payload: dict):
         self._send(200, json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(), {"Content-Type": "application/json"})
+
+    def do_HEAD(self):
+        authorized = self.headers.get("Authorization") == f"Bearer {_SECRET}"
+        self.server.requests.append({"path": urlparse(self.path).path, "query": {}, "range": None,
+            "if_match": self.headers.get("If-Match"), "authorized": authorized,
+            "license_ref_present": self.headers.get("X-Cassette-License-Acceptance") is not None})
+        if not authorized:
+            self.send_error(401)
+            return
+        fixture = _FIXTURES["huggingface"]
+        prefix = f"/{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
+        if not self.path.startswith(prefix):
+            self.send_error(404)
+            return
+        name = unquote(self.path[len(prefix):])
+        objects = (*self.server.artifact_overrides.get("huggingface", (fixture["artifact"],)),
+                   *self.server.semantic_overrides.get("huggingface", (fixture["asset"],)))
+        matches = [item for item in objects if item[0] == name]
+        if not matches:
+            self.send_error(404)
+            return
+        _, content, validator = matches[0]
+        validator = self.server.validator_overrides.get(("huggingface", name), validator)
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("ETag", validator)
+        self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -157,6 +213,82 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._send(302, b"", {"Location": self.server.range_redirect_target})
             return
+        ollama = _FIXTURES["ollama"]
+        ollama_prefix = f"/v2/{ollama['locator']}"
+        if parsed.path.startswith(ollama_prefix + "/manifests/"):
+            manifest, _ = _ollama_registry(self.server.artifact_overrides.get("ollama"))
+            manifest_digest = _sha(manifest)
+            reference = unquote(parsed.path.rsplit("/", 1)[1])
+            if reference not in {ollama["alias"], manifest_digest}:
+                self._send(404, b"")
+                return
+            self._send(200, manifest, {"Content-Type": "application/vnd.docker.distribution.manifest.v2+json"})
+            return
+        if parsed.path.startswith(ollama_prefix + "/blobs/"):
+            _, blobs = _ollama_registry(self.server.artifact_overrides.get("ollama"))
+            digest = unquote(parsed.path.rsplit("/", 1)[1])
+            payload = blobs.get(digest)
+            if payload is None:
+                self._send(404, b"")
+                return
+            try:
+                start, end = (int(value) for value in self.headers["Range"].removeprefix("bytes=").split("-", 1))
+            except (KeyError, TypeError, ValueError):
+                self._send(400, b"")
+                return
+            if self.headers.get("If-Match") != digest or start < 0 or end < start or end >= len(payload):
+                self._send(412, b"")
+                return
+            self._send(206, payload[start:end + 1], {"Content-Range": f"bytes {start}-{end}/{len(payload)}"})
+            return
+        fixture = _FIXTURES["huggingface"]
+        hub_prefix = f"/api/models/{fixture['locator']}/revision/"
+        hub_files = (*self.server.artifact_overrides.get("huggingface", (fixture["artifact"],)),
+                     *self.server.semantic_overrides.get("huggingface", (fixture["asset"],)),
+                     ("LICENSE", b"hf-license", '"license"'))
+        if parsed.path.startswith(hub_prefix):
+            revision = unquote(parsed.path[len(hub_prefix):])
+            if revision not in {fixture["alias"], fixture["revision"][9:]}:
+                self._send(409, b"")
+                return
+            if self.server.control_redirect_target is not None:
+                self._send(302, b"", {"Location": self.server.control_redirect_target})
+                return
+            siblings = []
+            for name, content, _ in hub_files:
+                row = {"rfilename": name, "size": len(content),
+                       "blobId": hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest()}
+                if name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
+                    row["lfs"] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content), "pointerSize": 130}
+                siblings.append(row)
+            if self.server.artifact_size_override is not None:
+                siblings[0]["size"] = self.server.artifact_size_override
+                siblings[0]["lfs"]["size"] = self.server.artifact_size_override
+            self._json({"id": fixture["locator"], "sha": (self.server.revision_override or fixture["revision"])[9:],
+                        "private": False, "gated": "manual", "siblings": siblings})
+            return
+        file_prefix = f"/{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
+        if parsed.path.startswith(file_prefix):
+            name = unquote(parsed.path[len(file_prefix):])
+            matches = [item for item in hub_files if item[0] == name]
+            if not matches:
+                self._send(404, b"")
+                return
+            _, content, source_validator = matches[0]
+            if self.headers.get("Range") is None:
+                validator = '"' + hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest() + '"'
+                corruption = self.server.corrupt_ranges.get(("huggingface", name, 0))
+                if corruption is not None and content:
+                    altered = bytearray(content)
+                    altered[corruption % len(content)] ^= 1
+                    content = bytes(altered)
+                self._send(200, content, {"ETag": validator})
+                return
+            if self.server.range_redirect_target is not None:
+                self._send(302, b"", {"Location": self.server.range_redirect_target,
+                    "X-Linked-Etag": self.server.linked_validator_override or source_validator})
+                return
+            parts = ["bytes", "huggingface", quote(name, safe="")]
         if len(parts) == 3 and parts[0] == "source" and parts[1] in _FIXTURES:
             kind, operation = parts[1], parts[2]
             query = parse_qs(parsed.query)
@@ -218,6 +350,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(404, b"")
                 return
             _, payload, validator = matches[0]
+            if kind == "huggingface" and not name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
+                validator = '"' + hashlib.sha1(f"blob {len(payload)}\0".encode() + payload).hexdigest() + '"'
             try:
                 start, end = (int(value) for value in self.headers["Range"].removeprefix("bytes=").split("-", 1))
             except (KeyError, TypeError, ValueError):
@@ -274,6 +408,7 @@ def source_fixture_server(*, artifact_overrides=None, semantic_overrides=None, i
     server.artifact_size_override = None
     server.control_redirect_target = None
     server.range_redirect_target = None
+    server.linked_validator_override = None
     server.artifact_overrides = artifact_overrides or {}
     server.semantic_overrides = semantic_overrides or {}
     server.identity_overrides = identity_overrides or {}

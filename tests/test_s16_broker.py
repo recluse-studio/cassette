@@ -38,20 +38,22 @@ EXPECTED_PHASES = (
 
 def _request(kind: str, identity: str, key: str) -> dict:
     fixture = source_fixture._FIXTURES[kind]
+    source = {
+        "kind": kind,
+        "locator": fixture["locator"],
+        "revision": fixture["alias"],
+        "credential_ref": f"keychain:s16/{kind}",
+        "license_acceptance_ref": f"license:s16/{kind}",
+    }
+    if kind != "ollama":
+        source["expected_identity"] = identity
     return {
         "protocol_version": "1",
         "operation": "prepare",
         "idempotency_key": key,
         "target": f"cartridge:s16:{kind}",
         "arguments": {
-            "source": {
-                "kind": kind,
-                "locator": fixture["locator"],
-                "revision": fixture["alias"],
-                "credential_ref": f"keychain:s16/{kind}",
-                "license_acceptance_ref": f"license:s16/{kind}",
-                "expected_identity": identity,
-            }
+            "source": source
         },
     }
 
@@ -159,20 +161,34 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
             assert broker.issue(request) == issued
             operation_id = issued["operation_id"]
             coordinator = CapacityCoordinator(cartridge)
-            data_fd, data_extent = _extent(
-                cartridge, "data", len(payloads[kind]), operation_id, coordinator
-            )
-            state_bytes = transfer_state_bytes(len(payloads[kind]))
-            state_fd, state_extent = _extent(
-                cartridge, "state", state_bytes, operation_id, coordinator
-            )
+            if kind == "ollama":
+                adapter = SourceAdapter(kind, server.base_url, {f"keychain:s16/{kind}": SECRET}.get)
+                source = asyncio.run(adapter.resolve(request["arguments"]["source"]))
+                source_objects = source.artifacts
+                transfers = {}
+                transfer_fds = []
+                for artifact in source_objects:
+                    data_fd, data_extent = _extent(cartridge, f"data-{artifact.path}", artifact.size, operation_id, coordinator)
+                    state_fd, state_extent = _extent(cartridge, f"state-{artifact.path}", transfer_state_bytes(artifact.size), operation_id, coordinator)
+                    transfers[artifact.path] = (data_extent, state_extent)
+                    transfer_fds.extend((data_fd, state_fd))
+            else:
+                data_fd, data_extent = _extent(
+                    cartridge, "data", len(payloads[kind]), operation_id, coordinator
+                )
+                state_bytes = transfer_state_bytes(len(payloads[kind]))
+                state_fd, state_extent = _extent(
+                    cartridge, "state", state_bytes, operation_id, coordinator
+                )
+                transfers = {names[kind]: (data_extent, state_extent)}
+                transfer_fds = [data_fd, state_fd]
             location = {"cartridge": cartridge}
 
             def context():
                 return AcquisitionContext(
                     SourceAdapter(kind, server.base_url, {f"keychain:s16/{kind}": SECRET}.get),
                     CapacityCoordinator(location["cartridge"]),
-                    {names[kind]: (data_extent, state_extent)},
+                    transfers,
                     location["cartridge"],
                 )
 
@@ -309,8 +325,20 @@ def test_q5_q6_q52_durable_idempotent_broker_is_source_blind_and_terminal_exact(
                 )
             finally:
                 broker.close()
-                os.close(data_fd)
-                os.close(state_fd)
+                for fd in transfer_fds:
+                    os.close(fd)
+            if kind == "huggingface":
+                requests = [row for row in server.requests if "huggingface-model" in row["path"]]
+                assert len([row for row in requests if row["path"].startswith("/api/models/")]) == 4
+                assert len([row for row in requests if row["range"]]) == 1
+                assert not any(row["path"].startswith("/source/huggingface/") for row in server.requests)
+                continue
+            if kind == "ollama":
+                requests = [row for row in server.requests if "/v2/library/ollama-model/" in row["path"]]
+                assert requests
+                assert all(not row["path"].startswith("/source/ollama/") for row in requests)
+                assert any(row["range"] for row in requests)
+                continue
             request_traces[kind] = [
                 request_record["path"].split("/")[-1]
                 if request_record["path"].startswith(f"/source/{kind}/")

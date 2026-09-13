@@ -130,6 +130,16 @@ def _case(tmp_path, label, **geometry):
                 result = asyncio.run(broker.run_acquisition(request, context))
                 assert result['state'] == 'SUCCEEDED', result
                 root = broker.callable_revision(result['operation_id'], cartridge).root_digest
+                if label == 'dense':
+                    wrong_descriptor = {**descriptor, 'expected_identity': 'blake3:' + 'f'*64}
+                    wrong = _request('prepare', label + '-wrong-identity', source['identity'], {'source': wrong_descriptor})
+                    rejected = asyncio.run(broker.run_acquisition(wrong, context))
+                    assert rejected['state'] == 'FAILED'
+                    assert rejected['error']['code'] == 'IDENTITY_MISMATCH'
+                    phases = [event['payload']['phase'] for event in broker.events(rejected['operation_id'])
+                              if 'phase' in event['payload']]
+                    assert phases[-1] == 'SOURCE_VERIFIED'
+                    assert recover_generation(cartridge).root_digest == root
             requested_paths = {row['path'].split('/')[-1] for row in server.requests if row['range']}
             assert requested_paths == set(payloads)
         yield cartridge, owner, root, config, weights, payloads, source, inspection

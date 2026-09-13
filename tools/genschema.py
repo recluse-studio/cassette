@@ -2173,6 +2173,31 @@ CONTRACTS: dict[str, dict] = {
                 "Q6",
                 {
                     "source": ref("source_descriptor"),
+                    "discovery": record("Source discovery request", "Q9/Q52", {
+                        "source": text(enum=["huggingface", "ollama", "tinker"]),
+                        "endpoint": bounded_text(), "query": text(empty=True, maximum=256),
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                        "cursor": nullable(text(maximum=4096)),
+                        "connection_id": identifier(),
+                    }, optional=("connection_id",)),
+                    "connection": record("Source connection", "Q9/Q52", {
+                        "source": text(enum=["huggingface", "ollama"]),
+                        "endpoint": bounded_text(),
+                        "mode": text(enum=["public", "token"]),
+                        "credential_ref": nullable(bounded_text()),
+                    }),
+                    "selection": record("Immutable model selection", "Q5/Q9", {
+                        "connection_id": identifier(), "locator": bounded_text(),
+                        "revision": nullable(bounded_text()),
+                        "license_acceptance_ref": nullable(bounded_text()),
+                    }),
+                    "drive": record("Mounted drive selection", "Q44/Q49", {
+                        "volume_uuid": bounded_text(), "folder": bounded_text(),
+                        "cartridge_uuid": nullable(bounded_text()),
+                    }),
+                    "acquisition": record("Selected model and destination", "Q5/Q44/Q49", {
+                        "model_selection_id": identifier(), "drive_selection_id": identifier(),
+                    }),
                     "checkpoint_root": blake3_digest(),
                     "manifest_digest": blake3_digest(),
                     "messages": array(bounded_json_object(), minimum=1, maximum=64),
@@ -2191,7 +2216,7 @@ CONTRACTS: dict[str, dict] = {
                     ),
                 },
                 optional=(
-                    "checkpoint_root", "manifest_digest", "source", "context_ref", "negotiation_id", "tier", "delta_digest",
+                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "context_ref", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
                     "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),
@@ -2303,6 +2328,17 @@ CONTRACTS: dict[str, dict] = {
         },
         optional=("extensions",),
     )),
+    "source_catalogue": record(
+        "Bounded source discovery page", "Q9/Q52",
+        {"candidates": bounded_array(record("Source candidate", "Q52", {
+            "kind": text(enum=["huggingface", "ollama", "tinker"]),
+            "locator": bounded_text(),
+            "revision": nullable(bounded_text()),
+            "private": nullable({"type": "boolean"}),
+            "gated": nullable({"type": "boolean"}),
+            "downloadability": text(enum=["NOT_VERIFIED"]),
+        }), maximum=100), "next_cursor": nullable(bounded_text())},
+    ),
     "source_descriptor": with_bounded_json(record(
         "Normalized source descriptor",
         "Q9",
@@ -2562,6 +2598,8 @@ def emit(outdir: Path) -> dict[str, str]:
     live_block = next(block for block in re.findall(r"```yaml\n(.*?)```", queue_text, re.S)
                       if block.startswith("phase_live_queue:"))
     live = yaml.safe_load(live_block)["phase_live_queue"]
+    matrix = yaml.safe_load((Path(__file__).resolve().parent.parent / "research/ACCEPTANCE_MATRIX.yaml").read_text())
+    acquisition_models = next(row["model_set"] for row in matrix["source_rows"] if row["id"] == "source_huggingface_all_immutable_models")
     campaign_contract = {key: live[key] for key in (
         "materialized_record_contract", "dependency_graph_revision_contract", "expanded_session_families")}
     campaign_contract["assertion_owner_patterns"] = {
@@ -2571,7 +2609,7 @@ def emit(outdir: Path) -> dict[str, str]:
         "physical_storage_qualification": ["QUALIFY-.+-VERIFY"],
         "fixture_gate_rows[id=f4_gate]": ["F4-GATE"],
         "fixture_gate_rows[id=f5_gate]": ["F5-GATE"],
-        "source_rows[id=source_huggingface_all_immutable_models]": ["ACQ-(kimi_k3|llama_4_scout|qwen3_235b_a22b)-VERIFY"],
+        "source_rows[id=source_huggingface_all_immutable_models]": ["ACQ-(" + "|".join(re.escape(model) for model in acquisition_models) + ")-VERIFY"],
         "source_rows[id=source_ollama_content_addressed_reimport]": ["OLLAMA-VERIFY"],
         "source_rows[id=source_tinker_export_reimport]": ["TINKER-VERIFY"],
         "execution_rows[id=exec_c3_k3_compiled_portability]": ["EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY"],
@@ -2584,7 +2622,6 @@ def emit(outdir: Path) -> dict[str, str]:
         "offline_and_privacy_rows[id=offline_training_all_training_rows]": ["OFFLINE-TRAINING-.+-VERIFY"],
         "minimum_code_rows[id=q78_exact_accounting]": ["L04", "FINAL-PROVENANCE"],
     }
-    matrix = yaml.safe_load((Path(__file__).resolve().parent.parent / 'research/ACCEPTANCE_MATRIX.yaml').read_text())
     campaign_contract['failure_contract'] = {key: matrix['failure_rows'][key] for key in (
         'phase_live_operation_bindings', 'operation_binding_rule', 'requalification_after_recovery', 'approval_contract',
         'phase_live_injections', 'expand_over_operations')}

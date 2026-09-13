@@ -51,11 +51,15 @@ Cassette begins with these components:
 - downloadable model sources such as Hugging Face, Ollama, Tinker, and future equivalent sources;
 - agent systems and endpoints including Codex, Ollama, OpenClaw, Hermes, and custom endpoints.
 
-The intended operation is equally direct:
+The intended operation is equally direct. The principal clarified the acquisition controls on
+2026-09-12: L05 builds the backend operations and may use a basic CLI to trigger them; a finished
+graphical or terminal interface is not a prerequisite.
 
-1. The user chooses a downloadable model from Hugging Face, Ollama, Tinker, or another supported
-   source.
-2. Cassette downloads the full model directly to the external drive.
+1. The user connects a supported source securely when authentication is required, browses available
+   downloadable models and selects one. Provider authorization stays separate from model execution.
+2. The user selects a discovered external drive. Cassette establishes the required platform access,
+   binds the exact destination and offers Go. Go starts the broker-owned qualification and download
+   sequence; Cassette creates its working folder and writes the full model directly to that drive.
 3. The user does “something”—a button, a prompt, or some other control.
 4. Cassette does things. The method remains open because discovering and building the right method
    is part of the work.

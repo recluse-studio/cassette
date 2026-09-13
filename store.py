@@ -11,6 +11,7 @@ while a separate fixed-record index owns physical placement.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import copy
 import ctypes
 from dataclasses import dataclass, field, replace
 import errno
@@ -20,9 +21,11 @@ import json
 import math
 import os
 from pathlib import Path
+import platform
 import re
 import stat
 import struct
+import sys
 import tempfile
 import threading
 import uuid
@@ -72,6 +75,9 @@ _CARTRIDGE_EVENTS = {
     "bus_reset": "REVALIDATING", "port_migration": "REVALIDATING",
 }
 _CARTRIDGE_IDENTITY_NAME = "cartridge.json"
+_DARWIN_MNT_LOCAL = 0x00001000
+_DARWIN_ATTR_VOL_UUID = 0x00040000
+_DRIVE_ROOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 _SAFETENSORS_HEADER_BYTES = 100_000_000
@@ -268,6 +274,85 @@ class CartridgeAccess:
     operation_id: str
     epoch: int
     write: bool
+
+
+@dataclass(frozen=True)
+class DriveVolume:
+    """One locally mounted APFS candidate identified without writing to it."""
+
+    name: str
+    volume_uuid: str
+    mount_path: str
+    filesystem: str
+    available_bytes: int
+    device: int
+    mount_source: str
+    read_only: bool
+    observed_access: str
+
+
+@dataclass(frozen=True)
+class WriterContext:
+    """The exact process context that will attempt the store-owned write."""
+
+    executable: str
+    pid: int
+    uid: int
+    gid: int
+    groups: tuple[int, ...]
+    launch_host: str
+
+
+@dataclass(frozen=True)
+class DriveSelection:
+    """A volume identity and writer context retained until the next revalidation."""
+
+    volume: DriveVolume
+    writer: WriterContext
+
+
+class _DarwinAttrList(ctypes.Structure):
+    """The SDK-defined attrlist layout used only for ATTR_VOL_UUID."""
+
+    _fields_ = [
+        ("bitmapcount", ctypes.c_ushort),
+        ("reserved", ctypes.c_uint16),
+        ("commonattr", ctypes.c_uint32),
+        ("volattr", ctypes.c_uint32),
+        ("dirattr", ctypes.c_uint32),
+        ("fileattr", ctypes.c_uint32),
+        ("forkattr", ctypes.c_uint32),
+    ]
+
+
+class _DarwinFsid(ctypes.Structure):
+    """The SDK-defined fsid_t field embedded in Darwin's statfs structure."""
+
+    _fields_ = [("values", ctypes.c_int32 * 2)]
+
+
+class _DarwinStatfs(ctypes.Structure):
+    """The arm64 macOS SDK statfs layout used for mounted-volume facts."""
+
+    _fields_ = [
+        ("block_size", ctypes.c_uint32),
+        ("io_size", ctypes.c_int32),
+        ("blocks", ctypes.c_uint64),
+        ("free_blocks", ctypes.c_uint64),
+        ("available_blocks", ctypes.c_uint64),
+        ("files", ctypes.c_uint64),
+        ("free_files", ctypes.c_uint64),
+        ("filesystem_id", _DarwinFsid),
+        ("owner", ctypes.c_uint32),
+        ("filesystem_type", ctypes.c_uint32),
+        ("mount_flags", ctypes.c_uint32),
+        ("filesystem_subtype", ctypes.c_uint32),
+        ("filesystem_name", ctypes.c_char * 16),
+        ("mount_path", ctypes.c_char * 1024),
+        ("mount_source", ctypes.c_char * 1024),
+        ("extended_mount_flags", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32 * 7),
+    ]
 
 
 @dataclass(frozen=True)
@@ -918,6 +1003,228 @@ def _normalize_uuid(value: object, field: str) -> str:
         _lifecycle_reject(str(object_id), f"{field} is not a UUID", "INVALID_REQUEST")
 
 
+def _drive_reject(volume_uuid: str, detail: str, code: str = "CAPABILITY_MISMATCH") -> None:
+    retryable = code in {"CARTRIDGE_DISCONNECTED", "CARTRIDGE_READ_ONLY"}
+    raise CassetteError(
+        code=code,
+        object_id=f"volume:{volume_uuid}",
+        failed_invariant="Q44/Q49: mounted APFS identity and writer-context revalidation",
+        retryability="retryable" if retryable else "terminal",
+        detail=detail,
+    )
+
+
+def _darwin_statfs(mount: Path) -> _DarwinStatfs:
+    if platform.system() != "Darwin":
+        _drive_reject(str(mount), "mounted APFS discovery requires macOS")
+    result = _DarwinStatfs()
+    libc = ctypes.CDLL(None, use_errno=True)
+    statfs = libc.statfs
+    statfs.argtypes = (ctypes.c_char_p, ctypes.POINTER(_DarwinStatfs))
+    statfs.restype = ctypes.c_int
+    if statfs(os.fsencode(mount), ctypes.byref(result)) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), mount)
+    return result
+
+
+def _darwin_volume_uuid(mount: Path) -> str:
+    attributes = _DarwinAttrList(bitmapcount=5, volattr=_DARWIN_ATTR_VOL_UUID)
+    result = (ctypes.c_ubyte * 20)()
+    libc = ctypes.CDLL(None, use_errno=True)
+    getattrlist = libc.getattrlist
+    getattrlist.argtypes = (
+        ctypes.c_char_p,
+        ctypes.POINTER(_DarwinAttrList),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_ulong,
+    )
+    getattrlist.restype = ctypes.c_int
+    if getattrlist(os.fsencode(mount), ctypes.byref(attributes), result, len(result), 0) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), mount)
+    return str(uuid.UUID(bytes=bytes(result[4:])))
+
+
+def _cstring(value: ctypes.Array) -> str:
+    return bytes(value).split(b"\0", 1)[0].decode("utf-8", "strict")
+
+
+def _observed_posix_access(mount: Path, read_only: bool) -> str:
+    if read_only:
+        return "READ_ONLY_VOLUME"
+    metadata = mount.stat()
+    uid = os.geteuid()
+    groups = frozenset((os.getegid(), *os.getgroups()))
+    if uid == 0:
+        return "POSIX_MODE_ALLOWED"
+    if uid == metadata.st_uid:
+        allowed = bool(metadata.st_mode & stat.S_IWUSR)
+    elif metadata.st_gid in groups:
+        allowed = bool(metadata.st_mode & stat.S_IWGRP)
+    else:
+        allowed = bool(metadata.st_mode & stat.S_IWOTH)
+    return "POSIX_MODE_ALLOWED" if allowed else "POSIX_MODE_DENIED"
+
+
+def writer_process_context() -> WriterContext:
+    """Report the exact Python process that would issue a subsequent store write."""
+
+    return WriterContext(
+        executable=os.path.realpath(sys.executable),
+        pid=os.getpid(),
+        uid=os.geteuid(),
+        gid=os.getegid(),
+        groups=tuple(sorted(set(os.getgroups()))),
+        launch_host=platform.node(),
+    )
+
+
+def list_external_apfs_volumes() -> tuple[DriveVolume, ...]:
+    """Read locally mounted APFS volumes below /Volumes without testing or changing write access."""
+
+    if platform.system() != "Darwin":
+        _drive_reject("unavailable", "mounted APFS discovery requires macOS")
+    volumes = []
+    try:
+        mounts = sorted(Path("/Volumes").iterdir(), key=lambda path: path.name.casefold())
+    except OSError as error:
+        _drive_reject("unavailable", f"could not read /Volumes: {error}")
+    for mount in mounts:
+        try:
+            if mount.is_symlink() or not mount.is_dir():
+                continue
+            filesystem = _darwin_statfs(mount)
+            if not filesystem.mount_flags & _DARWIN_MNT_LOCAL:
+                continue
+            if _cstring(filesystem.filesystem_name).casefold() != "apfs":
+                continue
+            snapshot = os.statvfs(mount)
+            if snapshot.f_frsize <= 0 or snapshot.f_bavail < 0:
+                continue
+            available_bytes = snapshot.f_frsize * snapshot.f_bavail
+            volume_uuid = _darwin_volume_uuid(mount)
+            read_only = bool(snapshot.f_flag & os.ST_RDONLY)
+            volumes.append(
+                DriveVolume(
+                    name=mount.name,
+                    volume_uuid=volume_uuid,
+                    mount_path=str(mount),
+                    filesystem="apfs",
+                    available_bytes=available_bytes,
+                    device=mount.stat().st_dev,
+                    mount_source=_cstring(filesystem.mount_source),
+                    read_only=read_only,
+                    observed_access=_observed_posix_access(mount, read_only),
+                )
+            )
+        except (OSError, UnicodeError, ValueError):
+            continue
+    return tuple(volumes)
+
+
+def select_external_apfs_volume(volume_uuid: str) -> DriveSelection:
+    """Select one exact discovered volume while retaining its current writer context."""
+
+    normalized = _normalize_uuid(volume_uuid, "volume_uuid")
+    matches = tuple(
+        volume for volume in list_external_apfs_volumes() if volume.volume_uuid == normalized
+    )
+    if len(matches) != 1:
+        _drive_reject(normalized, "selected APFS volume is unavailable or ambiguous", "CARTRIDGE_DISCONNECTED")
+    return DriveSelection(volume=matches[0], writer=writer_process_context())
+
+
+def revalidate_external_apfs_volume(selection: DriveSelection) -> DriveSelection:
+    """Require the selected mount's stable identity before the store opens or creates a root."""
+
+    if not isinstance(selection, DriveSelection):
+        _drive_reject("unidentified", "drive selection has the wrong record shape", "INVALID_REQUEST")
+    current = select_external_apfs_volume(selection.volume.volume_uuid)
+    expected = selection.volume
+    observed = current.volume
+    if (
+        observed.mount_path != expected.mount_path
+        or observed.device != expected.device
+        or observed.mount_source != expected.mount_source
+        or observed.filesystem != expected.filesystem
+    ):
+        _drive_reject(
+            expected.volume_uuid,
+            "selected APFS volume identity changed after selection; retry with the current mount",
+            "CARTRIDGE_DISCONNECTED",
+        )
+    return current
+
+
+def _inventory_reject(object_id: object, detail: str) -> None:
+    raise CassetteError(
+        "PROVENANCE_VIOLATION",
+        str(object_id),
+        "Q80: exact campaign evidence",
+        "terminal",
+        detail,
+    )
+
+
+def inventory_step(root, *, excluded=(), checkpoint=None, limit=1000):
+    """Q41/Q79: resumable logical-byte inventory; the result exposes only top-level names."""
+
+    root = Path(root).resolve(strict=True)
+    excluded = tuple(excluded)
+    if (
+        type(limit) is not int
+        or limit <= 0
+        or any(
+            not isinstance(name, str)
+            or not name
+            or name.startswith("/")
+            or any(part in {"", ".", ".."} for part in name.split("/"))
+            for name in excluded
+        )
+    ):
+        _inventory_reject(root, "inventory bound or volatile-entry declaration is invalid")
+    top = {p.name: "directory" if p.is_dir() and not p.is_symlink() else
+           "file" if p.is_file() and not p.is_symlink() else "link" if p.is_symlink() else "special"
+           for p in sorted(root.iterdir()) if p.name not in excluded}
+    if checkpoint is None:
+        state = {"root": str(root), "device": str(root.stat().st_dev), "excluded": sorted(excluded),
+                 "top": top, "pending": [[name, name] for name in reversed(top)],
+                 "bytes": dict.fromkeys(top, 0), "visited": 0}
+    else:
+        state = copy.deepcopy(checkpoint)
+        if (state["root"] != str(root) or state["device"] != str(root.stat().st_dev)
+                or state["excluded"] != sorted(excluded) or state["top"] != top):
+            _inventory_reject(root, "inventory identity or top-level entries changed during traversal")
+    for _ in range(limit):
+        if not state["pending"]:
+            break
+        relative, owner = state["pending"].pop()
+        path = root / relative
+        if Path(relative).is_absolute() or '..' in Path(relative).parts:
+            _inventory_reject(root, "inventory checkpoint escapes its root")
+        if any(relative == name or relative.startswith(name + "/") for name in excluded):
+            continue
+        metadata = path.lstat()
+        if stat.S_ISDIR(metadata.st_mode):
+            state["pending"].extend([[p.relative_to(root).as_posix(), owner]
+                                     for p in sorted(path.iterdir(), reverse=True)])
+        elif stat.S_ISREG(metadata.st_mode):
+            state["bytes"][owner] += metadata.st_size
+        state["visited"] += 1
+    result = None if state["pending"] else {name: {"type": kind, "logical_bytes": state["bytes"][name]}
+                                           for name, kind in top.items()}
+    return {"checkpoint": state, "inventory": result, "status": "NOT_RUN" if result is None else "PASS"}
+
+
+def compare_inventory(before, after):
+    """Reject an inventory change outside the declared Cassette root."""
+
+    if before != after:
+        _inventory_reject("protected-inventory", "protected top-level names, types or logical byte totals changed")
+
+
 def _capacity_reject(
     operation_id: str,
     detail: str,
@@ -1540,6 +1847,16 @@ def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
 
 
 _RESUMABLE_SHA256_STATE = struct.Struct("@64sIQ8I")
+
+
+def git_blob_sha256(payload: bytes, expected_blob: str, object_id: str) -> str:
+    """Q9/Q51: verify a Git blob before deriving its resumable transfer digest."""
+    header = f"blob {len(payload)}\0".encode("ascii")
+    if hashlib.sha1(header + payload).hexdigest() != expected_blob:
+        raise CassetteError("SOURCE_REVISION_CHANGED", object_id,
+                            "Q9: Git metadata bytes must match their immutable blob", "terminal",
+                            "source bytes differ from the pinned Git blob")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def artifact_hasher(expected_digest: str, object_id: str):
@@ -5667,6 +5984,67 @@ def write_campaign_artifact(owner: CapacityCoordinator, attempt: str, name: str,
     return path
 
 
+def verify_campaign_artifact(
+    cartridge: str | Path,
+    attempt: str,
+    name: str,
+    expected_digest: str,
+    expected_bytes: int,
+) -> dict:
+    """Q44: read one bounded campaign probe through unlinked descriptors and verify its Cassette digest."""
+
+    for value in (attempt, name):
+        if (
+            not isinstance(value, str)
+            or re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", value) is None
+            or value in {".", ".."}
+        ):
+            _transaction_reject(str(value), "capture name is not a bounded literal filename", "INVALID_REQUEST")
+    expected_digest = _transaction_digest(expected_digest, attempt)
+    if type(expected_bytes) is not int or not 0 <= expected_bytes <= 4096:
+        _transaction_reject(attempt, "integrity probe size must be an unsigned 4096-byte bound", "INVALID_REQUEST")
+    descriptors = []
+    try:
+        descriptor = os.open(cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        descriptors.append(descriptor)
+        for component in ("captures", attempt):
+            descriptor = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=descriptors[-1],
+            )
+            descriptors.append(descriptor)
+            if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                _transaction_reject(attempt, "campaign artifact path component is not a directory")
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptors[-1])
+        descriptors.append(descriptor)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            _transaction_reject(attempt, "campaign artifact is linked or nonregular")
+        if metadata.st_size != expected_bytes:
+            _transaction_reject(attempt, "campaign artifact byte count differs from the integrity probe")
+        payload = bytearray()
+        while len(payload) < expected_bytes:
+            chunk = os.read(descriptor, expected_bytes - len(payload))
+            if not chunk:
+                _transaction_reject(attempt, "campaign artifact ended before its exact probe bound")
+            payload.extend(chunk)
+        observed_digest = digest_bytes(payload)
+        if observed_digest != expected_digest:
+            _transaction_reject(attempt, "campaign artifact digest differs from the integrity probe")
+        return {
+            "attempt": attempt,
+            "name": name,
+            "digest": observed_digest,
+            "bytes": expected_bytes,
+        }
+    except OSError as error:
+        _transaction_reject(attempt, f"campaign artifact is absent or unavailable: {error}")
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: dict) -> dict:
     """Q42/Q44/Q53: perform one measured scratch write, readback and full-sync boundary."""
     import time
@@ -6438,6 +6816,115 @@ def initialize_cartridge(
             "CARTRIDGE_IDENTITY_MISMATCH",
         )
     return logical_uuid
+
+
+def create_selected_root(
+    selection: DriveSelection,
+    destination_path: str,
+    *,
+    operation_id: str,
+    cartridge_uuid: str | None = None,
+) -> tuple[Path, str]:
+    """Create or reopen one relative Cassette root below an existing selected-volume directory."""
+
+    if (
+        not isinstance(destination_path, str)
+        or not destination_path
+        or destination_path.startswith("/")
+        or any(_DRIVE_ROOT_NAME.fullmatch(part) is None for part in destination_path.split("/"))
+        or not isinstance(operation_id, str)
+        or not operation_id
+    ):
+        _drive_reject("unidentified", "relative destination path or operation ID is invalid", "INVALID_REQUEST")
+    selection = revalidate_external_apfs_volume(selection)
+    if selection.volume.read_only:
+        _drive_reject(
+            selection.volume.volume_uuid,
+            "selected APFS volume is read-only",
+            "CARTRIDGE_READ_ONLY",
+        )
+    volume_root = Path(selection.volume.mount_path)
+    volume_device = volume_root.stat().st_dev
+    cartridge = volume_root.joinpath(*destination_path.split("/"))
+    parent = volume_root
+    for segment in destination_path.split("/")[:-1]:
+        parent = parent / segment
+        try:
+            metadata = parent.lstat()
+        except OSError as error:
+            _drive_reject(
+                selection.volume.volume_uuid,
+                f"relative destination parent {segment!r} is unavailable: {error}",
+                "CONTAINMENT_REJECTED",
+            )
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_dev != volume_device
+        ):
+            _drive_reject(
+                selection.volume.volume_uuid,
+                f"relative destination parent {segment!r} is not an ordinary directory on the selected volume",
+                "CONTAINMENT_REJECTED",
+            )
+    marker = _cartridge_identity_path(cartridge)
+    try:
+        cartridge_metadata = cartridge.lstat()
+    except FileNotFoundError:
+        cartridge_exists = False
+    except OSError as error:
+        _drive_reject(
+            selection.volume.volume_uuid,
+            f"relative destination path is unavailable: {error}",
+            "CONTAINMENT_REJECTED",
+        )
+    else:
+        cartridge_exists = True
+        if (
+            stat.S_ISLNK(cartridge_metadata.st_mode)
+            or not stat.S_ISDIR(cartridge_metadata.st_mode)
+            or cartridge_metadata.st_dev != volume_device
+        ):
+            _drive_reject(
+                selection.volume.volume_uuid,
+                "selected root is not an ordinary directory on the selected volume",
+                "CONTAINMENT_REJECTED",
+            )
+    if cartridge_exists and not marker.exists():
+        _drive_reject(
+            selection.volume.volume_uuid,
+            "selected root already exists without a Cassette identity marker",
+            "CONTAINMENT_REJECTED",
+        )
+    coordinator = CapacityCoordinator(cartridge)
+    if not cartridge_exists:
+        try:
+            _claimed_directories(
+                coordinator,
+                operation_id,
+                "drive:selected-root",
+                cartridge,
+                f"volume:{selection.volume.volume_uuid}",
+            )
+        except OSError as error:
+            _drive_reject(
+                selection.volume.volume_uuid,
+                f"actual writer mkdir failed with {error.__class__.__name__} errno {error.errno}; no cause is inferred",
+            )
+    try:
+        cartridge_id = initialize_cartridge(
+            cartridge,
+            cartridge_uuid,
+            capacity_controller=coordinator,
+            operation_id=operation_id,
+        )
+    except OSError as error:
+        _drive_reject(
+            selection.volume.volume_uuid,
+            f"actual writer initialization failed with {error.__class__.__name__} errno {error.errno}; no cause is inferred",
+        )
+    revalidate_external_apfs_volume(selection)
+    return cartridge, cartridge_id
 
 
 def _cartridge_snapshot(

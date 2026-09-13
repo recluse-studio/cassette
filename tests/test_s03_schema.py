@@ -44,6 +44,7 @@ EXPECTED_KINDS = {
     "run_event",
     "run_request",
     "source_descriptor",
+    "source_catalogue",
     "tensor_map",
     "tensor_span",
 }
@@ -71,6 +72,7 @@ REMOTE_FIELDS = {
     "source_validators",
 }
 EXPECTED_FIELDS = {
+    "source_catalogue": {"candidates", "next_cursor"},
     "native_adapter_factors": {"a", "b", "scale"},
     "native_training_manifest": {
         "version", "job_id", "operation", "parent_root", "reference_root", "dataset",
@@ -682,6 +684,12 @@ GOLDEN = {
         "locator": "org/model",
         "revision": "immutable-revision",
         "credential_ref": "keychain:item-1",
+    },
+    "source_catalogue": {
+        "candidates": [{"kind": "huggingface", "locator": "org/model",
+                        "revision": "immutable-revision", "private": False,
+                        "gated": False, "downloadability": "NOT_VERIFIED"}],
+        "next_cursor": None,
     },
     "remote_metadata_field": metadata(
         1_560_936_091_448, "EVIDENCE_DIGESTED", "manifest:sha256:01"

@@ -1,9 +1,12 @@
 <!-- Machine-stage review and bounded remediation; depends on repository instructions, the execution queue, governing acceptance authorities, one frozen machine-attempt manifest, and any prior review envelope. -->
 # Machine attempt procedure
 
-Review one completed machine attempt against its declared assertions. Challenge the implementation
-and its evidence. If a defect is proved and the profile permits remediation, apply the bounded
-repair procedure. The review does not close, reorder, or redefine a stage.
+Review one completed machine attempt or a declared ordered batch against its declared assertions.
+Challenge the implementation and its evidence. If a defect is proved and the profile permits
+remediation, apply the bounded repair procedure. The review does not close, reorder, or redefine a
+stage. A batch freezes its ID, ordered members, and per-stage attempts and close records; report
+separate questions, evidence, findings, disposition, and verdict for every member. An earlier
+repair invalidates dependent later evidence until replayed.
 
 ## Boundary
 

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yaml
 
 from errors import CassetteError
-from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, digest_bytes, write_campaign_artifact
+from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, inventory_step, write_campaign_artifact
 from tools.ledger import remediation_diff
 
 
@@ -240,47 +240,6 @@ def measure_profile(owner, binding, patterns, collect, *, expected=None):
     return compare_campaign_head(owner,key,expected, {**state,'observations':[*state['observations'],observation]})
 
 
-def inventory_step(root, *, excluded=(), checkpoint=None, limit=1000):
-    """Q41/Q79: resumable logical-byte inventory; the result exposes only top-level names."""
-    root = Path(root).resolve(strict=True)
-    if type(limit) is not int or limit <= 0 or any('/' in name or name in {'.', '..'} for name in excluded):
-        reject(root, "inventory bound or volatile-entry declaration is invalid")
-    top = {p.name: "directory" if p.is_dir() and not p.is_symlink() else
-           "file" if p.is_file() and not p.is_symlink() else "link" if p.is_symlink() else "special"
-           for p in sorted(root.iterdir()) if p.name not in excluded}
-    if checkpoint is None:
-        state = {"root": str(root), "device": str(root.stat().st_dev), "excluded": sorted(excluded),
-                 "top": top, "pending": [[name, name] for name in reversed(top)],
-                 "bytes": dict.fromkeys(top, 0), "visited": 0}
-    else:
-        state = copy.deepcopy(checkpoint)
-        if (state["root"] != str(root) or state["device"] != str(root.stat().st_dev)
-                or state["excluded"] != sorted(excluded) or state["top"] != top):
-            reject(root, "inventory identity or top-level entries changed during traversal")
-    for _ in range(limit):
-        if not state["pending"]:
-            break
-        relative, owner = state["pending"].pop()
-        path = root / relative
-        if Path(relative).is_absolute() or '..' in Path(relative).parts:
-            reject(root, "inventory checkpoint escapes its root")
-        metadata = path.lstat()
-        if stat.S_ISDIR(metadata.st_mode):
-            state["pending"].extend([[p.relative_to(root).as_posix(), owner]
-                                     for p in sorted(path.iterdir(), reverse=True)])
-        elif stat.S_ISREG(metadata.st_mode):
-            state["bytes"][owner] += metadata.st_size
-        state["visited"] += 1
-    result = None if state["pending"] else {name: {"type": kind, "logical_bytes": state["bytes"][name]}
-                                           for name, kind in top.items()}
-    return {"checkpoint": state, "inventory": result, "status": "NOT_RUN" if result is None else "PASS"}
-
-
-def compare_inventory(before, after):
-    if before != after:
-        reject("protected-inventory", "protected top-level names, types or logical byte totals changed")
-
-
 def path_identity(root, *, disk_record, host_record):
     """Bind measured disk/host records without treating media descriptions as admission gates."""
     path = Path(root).resolve(strict=True)
@@ -325,7 +284,7 @@ def collect_path_identity(root):
     return path_identity(root,disk_record=disk,host_record=host)
 
 
-def validate_graph(records, *, required_owners, parent=None, materializer="L04", registry_digest=""):
+def validate_graph(records, *, required_owners, parent=None, materializer="L04", registry_digest="", deferred_owners=None):
     """Q33/Q80: validate literal predecessors, complete owners and monotone extensions."""
     nodes = {}
     for record in records:
@@ -356,6 +315,8 @@ def validate_graph(records, *, required_owners, parent=None, materializer="L04",
     for assertion, expected in required_owners.items():
         if sorted(owners[assertion]) != sorted(expected):
             reject(assertion, "assertion owners differ from their complete declared producer set")
+    if deferred_owners is None:
+        deferred_owners = parent.get("deferred_assertion_owners", {}) if parent else {}
     if parent:
         if identity({key:value for key,value in parent.items() if key != 'revision_digest'}) != parent['revision_digest']:
             reject('graph', 'parent graph content differs from its sealed revision')
@@ -364,6 +325,11 @@ def validate_graph(records, *, required_owners, parent=None, materializer="L04",
                 reject(key, "successor rewrites or removes an inherited record or edge")
         if materializer not in parent["nodes"]:
             reject(materializer, "successor materializer is absent from its parent graph")
+        for assertion, patterns in parent.get("deferred_assertion_owners", {}).items():
+            if assertion not in deferred_owners and any(
+                    not any(re.fullmatch(pattern, owner) for owner in owners.get(assertion, []))
+                    for pattern in patterns):
+                reject(assertion, "successor drops an unresolved matrix obligation")
     remaining, order = set(nodes), []
     while remaining:
         ready = sorted(key for key in remaining if set(nodes[key]["depends"]) <= set(order))
@@ -374,6 +340,8 @@ def validate_graph(records, *, required_owners, parent=None, materializer="L04",
     body = {"nodes": nodes, "order": order, "required_owners": required_owners,
             "parent_graph_digest": parent["revision_digest"] if parent else None,
             "expansion_registry_digest": registry_digest, "materializer_record_id": materializer}
+    if deferred_owners:
+        body["deferred_assertion_owners"] = copy.deepcopy(deferred_owners)
     return {**body, "revision_digest": identity(body)}
 
 
@@ -382,7 +350,8 @@ def publish_graph(owner, graph, expected=None):
     current = campaign_head(owner.cartridge,'graph')
     parent = current['value']['graph'] if current else None
     verified = validate_graph(list(graph['nodes'].values()),required_owners=graph['required_owners'],parent=parent,
-                              materializer=graph['materializer_record_id'],registry_digest=graph['expansion_registry_digest'])
+                              materializer=graph['materializer_record_id'],registry_digest=graph['expansion_registry_digest'],
+                              deferred_owners=graph.get('deferred_assertion_owners', {}))
     if verified != graph:
         reject('graph','proposed graph identity differs from its verified successor')
     ancestors = [*current['value']['ancestors'],parent['revision_digest']] if current else []
@@ -418,6 +387,8 @@ def invalidate(graph, changed, declared):
 
 def clean_replay(graph, members):
     """Preserve reachability through intermediate evidence levels in a fresh replay lineage."""
+    if graph.get("deferred_assertion_owners"):
+        reject("replay", "Q80 replay requires every matrix assertion owner to be materialized")
     members = set(members)
     if not members <= graph["nodes"].keys():
         reject("replay", "replay membership contains an unknown record")
@@ -867,6 +838,21 @@ def failure_binding(record, coordinate, contract, registry, records, parent):
     return binding
 
 
+def historical_steps(root):
+    """Read completed machine prerequisites from the queue's historical prose records."""
+    text = (Path(root)/'IMPLEMENTATION.md').read_text()
+    blocks = re.findall(r'```yaml\n(.*?)```', text, re.S)
+    records = {}
+    for block in (value for value in blocks if value.startswith('steps:')):
+        for match in re.finditer(r'^  - id: (S[0-9]+)\n(.*?)(?=^  - id: |\Z)', block, re.M | re.S):
+            status = re.search(r'^    status: (.*)$', match[2], re.M)
+            dependencies = re.search(r'^    depends: (.*)$', match[2], re.M)
+            if status and re.match(r'''^["']?DONE(?:\s|$)''', status[1]) and dependencies:
+                records[match[1]] = {'id': match[1], 'depends': yaml.safe_load(dependencies[1]),
+                    'status': status[1], 'authority_digest': identity(match[0])}
+    return records
+
+
 def materialize(root, registry, *, parent=None):
     """Expand frozen family coordinates against generated contracts and preserve inherited records."""
     queue, matrix = load_contracts(root)
@@ -883,9 +869,30 @@ def materialize(root, registry, *, parent=None):
         reject('materialization', 'registry contains an unknown family')
     records = copy.deepcopy(registry.get('fixed_records', []))
     fixed_authorities = {record['id']: record for record in [*queue['fixed_steps'], *queue['operation_records']]}
+    aggregates = {}
+    for name in registry['families']:
+        family = families[name]
+        if 'aggregate_record' in family:
+            key = family['aggregate_record']
+            if key in fixed_authorities or key in aggregates:
+                reject(key, 'aggregate has more than one declaration')
+            aggregates[key] = {'depends': family['aggregate_dependencies'],
+                'owner_stage': family.get('aggregate_owner_stage', family['owner_stage']),
+                'evidence_level': generated['materialized_record_contract']['family_evidence_levels'][name]}
+    if set(aggregates) - {record['id'] for record in records}:
+        reject('materialization', 'registered family omits its declared aggregate record')
+    fixed_authorities.update(aggregates)
+    historical = historical_steps(root)
+    fixed_authorities.update(historical)
     for record in records:
         if record['id'] not in fixed_authorities:
             reject(record['id'], 'fixed record is absent from the execution queue')
+        if record['id'] in aggregates and any(record[field] != aggregates[record['id']][field]
+                                               for field in ('owner_stage', 'evidence_level')):
+            reject(record['id'], 'aggregate owner or evidence level differs from its declared family')
+        if record['id'] in historical and (record.get('historical_authority_digest') != identity(historical[record['id']])
+                or record['permission'] != 'READ_ONLY' or record['evidence_level'] == 'LIVE'):
+            reject(record['id'], 'historical prerequisite must bind its completed authority without live execution')
     for name, inputs in registry['families'].items():
         family = families[name]
         template = family.get('id_format')
@@ -925,7 +932,19 @@ def materialize(root, registry, *, parent=None):
     ids = {record['id'] for record in records}
     for record in registry.get('fixed_records', []):
         expected = fixed_authorities[record['id']].get('depends', [])
-        if record['depends'] != expected:
+        if record['id'] in aggregates:
+            expanded = []
+            for dependency in expected:
+                if dependency.startswith(('every-', 'every ')):
+                    pattern = re.sub(r'<[^<>]+>', r'.+', re.escape(dependency[6:]))
+                    matches = sorted(key for key in ids if re.fullmatch(pattern, key))
+                    if not matches:
+                        reject(record['id'], 'aggregate prerequisite expansion is empty')
+                    expanded.extend(matches)
+                else:
+                    expanded.append(dependency)
+            expected = sorted(set(expanded))
+        if sorted(record['depends']) != sorted(expected):
             reject(record['id'], 'fixed record rewrites queue prerequisites')
     for name, inputs in registry['families'].items():
         family = families[name]
@@ -941,6 +960,10 @@ def materialize(root, registry, *, parent=None):
         for record in inputs['records']:
             values = bindings.get(record['id'],{})
             suffix = values.get('record')
+            if suffix is None:
+                declared_records = next((value for key, value in family.items() if key.startswith('records_per_')), [])
+                if len(declared_records) == 1:
+                    suffix = declared_records[0]
             if name == 'live_failure':
                 bound_operation = failure_binding(record, values, failure_contract, registry, records, parent)
             dependencies = family.get('dependencies',{})
@@ -976,19 +999,26 @@ def materialize(root, registry, *, parent=None):
                         expected.extend(bound)
             if sorted(record['depends']) != sorted(set(expected)):
                 reject(record['id'], 'literal graph edges differ from declared family prerequisites')
-    required = {}
+    required, deferred = {}, {}
     for assertion in matrix_assertions(matrix):
         section = assertion.removeprefix('matrix#').split('.')[0]
         patterns = generated['assertion_owner_patterns'].get(section)
         if not patterns:
             reject(assertion, 'matrix assertion has no generated owner rule')
-        owners = []
+        owners, missing = [], []
         for pattern in patterns:
             matching = sorted(record['id'] for record in records if re.fullmatch(pattern,record['id']))
             if not matching:
-                reject(assertion, 'required assertion producer has not been materialized')
+                missing.append(pattern)
             owners.extend(matching)
-        required[assertion] = sorted(set(owners))
+        if missing:
+            deferred[assertion] = missing
+        if owners:
+            required[assertion] = sorted(set(owners))
+    if registry.get('deferred_assertion_owners', {}) != deferred:
+        reject('materialization', 'every unresolved owner must retain its exact generated selector')
+    if deferred and registry['materializer'] == 'Q80-MATERIALIZE':
+        reject('materialization', 'Q80 requires complete matrix assertion ownership')
     if registry['required_owners'] != required:
         reject('materialization', 'registry owners differ from generated matrix ownership')
     records = copy.deepcopy(records)
@@ -999,7 +1029,8 @@ def materialize(root, registry, *, parent=None):
                 reject(record['id'], 'approved card is absent from the frozen registry')
             record['approved_card'] = copy.deepcopy(card)
     return validate_graph(records, required_owners=required, parent=parent,
-                          materializer=registry['materializer'], registry_digest=identity(registry))
+                          materializer=registry['materializer'], registry_digest=identity(registry),
+                          deferred_owners=deferred)
 
 
 def expand_coordinates(template, dimensions):

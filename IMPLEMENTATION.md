@@ -51,8 +51,18 @@ later step's invariant fails and names it, or a review names a failing invariant
 step's own rows — a regression reopens through a named failing invariant, never through
 preference, style, or refactoring appetite.
 
+**Optional ordered review batch.** An explicit future batch may name one or more
+dependency-contiguous stages and a batch ID before its first member begins; this amendment declares
+no batch. Every member retains separate scope, acceptance, proof, close record, and status. In a
+declared batch, builder-complete is `READY_FOR_BATCH_REVIEW`, not `DONE`, and satisfies only the
+next member. One independent review may cover the frozen batch only with separate questions,
+findings, evidence, disposition, and PASS/FAIL/NOT_RUN/BLOCKED verdict for every member. An earlier
+repair invalidates dependent later evidence until replayed. No batch member becomes DONE without
+its own independent PASS.
+
 **Per-step ritual.**
-1. Read this file. Find the step. Verify its depends are DONE.
+1. Read this file. Find the step. Verify its depends are DONE, or are only the immediately preceding
+   READY_FOR_BATCH_REVIEW member of the same declared batch.
 2. Make the step's invariants pass with the smallest change (AGENTS.md workflow).
 3. Run done_when: the full test suite plus tools/ledger, not just the step's tests. Green means
    green everywhere — regressions never accumulate silently.
@@ -62,11 +72,14 @@ preference, style, or refactoring appetite.
    record the exact test or probe, the exact input changed or failure injected, the expected
    result, and the observed result. A test name or total passing-test count is not evidence. Any
    missing clause keeps the step IN_PROGRESS.
-5. Close in two commits, because a commit cannot contain its own hash: first the step commit
-   (code and tests), then a close commit that sets this file's status to DONE with date and the
-   step commit's hash. Every commit — step, close, repair, docs — answers the AGENTS.md commit
-   test; close-commit answers may be short but must exist, and tools/ledger enforces this
-   mechanically for every commit after the law baseline. The queue authority is never left dirty.
+5. When commit authority is granted, close in two commits, because a commit cannot contain its own
+   hash: first the step commit (code and tests), then a close commit that sets this file's status to
+   DONE with date and the step commit's hash. Every commit — step, close, repair, docs — answers the
+   AGENTS.md commit test; close-commit answers may be short but must exist, and tools/ledger enforces
+   this mechanically for every commit after the law baseline. Without commit authority, retain the
+   complete working-tree candidate and close record; a declared batch member may become
+   READY_FOR_BATCH_REVIEW, but its record must not claim an immutable revision. Never infer push
+   authority.
 
 **Resume ritual (agent restart, platform restart, new session).**
 1. Read this file top to bottom. The queue statuses are ground truth; git log corroborates.
@@ -87,20 +100,22 @@ preference, style, or refactoring appetite.
 - No polishing loops: formatting, renaming, and restructuring of DONE code are defects unless a
   named invariant demands them.
 
-**Check-in policy.** Stopping to ask the principal is rare and reserved for: a remit-level
-decision the ledger genuinely does not answer; credentials, purchases, or physical hardware; two
-steps BLOCKED on the same root cause; or an action that is destructive or irreversible outside
-this repository. Everything else is decided from the ledger, recorded in the step's notes, and
-the work continues.
+**Check-in policy.** Ask only for a remit-level decision the ledger does not answer, a missing
+credential or account action, unapproved spending, a physical intervention, or an action outside
+existing authorization. Two steps BLOCKED on the same root cause warrant a report; request a
+decision only when the principal can resolve that cause. Routine inspection, documents, evidence
+records and reversible work within the requested scope proceed without confirmation. Physical
+hardware being involved does not itself require the principal to be present. For L06-L10, apply
+the live participation policy below to each actual action.
 
 **Phase boundary.** PHASE MACHINE contains S00 through S28 and uses only deterministic generated or
 checked-in model fixtures, loopback source fixtures, scratch cartridge images, and simulated
 recorded storage classes. It performs no live model download, touches no physical external drive,
 inspects no attached storage or local model cache, and asks the principal for no physical action.
 S28 closes this machine and emits the runbook. PHASE LIVE begins only afterward, with the principal
-present, and owns the first live source request, selected real-model download, physical-drive use,
-and real matrix execution. No audit, research obligation, or dependency correction may move those
-inputs earlier.
+present for the required initial physical setup, and owns the first live source request, selected
+real-model download, physical-drive use and real matrix execution. No audit, research obligation,
+or dependency correction may move those inputs earlier.
 
 **Environments.** env: any — runs anywhere Python runs. env: macos — requires Apple Silicon
 (MLX/Metal, F_FULLFSYNC). env: macos+hardware — PHASE LIVE only. An agent on the wrong platform
@@ -1576,8 +1591,9 @@ New L02 names native execution, so requests referring
 to the earlier guard repair resolve to new L01, not to new L02.
 
 Matrix phase labels L01.25, L01.5 and L02-L05 remain unchanged and are separate from execution-stage
-numbers. The six drive-stage workloads, evidence recipes, dependencies, thresholds and permission
-boundaries are preserved. A renamed owner does not change a matrix phase or establish a live pass.
+numbers. The six drive-stage workloads, evidence recipes, dependencies and thresholds are preserved.
+The live participation policy below amends approval frequency from L06 onward. A renamed owner
+does not change a matrix phase or establish a live pass.
 
 ### Execute, verify and resume
 
@@ -1607,8 +1623,63 @@ immutable evidence and invalidation rules; same-agent review must not be called 
 L01-L04 use fixtures, loopback sources and scratch cartridge images. L05 begins the drive/live
 campaign: freeze source descriptors, refresh machine identities, inventory the physical drive and
 qualify the approved operation before acquisition. No physical qualification has been performed by
-this consolidation. PHASE_LIVE_RUNBOOK.md owns run cards, protected-content inventory and the exact
-permission boundary for each physical write, fault or path change.
+this consolidation. PHASE_LIVE_RUNBOOK.md records run cards, protected-content inventory and exact
+action scopes. The following policy determines when those records require new human input.
+
+### Live participation policy — L06 through L10
+
+The principal's 2026-09-12 instruction reserves live check-ins for work that needs their physical
+presence or a decision the agent cannot make under existing authority. Execute the requested stage
+or range through its eligible work. A new operation, document, measurement, checkpoint, verification
+record or stage within that range does not create a permission gate. Required independent review
+still governs stage closure; preparation of review material needs no approval, and an existing
+review requirement must not become a review of every internal operation.
+
+**Proceed without asking.** Read drive identity, mount state, health and capacity; capture or compare
+the prescribed coarse inventory; inspect source metadata; write documents, plans, cards and evidence;
+run checks and recompute results. For an identified campaign drive and authorized root, ordinary
+qualification, acquisition, compilation, inference, training, local export/reimport, verification
+and eligible temporary-file reclamation proceed under the existing campaign scope. Preserve Q53
+claims, Q44 durability, Q74 endurance admission and protected content. New operation-specific
+profiles remain mandatory, but measuring and verifying an in-scope profile needs no new approval.
+
+**Keep exact records without requiring another click.** The agent prepares each required card,
+records its exact disk, paths, command, next-byte claim, recovery boundary and stop conditions, and
+binds it to the applicable recorded authorization. A requested stage supplies routine work authority
+within the established campaign scope. An earlier narrower instruction still limits that scope.
+Reuse authorization across checkpoints, ordinary retries, verification and resumed sessions while
+its scope remains valid. Record inherited authority honestly; never invent a fresh human approval.
+A new card, digest, operation ID, plan or evidence path within that scope is not a scope change.
+If existing authorization covers only the initial bootstrap write, prepare one consolidated ordinary
+operation scope for the requested range and ask once before the first uncovered action. Complete
+independent preparation first; do not turn that missing scope into permission requests for documents.
+
+**Ask at the actual boundary.** Human input is required to attach, detach, reconnect or move hardware;
+resolve an ambiguous target identity; supply unavailable credentials or accept account terms; approve
+new spending or external disclosure; or authorize a destructive action or work outside the existing
+disk, root, account, service or command scope. Retain exact approval for physical faults, remounts,
+capacity-filler tests, source mutation and above-duty/endurance stress. An ordinary campaign approval
+does not cover those actions. Prepare the complete card and recovery procedure before asking, and
+explain the specific intervention or scope change. Previously authorized nonphysical fault actions
+may execute under their exact unchanged scope without another confirmation. Human physical cues
+still occur at the required live boundary.
+
+**Agent-controlled operations stay with the agent.** Required process kill/resume, cancellation and
+recovery checks on agent-owned campaign jobs proceed with exact interruption records; they do not
+authorize killing user-owned processes or replacing a required physical-fault observation. Apply and
+restore a declared network restriction automatically when it is confined to agent-owned test
+processes. A host-wide change that affects the principal's session requires prior authorization;
+once authorized, execute its recorded disable/restore sequence without separate prompts. Keep every
+offline lease active through terminal verification and restore only after the last lease closes.
+
+For L10, create fresh agent-owned replay directories under the authorized campaign root, with new
+operation and evidence identities. Preserve existing source and accepted evidence. Clean replay does
+not authorize deleting an earlier campaign or require approval for each fresh directory. Reuse
+ordinary authority and unchanged action templates; request only a new physical cue or uncovered scope.
+
+Pause only the operation that needs human input and continue independent authorized work within the
+requested range. This amendment changes future participation rules; it does not execute L06-L10,
+change stage status, waive an assertion or review, or rewrite sealed cards and historical evidence.
 
 Preserve causal order: freeze inputs before measurement, qualify/acquire candidates before selection,
 qualify compilation against its intended plan and inference against its resulting certificate.
@@ -2364,12 +2435,55 @@ phase_live_queue:
     - PHASE_LIVE_RUNBOOK.md
     - IMPLEMENTATION.md
     - research/ACCEPTANCE_MATRIX.yaml
-    work: Pin source and workload/baseline descriptors, refresh machine identities, inventory the approved
-      drive, prove Q44, qualify each exact transfer and acquire all required model/dataset bytes.
+    work: Build the shared source connection, catalogue, model selection, drive discovery/access and Go
+      operations with a basic packaged CLI under acquisition_entry_contract in the acceptance matrix.
+      Demonstrate the missing paths, implement them and pass focused machine checks before live execution.
+      Then use those product triggers to pin inputs, inventory the selected drive, prove Q44, qualify
+      each exact transfer and acquire the required model/dataset bytes. A full TUI is not required.
+    discovered_files:
+    - path: research/F4_SELECTION.json
+      reason: Q1/Q36 immutable record of the principal-selected F4 revision, source artifact metadata and license evidence.
+    - path: cli.py
+      reason: Q9/Q31/Q52 the missing product entrypoint requires packaged commands for source connection, catalogue, immutable model selection, native drive selection, Go and remount verification through the existing broker.
+    - path: tests/test_l05_entry.py
+      reason: Q9/Q52 exercise the real CLI module process, broker and source adapter against a bounded external-provider fixture; retain later access and download boundaries as NOT_RUN.
+    - path: research/SPARSE_MODEL_SELECTION.json
+      reason: Q36/Q39 principal-authorized ungated sparse-model replacement with unchanged acceptance gates.
+    - path: tools/genschema.py
+      reason: Q33 source ownership must derive from the matrix after model substitution.
+    - path: sources.py
+      reason: Q9/Q52 actual Hub endpoints, immutable file metadata and validator-bound reads replace the fixture-only Hugging Face wire.
+    - path: store.py
+      reason: Q9/Q51 verified Git blobs need a SHA-256 transfer digest owned by the existing digest authority.
+    - path: broker.py
+      reason: Q1/Q5 the broker derives full model identity from verified source extents before planning.
+    - path: compiler.py
+      reason: Q1 source inspection must accept an unknown full identity until parsing completes.
+    - path: tests/fixture_server.py
+      reason: Q52 deterministic Hugging Face fixtures must expose the public provider protocol.
+    - path: tests/test_s09_sources.py
+      reason: Q9/Q52 source-boundary assertions must distinguish a pinned repository from a parsed model identity.
+    - path: tests/test_s16_broker.py
+      reason: Q5/Q52 preserve identical broker phases while asserting the real Hub request path.
+    - path: tests/test_l02_native.py
+      reason: Q1/Q5 reject an expected identity mismatch at the verified-source boundary before planning or publication.
+    - path: tests/fixtures/s26_deferred_live_rows.json
+      reason: Q36 regenerate the selected-model projection from the current matrix without promoting live results.
+    - path: tests/fixtures/s26_machine_gate.json
+      reason: Q36 recapture the machine result by executing its producer against the current matrix.
+    - path: tools/ledger.py
+      reason: Q29/Q80 candidate capture must report independent review as NOT_RUN until a review is supplied.
+    - path: tools/campaign.py
+      reason: Q80 staged expansion must retain unresolved future owners and immutable historical dependencies through graph publication.
+    - path: tests/test_l04_campaign.py
+      reason: Q80 verify staged publication, inherited dependencies and refusal of incomplete final replay.
     evidence_recipe: F4-SELECTION through SOURCE-ENTRY-PASS; source_header, acquisition, ollama_source and
       workload_freeze
-    done_when: SOURCE-ENTRY-PASS, required acquisition/Ollama receipts and BASELINE-INPUTS-FROZEN pass with
-      preserved inventory and exact source identities.
+    done_when: The acquisition_entry_contract passes through the actual supported-launch CLI for both
+      Hugging Face and Ollama; SOURCE-ENTRY-PASS, required acquisition/Ollama receipts and
+      BASELINE-INPUTS-FROZEN pass with preserved inventory and exact source identities. Each CLI Go
+      operation joins to its verified external download. Builder checks precede the established
+      principal-supplied independent review; no lower-level capture substitutes for this path.
     acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
       claims retain their named owners.
     timing_evidence: NOT_RUN
@@ -2377,8 +2491,63 @@ phase_live_queue:
     env: declared_live_hosts_drives_sources_and_principal
     evidence_level: LIVE
     record_kind: stage
-    status: TODO
+    status: IN_PROGRESS
     attempts: []
+    preflight:
+      date: '2026-09-11'
+      source_commit: 30220e94e015012aa47a75c64fc1bd506e549565
+      evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-preflight-01
+      counted_execution_attempt: false
+      observations:
+      - All three pinned matrix revisions resolve through public Hugging Face model metadata.
+      - The principal selected Qwen/Qwen3-4B revision 1cfa9a7208912126459214e8b04321603b3df60c; research/F4_SELECTION.json freezes its ungated source metadata and Apache-2.0 license evidence.
+      - Scout metadata declares manual gating; no Hugging Face token reference is present in the checked environment variables.
+      - LaCie APFS volume 4CB76495-61CC-4ACF-82BD-B84B6DD4E65D is mounted, unlocked and writable; this is identity observation, not qualification.
+      - SourceAdapter._resolved rejects the captured ordinary Hub response with SOURCE_UNAVAILABLE because cassette_identity is absent; Q9/Q52 production-wire repair is required before acquisition.
+      next_action: Freeze the remaining baseline and workload inputs, then follow the approved drive inventory and qualification sequence before acquisition.
+      sparse_model_substitution: research/SPARSE_MODEL_SELECTION.json; the principal authorized an ungated replacement, so Scout credentials are no longer required.
+      physical_qualification: NOT_RUN
+      model_acquisition: NOT_RUN
+      drive_writes: none
+    machine_continuation:
+      evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01
+      candidate: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-candidate-03
+      candidate_tree: 96649d980053256a8dedef314e223b772b64241c
+      validation: 339 passed in 327.69 seconds with zero skips; all fourteen Q78 deletion and bypass controls passed. The ordinary ledger passed in the isolated candidate and current checkout with the producer's fresh J report.
+      generated_authorities: Generated contracts reproduced exactly; both reviewer skills validated. The installed wheel's 38 runtime and schema files match the tested candidate byte-for-byte.
+      graph_digest: blake3:9be04dbd4c228604c6f7b492d5ec3a0f6d7cbdab5fb206a69f1599a0a55c9726
+      graph_origin: The entry branch replays the three exact retained ancestors through the pre-card graph, then appends the current-matrix nested-root card. The superseded root-level card and failed first attempt remain immutable; their approval is not transferred and the new capture remains attempt two.
+      entry_evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control
+      repairs: Q9/Q52 public source protocol; Q1/Q5 identity derivation before planning; Q80 staged ownership, historical dependencies, declared aggregates and literal record-kind dependencies; truthful builder review status.
+      baseline_inputs: FROZEN_DESCRIPTORS
+      baseline_results: NOT_RUN
+      next_action: Observe the principal's orderly physical disconnect and reconnect with the installed watch-remount command, then verify the same record and protected inventory. Source qualification, the remaining Go-to-acquisition integration and verified external downloads follow; independent review remains principal-supplied.
+      routine_action_authority: The principal approved routine non-destructive, non-physical L05 continuation without repeated approval questions. Preserve exact action bindings and record inherited authorization honestly.
+      entry_amendment_status: IN_PROGRESS; the installed CLI created and verified the nested Cassette root on LaCie, preserved the protected inventory, recovered the same hold in a fresh process and repeated Go without changing the cartridge namespace. Physical reconnect, source qualification and external downloads remain NOT_RUN.
+      entry_builder_progress:
+        date: '2026-09-13'
+        implemented: Packaged CLI; public Hugging Face and Ollama discovery and immutable selection; masked provider-validated token input backed by macOS Keychain; native APFS discovery; scoped nested destinations; broker/store Go durability hold and reconnect verification; Q5 acquisition-only checkpoints through SOURCE_VERIFIED.
+        validation: Focused checks and the complete 339-test candidate passed. Earlier entry candidates remain sealed as interrupted or failed evidence. Repairs added the catalogue schema to the existing exact fixtures, refreshed the machine fixture through its actual producer, updated admitted dependency/component counts, and made the acquisition observer read the preserved typed error instead of labeling every pause as capacity exhaustion.
+        source_observation: Installed CLI public connections and catalogue requests reached Hugging Face and Ollama. The installed CLI pinned Qwen3-4B at the frozen revision. Catalogue results do not prove complete coverage or downloadability; model payload remains zero and live authenticated-source proof remains pending.
+        writable_destination: The installed CLI created /Volumes/LaCie/drewwiberg-lacie/Cassette without changing drive permissions. Only that subtree is excluded from inventory; the remaining Arup, Writing and drewwiberg-lacie entries retained their pre-write names, types and aggregate byte totals. This is coarse inventory proof, not a hash of every protected file.
+        authority_boundaries: store owns native volume identity, scoped directory creation, inventory and durable probes; broker owns Keychain references and operation state; sources owns provider authentication and transfer. ctypes calls reuse system APIs. The Q31 wheel backend admits only setuptools.build_meta.build_wheel at setuptools==84.0.0, counted by the Q29 dependency ledger.
+        remaining: Physical reconnect verification, exact source qualification, live authenticated-source proof and joined external downloads remain unproved. Go reaches its durable physical hold; the acquisition-only core is separately tested and is not yet joined after live qualification.
+        installed_cli: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-installed-entry-01/environment/bin/cassette
+        cli_state: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-product-entry-01/state
+        model_selection_id: op-afeabfc5f4cd8f048244566af6f6f5848230022b8fcf74afe19db09f7112cccb
+        drive_selection_id: op-cdf5e4c926fb33e787a41413c27446dc32a6c3879270b7b7b54fce57b785f632
+        go_operation_id: op-68b5df299fe5e7d68d26de4128eac63bd7cf42a4c1b97627488de3a5ae2fe4c1
+        physical_remount_card: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control/captures/physical-remount-card-01/card.json
+        independent_review: NOT_RUN
+      previous_cartridge_write_result: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-campaign-control/captures/durability-assessment-9d462bdf-bccd-4c99-8ae9-5a6c79ce9370/assessment.json
+      cartridge_write_result: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control/captures/installed-go-assessment-01/assessment.json
+      drive_inventory_card: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01/drive-inventory-card.json
+      drive_inventory_result: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-campaign-control/captures/inventory-assessment-314c0fe9/assessment.json
+      previous_cartridge_write_card: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-campaign-control/captures/cartridge-durability-card-02/card.json
+      cartridge_write_card: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control/captures/installed-go-card-01/card.json
+      independent_review: NOT_RUN
+      physical_qualification: NOT_RUN
+      model_acquisition: NOT_RUN
     phase: DRIVE_AND_LIVE_PROOF
   - id: L06
     title: Measure and select the comparison baselines
@@ -2419,7 +2588,7 @@ phase_live_queue:
       claims retain their named owners.
     timing_evidence: NOT_RUN
     review_profile: live
-    env: declared_live_hosts_drives_sources_and_principal
+    env: declared_live_hosts_drives_and_sources
     evidence_level: LIVE
     record_kind: stage
     status: TODO
@@ -2464,7 +2633,7 @@ phase_live_queue:
       claims retain their named owners.
     timing_evidence: NOT_RUN
     review_profile: live
-    env: declared_live_hosts_drives_sources_and_principal
+    env: declared_live_hosts_drives_and_sources
     evidence_level: LIVE
     record_kind: stage
     status: TODO
@@ -2500,7 +2669,7 @@ phase_live_queue:
     - PHASE_LIVE_RUNBOOK.md
     - IMPLEMENTATION.md
     - research/ACCEPTANCE_MATRIX.yaml
-    work: After F4 PASS, qualify and compile pinned Scout, run sparse inference/training and fit the predeclared
+    work: After F4 PASS, qualify and compile pinned Qwen3-30B-A3B, run sparse inference/training and fit the predeclared
       Q37 curves.
     evidence_recipe: F5-COMPILE-PLAN through F5-GATE; f5_inference and sparse training
     done_when: F5-GATE passes with independently verified sparse certificates and resource/quality/service
@@ -2509,7 +2678,7 @@ phase_live_queue:
       claims retain their named owners.
     timing_evidence: NOT_RUN
     review_profile: live
-    env: declared_live_hosts_drives_sources_and_principal
+    env: declared_live_hosts_drives_and_sources
     evidence_level: LIVE
     record_kind: stage
     status: TODO
@@ -2555,7 +2724,7 @@ phase_live_queue:
       claims retain their named owners.
     timing_evidence: NOT_RUN
     review_profile: live
-    env: declared_live_hosts_drives_sources_and_principal
+    env: declared_live_hosts_drives_and_sources
     evidence_level: LIVE
     record_kind: stage
     status: TODO
@@ -2600,7 +2769,7 @@ phase_live_queue:
       claims retain their named owners.
     timing_evidence: NOT_RUN
     review_profile: live
-    env: declared_live_hosts_drives_sources_and_principal
+    env: declared_live_hosts_drives_and_sources
     evidence_level: LIVE
     record_kind: stage
     status: TODO
@@ -2650,7 +2819,7 @@ phase_live_queue:
       per receipt. Resolve dense F4 training and thermal receipts to L07, sparse F5 to L08, and frontier rows
       to L36. Resolve qualification, checkpoint, offline-training and verification ownership from the exact
       consumer/target. Ownership is not a dependency on the owner stage already being DONE. Preserve each exact
-      action/permission boundary.
+      action scope under the live participation policy; a receipt does not create a new approval request.
     closure_rule: DONE requires all stage assertions and its independent PASS_READY review. An elapsed coding
       budget or successful launch is not completion.
   operation_records:
@@ -2665,8 +2834,18 @@ phase_live_queue:
       payload; write the exact selection through the matrix's canonical amendment path.
     done_when: The matrix contains the exact F4 model, immutable revision, and selection-record digest; license
       evidence and the secret-free credential reference resolve; no model payload moved.
-    status: TODO
+    status: DONE
     attempts: []
+    selection:
+      status: FROZEN
+      principal_authorization: "Yes, let's freeze the qwen."
+      record: research/F4_SELECTION.json
+      digest: blake3:b8abcca8f6da0b32ef473d8a2644663d95c3f008c8bccefcafb4452bc6f42a89
+      model: Qwen/Qwen3-4B
+      revision: 1cfa9a7208912126459214e8b04321603b3df60c
+      credential_required: false
+      model_payload_moved: false
+      review_status: NOT_RUN
     invariants:
     - Q1
     - Q36
@@ -2687,8 +2866,25 @@ phase_live_queue:
     done_when: F4 authority is exact; matrix, runbook, expansion, and graph identities match; the new graph
       names L04 as its parent and is eligible for later bindings; machine assertions remain PASS; no model
       byte moved and no LIVE model result exists.
-    status: TODO
+    status: DONE
     attempts: []
+    machine_receipt: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01/machine-binding.json
+    proof_limit: Builder machine evidence; L05 independent review and physical evidence remain NOT_RUN.
+    retained_machine_runs:
+    - candidate: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-source-wire-candidate-01
+      outcome: SUPERSEDED
+      disposition: Its full machine gate passed, but the later staged-graph and bounded metadata-read repairs required a new snapshot.
+    - candidate: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-source-wire-candidate-02
+      outcome: SUPERSEDED
+      namespace_digest: blake3:8c39b020a433e31cf3452c3b0329928ad2c62a7c55f873c772a021eea3b04524
+      disposition: The full gate passed; subsequent declared-aggregate and literal-suffix repairs required a new snapshot.
+    - candidate: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-source-wire-candidate-03
+      outcome: INTERRUPTED_SUPERSEDED
+      namespace_digest: blake3:fb5eaf157772cb4fc16016bd64f47719ea0ef5a0fdca4d76879eea89b6c07b30
+      disposition: The agent stopped the gate when actual baseline expansion exposed the literal-suffix defect; the partial evidence remains sealed.
+    - candidate: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-source-wire-candidate-04
+      outcome: PASS
+      namespace_digest: blake3:873df4cae44369c3828dbc0b67a1ba295204b9fb31f7d12e98645a8e2d017811
     invariants:
     - Q29
     - Q78
@@ -2711,8 +2907,13 @@ phase_live_queue:
       select a native winner yet.
     done_when: Every measurement has frozen inputs, an exact reference-only provenance rule and a named result
       producer; no winner is inferred from model size or reputation.
-    status: TODO
+    status: IN_PROGRESS
     attempts: []
+    preparation: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01/progress.json
+    input_freeze: FROZEN_DESCRIPTORS
+    descriptor_validation: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01/descriptor-validation.json
+    measurement_expansion: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-baseline-freeze-01/measurement-expansion.json
+    proof_limit: Inputs and downstream record identities are fixed; actual source bytes, scorer/runtime admission, reference observations and native selection remain NOT_RUN. L05 independent acceptance remains pending.
     invariants:
     - Q13
     - Q15
@@ -2732,8 +2933,21 @@ phase_live_queue:
     work: After approval, capture host and path telemetry and the off-drive top-level name, type, and aggregate-byte
       inventory.
     done_when: Identity and inventory are sealed; the drive has no recorded byte change.
-    status: TODO
-    attempts: []
+    status: IN_PROGRESS
+    builder_result: CAPTURED_CHECKED
+    independent_review: NOT_RUN
+    attempts:
+    - number: 1
+      operation_id: 314c0fe9-a58d-42ba-9c1a-d5d87ee058b7
+      permission: READ_ONLY
+      approval: The principal replied "I agree" to the exact read-only card on 2026-09-12.
+      template_digest: blake3:cfe4a69a6f1602e59dbb21cca32ac51f8ab363de3f687904972ba503ab8f19b8
+      capture: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-campaign-control/captures/314c0fe9-a58d-42ba-9c1a-d5d87ee058b7
+      capture_digest: blake3:af35f1f884789830b7d45dc0c703fd4ee23d64ddabb26c527464de115faf65c4
+      inventory_digest: blake3:113e33539890c539292c8f7016414def16a1e6edb38be4c5bb49caa5904383a2
+      elapsed_seconds: 206.69814724999742
+      result: Three top-level folders inventoried; exact drive identity preserved; no drive writes; the campaign root remains absent.
+      proof_limit: Coarse metadata inventory and builder checks; content integrity and independent acceptance are not claimed.
     invariants:
     - Q44
     - Q79
@@ -2751,11 +2965,34 @@ phase_live_queue:
     evidence_level: LIVE
     principal_action: Approve the exact CAMPAIGN_DIRECTORY_WRITE and PHYSICAL_FAULT cards; detach and reattach
       only on their printed cues.
-    work: After approval, create the campaign root as the first write; execute write, readback hash, F_FULLFSYNC,
-      root, pointer, F_FULLFSYNC; remount by exact identity; compare inventories.
+    work: Exercise the tested CLI drive-selection/access and Go operations under acquisition_entry_contract.
+      The broker calls store to create the campaign root as the first write; execute write, readback hash,
+      F_FULLFSYNC, root, pointer, F_FULLFSYNC; remount on the physical cue, revalidate access by exact
+      identity and compare inventories. Preserve direct-helper captures as supporting evidence only.
     done_when: The exact generation survives remount and no top-level change exists outside the campaign root.
-    status: TODO
-    attempts: []
+    status: IN_PROGRESS
+    builder_result: WRITE_AND_RESTART_VERIFIED_PENDING_PHYSICAL_REMOUNT
+    independent_review: NOT_RUN
+    attempts:
+    - number: 1
+      operation_id: 9d462bdf-bccd-4c99-8ae9-5a6c79ce9370
+      permission: CAMPAIGN_DIRECTORY_WRITE
+      status: FAIL
+      capture: /Users/drewwiberg/.codex/reviews/cassette/2026-09-11/L05-campaign-control/captures/9d462bdf-bccd-4c99-8ae9-5a6c79ce9370
+      capture_digest: blake3:18ced2b962f34e7eb46228267954ba2912ed30e728ddd85764867e9270343c2e
+      observed: The first mkdir returned EACCES. The campaign root remains absent; no test bytes were written. Volume-root ownership is root:wheel with mode 0775, and the effective account lacks write access.
+    - number: 2
+      operation_id: 21c4abe2-c6db-43cb-96d5-06033048e0a6
+      go_operation_id: op-68b5df299fe5e7d68d26de4128eac63bd7cf42a4c1b97627488de3a5ae2fe4c1
+      permission: CAMPAIGN_DIRECTORY_WRITE
+      authorization: Principal standing routine non-destructive, non-physical L05 instruction; this nested-root card does not reuse the old root-level approval.
+      status: CAPTURED_PENDING_PHYSICAL_REMOUNT
+      capture: /Users/drewwiberg/.codex/reviews/cassette/2026-09-13/L05-entry-campaign-control/captures/21c4abe2-c6db-43cb-96d5-06033048e0a6
+      capture_digest: blake3:121ae9b8ee66e5b75010fe56aefb0214b1a00bec32c8f72d9f52bea079ff9585
+      observed: The installed CLI created the scoped root, verified its 4096-byte probe and durable campaign pointer, preserved the coarse protected inventory, and returned the expected PAUSED exit code 2. A fresh CLI process recovered the same hold; duplicate Go left the cartridge namespace unchanged. The wrapper retained exact CLI exit codes and output.
+      campaign_digest: blake3:45271004be8284d39d3d2defa86671873b787788ded954435532afbbe4a26093
+      model_payload_bytes: 0
+      proof_limit: Physical remount, abrupt power loss, source qualification, external model acquisition and independent review remain NOT_RUN.
     invariants:
     - Q44
     record_kind: evidence
@@ -2776,7 +3013,8 @@ phase_live_queue:
       frozen native candidate; preserve the separate Ollama request. Header/acquisition plans use pinned source
       metadata and bounded wire shapes, not a nonexistent inference certificate.
     done_when: Every literal source and candidate has its own header/acquisition request and dependencies;
-      no live source or payload action precedes the source-entry gate.
+      no model-bearing header or payload action precedes its source-entry gate. Authorization, catalogue
+      and bounded non-payload metadata follow acquisition_entry_contract.
     status: TODO
     attempts: []
     invariants:
@@ -2794,9 +3032,10 @@ phase_live_queue:
     evidence_level: LIVE
     principal_action: none
     work: Recompute every HEADER, ACQ, and OLLAMA physical profile from its sealed bundle and reconcile the
-      coarse protected-content inventory before any live source request.
-    done_when: Every HEADER and ACQ profile and the OLLAMA profile are PASS; no live source request or model
-      payload acquisition has begun.
+      coarse protected-content inventory before any model-bearing header or payload request.
+    done_when: Every HEADER and ACQ profile and the OLLAMA profile are PASS; no model-bearing header or
+      payload acquisition has begun. Earlier authorization/catalogue/non-payload metadata receipts
+      are identified separately under acquisition_entry_contract.
     status: TODO
     attempts: []
     invariants:
@@ -2852,8 +3091,8 @@ phase_live_queue:
     depends:
     - F4-COMPILE-PROFILE-PASS
     evidence_level: LIVE
-    principal_action: Approve the exact F4 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
-      claim, paths, recovery boundary, and stop conditions are printed.
+    principal_action: none within the authorized campaign scope; bind the exact F4 compilation card to
+      existing authorization under the live participation policy.
     work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
       Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
     done_when: The exact operation is durably launched and owned; later recovery and certificate verification
@@ -2936,11 +3175,11 @@ phase_live_queue:
     owner_stage: L07
   - id: F5-COMPILE-PLAN
     matrix_phase: L03
-    title: Materialize Scout F5 compilation qualification
+    title: Materialize Qwen3-30B-A3B F5 compilation qualification
     depends:
     - F4-GATE@PASS
-    - ACQ-llama_4_scout-VERIFY
-    - REFERENCE-llama_4_scout-ALL-PASS
+    - ACQ-qwen3_30b_a3b-VERIFY
+    - REFERENCE-qwen3_30b_a3b-ALL-PASS
     evidence_level: INTEGRATION
     principal_action: none
     work: Freeze the intended F5 compilation work plan and materialize only its exact compile-profile request;
@@ -2979,8 +3218,8 @@ phase_live_queue:
     depends:
     - F5-COMPILE-PROFILE-PASS
     evidence_level: LIVE
-    principal_action: Approve the exact F5 compilation CAMPAIGN_DIRECTORY_WRITE card after its command, next-byte
-      claim, paths, recovery boundary, and stop conditions are printed.
+    principal_action: none within the authorized campaign scope; bind the exact F5 compilation card to
+      existing authorization under the live participation policy.
     work: Launch the exact compilation work plan with a durable broker receipt and first-data-boundary hold.
       Its separate RECOVERABILITY record proves real kill/resume before the operation continues.
     done_when: The exact operation is durably launched and owned; later recovery and certificate verification
@@ -3002,7 +3241,7 @@ phase_live_queue:
     principal_action: none
     work: Independently verify the terminal F5 revision through verification_work; materialize its frozen condition
       records and exact post-certificate inference-profile request.
-    done_when: One immutable Scout F5 revision is published with every certificate field exact, and the F5
+    done_when: One immutable Qwen3-30B-A3B F5 revision is published with every certificate field exact, and the F5
       inference records and aggregate reproduce from its frozen condition set.
     status: TODO
     attempts: []
@@ -3070,7 +3309,7 @@ phase_live_queue:
     - TINKER-VERIFY
     - ACQ-F4-VERIFY
     - ACQ-kimi_k3-VERIFY
-    - ACQ-llama_4_scout-VERIFY
+    - ACQ-qwen3_30b_a3b-VERIFY
     - ACQ-qwen3_235b_a22b-VERIFY
     - OLLAMA-VERIFY
     - F4-GATE@PASS
@@ -3172,7 +3411,7 @@ phase_live_queue:
     matrix_assertion_owner_rules:
     - selector: every QUALIFY-<consumer-flat-id>-VERIFY
       owns: research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]
-    - selector: ACQ-<kimi_k3|llama_4_scout|qwen3_235b_a22b>-VERIFY
+    - selector: ACQ-<kimi_k3|qwen3_30b_a3b|qwen3_235b_a22b>-VERIFY
       owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]
     - selector: OLLAMA-VERIFY
       owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_ollama_content_addressed_reimport].assertions[*]
@@ -3331,8 +3570,9 @@ phase_live_queue:
     verify_work: After terminal state, verify all plan sizes, alignments, patterns, cache crossing, p05, p50,
       p95, p99, maximum latency, IOPS, flushes, errors, thermal events, writes, health, endurance, Q44 ordering,
       and inventory effects that apply.
-    principal_action: On START, attach or move the named drive when cued, confirm exact identity, and approve
-      this one profile card. VERIFY requires none.
+    principal_action: Attach or move hardware only when needed; resolve identity only if the agent cannot
+      match it unambiguously. From L06 onward, ordinary START and VERIFY use existing campaign authority;
+      bind each exact profile card without requesting fresh approval for measurement.
     path_change_rule: Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
       request and blocks resumed I/O until its VERIFY record passes.
     group_aggregate_id_format: <request-group>-ALL-PASS
@@ -3360,11 +3600,11 @@ phase_live_queue:
       - SOURCE-ENTRY-PASS
       - BASELINE-INPUTS-FROZEN
       - QUALIFY-HEADER-<instance>-VERIFY
-    work: After approval, exercise live resolve, enumerate, metadata, license, authentication, and header-range
-      paths; land only header bytes; inventory dtypes, shapes, operators, semantics, and execute no remote
-      code.
-    principal_action: Approve the exact HEADER CAMPAIGN_DIRECTORY_WRITE card; accept a source license in the
-      browser only when the service requests it.
+    work: With the required source and campaign authority recorded, exercise live resolve, enumerate,
+      metadata, license, authentication and header-range paths; land only header bytes; inventory dtypes,
+      shapes, operators and semantics, and execute no remote code.
+    principal_action: Accept source terms or supply credentials only when the service requires a new human
+      action. From L06 onward, bind HEADER writes to existing campaign authority without another prompt.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record: HEADERS-ALL-PASS
@@ -3394,12 +3634,13 @@ phase_live_queue:
       - QUALIFY-ACQ-<instance>-VERIFY
       VERIFY:
       - matching-START
-    start_work: After approval, launch direct-to-cartridge ranged acquisition with a durable receipt, first-boundary
-      hold and no internal model file. checkpoint_proof performs kill/resume separately.
+    start_work: Under the recorded source and campaign authority, launch direct-to-cartridge ranged acquisition
+      with a durable receipt, first-boundary hold and no internal model file. checkpoint_proof performs
+      kill/resume separately.
     verify_work: After terminal state, prove immutable revision, complete intervals, final source and local
       digests, exact byte total, and no internal model file.
-    principal_action: START requires the exact drive and write card; a different drive first requires its own
-      physical-qualification request and PASS. VERIFY requires none.
+    principal_action: From L06 onward, START binds the exact write card to existing campaign authority.
+      A different drive requires target authorization if absent and its own qualification PASS. VERIFY requires none.
     status_per_record: TODO
     attempts_per_record: []
     expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
@@ -3421,15 +3662,16 @@ phase_live_queue:
     id_format: OLLAMA-<record>
     dependencies:
       START:
-      - ACQ-llama_4_scout-VERIFY
+      - ACQ-qwen3_30b_a3b-VERIFY
       - QUALIFY-OLLAMA-VERIFY
       VERIFY:
       - matching-START
-    start_work: After approval, launch content-addressed production-adapter reacquisition of the pinned Scout
-      identity with a durable receipt and first-boundary hold.
+    start_work: Under the recorded campaign authority, launch content-addressed production-adapter reacquisition
+      of the pinned Qwen3-30B-A3B identity with a durable receipt and first-boundary hold.
     verify_work: After terminal state, prove complete manifest and blob digests, semantic identity, source
       identity, and the shared Q5 lifecycle.
-    principal_action: START requires the exact bounded drive-write card. VERIFY requires none.
+    principal_action: From L06 onward, START binds its exact bounded write card to existing campaign authority;
+      no new confirmation is required. VERIFY requires none.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -3476,7 +3718,7 @@ phase_live_queue:
   - family: f5_inference
     matrix_phase: L03
     materialized_by: F5-CERTIFICATE
-    expand_over: frozen_Q15_Q16_conditions_for_pinned_Scout_F5
+    expand_over: frozen_Q15_Q16_conditions_for_pinned_Qwen3-30B-A3B_F5
     records_per_coordinate:
     - START
     - VERIFY
@@ -3485,7 +3727,7 @@ phase_live_queue:
       START:
       - F5-CERTIFICATE
       - QUALIFY-F5-INFERENCE-VERIFY
-      - REFERENCE-llama_4_scout-ALL-PASS
+      - REFERENCE-qwen3_30b_a3b-ALL-PASS
       VERIFY:
       - matching-START
     start_work: Launch this frozen condition with a durable receipt and first-boundary hold. Execute its full
@@ -3525,13 +3767,13 @@ phase_live_queue:
       - matching-QUALIFY_VERIFY
       VERIFY:
       - matching-START
-    qualify_start_work: After approval, begin the exact export and re-import profile measurement.
+    qualify_start_work: Under existing campaign authority, begin the exact export and re-import profile measurement.
     qualify_verify_work: Verify the terminal Q41-Q44 and Q74 profile.
-    start_work: After approval, launch the dense Tier-A export and production-wire Tinker re-import with a
-      durable receipt and first-boundary hold for each long operation.
+    start_work: Under recorded source and campaign authority, launch the dense Tier-A export and production-wire
+      Tinker re-import with a durable receipt and first-boundary hold for each long operation.
     verify_work: Prove terminal weight identity, parent, training provenance, digests, and shared lifecycle.
-    principal_action: QUALIFY_START and START each require their own exact bounded card; the other records
-      require none.
+    principal_action: none for in-scope local qualification and export/reimport; bind both exact cards to
+      existing authority. Ask only for an uncovered external account, disclosure, spend or action scope.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -3574,13 +3816,13 @@ phase_live_queue:
       - EXEC-exec_c1_frontier_compiled-RUN_VERIFY
       train_c1_frontier_tier_b:
       - TRAIN-train_c1_frontier_tier_a-ALL-PASS
-      train_c1_scout_tier_a:
-      - EXEC-exec_c1_scout_least_invasive-RUN_VERIFY
+      train_c1_qwen3_30b_tier_a:
+      - EXEC-exec_c1_qwen3_30b_least_invasive-RUN_VERIFY
       train_c3_frontier_tier_a:
       - EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY
       train_c3_frontier_tier_b:
       - TRAIN-train_c3_frontier_tier_a-ALL-PASS
-    qualify_start_work: After approval, begin the exact training-plan Q41-Q44 and Q74 profile.
+    qualify_start_work: Under existing campaign authority, begin the exact training-plan Q41-Q44 and Q74 profile.
     qualify_verify_work: Verify terminal profile, writes, health, endurance, and inventory evidence.
     start_work: With Q79 tracing armed and external networking disabled, launch the exact training operation
       with a first-boundary hold. checkpoint_proof performs real kill/resume; the operation then runs to terminal
@@ -3588,9 +3830,9 @@ phase_live_queue:
     verify_work: Through verification_work prove all original Q70/Q71/Q72/Q73, write, estimate, quality, non-regression,
       client-callability and Tier-B requirements, plus continuous Q79 restriction coverage. Q48 training duration
       and cache-volume proof closes through training_thermal.
-    principal_action: QUALIFY_START binds its profile card. START binds the exact drive-operation-plan card
-      and network-off cue. VERIFY may restore networking only after terminal evidence and all overlapping offline
-      leases are closed; capture at START never restores networking.
+    principal_action: none for ordinary in-scope qualification and training; bind exact profile and operation
+      cards to existing authority. Apply the live participation policy to network controls. VERIFY restores
+      networking only after terminal evidence and all overlapping offline leases close; START never restores it.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record_per_row: ALL-PASS
@@ -3645,8 +3887,8 @@ phase_live_queue:
       - F4-GATE@PASS
       - F5-GATE@PASS
       - REFERENCE-kimi_k3-ALL-PASS
-      exec_c1_scout_least_invasive:
-      - ACQ-llama_4_scout-VERIFY
+      exec_c1_qwen3_30b_least_invasive:
+      - ACQ-qwen3_30b_a3b-VERIFY
       exec_c2_qwen_least_invasive:
       - ACQ-qwen3_235b_a22b-VERIFY
       exec_c3_k3_native_teacher:
@@ -3667,8 +3909,9 @@ phase_live_queue:
       network restriction across all cases and terminal verification.
     run_verify_work: Verify every case, context boundary, gate, honesty vector, tail, capability, and forbidden
       label from raw evidence.
-    principal_action: QUALIFY_START, PREPARE_START, RUN_QUALIFY_START and RUN_START each bind their own exact
-      card. Runtime START and its descendants retain the network restriction until terminal verification.
+    principal_action: none within existing campaign scope; QUALIFY_START, PREPARE_START, RUN_QUALIFY_START
+      and RUN_START retain separate exact cards without separate approvals. Apply the live participation
+      policy to network controls and retain restrictions through terminal verification.
     status_per_record: TODO
     attempts_per_record: []
     run_qualify_start_work: After PREPARE_VERIFY, derive the actual runtime plan and qualify its exact drive/host/path
@@ -3811,17 +4054,18 @@ phase_live_queue:
     arm_work: Create a fresh operation bound to its exact source, plan and starting profile. Hold at the operation-specific
       injection barrier; record the active I/O target and hold acknowledgement. The hold must preserve the
       active failure locus, not turn an in-flight fault into an idle operation.
-    inject_work: After exact approval, apply one injection and capture the immediate typed result.
-    recover_work: After an exact recovery card when physical action is required, restore or refuse the named
-      identity and seal the resulting boundary.
-    requalify_start_work: After path-profile approval, start a new exact Q41-Q44 profile for any changed drive,
-      cable, port, host, path, plan, or mechanism.
+    inject_work: Once the exact injection authority and any required physical cue are recorded, apply one
+      injection and capture the immediate typed result.
+    recover_work: Bind the exact recovery card and request the physical intervention only when required;
+      restore or refuse the named identity and seal the resulting boundary.
+    requalify_start_work: After the changed physical path is authorized and established, start its new exact
+      Q41-Q44 profile under that authority; a changed plan or mechanism still requires its own measured profile.
     requalify_verify_work: Verify the terminal replacement profile before any resumed I/O.
     verify_work: Prove all six failure assertions and inventory effects from the coordinate's own lineage.
-    principal_action: ARM requires the exact coordinate's CAMPAIGN_DIRECTORY_WRITE card before creating its
-      fresh durable operation. INJECT always requires its separate exact injection card. RECOVER requires a
-      separate exact card when it changes physical state. REQUALIFY_START requires its own profile card. Perform
-      only the printed cue; a general campaign approval never applies.
+    principal_action: ARM and ordinary REQUALIFY_START use existing campaign authority with exact cards.
+      INJECT retains the matrix-required exact injection approval; RECOVER retains exact recovery scope.
+      Ask for physical interventions at their cues or for uncovered fault/recovery scope. An already authorized
+      nonphysical injection needs no second confirmation. Ordinary campaign approval never authorizes an injection.
     status_per_record: TODO
     attempts_per_record: []
     injection_precondition: Before the separate INJECT cue, verify the same logical operation, live access
@@ -3850,7 +4094,9 @@ phase_live_queue:
     start_work: After the network-off cue, start the complete row through loopback while tracing processes,
       sockets, files, identities, credentials, and persistence.
     verify_work: Recompute every offline and privacy assertion and restore networking only on its sealed cue.
-    principal_action: START requires the exact network-off cue; VERIFY requires the exact network-restore cue.
+    principal_action: none for restrictions confined to agent-owned test processes. Obtain authorization
+      for an uncovered host-wide change, then execute the recorded network-off and network-restore sequence
+      without another prompt; restore only after terminal evidence and the last overlapping lease closes.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -3934,7 +4180,8 @@ phase_live_queue:
     evidence_level: INTEGRATION
     provenance: REFERENCE_ONLY
     replay_policy: FROZEN_REFERENCE
-    principal_action: No live source in this record; remote input acquisition uses its own exact source card.
+    principal_action: none for workload documents and frozen-input verification; remote input acquisition
+      binds its exact source card to existing authority and asks only for uncovered scope.
     aggregate_record: WORKLOADS-FROZEN
     aggregate_dependencies:
     - every-WORKLOAD-<coordinate>-FREEZE
@@ -3986,8 +4233,9 @@ phase_live_queue:
     evidence_level: PLATFORM
     provenance: REFERENCE_ONLY
     replay_policy: FROZEN_REFERENCE
-    principal_action: Exact reference host, source and any qualification/write cards; network disabled during
-      local reference execution.
+    principal_action: none within the recorded reference host, source and campaign scope; prepare exact
+      qualification/write cards and execute automatically. Disable networking during local reference execution
+      under the live participation policy; ask only for a missing human action or uncovered scope.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4069,7 +4317,8 @@ phase_live_queue:
     evidence_level: LIVE
     provenance: REFERENCE_ONLY
     replay_policy: FROZEN_REFERENCE
-    principal_action: Exact reference account/compute, source and write scope; opaque credentials only.
+    principal_action: Supply an unavailable opaque credential or authorize uncovered account, compute,
+      disclosure or spending scope. Reuse existing authority for all contained reference requests and writes.
     aggregate_record_per_model: REFERENCE-<model>-ALL-PASS
     aggregate_dependencies:
     - every-required-REFERENCE-<model>-<baseline>-<batch>-VERIFY
@@ -4103,7 +4352,8 @@ phase_live_queue:
     work: Derive the actual certified inference plan from the committed revision, then run the physical_qualification
       contract for that exact consumer. The source and compilation profiles cannot satisfy this record.
     evidence_level: LIVE
-    principal_action: Exact plan-specific qualification card.
+    principal_action: none for in-scope measurement; bind the exact plan-specific qualification card to
+      existing campaign authority. A new plan requires measurement, not renewed approval.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4147,9 +4397,10 @@ phase_live_queue:
       before TRAIN START and exact plan, both minima, duty experiment, raw coverage and continuous restriction
       match; otherwise execute the separate thermal START. The finite graph and every member remain present
       in either case, and reuse binds actual raw inputs rather than skipping the record.
-    principal_action: Separate exact endurance/duty-cycle and write approval; retain network restriction through
-      terminal VERIFY and all overlapping offline leases. Each separately materialized above-duty experiment
-      carries its own exact action scope; no general campaign approval authorizes endurance stress.
+    principal_action: Ordinary qualified training and its passive thermal capture use existing authority.
+      Obtain exact approval for each uncovered above-duty/endurance-stress experiment before execution;
+      reuse an unchanged approved experiment scope without another confirmation. Retain every exact card and
+      network restriction through terminal VERIFY and all overlapping leases; ordinary approval excludes stress.
     evidence_level: LIVE
     invariants:
     - Q28
@@ -4184,8 +4435,8 @@ phase_live_queue:
       verify the same source/plan/recovery boundary, and release the job. Insert this node before all terminal
       verification and dependent runtime work for that operation.
     evidence_level: inherit_operation
-    principal_action: Exact approved interruption/resume card for the named operation; never a physical-fault
-      substitute.
+    principal_action: none for required process interruption/resume of an agent-owned campaign job; bind
+      its exact card to the stage authority. User-owned processes and physical faults require separate authority.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4212,8 +4463,9 @@ phase_live_queue:
       resumptions. START proves launch; RESULT proves the entire independent job finished and its coverage/namespace
       seal is exact. It cannot accept missing recomputation.
     evidence_level: inherit_target
-    principal_action: Inherit only the exact target read/write authority. Any additional model-bearing scratch
-      storage or physical action needs its own declared card; metadata-only review has no principal action.
+    principal_action: none for verification, evidence documents or agent-owned scratch within the authorized
+      campaign root; retain exact cards and model-byte placement. Ask only for a physical intervention or
+      additional storage outside existing authority.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4242,8 +4494,9 @@ phase_live_queue:
     work: Re-execute one exact original record against the fresh clean-root operation and input bindings. Verification
       producers rerun their complete independent jobs. Reference identities and measured selections remain
       frozen inputs; remote reference material never answers a product runtime request.
-    principal_action: Mirror the original record's one exact action template, or none when the original required
-      none.
+    principal_action: Apply the live participation policy to the original action. Reuse ordinary authority
+      for fresh agent-owned roots under the authorized campaign root, with exact cards and fresh identities.
+      Physical cues and uncovered exceptional action scopes still require the principal.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record: Q80-ALL-PASS
@@ -4450,6 +4703,8 @@ phase_live_queue:
 
 ## Status vocabulary
 
-Stage status is TODO, IN_PROGRESS, DONE or BLOCKED. Matrix/evidence status is NOT_RUN, RUNNING,
+Stage status is TODO, IN_PROGRESS, READY_FOR_BATCH_REVIEW, DONE or BLOCKED.
+READY_FOR_BATCH_REVIEW is builder-complete only and is valid solely for the immediately next
+dependency-contiguous member of a declared batch. Matrix/evidence status is NOT_RUN, RUNNING,
 PASS, FAIL or BLOCKED. Q38_FALSIFIED is a FAIL outcome. Only the complete required live proof
 and Q80 digest permit campaign PASS.

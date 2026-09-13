@@ -22,6 +22,61 @@ estimate. Operation receipts remain evidence within their owning stage.
 
 ## Authority and identity
 
+### L05 product-trigger amendment — 12 September 2026
+
+`research/ACCEPTANCE_MATRIX.yaml:acquisition_entry_contract` owns the source-to-download path.
+L05 builds shared backend operations and a basic packaged CLI to trigger them. No app interface
+exists yet; the separate terminal-interface plan later consumes these same operations.
+
+The required sequence is source connection when needed, catalogue/model selection, discovered-drive
+selection and access establishment, then Go. Source and drive selections remain inside Cassette;
+provider sign-in and macOS authorization may invoke their supported system surfaces. The actual
+store-writing process must prove access. A shell launched by Codex, a browser session, a selected
+path, an `os.access` result or an agent-created folder does not establish product launch/access proof.
+Go starts one broker operation, including the necessary bounded qualification and direct-to-drive
+acquisition. It retains canonical checkpoints, cancellation, resume and final digest verification.
+
+Keep the established test cadence: demonstrate each missing behavior against its acceptance check,
+implement it, pass focused fixture/integration checks, then execute the actual CLI on the live path.
+The principal supplies the independent review; selected remediations, build story and authorized
+commit follow as before. This amendment passes no implementation or live assertion. The existing
+failed folder-creation capture remains failure evidence and is not retried as the product entrypoint.
+
+Authorization, catalogue queries and bounded non-payload metadata may precede physical source-entry
+qualification. Model-bearing headers and payloads still require their exact qualified path. Existing
+model/workload choices and captures remain immutable; derive successor matrix/graph bindings before
+the next live action. A matrix identity refresh below is not a new machine-gate result.
+
+The 13 September entry build supports a relative destination inside an existing writable directory
+on the selected volume. The LaCie candidate is `drewwiberg-lacie/Cassette`; Cassette creates only the
+last directory and protects the rest of `drewwiberg-lacie` in its inventory. The earlier failed
+`/Volumes/LaCie/Cassette` attempt remains unchanged. A successor action card must bind the new path,
+the installed build and the principal's standing routine-work authorization. No ownership, ACL,
+format or partition change is part of this route. Builder checks cover a real disposable APFS image;
+the live record must still prove creation, flush, readback and physical reconnect on LaCie.
+
+The installed CLI has now created `/Volumes/LaCie/drewwiberg-lacie/Cassette`, verified its
+4096-byte probe and saved campaign pointer, preserved the coarse protected inventory, and recovered
+the same paused Go operation in a fresh process. Repeating Go left the cartridge namespace unchanged.
+The current capture is `21c4abe2-c6db-43cb-96d5-06033048e0a6` under the 13 September
+`L05-entry-campaign-control` root. Its complete machine candidate passed 339 tests and fourteen Q78
+controls. Physical reconnect, source qualification, model payload acquisition and independent review
+remain unproved. The prepared physical card calls for orderly ejection and reconnect; it supplies no
+abrupt power-cut claim. Keep L05 IN_PROGRESS.
+
+Provider/platform references checked for this amendment:
+
+- [Hugging Face public-client and device authorization](https://huggingface.co/docs/hub/oauth):
+  qualify read scopes and account validation; do not collect the provider password.
+- [Hugging Face catalogue API](https://huggingface.co/docs/hub/api): qualify discovery separately
+  from immutable artifact enumeration.
+- [Ollama authentication](https://docs.ollama.com/api/authentication) and
+  [local model listing](https://docs.ollama.com/api/tags): public/local access and private downloads
+  have different authentication needs. A local installed-model list is not a remote catalogue.
+- [Apple file access](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
+  and [Keychain services](https://developer.apple.com/documentation/security/keychain-services):
+  qualify access in the supported launch context and keep saved credentials in the system vault.
+
 This runbook is a human-executable projection of `research/ACCEPTANCE_MATRIX.yaml`. The matrix
 remains the release authority. The S26 and S28 artifacts record the superseded schema-version-4
 machine baseline; they do not prove the 2026-09-02 amendments. If this runbook disagrees with the
@@ -30,9 +85,9 @@ physical drive.
 
 | Record | Immutable identity |
 |---|---|
-| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:6d909b678d85c17a900426a33b60b92b0616ecae5ef620ca4962d9116d860140` |
-| Deferred-live projection, `s26-deferred-live-v4` | `blake3:21a64f61e1c68a444c6b8ef5903caf2d9451ad1ba652d33820fac3e0e4a19f6c` |
-| Amended S26 machine fixture | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
+| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:f198dd8c92a067178e3f3c8f52590c4945d55820f74e822d89573a88349dae0e` |
+| Deferred-live projection, `s26-deferred-live-v4` | `blake3:6301c9ce23177665696aa5dc80cd0f52e2884bfe239bc9df32656c33d69b1f50` |
+| Prior S26 machine fixture; not proof of the acquisition-entry amendment | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
 | Historical S27 complete J report | `sha256:15b81c535a4aada190ae31a1ed4ae2d273b827118901f220167a8c1fb4edf184` |
 | Current complete J report after L04 remediation | `sha256:37fe5e7a7ff26735843d38ff99ebb95d352415aa2f539089563f2d951b91a660` |
 
@@ -48,6 +103,33 @@ Its Q30 checks cover reflective, implicit-builtins and relative-context import f
 ledger tool path. IMPLEMENTATION.md binds its source, generated report and same-agent repair review,
 and preserves the failed candidates and earlier independent review.
 The matrix retains its deferral declarations; every physical and real-model claim remains NOT_RUN.
+
+## F4 selection — 2026-09-11
+
+The principal selected `Qwen/Qwen3-4B` at revision
+`1cfa9a7208912126459214e8b04321603b3df60c`. The immutable selection record is
+[`research/F4_SELECTION.json`](research/F4_SELECTION.json), bound by the F4 matrix row.
+The pinned public metadata lists 8,060,926,626 repository artifact bytes, declares Apache 2.0,
+and requires no credential. The retained license bytes and artifact metadata have content digests.
+No model payload has been acquired and runtime compatibility remains unproved.
+
+This selection changes the matrix identity. The retained S26 projection, S26 machine result and
+L04 complete-J report describe the preceding matrix. POST-SELECTION-MACHINE-PASS must regenerate
+and verify those dependent records and publish the successor graph before physical qualification
+or acquisition. Their historical passing results do not prove this selected configuration.
+
+## Sparse-model substitution — 2026-09-11
+
+The principal authorized replacing gated Scout without waiting for account approval.
+`Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39` now owns its
+F5, C1 least-invasive execution, Tier-A training and Ollama reimport obligations.
+[`research/SPARSE_MODEL_SELECTION.json`](research/SPARSE_MODEL_SELECTION.json) records the
+source metadata, license bytes, authorization and old-to-new model mapping. Public metadata
+confirms ungated access and 61,084,187,391 repository artifact bytes. The model card declares
+30.5B total parameters and 3.3B active parameters, within the existing F5 20–120B sparse class.
+All required capability categories and numerical gates remain. The smaller sparse fixture does
+not prove Scout's scale or replace the unchanged K3 frontier and Qwen3-235B rows.
+The signed-in Hugging Face session was inspected; this replacement requires no account token.
 
 ## Coding time and independent verification
 
@@ -76,6 +158,13 @@ evidence digests.
 These controls govern live human approval and user-owned hardware. They add no product acceptance
 row, but an action taken without them cannot supply usable live evidence.
 
+For execution stages L06-L10, `IMPLEMENTATION.md`'s **Live participation policy** governs when
+the principal must act. An exact card is an evidence record, not automatically a permission request.
+Read-only identity, health, capacity and coarse-inventory checks, documents, plans and evidence
+preparation need no fresh approval. Ordinary operations within the authorized campaign scope proceed
+without the principal present. Initial L05 campaign-root authorization and physical setup remain
+required; later work reuses that scope rather than requesting approval for each write.
+
 Before a bounded live storage action, append one run card to an off-drive campaign control record.
 After the campaign directory exists, mirror each card into its append-only campaign manifest. The
 card records:
@@ -92,11 +181,13 @@ card records:
   and
 - the off-drive identity of the protected-content inventory described below.
 
-Every write-bearing record binds the digest of its approved card. The principal either approves
-that exact card in the record or the binding cites an earlier immutable general campaign approval
-whose disk, root, permission, command class, byte-claim rule, and stop conditions contain it exactly.
-An explicit `principal_action: none` never removes this lineage. Physical faults, path mutations,
-destructive actions, and new permission classes always require a fresh cue.
+Every write-bearing record binds its exact card and the recorded authority that covers it. The
+principal may approve that card directly, or the agent records that an existing campaign scope
+covers its disk, root, permission, command class, byte-claim rule and stop conditions. The agent
+prepares and binds contained cards automatically; a new digest or operation ID does not require a
+new approval. Record inherited authority without claiming the principal separately approved the
+card. An explicit `principal_action: none` retains this lineage. Ask only for an uncovered scope or
+required physical intervention under the live participation policy.
 
 Before the first write to a data-bearing drive, create an inventory outside that drive for every
 pre-existing top-level entry. Record only its name, object type, and aggregate logical byte count,
@@ -113,9 +204,10 @@ content-integrity proof and cannot prove that physical wear or controller risk w
 
 General campaign approval covers only the recorded campaign root and ordinary operations. It does
 not authorize formatting, erasure, repartitioning, filesystem repair, firmware changes, endurance
-stress, or a physical fault injection. Each such action requires separate approval naming the exact
-physical disk and action. A data-bearing drive may serve ordinary L01.5-L05 rows from a clean Cassette
-campaign root; it need not be blank. Destructive and physical-fault rows use separately approved
+stress, or a physical fault injection. Each such action needs exact authorization naming the physical
+disk and action. Reuse an unchanged authorized nonphysical action scope without another confirmation;
+physical interventions still require their timed cues. A data-bearing drive may serve ordinary
+L01.5-L05 rows from a clean Cassette campaign root; it need not be blank. Destructive and physical-fault rows use separately approved
 hardware and never inherit authority from an ordinary campaign card.
 
 Q53 has no fixed byte floor, device percentage, user ceiling, or whole-job reservation. Before each
@@ -135,7 +227,7 @@ Classify the result, propose the bounded repair, and identify the proof that mus
 change creates a governed machine revision and invalidates dependent live evidence; an F4 or F5
 mechanism failure starts a new campaign after renewed L01.25 machine proof and affected L01.5
 physical qualification. Independent rows may
-continue only on a still-safe, separately approved physical path.
+continue on a still-safe physical path within existing authorization.
 
 Seal execution evidence once. Use `lstat` without following links and accept only directories and
 regular files whose link count is one. The recursive manifest lists every relative path, object
@@ -203,8 +295,9 @@ POST-SELECTION-MACHINE-PASS use normal machine review. Physical proof begins aft
 
 ## L01.5 — qualify actual storage paths
 
-With the principal present, qualify each actual locally attached APFS path for the operation it will
-run:
+The principal supplies the initial physical setup and any later physical intervention. The agent
+measures and verifies each established APFS path for its exact operation under the recorded scope;
+ordinary later qualification does not require the principal to remain present:
 
 - Apple classes: `c1_air_32`, `c2_max_128`, `c3_ultra_512`.
 - Storage profile family: `external_apfs_measured`; every result binds the exact drive, operation,
@@ -257,14 +350,14 @@ Lock and preserve these immutable model revisions:
 | Model ID | Source locator | Revision |
 |---|---|---|
 | `kimi_k3` | `moonshotai/Kimi-K3` | `9f62e4e9fffbd0a83ddd60e1c209d828994b3569` |
-| `llama_4_scout` | `meta-llama/Llama-4-Scout-17B-16E-Instruct` | `92f3b1597a195b523d8d9e5700e57e4fbb8f20d3` |
+| `qwen3_30b_a3b` | `Qwen/Qwen3-30B-A3B` | `ad44e777bcd18fa416d9da3bd8f70d33ebb85d39` |
 | `qwen3_235b_a22b` | `Qwen/Qwen3-235B-A22B-Instruct-2507` | `ac9c66cc9b46af7306746a9250f23d47083d689e` |
 
-First run the immutable Hugging Face acquisitions and the Scout-backed Ollama re-import through the
+First run the immutable Hugging Face acquisitions and the Qwen3-30B-A3B-backed Ollama re-import through the
 production acquisition state machine. For Hugging Face, prove the actual resolve, authentication, license, manifest, metadata, and range
 wires; admit each exact Q53 transfer step; interrupt and resume ranged acquisition; verify the
 immutable source and final local digests; and retain no internal model file. For Ollama, re-expose
-the pinned Scout revision through content-addressed manifests and blobs while preserving semantic
+the pinned Qwen3-30B-A3B revision through content-addressed manifests and blobs while preserving semantic
 identity. Later, run the Tinker derivative row. It remains an L02-labelled source obligation, but its input is a Q70 child and
 therefore runs only after the dense F4 Tier-A child passes. It must finish before Q80; it does not
 block entry to F4 or F5. Export and re-import that child while preserving weights, parent, and
@@ -291,12 +384,12 @@ error, risk, and horizon field, complete `train_dense_fixture_tier_a` and
 achieve `lower95CI(Qc/Q_teacher) >= 0.95` in every Q15 stratum inside the predeclared training
 budget.
 
-Each F4 or F5 compilation `START` record prints and receives approval for its exact
-`CAMPAIGN_DIRECTORY_WRITE` card before it creates the first durable boundary. Its later `VERIFY`
-record performs no new principal action.
+Each F4 or F5 compilation `START` record binds its exact `CAMPAIGN_DIRECTORY_WRITE` card to
+existing campaign authority before it creates the first durable boundary. Compilation and its
+later `VERIFY` proceed without a new prompt when that scope covers them.
 
-After F4 passes, run `f5_gate` on the pinned `llama_4_scout` revision
-`92f3b1597a195b523d8d9e5700e57e4fbb8f20d3`, which supplies the matrix class `20-120B sparse`.
+After F4 passes, run `f5_gate` on the pinned `qwen3_30b_a3b` revision
+`ad44e777bcd18fa416d9da3bd8f70d33ebb85d39`, which supplies the matrix class `20-120B sparse`.
 It must pass the F4 predicates at scale,
 complete `train_sparse_fixture_tier_a` and `train_sparse_fixture_tier_b`, and emit Q37
 mathematical-resource-versus-quality/service curves whose predicted feasible point clears Q68
@@ -304,7 +397,7 @@ mathematical-resource-versus-quality/service curves whose predicted feasible poi
 
 If either gate fails, preserve the raw result, set the gate row to `FAIL` with
 `Q38_FALSIFIED`, emit the exact Q38 record, and refuse its frontier compiled dependents and L05.
-Independent Scout, Qwen, and native-teacher rows may continue only when their own prerequisites and
+Independent Qwen3-30B-A3B, Qwen3-235B, and native-teacher rows may continue only when their own prerequisites and
 physical paths remain valid. Repairing the failed mechanism creates a governed machine revision,
 repeats its required L01.25 machine proof and affected L01.5 qualification, and begins a new live
 campaign for invalidated work. L03 passes only when both gates have live `PASS` evidence in order.
@@ -317,7 +410,7 @@ Run all five execution rows against their exact model, Apple, storage, mode, con
 tier:
 
 - `exec_c1_frontier_compiled`
-- `exec_c1_scout_least_invasive`
+- `exec_c1_qwen3_30b_least_invasive`
 - `exec_c2_qwen_least_invasive`
 - `exec_c3_k3_native_teacher`
 - `exec_c3_k3_compiled_portability`
@@ -326,6 +419,7 @@ For each row, `QUALIFY_START`, `PREPARE_START`, and `RUN_START` bind separate ex
 Preparation may include full F6 compilation. RUN_QUALIFY_START/VERIFY then measures the actual
 prepared runtime plan; it cannot inherit the preparation profile.
 The corresponding verify records require no new action unless their sealed template says otherwise.
+Separate cards preserve exact execution records; ordinary contained cards use existing authorization.
 
 For each row, execute `capability_complete_q16` and `sustained_q48`. The capability suite includes
 ordinary warm and cold requests, reasoning, coding with executable tests, tool round trips,
@@ -336,7 +430,7 @@ or below 10 percent and no integrity error.
 
 The C1 frontier row requires Q68 usability floors, value against `b_native_c1`, position against
 `b_teacher`, Q18 capacity proof, an independently recomputed Q19 certificate, and the complete
-honesty vector. Scout and Qwen use only Q40 modes 1–3 and require floors plus the Q17 parity tier;
+honesty vector. Qwen3-30B-A3B and Qwen3-235B use only Q40 modes 1–3 and require floors plus the Q17 parity tier;
 if none passes, record the row failure under Q38 rather than advancing to compiled mode. The C3
 native K3 row is `TEACHER_CORRECTNESS`; it may emit no `FRONTIER_CLASS`, `PARITY`, or
 `NEAR_LABORATORY` label. The C3 compiled K3 row must use the same cartridge pages as the C1 row
@@ -356,7 +450,7 @@ Run every required training row:
 
 - `train_c1_frontier_tier_a`
 - `train_c1_frontier_tier_b`
-- `train_c1_scout_tier_a`
+- `train_c1_qwen3_30b_tier_a`
 - `train_c3_frontier_tier_a`
 - `train_c3_frontier_tier_b`
 - `train_dense_fixture_tier_a`
@@ -381,11 +475,17 @@ with above/below-duty-cycle evidence on each applicable Apple class and the unch
 admission. Unknown mandatory cache evidence blocks the volume claim. An evidenced absence of SLC cache may
 produce a zero SLC estimate; the complete duration, duty-cycle and service proof still applies.
 TRAINING-THERMAL-ALL-PASS is required before FINAL-PROVENANCE and its producers belong in Q80 replay.
+Ordinary qualified training and passive thermal capture need no fresh approval. Before a distinct
+above-duty or endurance-stress experiment, bind its exact separate authorization; request approval
+only when that experiment's scope is not already covered.
 
 Every inference, training, protocol and sustained operation keeps external networking disabled
 from activation through terminal evidence capture. Overlapping operations hold separate leases;
 restore networking only after the last lease closes under its exact cue. Training START capture
 never restores access while the job remains active. A missing interval requires a new attempt.
+The agent controls restrictions confined to its own test processes. Host-wide network changes
+require prior authorization when they affect the principal's session; an authorized disable/restore
+sequence runs without a separate confirmation for each cue.
 
 ### Live failure rows
 
@@ -422,9 +522,13 @@ child recovery, no stale handle use, no uncommitted token, and no internal model
 Each disconnect, same-identity reconnect, wrong-identity reconnect, sleep/wake, bus reset, or port
 migration session requires a separate `PHYSICAL_FAULT` card naming the exact physical disk and
 action. Read-only remount, capacity-filler, and source-revision-change sessions require their own
-bounded path-specific cards. Corruption, interruption, and every other agent-executed injection also
-requires an approved card naming the exact disk, path, byte or state bound, and stop conditions. A
-general campaign card authorizes none of those actions.
+bounded path-specific cards. Deliberate corruption also requires exact authorization naming the disk,
+path, byte or state bound, and stop conditions. A general campaign card authorizes none of those faults.
+ARM preparation and ordinary requalification use campaign authority with their exact cards. Required
+process kill/resume and cancellation checks on agent-owned campaign jobs use the requested stage's
+authority and retain exact interruption records. They need no fresh human approval and cannot replace
+a physical-fault observation. Reuse exact authorization for an unchanged nonphysical injection;
+request the principal's action only for a physical cue or uncovered injection/recovery scope.
 
 ### Offline and privacy rows
 
@@ -469,6 +573,10 @@ status above: `INCOMPLETE`, `FAIL`, or `BLOCKED` once qualifying live work has b
 is active; use `RUNNING` while one is active. Retain the non-passing campaign outcome in its sealed evidence bundle. Only a
 complete, reproducible live campaign may set the matrix result to `PASS` and attach its completion
 digest and evidence bundle.
+
+Fresh replay directories under the authorized campaign root and fresh operation/evidence identities
+are agent work. They need no renewed approval. Preserve earlier source and accepted evidence, retain
+each exact action card, and request only a physical intervention or action outside existing scope.
 
 ## Campaign close
 

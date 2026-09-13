@@ -49,6 +49,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     lifecycle
   - L2 components: sources.py, compiler.py, pager.py, trainer.py
   - L3 broker.py, adapters/ (generated maps + thin shims)
+  - L4 cli.py — basic product triggers; imports broker and canonical errors only
 - Sibling law: L2 components never import each other. They exchange exactly two things —
   committed store objects (content-addressed, journaled) and broker-dispatched operations.
   Every cross-component interaction is therefore durable, inspectable, and replayable.
@@ -80,6 +81,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   {
     "adapters/__init__.py": ["Q76"],
     "broker.py": ["Q5"],
+    "cli.py": ["Q52"],
     "compiler.py": ["Q58"],
     "errors.py": ["Q6"],
     "pager.py": ["Q19"],

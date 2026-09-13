@@ -1,10 +1,12 @@
 <!-- Portable live-attempt review; the application's existing contract supplies authorities, schemas, identity, resource checks, budgets, tools, and invalidation meanings. -->
 # Live attempt procedure
 
-Review exactly one live attempt under the application's existing live-stage contract. Preserve what
-happened. Test whether the sealed evidence distinguishes the claimed behavior from its nearest false
-pass. Repair one small implementation defect only when the contract permits it and the parent and
-child proofs are exact. Return control to the queue.
+Review exactly one live attempt or a declared ordered batch under the application's existing
+live-stage contract. Preserve what happened. Test whether the sealed evidence distinguishes each
+claimed behavior from its nearest false pass. Repair one small implementation defect only when the
+contract permits it and the parent and child proofs are exact. A batch must retain separate frozen
+scope, questions, evidence, findings, disposition, and verdict for each stage; an earlier repair
+invalidates dependent later evidence until replayed. Return control to the queue.
 
 ## Read the governing contract first
 

@@ -43,14 +43,14 @@ def test_q29_complete_j_classifies_every_surface_and_exposes_all_nine_coordinate
         accounting["authored_executable_loc"]["total"],
         1,
         1,
-        8,
+        9,
         0,
         0,
         sum((REPO / row["path"]).stat().st_size for row in accounting["shipped_binary_files"]),
     ]
     assert set(accounting["source_files"]) == {"generated", "product", "tests", "tools"}
     assert set(accounting["source_files"]["product"]) == {
-        "adapters/__init__.py", "broker.py", "compiler.py", "errors.py", "pager.py",
+        "adapters/__init__.py", "broker.py", "cli.py", "compiler.py", "errors.py", "pager.py",
         "sources.py", "store.py", "trainer.py",
     }
 
@@ -85,7 +85,7 @@ def test_q78_completed_map_resolves_each_owner_to_one_direct_cited_proof():
     assert check_removal_map(REPO, files, authorities) == ("ran", [])
     removal_map, errors = load_removal_map(REPO)
     assert errors == [] and removal_map is not None
-    assert len(removal_map) == 13
+    assert len(removal_map) == 14
     for target, rows in removal_map.items():
         assert len(rows) == 1
         node = removal_proof_node(REPO, target, rows[0])

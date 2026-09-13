@@ -8,7 +8,7 @@ Checks (AGENTS.md):
   4. Runtime confinement: `mlx` imports exist only in pager.py and trainer.py.
   5. Identity authority confinement: product digest and RFC 8785 imports exist only in store.py.
   6. Test citation law: every test function cites a ledger invariant (Qn or a matrix row id).
-  7. Pin law: every dependency in pyproject.toml carries an exact `==` pin.
+  7. Pin law: every runtime, development, and build dependency in pyproject.toml carries an exact `==` pin.
   8. Governed-source accounting: Git-owned and intentionally untracked source is measured; foreign
      interpreter environments, dependency trees, and ignored caches are not repository code.
   9. Removal-map law: every authored product or tool file names one declared acceptance authority;
@@ -42,7 +42,7 @@ from pathlib import Path
 
 UNTRACKED_CACHE_DIRS = {".git", "__pycache__", ".pytest_cache"}
 GENERATED_DIRS = {"schema"}
-PRODUCT_MODULES = {"errors", "store", "sources", "compiler", "pager", "trainer", "broker"}
+PRODUCT_MODULES = {"errors", "store", "sources", "compiler", "pager", "trainer", "broker", "cli"}
 
 # Structure section, AGENTS.md: allowed intra-repo import edges (downward only).
 ALLOWED_EDGES = {
@@ -54,6 +54,7 @@ ALLOWED_EDGES = {
     "trainer": {"errors", "schema", "store"},
     "broker": {"errors", "schema", "store", "sources", "compiler", "pager", "trainer"},
     "adapters": {"errors", "schema", "broker"},
+    "cli": {"errors", "broker"},
 }
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
 IDENTITY_AUTHORITY_IMPORTS = {"blake3", "hashlib", "rfc8785"}
@@ -393,12 +394,16 @@ def check_pins(root: Path) -> tuple[list[str], list[str]]:
         deps = list(data.get("project", {}).get("dependencies", []))
         for group in data.get("dependency-groups", {}).values():
             deps.extend(d for d in group if isinstance(d, str))
+        deps.extend(d for d in data.get("build-system", {}).get("requires", []) if isinstance(d, str))
         python_pin = data.get("project", {}).get("requires-python", "")
     except ModuleNotFoundError:  # sandbox interpreters below 3.11
         dep_blocks = re.findall(r"dependencies\s*=\s*\[(.*?)\]", text, re.S)
         groups = re.search(r"\[dependency-groups\](.*)", text, re.S)
         if groups:
             dep_blocks.extend(re.findall(r"=\s*\[(.*?)\]", groups.group(1), re.S))
+        build_system = re.search(r"^\[build-system\]\s*$([\s\S]*?)(?=^\[|\Z)", text, re.M)
+        if build_system:
+            dep_blocks.extend(re.findall(r"requires\s*=\s*\[(.*?)\]", build_system.group(1), re.S))
         deps = []
         for block in dep_blocks:
             deps.extend(re.findall(r'"([^"]+)"', block))
@@ -1153,7 +1158,7 @@ def prove_candidate(root: Path, destination: Path) -> dict:
                   'source_manifest_sha256':hashlib.sha256(_canonical_json(source_manifest)).hexdigest(),
                   'archive_sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),
                   'python':sys.version, 'evidence_level':'INTEGRATION', 'physical_drive':'NOT_RUN',
-                  'independent_review':'SUPPLIED_REVIEW_REMEDIATION', 'publication':'PENDING'}
+                  'independent_review':'NOT_RUN', 'publication':'PENDING'}
         (destination/'inputs.json').write_bytes(_canonical_json(inputs))
         report = {'status':'PASS', 'scope':'immutable candidate snapshot with passing ordinary ledger',
                   'source_manifest_sha256':hashlib.sha256(_canonical_json(source_manifest)).hexdigest(),

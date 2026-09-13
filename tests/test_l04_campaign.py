@@ -452,10 +452,102 @@ def test_q33_q80_materialization_derives_owners_and_edges(tmp_path):
                                     'records':[node('F4-a-b-START',['L04']),node('F4-a-b-VERIFY',['F4-a-b-START'])]}}}
     graph = campaign.materialize(tmp_path,registry)
     assert graph['order'] == ['L04','F4-a-b-START','F4-a-b-VERIFY','F4-GATE']
+    early = {**registry, 'fixed_records': registry['fixed_records'][:1], 'families': {},
+             'required_owners': {}, 'deferred_assertion_owners': {authority: ['F4-GATE']}}
+    provisional = campaign.materialize(tmp_path, early)
+    assert provisional['deferred_assertion_owners'] == {authority: ['F4-GATE']}
+    with pytest.raises(CassetteError): campaign.clean_replay(provisional, ['L04'])
+    for invalid in ({}, {authority: ['L04']}, {authority: ['F4-GATE'], 'unknown': ['future']}):
+        with pytest.raises(CassetteError):
+            campaign.materialize(tmp_path, {**early, 'deferred_assertion_owners': invalid})
+    with pytest.raises(CassetteError):
+        campaign.materialize(tmp_path, {**early, 'materializer': 'Q80-MATERIALIZE'})
+    with pytest.raises(CassetteError):
+        campaign.validate_graph(early['fixed_records'], required_owners={}, parent=provisional,
+                                deferred_owners={})
+    completed = campaign.materialize(tmp_path, registry, parent=provisional)
+    assert not completed.get('deferred_assertion_owners')
+    assert completed['parent_graph_digest'] == provisional['revision_digest']
+    assert len(campaign.clean_replay(completed, completed['order'])) == 4
+    control = tmp_path/'control'; control.mkdir()
+    owner = CapacityCoordinator(control)
+    head = campaign.publish_graph(owner, provisional)
+    published = campaign.publish_graph(owner, completed, head['digest'])
+    assert published['value']['graph'] == completed
+    assert published['value']['ancestors'] == [provisional['revision_digest']]
     changed = copy.deepcopy(registry); changed['families']['dense']['records'][1]['depends'] = ['L04']
     with pytest.raises(CassetteError): campaign.materialize(tmp_path,changed)
     changed = copy.deepcopy(registry); changed['required_owners'][authority] = ['L04']
     with pytest.raises(CassetteError): campaign.materialize(tmp_path,changed)
+
+    aggregate_root = tmp_path/'aggregates'
+    (aggregate_root/'research').mkdir(parents=True)
+    (aggregate_root/'schema/campaign').mkdir(parents=True)
+    aggregate_queue = copy.deepcopy(queue)
+    aggregate_family = aggregate_queue['expanded_session_families'][0]
+    aggregate_family.update(aggregate_record='DENSE-ALL-PASS',
+        aggregate_dependencies=['every-F4-<batch-id>-VERIFY'], aggregate_owner_stage='L08')
+    aggregate_generated = {**generated, 'expanded_session_families':[aggregate_family]}
+    (aggregate_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':aggregate_queue},sort_keys=False)+'```\n')
+    (aggregate_root/'research/ACCEPTANCE_MATRIX.yaml').write_text(campaign.yaml.safe_dump(matrix))
+    (aggregate_root/'schema/campaign/contract.json').write_text(json.dumps(aggregate_generated))
+    aggregate_registry = copy.deepcopy(registry)
+    aggregate_registry['fixed_records'].append({**node('DENSE-ALL-PASS',['F4-a-b-VERIFY']),
+                                                'owner_stage':'L08'})
+    aggregate_graph = campaign.materialize(aggregate_root,aggregate_registry)
+    assert aggregate_graph['nodes']['DENSE-ALL-PASS']['depends'] == ['F4-a-b-VERIFY']
+    assert aggregate_graph['order'].index('F4-a-b-VERIFY') < aggregate_graph['order'].index('DENSE-ALL-PASS')
+    for fault in ('omitted','missing_edge','foreign_edge','wrong_owner','wrong_level','undeclared'):
+        bad = copy.deepcopy(aggregate_registry)
+        if fault == 'omitted': bad['fixed_records'].pop()
+        elif fault == 'missing_edge': bad['fixed_records'][-1]['depends'] = []
+        elif fault == 'foreign_edge': bad['fixed_records'][-1]['depends'] = ['L04']
+        elif fault == 'wrong_owner': bad['fixed_records'][-1]['owner_stage'] = 'L07'
+        elif fault == 'wrong_level': bad['fixed_records'][-1]['evidence_level'] = 'UNIT'
+        else: bad['fixed_records'][-1]['id'] = 'UNDECLARED-ALL-PASS'
+        with pytest.raises(CassetteError): campaign.materialize(aggregate_root,bad)
+
+    aggregate_family.update(id_format='INPUT-<batch-id>-FREEZE', records_per_coordinate=['FREEZE'],
+        dependencies={'FREEZE':['L04']}, aggregate_dependencies=['every INPUT-<batch-id>-FREEZE'])
+    aggregate_registry['families']['dense'] = {'dimensions':{'batch-id':['a','b']},
+        'records':[node('INPUT-'+key+'-FREEZE',['L04']) for key in ('a','b')]}
+    aggregate_registry['fixed_records'][1]['depends'] = ['INPUT-a-FREEZE','INPUT-b-FREEZE']
+    aggregate_queue['operation_records'][0]['depends'] = ['INPUT-a-FREEZE','INPUT-b-FREEZE']
+    aggregate_registry['fixed_records'][-1]['depends'] = ['INPUT-a-FREEZE','INPUT-b-FREEZE']
+    (aggregate_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':aggregate_queue},sort_keys=False)+'```\n')
+    (aggregate_root/'schema/campaign/contract.json').write_text(json.dumps(aggregate_generated))
+    literal_graph = campaign.materialize(aggregate_root,aggregate_registry)
+    assert literal_graph['nodes']['INPUT-a-FREEZE']['depends'] == ['L04']
+    assert literal_graph['nodes']['DENSE-ALL-PASS']['depends'] == ['INPUT-a-FREEZE','INPUT-b-FREEZE']
+    bad = copy.deepcopy(aggregate_registry)
+    bad['families']['dense']['records'][0]['depends'] = []
+    with pytest.raises(CassetteError): campaign.materialize(aggregate_root,bad)
+
+    historical_text = '''```yaml
+steps:
+  - id: S27
+    depends: []
+    status: DONE fixture: exact accounting
+  - id: S28
+    depends: [S27]
+    status: "DONE fixture closeout"
+```
+'''
+    queue['fixed_steps'][0]['depends'] = ['S28']
+    (tmp_path/'IMPLEMENTATION.md').write_text(historical_text + '```yaml\n' +
+        campaign.yaml.safe_dump({'phase_live_queue': queue}, sort_keys=False) + '```\n')
+    historical = campaign.historical_steps(tmp_path)
+    anchored = copy.deepcopy(registry)
+    anchored['fixed_records'][0]['depends'] = ['S28']
+    anchored['fixed_records'].extend({**node(key, row['depends'], level='INTEGRATION'),
+        'historical_authority_digest': campaign.identity(row)} for key, row in historical.items())
+    assert campaign.materialize(tmp_path, anchored)['order'][:3] == ['S27', 'S28', 'L04']
+    for field, value in [('historical_authority_digest', 'foreign'), ('permission', 'CAMPAIGN_DIRECTORY_WRITE'),
+                         ('evidence_level', 'LIVE'), ('depends', ['unknown'])]:
+        bad = copy.deepcopy(anchored); bad['fixed_records'][-1][field] = value
+        with pytest.raises(CassetteError): campaign.materialize(tmp_path, bad)
 
     # The actual failure authority expands all 80 coordinates and 432 records before publication.
     source_root = Path(__file__).resolve().parent.parent

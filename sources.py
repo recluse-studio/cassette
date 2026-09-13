@@ -15,7 +15,7 @@ import re
 import stat
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from errors import CassetteError
@@ -32,6 +32,7 @@ from store import (
     execute_claimed_write,
     TransferExtent,
     grant_transfer_extent,
+    git_blob_sha256,
     pause_capacity_claim,
     resumable_artifact_hasher,
     resume_artifact_hasher,
@@ -100,7 +101,7 @@ class ResolvedSource:
     source_kind: str
     locator: str
     immutable_revision: str
-    identity: str
+    identity: str | None
     artifacts: tuple[Artifact, ...]
     metadata_assets: tuple[Artifact, ...]
     auth_scope: str
@@ -266,7 +267,7 @@ class _Wire:
 
 _WIRES = {
     "huggingface": _Wire(
-        ("sha",), "git-sha1:", ("cassette_identity",), ("siblings",),
+        ("sha",), "git-sha1:", ("identity",), ("siblings",),
         ("metadata_siblings",), ("rfilename",), ("size",), ("lfs", "sha256"),
         "sha256:", ("download_url",), ("etag",), ("auth", "scope"),
         ("license", "digest"), ("remote_metadata",), ("auth", "scope"),
@@ -323,15 +324,19 @@ def _loopback_http(url: str) -> bool:
 class _CredentialSafeRedirect(HTTPRedirectHandler):
     """Keep control authority local and remove credentials before a range crosses origins."""
 
-    def __init__(self, object_id: str, allow_cross_origin: bool):
+    def __init__(self, object_id: str, allow_cross_origin: bool, validator: str | None = None):
         super().__init__()
         self.object_id = object_id
         self.allow_cross_origin = allow_cross_origin
+        self.validator = validator
+        self.verified_source_validator = None
 
     def redirect_request(self, request, response, code, message, headers, target):
         redirected = super().redirect_request(request, response, code, message, headers, target)
         if redirected is None:
             return None
+        if request.get_method() == "HEAD":
+            redirected.method = "HEAD"
         source_origin = _origin(request.full_url)
         target_origin = _origin(redirected.full_url)
         if target_origin is None:
@@ -343,6 +348,11 @@ class _CredentialSafeRedirect(HTTPRedirectHandler):
                 for name in tuple(collection):
                     if name.lower() in _SENSITIVE_HEADERS:
                         del collection[name]
+        if headers.get("X-Linked-Etag") is not None:
+            if self.validator is not None and headers["X-Linked-Etag"] != self.validator:
+                _fail("SOURCE_REVISION_CHANGED", self.object_id,
+                      "Q9: redirect must retain the immutable source validator", "linked ETag changed")
+            self.verified_source_validator = headers["X-Linked-Etag"]
         return redirected
 
 
@@ -388,7 +398,7 @@ def _digest(value: object, prefix: str, field: str, object_id: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class SourceAdapter:
-    """Q52's five operations; the instance owns configuration, not lifecycle state."""
+    """Own source protocol translation without acquisition lifecycle state."""
 
     kind: str
     base_url: str
@@ -398,10 +408,94 @@ class SourceAdapter:
         if self.kind not in _WIRES:
             _fail("MODEL_UNSUPPORTED", self.kind or "source", "Q52: source kind must have a declared adapter wire", "no source wire is registered")
         origin = urlparse(self.base_url) if isinstance(self.base_url, str) else None
-        if origin is None or _origin(self.base_url) is None or origin.query or origin.fragment:
+        if origin is None or _origin(self.base_url) is None or origin.query or origin.fragment or origin.username or origin.password:
             _fail("INVALID_REQUEST", self.kind, "Q52: adapter endpoint must be HTTP(S)", "base_url is invalid")
         if not _loopback_http(self.base_url):
             _fail("INVALID_REQUEST", self.kind, "Q9: credential-bearing remote endpoints require HTTPS", "non-loopback HTTP base_url refused")
+
+    async def discover(self, query: str, *, limit: int = 20, cursor: str | None = None,
+                       credential_ref: str | None = None) -> dict:
+        """Q52: return one bounded catalogue page; selection still requires resolution."""
+        if (not isinstance(query, str) or len(query) > 256 or type(limit) is not int
+                or not 1 <= limit <= 100 or (cursor is not None
+                and (not isinstance(cursor, str) or not 0 < len(cursor) <= 4096))):
+            _fail("INVALID_REQUEST", self.kind, "Q52: discovery inputs must be bounded", "invalid query, page size or cursor")
+        if self.kind == "ollama":
+            if cursor is not None:
+                _fail("CAPABILITY_MISMATCH", self.kind, "Q52: Ollama catalogue has no documented cursor", "Ollama catalogue pagination is unavailable")
+            _, payload, _ = await self._request(
+                self._ollama_catalogue_url(), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
+            )
+            try:
+                catalogue = json.loads(payload, object_pairs_hook=_unique_object)
+            except (ValueError, UnicodeError):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue must be JSON", "provider returned malformed catalogue JSON")
+            rows = _at(catalogue, ("models",), self.kind)
+            if not isinstance(rows, list):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue must list models", "provider returned invalid models")
+            candidates = []
+            for row in rows:
+                locator = row.get("name") if isinstance(row, Mapping) else None
+                if not isinstance(locator, str) or self._ollama_name(locator) is None:
+                    _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: candidate must name an Ollama model", "provider returned an invalid model locator")
+                if query.casefold() not in locator.casefold():
+                    continue
+                candidates.append({"kind": self.kind, "locator": locator, "revision": None,
+                                   "private": None, "gated": None, "downloadability": "NOT_VERIFIED"})
+                if len(candidates) == limit:
+                    break
+            result = {"candidates": candidates, "next_cursor": None}
+            defects = validate("source_catalogue", result)
+            if defects:
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue output must conform", "; ".join(defects))
+            return result
+        if self.kind != "huggingface":
+            _fail("CAPABILITY_MISMATCH", self.kind, "Q52: discovery requires a qualified provider route", "catalogue discovery is not implemented for this source")
+        parameters = {"search": query, "limit": str(limit), "full": "true"}
+        if cursor is not None:
+            parameters["cursor"] = cursor
+        endpoint = urljoin(self.base_url.rstrip('/') + '/', 'api/models')
+        _, payload, headers = await self._request(endpoint + '?' + urlencode(parameters),
+            credential_ref, None, {}, _CONTROL_BYTES, self.kind)
+        try:
+            rows = json.loads(payload, object_pairs_hook=_unique_object)
+        except (ValueError, UnicodeError):
+            _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue must be JSON", "provider returned malformed catalogue JSON")
+        if not isinstance(rows, list) or len(rows) > limit:
+            _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue must honor the page bound", "provider returned an invalid or oversized page")
+        candidates = []
+        for row in rows:
+            if (not isinstance(row, dict) or not isinstance(row.get('id'), str)
+                    or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,95}/[A-Za-z0-9][A-Za-z0-9_.-]{0,95}', row['id']) is None):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: candidate must name a repository", "provider returned an invalid repository locator")
+            revision = row.get('sha')
+            if revision is not None and (not isinstance(revision, str) or re.fullmatch('[0-9a-f]{40}', revision) is None):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q9: candidate revision must be a commit", "provider returned an invalid revision")
+            private, gated = row.get('private'), row.get('gated')
+            if (private is not None and type(private) is not bool) or (gated is not None
+                    and type(gated) is not bool and gated not in ('auto', 'manual')):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q9: access declarations must be explicit", "provider returned invalid access fields")
+            candidates.append({'kind': self.kind, 'locator': row['id'], 'revision': revision,
+                'private': private, 'gated': gated if gated is None or type(gated) is bool else True,
+                'downloadability': 'NOT_VERIFIED'})
+        next_cursor = None
+        for link in headers.get('Link', '').split(','):
+            if re.search(r';\s*rel="?next"?(?:\s|;|$)', link) is None:
+                continue
+            match = re.match(r'\s*<([^>]+)>', link)
+            target = urlparse(urljoin(endpoint, match[1])) if match else None
+            if (next_cursor is not None or target is None or _origin(target.geturl()) != _origin(endpoint)
+                    or target.path != urlparse(endpoint).path or target.fragment or target.username or target.password):
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: pagination must remain on the catalogue endpoint", "provider returned an invalid next-page link")
+            values = parse_qs(target.query).get('cursor', [])
+            if len(values) != 1 or not 0 < len(values[0]) <= 4096 or values[0] == cursor:
+                _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: pagination must advance a bounded cursor", "provider returned an invalid next-page cursor")
+            next_cursor = values[0]
+        result = {'candidates': candidates, 'next_cursor': next_cursor}
+        defects = validate('source_catalogue', result)
+        if defects:
+            _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue output must conform", '; '.join(defects))
+        return result
 
     async def resolve(self, descriptor: dict) -> ResolvedSource:
         """Resolve a Q9 descriptor to immutable source evidence."""
@@ -410,20 +504,36 @@ class SourceAdapter:
             _fail("INVALID_REQUEST", self.kind, "Q9: SourceDescriptor must conform before I/O", "; ".join(defects))
         if descriptor["kind"] != self.kind:
             _fail("INVALID_REQUEST", self.kind, "Q52: selected adapter must match descriptor kind", f"received {descriptor['kind']!r}")
+        if self.kind == "ollama":
+            resolved = await self._ollama_resolved(descriptor)
+            expected = descriptor.get("expected_identity")
+            if expected is not None and expected.startswith("sha256:") and expected != resolved.immutable_revision:
+                _fail("IDENTITY_MISMATCH", resolved.locator, "Q9: expected Ollama manifest identity must match", "resolved manifest differs from expected_identity")
+            return resolved
         payload = await self._json("resolve", descriptor["locator"], descriptor.get("revision", ""), descriptor.get("credential_ref"), descriptor.get("license_acceptance_ref"), descriptor.get("artifact_selector"))
         resolved = self._resolved(payload, descriptor)
         expected = descriptor.get("expected_identity")
-        if expected is not None and expected != resolved.identity:
+        if expected is not None and resolved.identity is not None and expected != resolved.identity:
             _fail("IDENTITY_MISMATCH", resolved.locator, "Q9: expected source identity must match resolved immutable evidence", "resolved identity differs from expected_identity")
         return resolved
 
     async def enumerate(self, revision: ResolvedSource) -> tuple[Artifact, ...]:
         """Enumerate every immutable model artifact without changing operation semantics."""
         self._revision(revision)
+        if self.kind == "ollama":
+            actual = await self._ollama_resolved({
+                "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
+                "credential_ref": revision.credential_ref,
+                "license_acceptance_ref": revision.license_acceptance_ref,
+            })
+            if actual != revision:
+                _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: enumeration must remain bound to the resolved revision", "registry manifest changed after resolve")
+            return actual.artifacts
         payload = await self._json("artifacts", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
         actual_revision = self._revision_digest(payload, revision.locator)
         artifacts = self._artifacts(payload, self._wire.artifacts, revision.locator)
-        if actual_revision != revision.immutable_revision or artifacts != revision.artifacts:
+        assets = self._artifacts(payload, self._wire.metadata_assets, revision.locator)
+        if actual_revision != revision.immutable_revision or artifacts != revision.artifacts or assets != revision.metadata_assets:
             _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: enumeration must remain bound to the resolved revision", "artifact manifest changed after resolve")
         return artifacts
 
@@ -432,9 +542,25 @@ class SourceAdapter:
         self._revision(revision)
         encoded = []
         for path, offset, length in ranges:
-            if not isinstance(path, str) or not path or isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0:
-                _fail("INVALID_REQUEST", revision.locator, "Q52: metadata ranges require path, nonnegative offset, and positive length", "invalid metadata range")
+            if not isinstance(path, str) or not path or isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or not 0 < length <= _CONTROL_BYTES:
+                _fail("INVALID_REQUEST", revision.locator, "Q52: metadata ranges require path, nonnegative offset, and length from 1 through 8388608 bytes", "invalid metadata range")
             encoded.append(f"{path}:{offset}:{length}")
+        if self.kind == "ollama":
+            actual = await self._ollama_resolved({
+                "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
+                "credential_ref": revision.credential_ref,
+                "license_acceptance_ref": revision.license_acceptance_ref,
+            })
+            if actual != revision:
+                _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q50: metadata must remain bound to resolve", "registry manifest changed after resolve")
+            by_path = {artifact.path: artifact for artifact in actual.artifacts}
+            for encoded_range in encoded:
+                path, offset, length = encoded_range.rsplit(":", 2)
+                artifact = by_path.get(path)
+                if artifact is None:
+                    _fail("INVALID_REQUEST", revision.locator, "Q50: metadata range must name a pinned artifact", path)
+                await self.open_range(actual, artifact, int(offset), int(length), artifact.validator)
+            return self._ollama_metadata(actual)
         payload = await self._json("metadata", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, ranges=tuple(encoded))
         metadata = _at(payload, self._wire.metadata, revision.locator)
         defects = validate("remote_metadata", metadata)
@@ -450,7 +576,7 @@ class SourceAdapter:
         self._revision(revision)
         if artifact not in (*revision.artifacts, *revision.metadata_assets):
             _fail("INVALID_REQUEST", revision.locator, "Q52: range artifact must belong to the resolved revision", artifact.path)
-        _require_source_range(self.base_url, artifact.range_uri, revision.locator, artifact.path)
+        _require_source_range(self._range_base_url(), artifact.range_uri, revision.locator, artifact.path)
         if isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0 or offset + length > artifact.size:
             _fail("INVALID_REQUEST", artifact.path, "Q52: range must fit the immutable artifact", f"offset={offset}, length={length}, size={artifact.size}")
         headers = {"Range": f"bytes={offset}-{offset + length - 1}", "If-Match": validator}
@@ -464,7 +590,12 @@ class SourceAdapter:
             allow_cross_origin_redirect=True,
         )
         expected_range = f"bytes {offset}-{offset + length - 1}/{artifact.size}"
-        if status != 206 or response_headers.get("Content-Range") != expected_range or response_headers.get("ETag") != validator:
+        retained_validator = (
+            response_headers.get("ETag") == validator
+            or response_headers.get("X-Cassette-Source-ETag") == validator
+            or (validator == artifact.digest and urlparse(artifact.range_uri).path.endswith("/blobs/" + artifact.digest))
+        )
+        if status != 206 or response_headers.get("Content-Range") != expected_range or not retained_validator:
             _fail("SOURCE_REVISION_CHANGED", artifact.path, "Q52: range response must retain validator, extent, and length", "source returned different range evidence")
         if len(payload) != length:
             _fail("SOURCE_UNAVAILABLE", artifact.path, "Q51/Q52: an interrupted range is incomplete", f"received {len(payload)} of {length} bytes", "retryable")
@@ -473,6 +604,15 @@ class SourceAdapter:
     async def license_and_auth(self, revision: ResolvedSource) -> Requirements:
         """Translate source requirements while keeping credential bytes outside every result."""
         self._revision(revision)
+        if self.kind == "ollama":
+            actual = await self._ollama_resolved({
+                "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
+                "credential_ref": revision.credential_ref,
+                "license_acceptance_ref": revision.license_acceptance_ref,
+            })
+            if actual != revision:
+                _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: requirements must remain bound to resolve", "registry manifest changed after resolve")
+            return Requirements(actual.auth_scope, False, actual.license_digest, False)
         payload = await self._json("requirements", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
         wire = self._wire
         requirements = Requirements(
@@ -492,6 +632,147 @@ class SourceAdapter:
     def _revision(self, revision: ResolvedSource) -> None:
         if not isinstance(revision, ResolvedSource) or revision.source_kind != self.kind:
             _fail("INVALID_REQUEST", self.kind, "Q52: revision must belong to the selected adapter", "source kind mismatch")
+
+    def _range_base_url(self) -> str:
+        return self._ollama_registry_url() if self.kind == "ollama" else self.base_url
+
+    def _ollama_catalogue_url(self) -> str:
+        parsed = urlparse(self.base_url)
+        if parsed.hostname == "registry.ollama.ai":
+            return "https://ollama.com/api/tags"
+        base = self.base_url.rstrip("/")
+        return base + ("/tags" if parsed.path.rstrip("/") == "/api" else "/api/tags")
+
+    def _ollama_registry_url(self) -> str:
+        if urlparse(self.base_url).hostname == "ollama.com":
+            return "https://registry.ollama.ai"
+        return self.base_url.rstrip("/")
+
+    @staticmethod
+    def _ollama_name(locator: str) -> tuple[str, str, str] | None:
+        if not isinstance(locator, str) or not locator or len(locator) > 256 or any(char in locator for char in "?#\\\x00"):
+            return None
+        raw, separator, tag = locator.rpartition(":")
+        name = raw if separator else locator
+        tag = tag if separator else "latest"
+        parts = name.split("/")
+        if len(parts) == 1:
+            namespace, model = "library", parts[0]
+        elif len(parts) == 2:
+            namespace, model = parts
+        else:
+            return None
+        component = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+        if any(component.fullmatch(value) is None for value in (namespace, model, tag)):
+            return None
+        return namespace, model, tag
+
+    async def _ollama_resolved(self, descriptor: dict) -> ResolvedSource:
+        locator = descriptor["locator"]
+        parts = self._ollama_name(locator)
+        if parts is None:
+            _fail("INVALID_REQUEST", locator, "Q9: Ollama locator must name an optional namespace, model, and tag", "invalid Ollama model locator")
+        if descriptor.get("artifact_selector") is not None:
+            _fail("MODEL_UNSUPPORTED", locator, "Q9: acquisition retains every referenced Ollama blob", "artifact selectors are not supported by the Ollama adapter")
+        namespace, model, tag = parts
+        requested = descriptor.get("revision") or tag
+        if not isinstance(requested, str) or (not re.fullmatch(r"sha256:[0-9a-f]{64}", requested)
+                                               and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", requested) is None):
+            _fail("INVALID_REQUEST", locator, "Q9: Ollama revision must be a manifest digest or tag", "invalid Ollama revision")
+        registry = self._ollama_registry_url()
+        repo = f"{namespace}/{model}"
+        manifest_url = f"{registry}/v2/{quote(repo, safe='/')}/manifests/{quote(requested, safe=':')}"
+        _, raw_manifest, _ = await self._request(
+            manifest_url, descriptor.get("credential_ref"), descriptor.get("license_acceptance_ref"),
+            {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}, _CONTROL_BYTES, locator,
+        )
+        try:
+            manifest = json.loads(raw_manifest, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, ValueError):
+            _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama registry manifest must be UTF-8 JSON", "invalid registry manifest")
+        hasher = artifact_hasher("sha256:" + "0" * 64, locator)
+        hasher.update(raw_manifest)
+        manifest_digest = "sha256:" + hasher.hexdigest()
+        if requested.startswith("sha256:") and requested != manifest_digest:
+            _fail("SOURCE_REVISION_CHANGED", locator, "Q9: pinned Ollama manifest digest must match", "registry returned another manifest")
+        if _at(manifest, ("schemaVersion",), locator) != 2:
+            _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama registry manifest must use schema version 2", "unsupported registry manifest schema")
+        config = _at(manifest, ("config",), locator)
+        layers = _at(manifest, ("layers",), locator)
+        if not isinstance(config, Mapping) or not isinstance(layers, list):
+            _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama registry manifest must list config and layers", "invalid registry manifest shape")
+        entries = [("config.json", config)] + [(f"layer-{index:06d}", layer) for index, layer in enumerate(layers)]
+        artifacts, metadata_assets = [], []
+        license_digests = []
+        seen = set()
+        for path, entry in entries:
+            if not isinstance(entry, Mapping):
+                _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama manifest entries must be objects", path)
+            digest = _digest(entry.get("digest"), "", "Ollama blob digest", locator)
+            size = entry.get("size")
+            media_type = entry.get("mediaType")
+            if (not digest.startswith("sha256:") or type(size) is not int or size < 0
+                    or not isinstance(media_type, str) or not media_type or digest in seen):
+                _fail("SOURCE_UNAVAILABLE", locator, "Q9: Ollama blob digest, size, and media type must be exact", path)
+            seen.add(digest)
+            annotations = entry.get("annotations")
+            title = annotations.get("org.opencontainers.image.title") if isinstance(annotations, Mapping) else None
+            if title is not None:
+                if (not isinstance(title, str) or not title or any(part in {"", ".", ".."} for part in title.split("/"))
+                        or "\\" in title or "\x00" in title):
+                    _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama blob title must be a safe relative path", path)
+                path = title
+            elif media_type == "application/vnd.ollama.image.model":
+                path += ".gguf"
+            if any(existing.path == path for existing in (*artifacts, *metadata_assets)):
+                _fail("SOURCE_UNAVAILABLE", locator, "Q9: Ollama blob paths must be unique", path)
+            artifact = Artifact(path, size, digest, f"{registry}/v2/{quote(repo, safe='/')}/blobs/{digest}", digest)
+            (artifacts if media_type == "application/vnd.ollama.image.model" else metadata_assets).append(artifact)
+            if media_type == "application/vnd.ollama.image.license":
+                license_digests.append(digest)
+        if len(license_digests) != 1:
+            _fail("METADATA_INSUFFICIENT", locator, "Q9: Ollama manifest requires one immutable license blob", "license layer is absent or ambiguous")
+        if not artifacts:
+            _fail("SOURCE_UNAVAILABLE", locator, "Q9: Ollama manifest requires one model blob", "model layer is absent")
+        artifacts.sort(key=lambda artifact: artifact.path)
+        metadata_assets.sort(key=lambda artifact: artifact.path)
+        return ResolvedSource(
+            self.kind, locator, manifest_digest, None, tuple(artifacts), tuple(metadata_assets), "ollama:registry:pull",
+            license_digests[0], descriptor.get("credential_ref"), descriptor.get("license_acceptance_ref"),
+        )
+
+    def _ollama_metadata(self, revision: ResolvedSource) -> dict:
+        authority = f"source:ollama:{revision.locator}@{revision.immutable_revision}"
+        fields = (*_PREFLIGHT_REQUIRED, "processor", "revision_ancestry", "training_precision")
+        metadata = {field: {"trust": "ABSENT", "authority": authority} for field in fields}
+        metadata.update({
+            "total_bytes": {"value": sum(artifact.size for artifact in revision.artifacts), "trust": "DECLARED", "authority": authority},
+            "artifact_count": {"value": len(revision.artifacts), "trust": "DECLARED", "authority": authority},
+            "artifact_digests": {"value": [artifact.digest for artifact in revision.artifacts], "trust": "DECLARED", "authority": authority},
+            "license": {"value": revision.license_digest, "trust": "DECLARED", "authority": authority},
+            "gating": {"value": False, "trust": "DECLARED", "authority": authority},
+            "source_validators": {"value": {artifact.path: artifact.validator for artifact in revision.artifacts}, "trust": "DECLARED", "authority": authority},
+            "conflicts": [],
+        })
+        return _source_metadata_record(metadata, self.kind, revision.locator)
+
+    async def _validate_credential(self, credential_ref: str | None) -> dict:
+        if credential_ref is None:
+            return {"provider": self.kind, "authenticated": False, "scope": f"{self.kind}:public"}
+        if self.kind == "ollama":
+            _fail("CAPABILITY_MISMATCH", self.kind, "Q9: Ollama has no documented token introspection route", "select and resolve a private registry model to validate its access")
+        if self.kind != "huggingface":
+            _fail("CAPABILITY_MISMATCH", self.kind, "Q9: provider credential validation is unavailable", "source has no supported credential validation route")
+        _, payload, _ = await self._request(
+            urljoin(self.base_url.rstrip("/") + "/", "api/whoami-v2"), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
+        )
+        try:
+            record = json.loads(payload, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, ValueError):
+            _fail("SOURCE_UNAVAILABLE", self.kind, "Q9: credential validation must return JSON", "provider returned malformed whoami record")
+        if not isinstance(record, Mapping) or not isinstance(record.get("name"), str) or not record["name"]:
+            _fail("AUTH_REQUIRED", self.kind, "Q9: provider must confirm a user credential", "provider returned no account identity", "retryable")
+        return {"provider": "huggingface", "authenticated": True, "scope": "NOT_VERIFIED"}
 
     def _revision_digest(self, payload: object, object_id: str) -> str:
         return _digest(_at(payload, self._wire.revision, object_id), self._wire.revision_prefix, "immutable_revision", object_id)
@@ -528,7 +809,7 @@ class SourceAdapter:
             self.kind,
             locator,
             self._revision_digest(payload, locator),
-            _digest(_at(payload, wire.identity, locator), "", "identity", locator),
+            None if _at(payload, wire.identity, locator) is None else _digest(_at(payload, wire.identity, locator), "", "identity", locator),
             self._artifacts(payload, wire.artifacts, locator),
             self._artifacts(payload, wire.metadata_assets, locator),
             _text(_at(payload, wire.auth_scope, locator), "auth_scope", locator),
@@ -543,7 +824,120 @@ class SourceAdapter:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: requirement fields have exact types", f"{field} must be boolean")
         return value
 
+    async def _hub_payload(self, operation, locator, revision, credential_ref, license_ref, selector, ranges):
+        """Q9/Q52: translate public Hub records; parsed model identity remains unknown."""
+        if (len(locator.split("/")) != 2 or any(part in {"", ".", ".."} for part in locator.split("/"))
+                or any(char in locator for char in "?#\\\x00")):
+            _fail("INVALID_REQUEST", locator, "Q9: Hub locator must name an owner and repository", "invalid repository locator")
+        if selector is not None:
+            _fail("MODEL_UNSUPPORTED", locator, "Q9: acquisition retains the complete pinned repository", "artifact selectors are not supported by the Hub adapter")
+        requested = revision.removeprefix("git-sha1:") or "main"
+        endpoint = self.base_url.rstrip("/")
+        repo = quote(locator, safe="/")
+        uri = f"{endpoint}/api/models/{repo}/revision/{quote(requested, safe='')}?blobs=true"
+        _, body, _ = await self._request(uri, credential_ref, license_ref, {}, _CONTROL_BYTES, locator)
+        try:
+            info = json.loads(body, object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, ValueError):
+            _fail("SOURCE_UNAVAILABLE", locator, "Q52: Hub metadata must be UTF-8 JSON", "invalid model-info response")
+        commit = _digest(_at(info, ("sha",), locator), "git-sha1:", "revision", locator)
+        if not commit.startswith("git-sha1:"):
+            _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub revision must be a Git commit", "invalid revision algorithm")
+        if re.fullmatch(r"[0-9a-f]{40}", requested) and commit != "git-sha1:" + requested:
+            _fail("SOURCE_REVISION_CHANGED", locator, "Q9: pinned Hub revision must match", "model-info returned another commit")
+        if _at(info, ("id",), locator) != locator:
+            _fail("SOURCE_REVISION_CHANGED", locator, "Q9: Hub response must name the requested repository", "repository identity changed")
+        private = self._boolean(_at(info, ("private",), locator), "private", locator)
+        gated = _at(info, ("gated",), locator)
+        if gated is not False and gated not in ("auto", "manual"):
+            _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub gating declaration must be exact", "invalid gated value")
+        siblings = _at(info, ("siblings",), locator)
+        if not isinstance(siblings, list) or not siblings:
+            _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub manifest requires immutable files", "siblings is empty or invalid")
+        objects, licenses = [], []
+        paths = set()
+        for item in siblings:
+            name = _text(_at(item, ("rfilename",), locator), "rfilename", locator)
+            size = _at(item, ("size",), locator)
+            if (name in paths or any(part in {"", ".", ".."} for part in name.split("/"))
+                    or "\\" in name or "\x00" in name or type(size) is not int or size < 0):
+                _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub paths and sizes must be exact and unique", name)
+            paths.add(name)
+            url = f"{endpoint}/{repo}/resolve/{commit[9:]}/{quote(name, safe='/')}"
+            license_file = name.upper() in {"LICENSE", "LICENSE.TXT", "LICENSE.MD", "COPYING"}
+            lfs = item.get("lfs")
+            if lfs is None and name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
+                _fail("METADATA_INSUFFICIENT", name,
+                      "Q9/Q50: non-LFS model bytes require a qualified metadata mechanism",
+                      "resolution cannot read model-bearing Git content")
+            if lfs is not None:
+                digest = _digest(_at(lfs, ("sha256",), locator), "sha256:", "artifact digest", locator)
+                if not digest.startswith("sha256:") or _at(lfs, ("size",), locator) != size:
+                    _fail("SOURCE_UNAVAILABLE", locator, "Q9: LFS digest and size must agree", name)
+                status, _, headers = await self._request(url, credential_ref, license_ref, {}, 0, name,
+                    allow_cross_origin_redirect=True, method="HEAD")
+                validator = _text(headers.get("X-Cassette-Source-ETag") or headers.get("ETag"), "ETag", name)
+                if status != 200 or headers.get("Content-Length") != str(size) or validator.startswith("W/"):
+                    _fail("SOURCE_REVISION_CHANGED", name, "Q9: Hub HEAD must bind the complete immutable artifact", "size or strong validator is invalid")
+            else:
+                blob = _digest(_at(item, ("blobId",), locator), "git-sha1:", "Git blob", locator)
+                if not blob.startswith("git-sha1:"):
+                    _fail("SOURCE_UNAVAILABLE", locator, "Q9: ordinary Hub files require Git blob identities", name)
+                validator = '"' + blob[9:] + '"'
+            if lfs is None or license_file:
+                if size > _CONTROL_BYTES:
+                    _fail("METADATA_INSUFFICIENT", name, "Q50: inline Git metadata must fit the bounded control read", f"{size} exceeds {_CONTROL_BYTES} bytes")
+                status, content, headers = await self._request(url, credential_ref, license_ref,
+                    {"If-Match": validator}, size, name, allow_cross_origin_redirect=True)
+                if status != 200 or len(content) != size or not (
+                        headers.get("ETag") == validator or headers.get("X-Cassette-Source-ETag") == validator):
+                    _fail("SOURCE_REVISION_CHANGED", name, "Q9: Hub metadata must retain its validator and extent", "metadata response changed")
+                if lfs is None:
+                    digest = git_blob_sha256(content, blob[9:], name)
+                else:
+                    hasher = artifact_hasher(digest, name)
+                    hasher.update(content)
+                    if "sha256:" + hasher.hexdigest() != digest:
+                        _fail("SOURCE_REVISION_CHANGED", name, "Q9: license bytes must match the source digest", "license digest changed")
+                if license_file:
+                    licenses.append(digest)
+            objects.append({"rfilename": name, "size": size, "lfs": {"sha256": digest[7:]},
+                            "download_url": url, "etag": validator})
+        if len(licenses) != 1:
+            _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity", "one root LICENSE or COPYING file is required")
+        objects.sort(key=lambda item: item["rfilename"])
+        artifacts = [item for item in objects if item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl"))]
+        assets = [item for item in objects if item not in artifacts]
+        authority = f"source:huggingface:{locator}@{commit}"
+        fields = (*_PREFLIGHT_REQUIRED, "processor", "revision_ancestry", "training_precision")
+        metadata = {field: {"trust": "ABSENT", "authority": authority} for field in fields}
+        values = {"total_bytes": sum(item["size"] for item in artifacts), "artifact_count": len(artifacts),
+                  "artifact_digests": ["sha256:" + item["lfs"]["sha256"] for item in artifacts],
+                  "license": licenses[0], "gating": gated is not False,
+                  "source_validators": {item["rfilename"]: item["etag"] for item in objects}}
+        metadata.update({field: {"value": value, "trust": "DECLARED", "authority": authority}
+                         for field, value in values.items()})
+        metadata["conflicts"] = []
+        payload = {"sha": commit[9:], "identity": None, "siblings": artifacts, "metadata_siblings": assets,
+                   "auth": {"scope": "hf:read", "required": private or gated is not False},
+                   "license": {"digest": licenses[0], "acceptance_required": gated is not False},
+                   "remote_metadata": metadata}
+        if ranges:
+            resolved = self._resolved(payload, {"locator": locator, "credential_ref": credential_ref,
+                                               "license_acceptance_ref": license_ref})
+            by_path = {item.path: item for item in (*resolved.artifacts, *resolved.metadata_assets)}
+            for encoded in ranges:
+                name, start, count = encoded.rsplit(":", 2)
+                if name not in by_path:
+                    _fail("INVALID_REQUEST", locator, "Q50: metadata range must name a pinned artifact", name)
+                item = by_path[name]
+                content = await self.open_range(resolved, item, int(start), int(count), item.validator)
+                metadata["source_validators"]["authority"] += ":" + digest_bytes(content)
+        return payload
+
     async def _json(self, operation: str, locator: str, revision: str, credential_ref: str | None, license_ref: str | None, selector: object = None, *, ranges: tuple[str, ...] = ()) -> object:
+        if self.kind == "huggingface":
+            return await self._hub_payload(operation, locator, revision, credential_ref, license_ref, selector, ranges)
         query = [("locator", locator), ("revision", revision)]
         if selector is not None:
             query.append(("selector", json.dumps(selector, sort_keys=True, separators=(",", ":"))))
@@ -572,6 +966,7 @@ class SourceAdapter:
         object_id: str,
         *,
         allow_cross_origin_redirect: bool = False,
+        method: str = "GET",
     ) -> tuple[int, bytes, Mapping[str, str]]:
         request_headers = dict(headers)
         if credential_ref is not None:
@@ -586,7 +981,7 @@ class SourceAdapter:
             request_headers["Authorization"] = f"Bearer {secret}"
         if license_ref is not None:
             request_headers["X-Cassette-License-Acceptance"] = license_ref
-        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect)
+        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method)
 
     def _blocking_request(
         self,
@@ -595,13 +990,19 @@ class SourceAdapter:
         maximum: int,
         object_id: str,
         allow_cross_origin_redirect: bool,
+        method: str = "GET",
     ) -> tuple[int, bytes, Mapping[str, str]]:
         try:
-            opener = build_opener(_CredentialSafeRedirect(object_id, allow_cross_origin_redirect))
-            with opener.open(Request(url, headers=headers), timeout=30) as response:
+            redirects = _CredentialSafeRedirect(object_id, allow_cross_origin_redirect, headers.get("If-Match"))
+            opener = build_opener(redirects)
+            with opener.open(Request(url, headers=headers, method=method), timeout=30) as response:
                 payload = response.read(maximum + 1)
                 if len(payload) > maximum:
                     _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source response must stay within the requested bound", f"response exceeds {maximum} bytes")
+                if "X-Cassette-Source-ETag" in response.headers:
+                    del response.headers["X-Cassette-Source-ETag"]
+                if redirects.verified_source_validator is not None:
+                    response.headers["X-Cassette-Source-ETag"] = redirects.verified_source_validator
                 return response.status, payload, response.headers
         except HTTPError as error:
             if error.code in {401, 403}:
@@ -755,7 +1156,7 @@ def _resolved_metadata_candidates(revision: ResolvedSource, object_id: str) -> d
     }
     return {
         field: {"value": value, "trust": "EVIDENCE_DIGESTED", "authority": authority}
-        for field, value in values.items()
+        for field, value in values.items() if value is not None
     }
 
 
@@ -978,8 +1379,8 @@ def preflight(
             or _canonical_text(revision.auth_scope) is None
             or _canonical_digest(revision.license_digest) is None
             or _canonical_digest(revision.immutable_revision) is None
-            or _canonical_digest(revision.identity) is None
-            or not revision.identity.startswith("blake3:")):
+            or (revision.identity is not None and (_canonical_digest(revision.identity) is None
+                                                  or not revision.identity.startswith("blake3:")))):
         decisive.append("MUTABLE_OR_UNVERIFIED_SOURCE_IDENTITY")
     source_identity = values.get("identity")
     if _canonical_digest(source_identity) is None or source_identity != revision.identity:

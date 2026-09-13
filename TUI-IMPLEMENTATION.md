@@ -3,6 +3,11 @@
 
 Contract version 1 · 6 September 2026 · implementation NOT_RUN
 
+Amendment, 12 September 2026: L05 now owns the shared acquisition operations and their basic CLI
+triggers under `research/ACCEPTANCE_MATRIX.yaml:acquisition_entry_contract`. No app interface exists
+yet. T01 still owns the terminal shell; T02 later connects U01–U03 to those implemented operations
+and proves the TUI journey. L05 does not wait for T01 or close T02 by proving the CLI path.
+
 The user chooses a source and model, connects an account when necessary, selects an external
 drive, and acquires a callable revision without managing downloads outside Cassette. In the same
 terminal application, the user talks to that model, gives it actions, follows ongoing operations,
@@ -177,8 +182,8 @@ Show the exact reason and **Open provider approval**, retain the selection, then
 on return. Never promise universal browser-free onboarding, bypass a gate, or scrape credentials.
 No provider credential is supplied to the model or stored on the cartridge.
 
-T02 qualifies public catalogue and immutable download APIs for both sources from first-hand
-provider documentation and traces. An Ollama pull through an unrelated daemon's default model
+L05 qualifies the shared catalogue and immutable download APIs for both sources from first-hand
+provider documentation and traces; T02 proves their terminal controls. An Ollama pull through an unrelated daemon's default model
 directory does not meet this contract. Preserve manifest/blob identity through Cassette's source
 adapter and store-granted extents; model execution is not delegated to that daemon.
 
@@ -200,7 +205,8 @@ old review and requires an updated summary; preserve the user's choices.
 assessment** separates source compatibility, acquisition feasibility, native fit, compiled-plan
 availability, and measured execution performance. Provider recommendations are attributed advice,
 never Cassette admission. No universal provider “check this machine” API has been established by
-this design research; T02 owns explicit source metadata and local host/drive measurement instead.
+this design research; L05 owns the shared source metadata and local host/drive measurement operations,
+and T02 presents their results.
 
 Acquisition total size is an estimate, not a whole-job storage reservation. Q53 still admits only
 the next atomic claim. Any locally attached macOS APFS drive may attempt operation-bound
@@ -570,7 +576,7 @@ tui_delivery:
       env: macos_fixture_sources_then_approved_live_source_and_drive
       files: [tui.py, sources.py, broker.py, store.py, tools/genschema.py, tests/, pyproject.toml, AGENTS.md, TUI-IMPLEMENTATION.md]
       invariants: [Q5, Q9, Q41, Q43, Q44, Q47, Q50, Q51, Q52, Q53, Q77, Q79, A02, A03]
-      work: Implement catalogue, account connection, drive selection, acquisition review, transfer control and preparation handoff using existing owners.
+      work: Connect catalogue, account connection, drive selection, acquisition review and transfer controls to the shared operations built in L05; add terminal interaction and preparation handoff without duplicating those owners.
       done_when: Both source paths pass fixture journeys including revocation, resume and identity mismatch; the approved live path acquires verified bytes directly to the drive and exposes the callable result.
       acceptance_boundary: Fixture results and live receipts remain separate; the L05 source-entry and permission rules govern physical execution.
       status: TODO

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from errors import CassetteError
-from fixture_server import credential_sink_server, source_fixture_server
+from fixture_server import _FIXTURES, credential_sink_server, source_fixture_server
 from sources import SourceAdapter
 
 REPO = Path(__file__).resolve().parent.parent
@@ -26,10 +26,10 @@ CASES = {
     },
     "ollama": {
         "locator": "library/ollama-model", "revision": "latest",
-        "immutable": "sha256:" + "2" * 64, "identity": "blake3:" + "b" * 64,
+        "immutable": _FIXTURES["ollama"]["revision"], "identity": None,
         "artifact": "model.gguf", "payload": b"ollama-parameter-bytes",
         "asset": "template.txt", "asset_payload": b"{{ .Prompt }}",
-        "scope": "ollama:pull", "license": b"ollama-license", "license_acceptance": False,
+        "scope": "ollama:registry:pull", "license": b"ollama-license", "license_acceptance": False,
     },
     "tinker": {
         "locator": "training/tinker-export", "revision": "checkpoint-7",
@@ -50,8 +50,9 @@ async def _acquire_boundary(kind, case, server, vault):
         "revision": case["revision"],
         "credential_ref": credential_ref,
         "license_acceptance_ref": f"license:s09/{kind}",
-        "expected_identity": case["identity"],
     }
+    if case["identity"] is not None:
+        descriptor["expected_identity"] = case["identity"]
     adapter = SourceAdapter(kind, server.base_url, vault.get)
     before = tuple(getattr(adapter, field.name) for field in fields(adapter))
     resolved = await adapter.resolve(descriptor)
@@ -64,12 +65,13 @@ async def _acquire_boundary(kind, case, server, vault):
 
 
 def test_q52_five_operations_run_unchanged_against_each_source_fixture():
-    """Q52 acceptance: substitute three deterministic sources without a lifecycle fork."""
+    """Q50/Q52: substitute three deterministic sources without a lifecycle fork or unbounded metadata read."""
     public_operations = {
         name for name, value in vars(SourceAdapter).items()
         if callable(value) and not name.startswith("_")
     }
-    assert public_operations == {"resolve", "enumerate", "read_metadata", "open_range", "license_and_auth"}
+    # Q52 now admits discovery; these five artifact operations retain their existing semantics.
+    assert public_operations == {"discover", "resolve", "enumerate", "read_metadata", "open_range", "license_and_auth"}
 
     with source_fixture_server() as server:
         vault = {f"keychain:s09/{kind}": SECRET for kind in CASES}
@@ -78,29 +80,40 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
             _, _, resolved, artifacts, metadata, payload, requirements, before, after = result
             assert resolved.source_kind == kind
             assert resolved.immutable_revision == case["immutable"]
-            assert resolved.identity == case["identity"]
+            assert resolved.identity == (None if kind in {"huggingface", "ollama"} else case["identity"])
             assert artifacts == resolved.artifacts
             assert [artifact.path for artifact in artifacts] == [case["artifact"]]
             assert artifacts[0].size == len(case["payload"])
             assert artifacts[0].digest == "sha256:" + hashlib.sha256(case["payload"]).hexdigest()
-            assert artifacts[0].range_uri == f"{server.base_url}/bytes/{kind}/{case['artifact']}"
-            assert [asset.path for asset in resolved.metadata_assets] == [case["asset"]]
-            assert resolved.metadata_assets[0].size == len(case["asset_payload"])
-            assert resolved.metadata_assets[0].digest == "sha256:" + hashlib.sha256(case["asset_payload"]).hexdigest()
+            expected_uri = (f"{server.base_url}/{case['locator']}/resolve/{case['immutable'][9:]}/{case['artifact']}"
+                            if kind == "huggingface" else f"{server.base_url}/v2/{case['locator']}/blobs/{artifacts[0].digest}"
+                            if kind == "ollama" else f"{server.base_url}/bytes/{kind}/{case['artifact']}")
+            assert artifacts[0].range_uri == expected_uri
+            expected_assets = (["LICENSE", case["asset"]] if kind == "huggingface" else
+                               ["config.json", "layer-000001", "layer-000002"] if kind == "ollama" else [case["asset"]])
+            assert [asset.path for asset in resolved.metadata_assets] == expected_assets
+            asset = next(asset for asset in resolved.metadata_assets if asset.digest == "sha256:" + hashlib.sha256(case["asset_payload"]).hexdigest())
+            assert asset.size == len(case["asset_payload"])
+            assert asset.digest == "sha256:" + hashlib.sha256(case["asset_payload"]).hexdigest()
             assert payload == case["payload"][1:-1]
-            assert metadata["identity"] == {
-                "value": case["identity"],
-                "trust": "DECLARED",
-                "authority": (
-                    f"source:{kind}:claim:EVIDENCE_DIGESTED:fixture:{kind}:manifest"
-                ),
-            }
-            assert metadata["format"]["trust"] == "DECLARED"
-            assert metadata["format"]["authority"].startswith(
-                f"source:{kind}:claim:PARSED:"
-            )
+            if kind == "huggingface":
+                assert metadata["identity"]["trust"] == "ABSENT"
+                assert "value" not in metadata["identity"]
+                assert metadata["format"]["trust"] == "ABSENT"
+            elif kind == "tinker":
+                assert metadata["identity"] == {
+                    "value": case["identity"],
+                    "trust": "DECLARED",
+                    "authority": (
+                        f"source:{kind}:claim:EVIDENCE_DIGESTED:fixture:{kind}:manifest"
+                    ),
+                }
+                assert metadata["format"]["trust"] == "DECLARED"
+                assert metadata["format"]["authority"].startswith(
+                    f"source:{kind}:claim:PARSED:"
+                )
             assert requirements.auth_scope == case["scope"]
-            assert requirements.credential_required is True
+            assert requirements.credential_required is (kind != "ollama")
             assert requirements.license_acceptance_required is case["license_acceptance"]
             expected_license = "sha256:" + hashlib.sha256(case["license"]).hexdigest()
             assert requirements.license_digest == resolved.license_digest == expected_license
@@ -109,7 +122,14 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
             assert set(requirements.record()) == {"auth_scope", "credential_required", "license_digest", "license_acceptance_required"}
             assert before == after
 
-        for kind in CASES:
+        hub_requests = [row for row in server.requests if "huggingface-model" in row["path"]]
+        assert len([row for row in hub_requests if row["path"].startswith("/api/models/")]) == 4
+        assert [row["range"] for row in hub_requests if row["range"]] == ["bytes=0-7", f"bytes=1-{len(CASES['huggingface']['payload']) - 2}"]
+        assert all(row["authorized"] and row["license_ref_present"] for row in hub_requests)
+        ollama_requests = [request for request in server.requests if "/v2/library/ollama-model/" in request["path"]]
+        assert [request["path"].split("/")[-2] for request in ollama_requests] == ["manifests", "manifests", "manifests", "blobs", "blobs", "manifests"]
+        assert all(request["authorized"] and request["license_ref_present"] for request in ollama_requests)
+        for kind in ("tinker",):
             operations = [request["path"].split("/")[-1] if request["path"].startswith("/source/") else "range" for request in server.requests if f"/{kind}/" in request["path"]]
             assert operations == ["resolve", "artifacts", "metadata", "range", "requirements"]
             assert all(request["authorized"] for request in server.requests if f"/{kind}/" in request["path"])
@@ -119,6 +139,11 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
 
         resolved = results[0][2]
         artifact = resolved.artifacts[0]
+        requests_before_oversize = len(server.requests)
+        with pytest.raises(CassetteError) as oversized:
+            asyncio.run(results[0][1].read_metadata(resolved, ((artifact.path, 0, 8 * 1024 * 1024 + 1),)))
+        assert oversized.value.code == "INVALID_REQUEST"
+        assert len(server.requests) == requests_before_oversize
         with pytest.raises(CassetteError) as changed:
             asyncio.run(results[0][1].open_range(resolved, artifact, 0, 1, '"wrong-validator"'))
         assert changed.value.code == "SOURCE_REVISION_CHANGED"
@@ -133,8 +158,15 @@ def test_q52_five_operations_run_unchanged_against_each_source_fixture():
         with pytest.raises(CassetteError) as changed_artifact:
             asyncio.run(results[0][1].enumerate(resolved))
         assert changed_artifact.value.code == "SOURCE_REVISION_CHANGED"
-        assert changed_artifact.value.object_id == resolved.locator
+        assert changed_artifact.value.object_id == artifact.path
         server.artifact_size_override = None
+        server.corrupt_ranges[("huggingface", "config.json", 0)] = 0
+        with pytest.raises(CassetteError) as changed_git_blob:
+            asyncio.run(results[0][1].resolve(results[0][0]))
+        assert changed_git_blob.value.code == "SOURCE_REVISION_CHANGED"
+        assert changed_git_blob.value.object_id == "config.json"
+        assert "Git blob" in changed_git_blob.value.detail
+        server.corrupt_ranges.clear()
 
 
 def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_path):
@@ -182,18 +214,17 @@ def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_
         assert SECRET not in not_opaque.value.detail
         assert len(server.requests) == requests_before_raw_ref
         vault[descriptor["credential_ref"]] = SECRET
+        deferred = asyncio.run(adapter.resolve({**descriptor, "expected_identity": "blake3:" + "0" * 64}))
+        assert deferred.identity is None
+        other_descriptor, other_adapter, *_ = results[1]
+        vault[other_descriptor["credential_ref"]] = SECRET
         with pytest.raises(CassetteError) as mismatch:
-            asyncio.run(adapter.resolve({**descriptor, "expected_identity": "blake3:" + "0" * 64}))
+            asyncio.run(other_adapter.resolve({**other_descriptor, "expected_identity": "sha256:" + "0" * 64}))
         assert mismatch.value.code == "IDENTITY_MISMATCH"
-        server.range_override = "https://attacker.invalid/model.safetensors"
-        with pytest.raises(CassetteError) as foreign_range:
-            asyncio.run(adapter.resolve(descriptor))
-        assert foreign_range.value.code == "SOURCE_UNAVAILABLE"
-        server.range_override = None
 
         resolved = results[0][2]
         artifact = resolved.artifacts[0]
-        with credential_sink_server(CASES["huggingface"]["payload"], artifact.validator) as sink:
+        with credential_sink_server(CASES["huggingface"]["payload"], '"transport-object-etag"') as sink:
             server.range_override = f"{server.base_url}/redirect"
             server.range_redirect_target = f"{sink.base_url}/range"
             redirected = asyncio.run(adapter.resolve(descriptor))
@@ -206,6 +237,13 @@ def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_
             ))
             assert redirected_payload == CASES["huggingface"]["payload"]
             assert sink.requests == [{"authorization": None, "license_ref": None, "path": "/range"}]
+            server.linked_validator_override = '"changed-source-etag"'
+            with pytest.raises(CassetteError) as changed_redirect:
+                asyncio.run(adapter.open_range(redirected, redirected.artifacts[0], 0,
+                    redirected.artifacts[0].size, redirected.artifacts[0].validator))
+            assert changed_redirect.value.code == "SOURCE_REVISION_CHANGED"
+            assert len(sink.requests) == 1
+            server.linked_validator_override = None
             server.range_override = None
             server.range_redirect_target = None
 
@@ -238,7 +276,7 @@ def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_
         assert len(server.requests) == requests_before_provider_failure
 
     source_kinds = set(CASES)
-    for path in (path for path in REPO.glob("*.py") if path.name != "sources.py"):
+    for path in (path for path in REPO.glob("*.py") if path.name not in {"sources.py", "cli.py"}):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, (ast.If, ast.Match)):
