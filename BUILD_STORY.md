@@ -7740,3 +7740,33 @@ remote with matching local and remote hashes. Selection 06 later ended without a
 receipt; I cancelled its recorded operation through the installed broker after its process ended.
 The owned runners, observer and scan are stopped. The separate film job remains untouched while
 Drew's requested choice is pending. No model payload has transferred, and L05 remains in progress.
+
+### Returning to the single-model acquisition
+
+Drew reported that nothing was running and directed continuation. The new process check found no
+film repeatability or Blender background job. I checked all 38 installed program and schema files
+against the verified candidate and found no change. The supported CLI then started selection 07
+for the same marked cartridge and the same sole selected `llamafactory/tiny-random-qwen3` revision.
+The earlier failures and cancellations remain intact. The continuation uses Drew's recorded
+reconnect, verifies the cartridge again, and keeps qualification, source digests, terminal replay
+and the outside-root inventory comparison as separate checks.
+
+Selection 07 and Go's preparation passed. The reported-reconnect command verified the marked
+cartridge and released the durability hold. Go then passed its measured storage qualification
+and streamed the nine selected files onto LaCie. Each checkpoint reread the retained bytes;
+the final source digests matched the immutable revision for all 20,764,612 bytes. Repeating the
+same Go returned the identical success receipt. The installed CLI then began its final inventory
+scan to compare recorded names, types and aggregate logical bytes outside the cartridge.
+
+That final comparison matched selection 07 exactly. The single-model acquisition passed,
+with the measured storage profile, source digests, repeated-command result and current drive
+preservation interval joined to the same Go operation. I saved the portable receipt in
+`docs/l05/2026-10-10-one-model-acquisition.json`, including hashes of the retained original records.
+The finite runner and its CLI children ended. I requested no additional physical action.
+His reconnect remains an operator report with fresh cartridge readback; this attempt does not
+claim a separately observed cold cycle for its newly created pointer.
+
+The one-model test is complete. L05's full release boundary still requires its authenticated and
+Ollama source journeys, required model and dataset input receipts, and the established independent
+review supplied by Drew. The downloaded random fixture does not establish model execution,
+training, large-model capability or completion of those release rows.

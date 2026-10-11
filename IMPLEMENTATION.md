@@ -82,6 +82,34 @@ the installed broker after its process ended. Both owned continuation helpers ar
 no owned scan, watcher or download remains active. The foreign film job remains untouched.
 The live single-model transfer remains NOT_RUN with zero model payload bytes. Resume only from
 a fresh selection after the film-write conflict is resolved; do not request another reconnect.
+The principal now reports that nothing is running and explicitly directs continuation. The
+current process check finds no film repeatability or Blender job. Resume without another approval
+or physical cue: the 38 installed files still match candidate 03, and the installed CLI starts
+selection 07, followed by Go, cartridge verification, qualification, download, exact terminal
+replay and the final outside-root inventory comparison. Retain earlier failed/cancelled records.
+Selection 07 succeeded as `op-ff54916c9e83e0b93bae033bed31e9a14c4f58223c1be175f1bd1b207bfb4726`.
+Go 07 is `op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e`.
+Its preparation established the acknowledged durability hold. The reported-reconnect operation
+`op-2af968fa0b7ab8086056f21228f8757901f8f69e34786f587fd46a29dc9d71bc` verified the same
+cartridge and released that hold. Go has resumed for qualification and acquisition. Final source
+digests, replay and the post-download inventory remain pending at this checkpoint.
+Go 07 subsequently succeeded with all nine source artifacts and 20,764,612 verified bytes.
+The operation-bound storage profile passed at
+`blake3:02730cc941c8977dab5433e9f957822b204dc5350a6e54cf95a41f90e1df39f9`.
+Repeating the same Go returned the identical terminal receipt. The installed CLI is recording
+the post-download protected inventory; its comparison remains pending. Source and replay receipts
+are retained under `2026-10-10/download-verified-07.json` in the existing evidence root.
+The final selection completed and its protected inventory equals selection 07 exactly: all
+recorded top-level names, types and aggregate logical-byte totals outside the cartridge match.
+`2026-10-10/result-07.json` records the bounded acquisition, storage qualification, exact terminal
+replay and current preservation interval as PASS. The owned driver and its CLI children ended.
+The portable receipt is `docs/l05/2026-10-10-one-model-acquisition.json`; it joins the operation,
+all nine source digests, storage-profile identity, inventories and retained evidence-file hashes.
+Earlier failed intervals remain failed. The physical reconnect remains operator-reported;
+the new pointer has verified readback but no separately observed cold-remount cycle. The single
+public-source test is complete. L05 remains IN_PROGRESS for its required authenticated and Ollama
+source paths, release model/dataset input receipts and established principal-supplied independent
+review. No model execution, later stage or whole-system completion is claimed.
 
 ### Earlier acquisition attempt — superseded by the current direction above
 
