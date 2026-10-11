@@ -1,5 +1,7 @@
 # pyproject.toml — project identity and the J dependency record (AGENTS.md: pins are part of J); depends on (none).
 # Q31 admits only setuptools.build_meta.build_wheel at the exact cached 84.0.0 release.
+# Q9 reuses CPython _ssl's linked OpenSSL Ed25519 EVP_PKEY/EVP_DigestSign subset through
+# ctypes. No crypto library is added or shipped; missing symbols raise CAPABILITY_MISMATCH.
 [build-system]
 requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"

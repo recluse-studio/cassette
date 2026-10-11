@@ -113,7 +113,8 @@
             "mode": {
               "enum": [
                 "public",
-                "token"
+                "token",
+                "existing"
               ],
               "minLength": 1,
               "type": "string"

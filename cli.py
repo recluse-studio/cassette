@@ -48,12 +48,13 @@ def main(argv=None):
     models.add_argument('--limit', type=int, default=20)
     models.add_argument('--cursor')
     models.add_argument('--connection')
-    connect = commands.add_parser('connect', help='Connect publicly or save a masked read token in macOS Keychain.')
+    connect = commands.add_parser('connect', help='Use public access, a masked read token, or an existing Ollama login.')
     connect.add_argument('--source', choices=['huggingface', 'ollama'], required=True)
     connect.add_argument('--endpoint')
     mode = connect.add_mutually_exclusive_group(required=True)
     mode.add_argument('--public', action='store_true')
     mode.add_argument('--token', action='store_true')
+    mode.add_argument('--existing-login', action='store_true', help='Reuse the current Ollama account without a new login.')
     select = commands.add_parser('select-model', help='Freeze a model revision and recheck source access.')
     select.add_argument('--connection', required=True)
     select.add_argument('--model', required=True)
@@ -91,7 +92,8 @@ def main(argv=None):
         elif args.command == 'connect':
             endpoint = args.endpoint or {'huggingface': 'https://huggingface.co', 'ollama': 'https://registry.ollama.ai'}[args.source]
             request.update(operation='source.connect', target=args.source, arguments={'connection': {
-                'source': args.source, 'endpoint': endpoint, 'mode': 'token' if args.token else 'public',
+                'source': args.source, 'endpoint': endpoint,
+                'mode': 'existing' if args.existing_login else 'token' if args.token else 'public',
                 'credential_ref': None}})
             token = None
             if args.token:

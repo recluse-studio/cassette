@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from dataclasses import dataclass
 import errno
 import fcntl
@@ -13,10 +14,11 @@ import json
 import os
 import re
 import stat
+import time
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, parse_http_list, parse_keqv_list
 
 from errors import CassetteError
 from schema.validator import validate
@@ -289,7 +291,7 @@ _WIRES = {
     ),
 }
 
-CredentialLookup = Callable[[str], str | None]
+CredentialLookup = Callable[[str], str | Callable[[bytes], str] | None]
 
 
 def _fail(code: str, object_id: str, invariant: str, detail: str, retryability: str = "terminal"):
@@ -423,6 +425,8 @@ class SourceAdapter:
         if self.kind == "ollama":
             if cursor is not None:
                 _fail("CAPABILITY_MISMATCH", self.kind, "Q52: Ollama catalogue has no documented cursor", "Ollama catalogue pagination is unavailable")
+            if credential_ref is not None and credential_ref.startswith('ollama-key:v1:'):
+                await self._validate_credential(credential_ref)
             _, payload, _ = await self._request(
                 self._ollama_catalogue_url(), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
             )
@@ -680,8 +684,14 @@ class SourceAdapter:
                                                and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", requested) is None):
             _fail("INVALID_REQUEST", locator, "Q9: Ollama revision must be a manifest digest or tag", "invalid Ollama revision")
         registry = self._ollama_registry_url()
+        credential_ref = descriptor.get('credential_ref')
+        if credential_ref is not None and credential_ref.startswith('ollama-key:v1:'):
+            await self._validate_credential(credential_ref)
         repo = f"{namespace}/{model}"
-        manifest_url = f"{registry}/v2/{quote(repo, safe='/')}/manifests/{quote(requested, safe=':')}"
+        source_tag = tag if requested.startswith('sha256:') else requested
+        name = locator.rsplit(':', 1)[0] if ':' in locator else locator
+        locator = f'{name}:{source_tag}'
+        manifest_url = f"{registry}/v2/{quote(repo, safe='/')}/manifests/{quote(source_tag, safe='')}"
         _, raw_manifest, _ = await self._request(
             manifest_url, descriptor.get("credential_ref"), descriptor.get("license_acceptance_ref"),
             {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}, _CONTROL_BYTES, locator,
@@ -756,23 +766,39 @@ class SourceAdapter:
         })
         return _source_metadata_record(metadata, self.kind, revision.locator)
 
+    def _require_existing_login(self) -> None:
+        """Q9: the source adapter owns admission of the provider's existing-login flow."""
+        if self.kind != 'ollama':
+            _fail('CAPABILITY_MISMATCH', self.kind, 'Q9: existing-login connection requires a supported provider', 'existing-login connection supports Ollama')
+
     async def _validate_credential(self, credential_ref: str | None) -> dict:
         if credential_ref is None:
             return {"provider": self.kind, "authenticated": False, "scope": f"{self.kind}:public"}
         if self.kind == "ollama":
-            _fail("CAPABILITY_MISMATCH", self.kind, "Q9: Ollama has no documented token introspection route", "select and resolve a private registry model to validate its access")
-        if self.kind != "huggingface":
+            if not credential_ref.startswith('ollama-key:v1:'):
+                _fail("CAPABILITY_MISMATCH", self.kind, "Q9: Ollama account validation uses its existing signing key", "use an existing-login connection")
+            account_url = self._ollama_catalogue_url().rsplit('/', 1)[0] + '/me'
+            _, payload, _ = await self._request(account_url, credential_ref, None, {}, _CONTROL_BYTES, self.kind, method='POST')
+        elif self.kind == "huggingface":
+            _, payload, _ = await self._request(
+                urljoin(self.base_url.rstrip("/") + "/", "api/whoami-v2"), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
+            )
+        else:
             _fail("CAPABILITY_MISMATCH", self.kind, "Q9: provider credential validation is unavailable", "source has no supported credential validation route")
-        _, payload, _ = await self._request(
-            urljoin(self.base_url.rstrip("/") + "/", "api/whoami-v2"), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
-        )
         try:
             record = json.loads(payload, object_pairs_hook=_unique_object)
         except (UnicodeDecodeError, ValueError):
             _fail("SOURCE_UNAVAILABLE", self.kind, "Q9: credential validation must return JSON", "provider returned malformed whoami record")
-        if not isinstance(record, Mapping) or not isinstance(record.get("name"), str) or not record["name"]:
+        name_field = 'Name' if self.kind == 'ollama' and isinstance(record, Mapping) and 'Name' in record else 'name'
+        if (isinstance(record, Mapping) and 'Name' in record and 'name' in record
+                and record['Name'] != record['name']):
+            _fail('SOURCE_UNAVAILABLE', self.kind, 'Q9: account identity must be unambiguous', 'provider returned conflicting account names')
+        if not isinstance(record, Mapping) or not isinstance(record.get(name_field), str) or not record[name_field]:
             _fail("AUTH_REQUIRED", self.kind, "Q9: provider must confirm a user credential", "provider returned no account identity", "retryable")
-        return {"provider": "huggingface", "authenticated": True, "scope": "NOT_VERIFIED"}
+        result = {"provider": self.kind, "authenticated": True, "scope": "NOT_VERIFIED"}
+        if self.kind == 'ollama':
+            result['account'] = record[name_field]
+        return result
 
     def _revision_digest(self, payload: object, object_id: str) -> str:
         return _digest(_at(payload, self._wire.revision, object_id), self._wire.revision_prefix, "immutable_revision", object_id)
@@ -984,19 +1010,64 @@ class SourceAdapter:
         method: str = "GET",
     ) -> tuple[int, bytes, Mapping[str, str]]:
         request_headers = dict(headers)
+        signer = None
         if credential_ref is not None:
             try:
-                secret = self.credential_lookup(credential_ref) if self.credential_lookup is not None else None
+                credential = await asyncio.to_thread(self.credential_lookup, credential_ref) if self.credential_lookup is not None else None
+            except CassetteError:
+                raise
             except Exception as error:
                 _fail("AUTH_REQUIRED", object_id, "Q9: credential_ref must resolve at operation time", f"credential provider failed with {type(error).__name__}", "retryable")
-            if not isinstance(secret, str) or not secret:
+            if callable(credential) and self.kind == 'ollama' and credential_ref.startswith('ollama-key:v1:'):
+                signer = credential
+                if _origin(url) not in {_origin(self._ollama_catalogue_url()), _origin(self._ollama_registry_url())}:
+                    _fail('AUTH_REQUIRED', object_id, 'Q9: signing key must remain on the connected provider origins', 'request origin differs from the connection')
+                if urlparse(url).path.endswith('/api/me'):
+                    parsed = urlparse(url)
+                    query = urlencode({'ts': str(int(time.time()))})
+                    url = parsed._replace(query=query).geturl()
+                    request_headers['Authorization'] = await asyncio.to_thread(signer, f'{method},{parsed.path}?{query}'.encode())
+            elif not isinstance(credential, str) or not credential:
                 _fail("AUTH_REQUIRED", object_id, "Q9: credential_ref must resolve at operation time", "credential reference is unavailable", "retryable")
-            if secret == credential_ref:
+            elif credential == credential_ref:
                 _fail("INVALID_REQUEST", object_id, "Q9: credential_ref must be opaque", "credential_ref must not contain credential material")
-            request_headers["Authorization"] = f"Bearer {secret}"
+            else:
+                request_headers["Authorization"] = f"Bearer {credential}"
         if license_ref is not None:
             request_headers["X-Cassette-License-Acceptance"] = license_ref
-        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method)
+        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method, signer)
+
+    def _ollama_registry_token(self, url: str, challenge: str, signer: Callable[[bytes], str], object_id: str) -> str:
+        """Exchange one same-origin pull challenge for an in-memory registry bearer token."""
+        scheme, _, parameters = challenge.partition(' ')
+        try:
+            fields = parse_http_list(parameters)
+            values = parse_keqv_list(fields)
+            parsed = urlparse(url)
+            repository = '/'.join(parsed.path.split('/')[2:4])
+            realm = values.get('realm', '')
+            token_url = urlparse(realm)
+        except ValueError:
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry challenge must be well formed', 'registry returned malformed authorization fields', 'retryable')
+        if (scheme.lower() != 'bearer' or len(fields) != 3 or set(values) != {'realm', 'service', 'scope'}
+                or _origin(realm) != _origin(url) or token_url.username or token_url.password or token_url.fragment
+                or not parsed.path.startswith('/v2/') or values['scope'] != f'repository:{repository}:pull'
+                or set(parse_qs(token_url.query)) & {'service', 'scope', 'ts', 'nonce'}):
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry challenge must bind the same origin and selected pull scope', 'registry returned an invalid authorization challenge', 'retryable')
+        query = parse_qsl(token_url.query) + [('service', values['service']), ('scope', values['scope']),
+            ('ts', str(int(time.time()))), ('nonce', base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip('='))]
+        realm = token_url._replace(query=urlencode(sorted(query))).geturl()
+        empty_hash = artifact_hasher('sha256:' + '0' * 64, object_id).hexdigest().encode('ascii')
+        authorization = signer(b'GET,' + realm.encode() + b',' + base64.b64encode(empty_hash))
+        _, payload, _ = self._blocking_request(realm, {'Authorization': authorization}, _CONTROL_BYTES, object_id, False)
+        try:
+            record = json.loads(payload, object_pairs_hook=_unique_object)
+        except (UnicodeError, ValueError):
+            _fail('SOURCE_UNAVAILABLE', object_id, 'Q9: registry grant must be JSON', 'registry returned a malformed token grant')
+        token = record.get('token') if isinstance(record, dict) else None
+        if not isinstance(token, str) or not token or any(character in token for character in '\r\n'):
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry grant must contain a bearer token', 'registry returned no usable token', 'retryable')
+        return token
 
     def _blocking_request(
         self,
@@ -1006,6 +1077,7 @@ class SourceAdapter:
         object_id: str,
         allow_cross_origin_redirect: bool,
         method: str = "GET",
+        signer: Callable[[bytes], str] | None = None,
     ) -> tuple[int, bytes, Mapping[str, str]]:
         try:
             redirects = _CredentialSafeRedirect(object_id, allow_cross_origin_redirect, headers.get("If-Match"))
@@ -1020,6 +1092,12 @@ class SourceAdapter:
                     response.headers["X-Cassette-Source-ETag"] = redirects.verified_source_validator
                 return response.status, payload, response.headers
         except HTTPError as error:
+            if error.code == 401 and signer is not None and urlparse(url).path.startswith('/v2/'):
+                challenge = error.headers.get('WWW-Authenticate', '')
+                error.close()
+                token = self._ollama_registry_token(url, challenge, signer, object_id)
+                return self._blocking_request(url, {**headers, 'Authorization': 'Bearer ' + token},
+                                              maximum, object_id, allow_cross_origin_redirect, method)
             if error.code in {401, 403}:
                 _fail("AUTH_REQUIRED", object_id, "Q9: source rejected the credential reference", f"source returned HTTP {error.code}", "retryable")
             if error.code in {409, 412}:

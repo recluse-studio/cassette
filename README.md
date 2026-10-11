@@ -264,6 +264,22 @@ S25–S28 closed that historical machine baseline. The 2026-09-02 contract amend
 new L01.25 machine proof and L01.5 physical qualification before PHASE LIVE may move a model byte.
 No UI has been built.
 
+### Reuse an existing Ollama login
+
+The installed CLI can validate the current Ollama account without opening a provider page:
+
+```bash
+cassette connect --source ollama --existing-login
+```
+
+Use the returned operation ID with `cassette models --connection <operation-id>` or
+`cassette select-model --connection <operation-id> --model <name:tag>`. Cassette keeps Ollama's
+existing key in its provider-owned location and saves only a reference bound to its public-key
+digest and the selected endpoint. Each new catalogue or selection operation rechecks the account.
+Model selection verifies the tag's manifest against its frozen digest; model bytes move only
+through the separately authorized Go operation. The provider's advertised catalogue can omit
+registry models, so a known model can be selected by name and tag.
+
 ## Build path
 
 The implementation proceeds in dependency order and does not promote diagnostic artifacts into a

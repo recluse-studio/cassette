@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections import deque
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -15,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import re
+import _ssl
 import sys
 from types import MappingProxyType
 import uuid
@@ -1540,7 +1542,7 @@ class CanonicalBroker:
                 _reject('INVALID_REQUEST', 'source.discover', 'catalogue endpoint differs from its connection')
             credential_ref = connection['credential_ref']
         adapter = SourceAdapter(args['source'], args['endpoint'],
-            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(args['source'], args['endpoint']))
+            credential_lookup=MacOSSourceCredentialProvider().lookup_callback(args['source'], args['endpoint']))
         async def discover():
             return await adapter.discover(args['query'], limit=args['limit'], cursor=args['cursor'],
                                           credential_ref=credential_ref)
@@ -1558,16 +1560,23 @@ class CanonicalBroker:
         if request['operation'] != 'source.connect' or set(request['arguments']) != {'connection'}:
             _reject('INVALID_REQUEST', 'source.connect', 'connection requires its generated argument record')
         args = request['arguments']['connection']
-        if args['mode'] == 'public' and (token is not None or args['credential_ref'] is not None):
-            _reject('INVALID_REQUEST', 'source.connect', 'public connection cannot contain a credential')
+        if args['mode'] != 'token' and (token is not None or args['credential_ref'] is not None):
+            _reject('INVALID_REQUEST', 'source.connect', 'public and existing-login connections accept no supplied credential')
         adapter = SourceAdapter(args['source'], args['endpoint'])
         async def connect():
             if args['mode'] == 'public':
                 await adapter.discover('', limit=1)
                 credential_ref = None
                 authentication = {'authenticated': False, 'scope': 'public'}
+            elif args['mode'] == 'existing':
+                adapter._require_existing_login()
+                vault = MacOSSourceCredentialProvider()
+                credential_ref = await asyncio.to_thread(vault.existing_login, args['source'], args['endpoint'])
+                authenticated_adapter = SourceAdapter(args['source'], args['endpoint'],
+                    credential_lookup=vault.lookup_callback(args['source'], args['endpoint']))
+                authentication = await authenticated_adapter._validate_credential(credential_ref)
             else:
-                vault = MacOSKeychainCredentialProvider()
+                vault = MacOSSourceCredentialProvider()
                 credential_ref = args['credential_ref']
                 if token is None or credential_ref is not None:
                     _reject('INVALID_REQUEST', 'source.connect', 'token connection requires masked input and no caller-supplied reference')
@@ -1586,7 +1595,7 @@ class CanonicalBroker:
         args = request['arguments']['selection']
         connection = self._entry_result(args['connection_id'], 'source.connect')
         adapter = SourceAdapter(connection['source'], connection['endpoint'],
-            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(connection['source'], connection['endpoint']))
+            credential_lookup=MacOSSourceCredentialProvider().lookup_callback(connection['source'], connection['endpoint']))
         async def select():
             descriptor = {'kind': connection['source'], 'locator': args['locator']}
             for field, value in (('revision', args['revision']),
@@ -1598,6 +1607,7 @@ class CanonicalBroker:
             if await adapter.enumerate(revision) != revision.artifacts:
                 _reject('SOURCE_REVISION_CHANGED', revision.locator, 'model artifacts changed during selection')
             requirements = await adapter.license_and_auth(revision)
+            descriptor['locator'] = revision.locator
             descriptor['revision'] = revision.immutable_revision
             return {'connection_id': args['connection_id'], 'endpoint': connection['endpoint'],
                     'descriptor': descriptor, 'source_lock': _source_record(revision),
@@ -1669,7 +1679,7 @@ class CanonicalBroker:
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
             selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
             adapter = SourceAdapter(descriptor['kind'], model['endpoint'],
-                credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
+                credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
             revision = await adapter.resolve(descriptor)
             if _source_record(revision) != model['source_lock']:
                 _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable model')
@@ -3051,8 +3061,8 @@ class _CFDictionaryCallbacks(ctypes.Structure):
     )
 
 
-class MacOSKeychainCredentialProvider:
-    """Store source tokens in macOS Keychain and expose provider-bound lookups."""
+class MacOSSourceCredentialProvider:
+    """Resolve endpoint-bound Keychain tokens and the existing Ollama signing key."""
 
     def __init__(self) -> None:
         if sys.platform != "darwin":
@@ -3092,14 +3102,117 @@ class MacOSKeychainCredentialProvider:
         finally:
             self._release(attributes)
 
-    def lookup_callback(self, provider: str, endpoint: str) -> Callable[[str], str | None]:
+    def lookup_callback(self, provider: str, endpoint: str) -> Callable[[str], str | Callable[[bytes], str] | None]:
         """Return the one-argument credential lookup callback SourceAdapter accepts."""
         self._binding(provider, endpoint)
         return lambda reference: self.load(reference, provider, endpoint)
 
-    def load(self, reference: str, provider: str, endpoint: str) -> str | None:
+    def existing_login(self, provider: str, endpoint: str) -> str:
+        """Bind an existing provider-owned key without copying or changing that key."""
+        _, public = self._ollama_key()
+        return 'ollama-key:v1:' + digest_bytes(self._binding(provider, endpoint) + public)
+
+    @staticmethod
+    def _ollama_key() -> tuple[bytes, bytes]:
+        """Read Ollama's unencrypted OpenSSH Ed25519 key; reject other encodings."""
+        try:
+            with (Path.home() / '.ollama/id_ed25519').open('rb') as stream:
+                if os.fstat(stream.fileno()).st_mode & 0o077:
+                    raise ValueError('key permissions')
+                encoded = stream.read(4097)
+            lines = encoded.strip().splitlines()
+            if (len(encoded) > 4096 or lines[0] != b'-----BEGIN OPENSSH PRIVATE KEY-----'
+                    or lines[-1] != b'-----END OPENSSH PRIVATE KEY-----'):
+                raise ValueError('key envelope')
+            block = base64.b64decode(b''.join(lines[1:-1]), validate=True)
+            if not block.startswith(b'openssh-key-v1\0'):
+                raise ValueError('key format')
+            cursor = 15
+
+            def word() -> int:
+                nonlocal cursor
+                if cursor + 4 > len(block):
+                    raise ValueError('truncated key')
+                value = int.from_bytes(block[cursor:cursor + 4], 'big')
+                cursor += 4
+                return value
+
+            def field() -> bytes:
+                nonlocal cursor
+                length = word()
+                if cursor + length > len(block):
+                    raise ValueError('truncated key field')
+                value = block[cursor:cursor + length]
+                cursor += length
+                return value
+
+            if field() != b'none' or field() != b'none' or field() != b'' or word() != 1:
+                raise ValueError('encrypted or multiple keys')
+            public = field()
+            private = field()
+            if cursor != len(block) or len(private) % 8:
+                raise ValueError('key extent')
+            block, cursor = private, 0
+            if word() != word() or field() != b'ssh-ed25519':
+                raise ValueError('key check or type')
+            raw_public, raw_private = field(), field()
+            field()  # OpenSSH comment does not participate in authentication.
+            padding = block[cursor:]
+            if (len(raw_public) != 32 or len(raw_private) != 64
+                    or raw_private[32:] != raw_public
+                    or public != b'\0\0\0\x0bssh-ed25519\0\0\0\x20' + raw_public
+                    or not padding or padding != bytes(range(1, len(padding) + 1))):
+                raise ValueError('key identity or padding')
+            return raw_private[:32], public
+        except (OSError, ValueError, IndexError):
+            _reject('AUTH_REQUIRED', 'ollama', 'existing Ollama login key is missing, unreadable or invalid', retryability='retryable')
+
+    def _sign_ollama(self, reference: str, provider: str, endpoint: str, challenge: bytes) -> str:
+        """Use CPython's linked OpenSSL Ed25519 primitive; author no signing algorithm."""
+        seed, public = self._ollama_key()
+        if reference != 'ollama-key:v1:' + digest_bytes(self._binding(provider, endpoint) + public):
+            _reject('AUTH_REQUIRED', reference, 'Ollama login key or endpoint binding changed', retryability='retryable')
+        try:
+            crypto = ctypes.CDLL(_ssl.__file__)
+            function_types = {
+                'OBJ_txt2nid': (ctypes.c_int, [ctypes.c_char_p]),
+                'EVP_PKEY_new_raw_private_key': (ctypes.c_void_p, [ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]),
+                'EVP_PKEY_get_raw_public_key': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t)]),
+                'EVP_MD_CTX_new': (ctypes.c_void_p, []),
+                'EVP_DigestSignInit': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+                'EVP_DigestSign': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_size_t]),
+                'EVP_PKEY_free': (None, [ctypes.c_void_p]),
+                'EVP_MD_CTX_free': (None, [ctypes.c_void_p]),
+            }
+            for name, (result, arguments) in function_types.items():
+                function = getattr(crypto, name)
+                function.restype, function.argtypes = result, arguments
+        except (AttributeError, OSError):
+            _reject('CAPABILITY_MISMATCH', 'ollama', 'this Python SSL runtime lacks the required OpenSSL Ed25519 symbols')
+        key = crypto.EVP_PKEY_new_raw_private_key(crypto.OBJ_txt2nid(b'ED25519'), None, seed, len(seed))
+        context = crypto.EVP_MD_CTX_new()
+        try:
+            derived_public, public_size = ctypes.create_string_buffer(32), ctypes.c_size_t(32)
+            if (not key or not context or crypto.EVP_PKEY_get_raw_public_key(key, derived_public, ctypes.byref(public_size)) != 1
+                    or public_size.value != 32 or derived_public.raw != public[-32:]):
+                _reject('AUTH_REQUIRED', reference, 'Ollama private key does not match its public identity', retryability='retryable')
+            signature, size = ctypes.create_string_buffer(64), ctypes.c_size_t(64)
+            if (crypto.EVP_DigestSignInit(context, None, None, None, key) != 1
+                    or crypto.EVP_DigestSign(context, signature, ctypes.byref(size), challenge, len(challenge)) != 1
+                    or size.value != 64):
+                _reject('CAPABILITY_MISMATCH', reference, 'OpenSSL could not sign the Ollama authorization challenge')
+            return base64.b64encode(public).decode('ascii') + ':' + base64.b64encode(signature.raw).decode('ascii')
+        finally:
+            crypto.EVP_MD_CTX_free(context)
+            crypto.EVP_PKEY_free(key)
+
+    def load(self, reference: str, provider: str, endpoint: str) -> str | Callable[[bytes], str] | None:
         """Resolve one reference only when its stored provider and endpoint binding matches."""
         binding = self._binding(provider, endpoint)
+        if isinstance(reference, str) and reference.startswith('ollama-key:v1:'):
+            if reference != self.existing_login(provider, endpoint):
+                _reject('AUTH_REQUIRED', reference, 'Ollama login key or endpoint binding changed', retryability='retryable')
+            return lambda challenge: self._sign_ollama(reference, provider, endpoint, challenge)
         self._reference(reference)
         query = self._query(reference, binding, return_data=True)
         result = ctypes.c_void_p()

@@ -2183,7 +2183,7 @@ CONTRACTS: dict[str, dict] = {
                     "connection": record("Source connection", "Q9/Q52", {
                         "source": text(enum=["huggingface", "ollama"]),
                         "endpoint": bounded_text(),
-                        "mode": text(enum=["public", "token"]),
+                        "mode": text(enum=["public", "token", "existing"]),
                         "credential_ref": nullable(bounded_text()),
                     }),
                     "selection": record("Immutable model selection", "Q5/Q9", {

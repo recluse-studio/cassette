@@ -17,6 +17,112 @@ The one Cassette Keychain item is bound to a loopback test endpoint; it cannot p
 access. No token was read or printed. The checked Hugging Face token cache and relevant credential
 environment variables are absent. Public download automation remains available; authenticated
 live proof requires a valid provider credential. No additional payload download was started.
+The principal corrected the narrow credential search and directed checks of the providers' own
+CLI logins. Actual checks now supersede the broader absence inference: Ollama 0.40.1 reports
+`You are already signed in as user 'drewwiberg'`; its local `/api/me` returned HTTP 200 and that
+account. The existing Hugging Face CLI in the mlx-lm tool environment is version 1.19.0;
+`hf auth whoami` returned exit 1 and `Not logged in`. No login, account change, browser flow,
+model run or download was performed. Cassette's own saved connections remain public. Its current
+source connection code does not reuse Ollama's existing CLI login; authenticated Ollama token
+connection terminates with CAPABILITY_MISMATCH before storing a token. The account exists, and
+the next missing behavior is Cassette's supported reuse of that account, not a new operator token.
+
+The principal now explicitly authorizes continuing through the existing Ollama login. The
+required path is installed Cassette CLI → canonical source.connect → provider-validated account
+→ saved opaque key reference → a new CLI process → source metadata access. Q9 and
+acquisition_entry_contract.source_connection/proof fail today: the CLI rejects --existing-login
+with exit 2, and the adapter refuses authenticated Ollama validation. Reuse Ollama 0.40.1's
+published Ed25519 authorization format and CPython's already linked OpenSSL signing primitive;
+add no downloader, process, runtime, numerical kernel or direct dependency. Keep the provider's
+existing key in its current location; record only its provider/endpoint-bound public-key digest.
+Prove rejection after key removal/replacement and provider revocation, origin confinement,
+secret-free records, and command replay. The live check transfers account/catalogue/manifest
+metadata only and preserves the completed one-model payload test. L05 remains IN_PROGRESS.
+The repaired development CLI now confirms `drewwiberg` directly at Ollama's remote /api/me.
+The first signed response returned HTTP 200 with `Name`, while the published Go user type names
+`name`; the adapter now accepts either observed spelling and rejects conflicting identities.
+Six focused source/credential checks pass, including independent OpenSSL signature verification,
+new-process catalogue and digest-pinned manifest selection, canonical connect replay, rejected
+cross-origin/push/malformed grants, provider revocation, missing/invalid/replaced keys and restored
+access. No blob GET occurs in that fixture. The ordinary ledger reports only the expected stale
+producer-owned J report; refresh the complete candidate before claiming the installed path.
+Broker remains the single credential authority; its existing large-file boundary includes source
+credential resolution. Sources owns provider wire translation. The changed runtime uses the
+already linked CPython OpenSSL EVP subset, with explicit failure when that subset is absent.
+The installed CLI confirms the real account and exact connect replay. Its catalogue query
+completes but returns no qwen3 match in the provider's current advertised catalogue. Selecting
+qwen3:30b exposed a separate Q9/Q52 failure: the registry serves the tag with manifest digest
+sha256:ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226, but its
+manifest-by-digest route returns HTTP 404. Cassette's next enumeration wrongly assumes that
+route exists. Stop candidate 01 and retain it as incomplete. Extend the existing Ollama fixture
+to serve the actual tag route only, then use the locator's explicit tag for readback and reject
+any digest change against the frozen revision. No fallback or replacement model is permitted.
+The tag-only fixture reproduced the 404. Resolution now freezes the actual selected tag in
+its locator, rereads that tag, and compares the returned bytes to the saved manifest digest.
+Changing even one manifest byte raises SOURCE_REVISION_CHANGED before a blob request. The broker
+records the resolved locator, including an explicitly selected alternate tag. All six focused
+checks pass. Candidate 01 remains interrupted; candidate 02 proves the complete successor.
+The first package's agent-created build/ and cassette.egg-info/ directories were removed after
+preserving its wheel; no source, accepted evidence or provider-owned files were removed.
+The successor installed package matches all 38 program/schema files in the checkout and
+wheel. Its Python is 3.13.14 with OpenSSL 3.6.2. The actual supported command validates account
+`drewwiberg`, replays the identical connect receipt, reads the advertised catalogue and selects
+qwen3:30b through its verified tag route. The selected manifest is the digest recorded above;
+no blob or model payload transferred. docs/l05/2026-10-11-ollama-existing-login.json joins those
+operation receipts and hashes their original records. This public library manifest is supporting
+source metadata proof; it is not the matrix's reimport generated from the pinned HF revision.
+Private access, Ollama payload acquisition, release inputs and supplied independent review remain
+unproved. The existing one-model payload result remains complete and unchanged.
+Final source inspection corrected the schema generator's indentation and clarified the names
+of the resolved credential and OpenSSL function declarations. The credential test header now
+names both supported credential paths. These edits preserve the generated schema and runtime
+behavior, but change the exact frozen source bytes. Candidate 02 is retained as interrupted;
+candidate 03 is the final complete producer for the published source. Rebuild and compare the
+installed package with that exact source before sealing its receipt.
+The final installed wheel again passes real account connection, exact replay, advertised
+catalogue access and public qwen3:30b selection; all 38 installed files match the final source.
+With the requested source connection working, check the exact release-plan HF revisions through
+the installed CLI. These are required input selections, not extra tiny-model payload tests.
+The public HF connection succeeds. The first Kimi selection was terminated by the agent's
+120-second probe deadline before a terminal receipt; no source failure is inferred. Retry its
+same canonical operation without that agent cutoff and retain both observations. No release
+model payload has moved at this checkpoint.
+Candidate 03 ran all 340 tests: 338 passed and two source-boundary checks failed. Both failures
+identify the same defect: a provider-kind admission branch escaped sources.py into the broker's
+credential provider. Move that capability decision into SourceAdapter; retain broker ownership
+of OS credential reads, endpoint binding and the existing signing primitive. Re-run those two
+checks with the six source/credential checks, then prove the corrected complete candidate.
+The failed candidate remains immutable and supplies no passing J report.
+All eight focused and coupled checks now pass, including the original source-blind broker
+assertions and rejection of an unsupported existing-login provider before any provider request.
+The final package is installed separately under existing-login-installed-final/environment;
+leave the older installation unchanged while its Kimi selection owns the release operation.
+Candidate 04 proves the final source; remove only agent-created packaging outputs after saving
+its wheel. No build/review or model acquisition is relabeled as complete by the focused pass.
+Candidate 04 passed 339 of 340 tests; its remaining failure rejects the newly public adapter
+helper because Q52 has a closed public operation surface. Keep the capability helper private,
+as the existing credential-validation helper is private. The complete source-boundary fixture,
+the broker source-blind check and the source/credential fixtures form the coupled proof for this
+correction. Candidate 04 remains failed; candidate 05 must own the complete final producer result.
+The complete coupled source/credential checks pass: nine tests in 9.62 seconds. All three
+required pinned model selections now succeed through the actual CLI: Kimi K3 at 9f62e4e9,
+Qwen3-30B-A3B at ad44e777, and Qwen3-235B-A22B-Instruct-2507 at ac9c66cc. Their complete
+receipts and raw-record hashes are in docs/l05/2026-10-11-release-source-selection.json.
+Each selection records zero downloaded model bytes. This proves public source access and frozen
+metadata; model/dataset acquisition and the required Ollama reimport remain NOT_RUN. The final
+private-helper repair has its own wheel and final installed-package proof; no older installation
+was modified while it owned an active source operation.
+Candidate 05 passed all 340 tests in 337.86 seconds with zero skips, all fourteen component
+deletion/bypass controls and the ordinary ledger. All 190 unchanged candidate files match this
+checkout; later differences are documentary receipts and the producer-owned J report. The
+canonical report was copied unchanged. J is (0, 0, 15588, 1, 1, 9, 0, 0, 8425096): 13,568
+product and 2,020 tool executable lines. The 155-line increase repairs Q9/Q52's existing-login
+and manifest-readback failures; no kernel, process, runtime, dependency or binary was added.
+The final installed wheel confirms the real account, exact replay, advertised catalogue and
+digest-verified manifest selection. All 38 installed program/schema files match the wheel and
+source. Portable receipts join those results to the complete candidate; previous incomplete and
+failed candidates remain preserved. L05 remains IN_PROGRESS at its required acquisition and
+supplied-review boundary. Publication of this complete worktree and Entry 88 remains authorized.
 
 The principal explicitly reconfirmed that the physical reconnect is complete and directed the
 builder to finish according to the written specifications. Q44/Q49 require fresh identity,

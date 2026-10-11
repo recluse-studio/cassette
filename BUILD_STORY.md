@@ -7770,3 +7770,80 @@ The one-model test is complete. L05's full release boundary still requires its a
 Ollama source journeys, required model and dataset input receipts, and the established independent
 review supplied by Drew. The downloaded random fixture does not establish model execution,
 training, large-model capability or completion of those release rows.
+
+---
+
+**Codex, builder in build; exact model variant is not exposed in this session**
+
+#### Entry 88 — 2026-10-11, using the account that was already signed in
+
+Drew asked whether Cassette could handle its source work without his hands on the keyboard.
+I checked Cassette's saved connections, found no production credential reference, and treated
+that narrow result as an account problem. Drew corrected the search: try the providers' own
+commands. Ollama 0.40.1 reported that `drewwiberg` was already signed in. The installed Hugging
+Face CLI reported that it was not. Cassette had failed to reuse an account that already existed.
+
+Drew directed continuation. I added `cassette connect --source ollama --existing-login` to the
+same broker-owned connection operation. The broker reads Ollama's existing signing key without
+copying or changing it. It records a reference bound to the public key and provider endpoint.
+The source adapter sends Ollama's published authorization challenge. Python's existing SSL
+runtime supplies the Ed25519 signing operation; Cassette adds no cryptographic algorithm,
+process, language runtime or direct dependency.
+
+The first signed account request returned HTTP 200, then my parser rejected it. The live response
+used `Name`; the published client type used `name`. I made that observed spelling difference
+explicit and retained a failure for conflicting identities. Cassette then confirmed Drew's
+account directly with Ollama. The fixture separately verifies signatures with OpenSSL's command,
+restarts the CLI, replays the original connection and rejects provider revocation, missing,
+invalid or replaced keys. Registry grants remain in memory and permit only the requested pull
+scope on the same origin. Cross-origin, push and malformed challenges fail before a grant.
+
+The installed command exposed another gap. Ollama served `qwen3:30b`, but Cassette's next
+manifest request by digest returned 404. The earlier fixture had supplied that unsupported route.
+I changed the fixture to serve the tag alone and reproduced the failure. Cassette now freezes the
+actual tag in its locator, rereads that tag and compares the exact response with the saved digest.
+Changing one manifest byte fails before a model request. An explicitly selected alternate tag
+also survives subsequent checks. I stopped the first full candidate and retained it as incomplete;
+the successor contains both corrections.
+
+The successor installed package matches all 38 program and schema files in the source and wheel.
+Its supported command confirms `drewwiberg`, returns the identical connection on replay, reads
+Ollama's advertised catalogue and selects `qwen3:30b` with its verified manifest. That selection
+transfers no model payload. Its public library model is source metadata evidence; it does not
+replace the release plan's reimport from the pinned Hugging Face revision. The portable receipt is
+`docs/l05/2026-10-11-ollama-existing-login.json`. The completed tiny-model download remains the
+single payload test. L05 still needs its required full acquisitions and Drew's supplied review.
+
+The first complete suite then found two failures, both caused by one misplaced provider check.
+I had put the admission of an existing Ollama login inside the broker's credential provider.
+The source adapter owns that decision. Moving the check back to `sources.py` restored the
+source-blind broker contract; the eight focused and coupled checks passed together. The failed
+340-test candidate remains failed, with 338 passes and both boundary failures preserved. I
+installed the corrected wheel separately, leaving the ongoing release-model selection's older
+installation intact. The corrected installed CLI again passed the real account, replay,
+catalogue and verified-manifest journey. Its 38 installed files match the final source.
+
+I then began selecting the exact release-plan revisions through Cassette. The public Hugging
+Face connection succeeded. My finite probe imposed a 120-second cutoff on Kimi's file checks
+and stopped the command before a result. I resumed the same canonical operation without that
+agent cutoff. The source reports the exact pinned revision as public and ungated, with 118 files,
+98 of them LFS objects. Its complete product selection remains the deciding receipt.
+
+Kimi's resumed selection completed. The two Qwen selections also completed at their exact
+release-plan revisions. Cassette saved their frozen source manifests and requirements; each
+receipt records zero downloaded model bytes. The retained records are joined in
+`docs/l05/2026-10-11-release-source-selection.json`.
+
+Candidate 04 found one remaining contract error: my capability helper had become a seventh
+public adapter operation. I made that helper private. All nine focused and coupled checks
+passed, then candidate 05 passed all 340 tests in 337.86 seconds with zero skips. Its fourteen
+component controls and ordinary ledger passed. The 190 unchanged candidate files match the
+checkout; later documentary receipts and the producer's J report are recorded separately.
+The final installed package matches all 38 program/schema files and repeats the real account,
+connection replay, catalogue and verified-manifest journey.
+
+The producer reports 13,568 product and 2,020 tool executable lines. The repair adds 155 lines
+to the previous total and adds no kernel, process, runtime, direct dependency or shipped binary.
+The portable source receipt includes the complete builder proof. This finishes the existing-login
+repair and live source-selection checks. Required model and dataset payload acquisitions, the
+specified Ollama reimport and Drew's supplied independent review remain open in L05.

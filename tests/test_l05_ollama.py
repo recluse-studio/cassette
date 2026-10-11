@@ -36,6 +36,7 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
     manifest_digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
     blobs = {config_digest: config, model_digest: model, license_digest: license_bytes}
     requests = []
+    provider_manifest = {'bytes': manifest}
 
     class Registry(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -53,9 +54,9 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
                 return
             if self.path in {
                 "/v2/library/fixture-model/manifests/latest",
-                "/v2/library/fixture-model/manifests/" + manifest_digest,
+                "/v2/library/fixture-model/manifests/pinned",
             }:
-                self._send(200, manifest, {"Content-Type": "application/vnd.docker.distribution.manifest.v2+json"})
+                self._send(200, provider_manifest['bytes'], {"Content-Type": "application/vnd.docker.distribution.manifest.v2+json"})
                 return
             prefix = "/v2/library/fixture-model/blobs/"
             if self.path.startswith(prefix):
@@ -111,8 +112,19 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
         assert requirements.license_acceptance_required is False
         assert "/api/tags" in [path for path, _, _ in requests]
         assert "/v2/library/fixture-model/manifests/latest" in [path for path, _, _ in requests]
-        assert "/v2/library/fixture-model/manifests/" + manifest_digest in [path for path, _, _ in requests]
+        assert not any('/manifests/sha256:' in path for path, _, _ in requests)
         assert all(path != "/api/tags" or authorization is None for path, authorization, _ in requests)
+
+        alternate = asyncio.run(adapter.resolve({'kind': 'ollama', 'locator': 'fixture-model:latest', 'revision': 'pinned'}))
+        assert alternate.locator == 'fixture-model:pinned'
+        assert asyncio.run(adapter.enumerate(alternate)) == alternate.artifacts
+        provider_manifest['bytes'] = manifest + b' '
+        before = len(requests)
+        with pytest.raises(CassetteError) as changed:
+            asyncio.run(adapter.enumerate(resolved))
+        assert changed.value.code == 'SOURCE_REVISION_CHANGED'
+        assert len(requests) == before + 1 and '/manifests/' in requests[-1][0]
+        provider_manifest['bytes'] = manifest
 
         with pytest.raises(CassetteError) as opaque_private:
             asyncio.run(adapter._validate_credential("keychain:ollama/private"))
