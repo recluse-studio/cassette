@@ -7,6 +7,17 @@ dependency-ordered, machine-checkable, resumable.
 
 ## One-model acquisition resume — 2026-10-10
 
+Current direction, 2026-10-11: The principal clarified that Cassette must handle downloads through
+its CLI and other programmatic controls without relying on source-provider UI/UX, and asked
+whether signed-in access, source downloads and required input acquisition can run without hands
+on the keyboard. Hugging Face or another provider may be used for the next source test. Retain
+the existing one-tiny-model test constraint until the principal changes it. A read-only inspection
+found public source connections but no production Hugging Face or Ollama credential reference.
+The one Cassette Keychain item is bound to a loopback test endpoint; it cannot prove real account
+access. No token was read or printed. The checked Hugging Face token cache and relevant credential
+environment variables are absent. Public download automation remains available; authenticated
+live proof requires a valid provider credential. No additional payload download was started.
+
 The principal explicitly reconfirmed that the physical reconnect is complete and directed the
 builder to finish according to the written specifications. Q44/Q49 require fresh identity,
 pointer and touched-byte verification; the acquisition contract does not require the observer
