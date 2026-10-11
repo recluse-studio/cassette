@@ -74,6 +74,14 @@ Cassette. Stop the agent-owned finite continuation before it launches Go from th
 baseline; leave selection 06 to finish and retain its observation. AGENTS.md requires permission
 before closing another task's test environment, so the builder requested permission to stop
 that separate film test. Pending an answer, finish and publish the already verified code repair.
+Repair commit `d45ea34014ab290094d00caca8cfc77e91386c73` passed the committed ledger and
+was pushed normally; remote and local hashes matched and the worktree was clean. Selection 06
+subsequently ended without a terminal CLI receipt. Its canonical operation
+`op-93929846ed18b2dd74752e74201444037ce8a2a445e5f2aacf0d611d7a1ffb20` was cancelled through
+the installed broker after its process ended. Both owned continuation helpers are stopped;
+no owned scan, watcher or download remains active. The foreign film job remains untouched.
+The live single-model transfer remains NOT_RUN with zero model payload bytes. Resume only from
+a fresh selection after the film-write conflict is resolved; do not request another reconnect.
 
 ### Earlier acquisition attempt — superseded by the current direction above
 
