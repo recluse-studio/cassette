@@ -1,0 +1,119 @@
+{
+  "seed": 2026092201,
+  "exhaustive": {
+    "sources": 6859,
+    "single_coordinate_checks": 61731,
+    "pair_coordinate_checks": 61731,
+    "pair_query_checks": 0
+  },
+  "larger_sources": [
+    {
+      "family": "balanced",
+      "rows": 48,
+      "dimensions": 64,
+      "old_column_bytes": 336,
+      "compact_column_bytes": 1,
+      "codec_mode": 0,
+      "single_coordinate_checks": 3072,
+      "pair_coordinate_checks": 72192,
+      "pair_query_checks": 752,
+      "active_coordinates": 0
+    },
+    {
+      "family": "one_sparse_column",
+      "rows": 48,
+      "dimensions": 64,
+      "old_column_bytes": 333,
+      "compact_column_bytes": 3,
+      "codec_mode": 2,
+      "single_coordinate_checks": 3072,
+      "pair_coordinate_checks": 72192,
+      "pair_query_checks": 752,
+      "active_coordinates": 1
+    },
+    {
+      "family": "binary_sparse",
+      "rows": 48,
+      "dimensions": 64,
+      "old_column_bytes": 144,
+      "compact_column_bytes": 25,
+      "codec_mode": 1,
+      "single_coordinate_checks": 3072,
+      "pair_coordinate_checks": 72192,
+      "pair_query_checks": 752,
+      "active_coordinates": 64
+    },
+    {
+      "family": "balanced",
+      "rows": 48,
+      "dimensions": 256,
+      "old_column_bytes": 1344,
+      "compact_column_bytes": 1,
+      "codec_mode": 0,
+      "single_coordinate_checks": 12288,
+      "pair_coordinate_checks": 288768,
+      "pair_query_checks": 752,
+      "active_coordinates": 0
+    },
+    {
+      "family": "one_sparse_column",
+      "rows": 48,
+      "dimensions": 256,
+      "old_column_bytes": 1341,
+      "compact_column_bytes": 4,
+      "codec_mode": 2,
+      "single_coordinate_checks": 12288,
+      "pair_coordinate_checks": 288768,
+      "pair_query_checks": 752,
+      "active_coordinates": 1
+    },
+    {
+      "family": "binary_sparse",
+      "rows": 48,
+      "dimensions": 256,
+      "old_column_bytes": 576,
+      "compact_column_bytes": 97,
+      "codec_mode": 1,
+      "single_coordinate_checks": 12288,
+      "pair_coordinate_checks": 288768,
+      "pair_query_checks": 752,
+      "active_coordinates": 256
+    },
+    {
+      "family": "balanced",
+      "rows": 128,
+      "dimensions": 64,
+      "old_column_bytes": 360,
+      "compact_column_bytes": 1,
+      "codec_mode": 0,
+      "single_coordinate_checks": 8192,
+      "pair_coordinate_checks": 520192,
+      "pair_query_checks": 2032,
+      "active_coordinates": 0
+    },
+    {
+      "family": "one_sparse_column",
+      "rows": 128,
+      "dimensions": 64,
+      "old_column_bytes": 358,
+      "compact_column_bytes": 3,
+      "codec_mode": 2,
+      "single_coordinate_checks": 8192,
+      "pair_coordinate_checks": 520192,
+      "pair_query_checks": 2032,
+      "active_coordinates": 1
+    },
+    {
+      "family": "binary_sparse",
+      "rows": 128,
+      "dimensions": 64,
+      "old_column_bytes": 192,
+      "compact_column_bytes": 25,
+      "codec_mode": 1,
+      "single_coordinate_checks": 8192,
+      "pair_coordinate_checks": 520192,
+      "pair_query_checks": 2032,
+      "active_coordinates": 64
+    }
+  ]
+}

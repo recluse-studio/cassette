@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yaml
 
 from errors import CassetteError
-from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, inventory_step, write_campaign_artifact
+from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, inventory_step, storage_profile, write_campaign_artifact
 from tools.ledger import remediation_diff
 
 
@@ -652,44 +652,6 @@ def process_observation(binding):
     return {'pid':os.getpid(), 'max_rss_bytes':usage.ru_maxrss,
             'user_cpu_seconds':usage.ru_utime, 'system_cpu_seconds':usage.ru_stime,
             'block_output_operations':usage.ru_oublock, 'binding':binding}
-
-
-def storage_profile(binding, patterns, observations, *, expected_binding):
-    """Q41-Q44: assess independent read/write/flush observations for exact plan patterns."""
-    if binding != expected_binding or not {'drive', 'host', 'path', 'operation', 'plan'} <= binding.keys():
-        reject('profile', 'drive, host, path, operation or plan identity differs')
-    if not patterns or len(patterns) != len(observations):
-        reject('profile', 'profile observation coverage is incomplete')
-    for pattern, observed in zip(patterns, observations, strict=True):
-        if observed.get('pattern') != pattern or observed.get('binding') != binding:
-            reject('profile', 'observation differs from the exact plan pattern')
-        for field in ('read_bytes', 'write_bytes'):
-            number(pattern.get(field), field, integer=True)
-        for field in ('host_write_bytes', 'device_write_bytes', 'errors'):
-            number(observed.get(field), field, integer=True)
-        number(observed.get('duration_seconds'), 'duration seconds', positive=True)
-        for field in ('read_seconds', 'write_seconds', 'flush_seconds'):
-            if field in observed:
-                number(observed[field], field, maximum=observed['duration_seconds'])
-        if (observed.get('errors') != 0 or observed.get('readback_ok') is not True
-                or observed.get('flush_ok') is not True or observed.get('duration_seconds', 0) <= 0):
-            reject('profile', 'readback, flush, error or timing evidence failed')
-        if observed.get('host_write_bytes', -1) < pattern.get('write_bytes', 0):
-            reject('profile', 'observed host writes omit planned writes')
-        if observed.get('device_write_bytes') is None:
-            reject('profile', 'physical write observation is unavailable')
-    latencies = sorted(x['duration_seconds'] for x in observations)
-    def percentile(values, q):
-        return values[max(0, math.ceil(q * len(values)) - 1)]
-    throughput = sorted((p.get('read_bytes', 0) + p.get('write_bytes', 0)) / o['duration_seconds']
-                        for p, o in zip(patterns, observations, strict=True))
-    for value in throughput:
-        number(value, 'derived throughput bytes per second')
-    return {"binding": binding, "status": "PASS", "patterns_digest": identity(patterns),
-            "throughput_bytes_per_second": {str(q): percentile(throughput, q) for q in (.05, .5, .95)},
-            "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
-            "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
-            "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
 
 
 def thermal_windows(windows, *, slc_bytes, training, warmup_end, knee_duty, duty_experiments, binding, recovery_end):

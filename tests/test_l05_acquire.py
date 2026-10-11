@@ -45,9 +45,10 @@ def test_q5_q51_q53_acquire_stops_at_verified_source_and_reuses_transfer_progres
     artifact_two = ("model-00002.safetensors", b"second model shard" * 4096, '"l05-model-two"')
     tokenizer = ("tokenizer.json", b'{"version":"l05"}', '"l05-tokenizer"')
     config = ("config.json", b'{"hidden_size":2}', '"l05-config"')
+    empty_asset = ("empty.json", b"", '"l05-empty"')
     with source_fixture_server(
         artifact_overrides={"tinker": (artifact_one, artifact_two)},
-        semantic_overrides={"tinker": (tokenizer, config)},
+        semantic_overrides={"tinker": (tokenizer, config, empty_asset)},
     ) as server:
         log = tmp_path / "operations"
         cartridge = tmp_path / "cartridge"
@@ -72,11 +73,14 @@ def test_q5_q51_q53_acquire_stops_at_verified_source_and_reuses_transfer_progres
             assert completed["state"] == "SUCCEEDED"
             assert completed["kind"] == "acquire"
             assert completed["result"]["immutable_revision"] == "sha256:" + "3" * 64
-            expected_paths = {artifact_one[0], artifact_two[0], tokenizer[0], config[0]}
+            expected_paths = {artifact_one[0], artifact_two[0], tokenizer[0], config[0], empty_asset[0]}
             verified = completed["result"]["verified_artifacts"]
             assert {item["path"] for item in verified} == expected_paths
             assert completed["result"]["verified_bytes"] == sum(item["size"] for item in verified)
             assert {item["digest"] for item in verified}
+            empty_verified = next(item for item in verified if item["path"] == empty_asset[0])
+            assert empty_verified["size"] == 0
+            assert empty_verified["digest"] == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
             with pytest.raises(CassetteError) as not_callable:
                 broker.callable_revision(operation_id, cartridge)
             assert not_callable.value.code == "OPERATION_NOT_FOUND"

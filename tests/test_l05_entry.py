@@ -126,15 +126,16 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
 
 
 def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
-    """Q5/Q9/Q44 acceptance: selection and Go preserve source identity before the physical hold.
+    """Q5/Q6/Q9/Q42/Q44/Q49/Q51: selection defers payload; qualified Go completes and replays.
 
     The CLI crosses the provider boundary, survives a new process and retains its selection
-    after a mutable tag changes. Model payload belongs to the later qualified Go operation.
+    after a mutable tag changes. Payload follows reconnect proof and operation-bound measurement.
     """
-    weights = b'fixture weights must remain at the provider during selection'
-    license_bytes = b'fixture license'
+    weights = b'fixture weights must remain at the provider during selection' * 72000
+    license_bytes = b'---\nlicense: apache-2.0\n---\nFixture model card.\n'
     requests = []
     revision = ['a' * 40]
+    interrupt = [True]
 
     class Provider(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -158,36 +159,52 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                 requested = route.rsplit('/', 1)[1]
                 resolved = revision[0] if requested == 'main' else requested
                 payload = json.dumps({'id': 'fixture/model', 'sha': resolved,
-                    'private': False, 'gated': False, 'siblings': [
+                    'private': False, 'gated': False, 'cardData': {'license': 'apache-2.0'}, 'siblings': [
                         {'rfilename': 'model.safetensors', 'size': len(weights),
                          'lfs': {'size': len(weights), 'sha256': hashlib.sha256(weights).hexdigest()}},
-                        {'rfilename': 'LICENSE', 'size': len(license_bytes),
+                        {'rfilename': 'README.md', 'size': len(license_bytes),
                          'blobId': hashlib.sha1(f'blob {len(license_bytes)}\0'.encode() + license_bytes).hexdigest()}
                     ]}).encode()
-            elif route.endswith('/LICENSE'):
+            elif route.endswith('/README.md'):
                 payload = license_bytes
                 headers['ETag'] = '"' + hashlib.sha1(f'blob {len(payload)}\0'.encode() + payload).hexdigest() + '"'
+            elif route.endswith('/model.safetensors'):
+                start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
+                payload = weights[start:end+1]
+                headers['ETag'] = '"' + hashlib.sha256(weights).hexdigest() + '"'
+                headers['Content-Range'] = f'bytes {start}-{end}/{len(weights)}'
             else:
                 self.send_response(404)
                 self.send_header('Content-Length', '0')
                 self.end_headers()
                 return
-            self.send_response(200)
+            self.send_response(206 if 'Range' in self.headers else 200)
+            if 'Range' in self.headers and route.endswith('/README.md'):
+                start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
+                headers['Content-Range'] = f'bytes {start}-{end}/{len(payload)}'
+                payload = payload[start:end+1]
             self.send_header('Content-Length', str(len(payload)))
             for name, value in headers.items():
                 self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(payload)
+            if route.endswith('/model.safetensors') and start == 0 and interrupt[0]:
+                interrupt[0] = False
+                self.wfile.write(payload[:17])
+                self.close_connection = True
+            else:
+                self.wfile.write(payload)
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Provider)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        def launch(*arguments, expected_code=0):
+        def launch(*arguments, expected_code=0, expected_message=None):
             result = subprocess.run([sys.executable, '-B', '-m', 'cli', '--state',
                 str(tmp_path / 'state'), *arguments], cwd=Path(__file__).resolve().parents[1],
                 capture_output=True, text=True, timeout=30)
             assert result.returncode == expected_code, result.stderr + result.stdout
+            if expected_message is not None:
+                assert expected_message in result.stderr
             return json.loads(result.stdout)
 
         connection = launch('connect', '--source', 'huggingface', '--endpoint',
@@ -217,13 +234,44 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             drives = launch('drives')
             volume = next(item for item in drives['result']['volumes'] if item['mount_path'] == str(mount))
             drive = launch('select-drive', '--volume', volume['volume_uuid'], '--folder', 'drewwiberg-lacie/Cassette')
+            subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
+            attached = False
+            disconnected = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                                  drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                                  expected_message='Go paused: CARTRIDGE_DISCONNECTED:')
+            assert disconnected['state'] == 'PAUSED'
+            assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-fixture', expected_code=2) == disconnected
+            record_path = tmp_path / 'state/operations' / (disconnected['operation_id'] + '.json')
+            record = json.loads(record_path.read_bytes())['record']
+            assert record['events'][-1]['payload']['error']['code'] == 'CARTRIDGE_DISCONNECTED'
+            assert record['events'][-1]['payload']['error']['retryability'] == 'retryable'
+            assert all(event['type'] not in {'failed', 'completed', 'cancelled'} for event in record['events'])
+            remounted = subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-plist', str(image)],
+                                       check=True, capture_output=True)
+            mount = next(Path(item['mount-point']) for item in plistlib.loads(remounted.stdout)['system-entities'] if 'mount-point' in item)
+            parent = mount / 'drewwiberg-lacie'
+            attached = True
             ready = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
-                           drive['operation_id'], '--key', 'go-fixture', expected_code=2)
+                           drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                           expected_message='Go paused at the physical drive qualification boundary.')
             assert ready['state'] == 'PAUSED'
+            assert ready['operation_id'] == disconnected['operation_id']
             assert (parent / 'Cassette/cartridge.json').is_file()
             assert (parent / 'user.txt').read_bytes() == b'protected'
+            held_record = record_path.read_bytes()
             assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                           drive['operation_id'], '--key', 'go-fixture', expected_code=2) == ready
+            assert record_path.read_bytes() == held_record
+
+            weights += b'changed source'
+            failed = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                            drive['operation_id'], '--key', 'go-terminal', expected_code=1)
+            assert failed['state'] == 'FAILED'
+            assert failed['error']['code'] == 'SOURCE_REVISION_CHANGED'
+            assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-terminal', expected_code=1) == failed
+            weights = weights.removesuffix(b'changed source')
             mount.chmod(root_mode)
             subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
             attached = False
@@ -250,6 +298,54 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert recovered['result']['selection']['volume']['volume_uuid'] == volume['volume_uuid']
             assert recovered['result']['source_qualification'] == 'NOT_RUN'
             assert (mount / 'drewwiberg-lacie/user.txt').read_bytes() == b'protected'
+            reported = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                              drive['operation_id'], '--key', 'go-reported', expected_code=2)
+            subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
+            attached = False
+            remounted = subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-plist', str(image)],
+                                       check=True, capture_output=True)
+            mount = next(Path(item['mount-point']) for item in plistlib.loads(remounted.stdout)['system-entities'] if 'mount-point' in item)
+            attached = True
+            reported_path = tmp_path / 'state/operations' / (reported['operation_id'] + '.json')
+            reported_record = json.loads(reported_path.read_bytes())['record']
+            preparation = next(event['payload']['drive_prepared'] for event in reported_record['events']
+                               if 'drive_prepared' in event['payload'])
+            probe = preparation['binding']['probe']
+            probe_path = mount / 'drewwiberg-lacie/Cassette/captures' / probe['attempt'] / probe['name']
+            saved_probe = probe_path.read_bytes()
+            probe_path.write_bytes(b'x' * len(saved_probe))
+            rejected = launch('watch-remount', reported['operation_id'], '--reconnected',
+                              '--key', 'reported-remount-corrupt', expected_code=1)
+            assert rejected['error']['code'] == 'ROOT_INVALID'
+            reported_record = json.loads(reported_path.read_bytes())['record']
+            assert reported_record['state'] == 'PAUSED'
+            assert not any('drive_remounted' in event['payload'] for event in reported_record['events'])
+            probe_path.write_bytes(saved_probe)
+            confirmed = launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount')
+            assert confirmed['result']['go_operation_id'] == reported['operation_id']
+            assert launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount') == confirmed
+            reported_record = json.loads((tmp_path / 'state/operations' / (reported['operation_id'] + '.json')).read_bytes())['record']
+            assert any(event['payload'].get('physical_reconnect_reported') == 'OPERATOR'
+                       for event in reported_record['events'])
+            assert not any('drive_disconnected' in event['payload'] for event in reported_record['events'])
+            assert any('drive_remounted' in event['payload'] for event in reported_record['events'])
+            interrupted = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                                 drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                                 expected_message='Go paused: SOURCE_UNAVAILABLE:')
+            assert interrupted['operation_id'] == ready['operation_id']
+            completed = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                               drive['operation_id'], '--key', 'go-fixture')
+            assert completed['state'] == 'SUCCEEDED'
+            assert completed['operation_id'] == ready['operation_id']
+            assert completed['result']['verified_bytes'] == len(weights) + len(license_bytes)
+            payload_requests = len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]])
+            assert payload_requests >= 3
+            assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-fixture') == completed
+            assert len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]]) == payload_requests
+            record = json.loads(record_path.read_bytes())['record']
+            assert any(event['payload'].get('source_qualification', {}).get('status') == 'PASS' for event in record['events'])
+            assert any(event['payload'].get('received_bytes') == len(weights) for event in record['events'])
         finally:
             if watcher is not None and watcher.poll() is None:
                 watcher.terminate()
@@ -258,7 +354,6 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                 mount.chmod(root_mode)
                 subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
             image.unlink()
-        assert all(not (method == 'GET' and 'model.safetensors' in route) for method, route in requests)
         assert all(weights not in path.read_bytes() for path in (tmp_path / 'state').rglob('*') if path.is_file())
     finally:
         server.shutdown()

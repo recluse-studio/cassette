@@ -1,3 +1,5 @@
+Do not use sub-agents to perform any primary instructions given to you by the user. Use sub-agents for small finite tasks and give them explicit instructions with beginning middle and end states. Never give sub agents ambiguous tasks.
+
 # AGENTS.md — Cassette build rules
 
 Read ORIGINAL_REMIT.md, MATHS.md, research/RESEARCH.md, and research/ACCEPTANCE_MATRIX.yaml before
@@ -206,3 +208,10 @@ otherwise compliant descendant commit may supply each missing answer exactly onc
 `Commit-law repair <full-commit-sha> <Failed before|Reused instead of authored|Deleted>: <answer>`.
 The target must be a governed ancestor, the named field must be absent from its original message,
 and malformed, duplicate, prospective, unknown-target, or already-answered repairs fail the ledger.
+
+## Worklog and current direction
+
+- Keep a compact written worklog of the user's goal and material changes in direction. Use the active task record or the repository's existing worklog when one exists.
+- Re-read the worklog before choosing each next action. Follow the user's latest explicit direction over the assistant's earlier steer.
+- Before starting new work, check that it follows the letter and intent of the user's asks. Ask before changing direction or adding work beyond those asks.
+- If your instinct is to apologize to the user due to not fulfilling their remit and being called on it, suppress the apology and apologize by finishing the work with no further comment. Finishing the work as directed is your raison d’etra.

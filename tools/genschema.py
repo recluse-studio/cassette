@@ -2207,6 +2207,7 @@ CONTRACTS: dict[str, dict] = {
                     "max_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
                     "pixels": array(bounded_json_value(), minimum=1, maximum=1),
                     "context_ref": bounded_text(),
+                    "reconnect_confirmed": {"const": True},
                     "negotiation_id": digest(),
                     "tier": bounded_text(),
                     "delta_digest": blake3_digest(),
@@ -2216,7 +2217,7 @@ CONTRACTS: dict[str, dict] = {
                     ),
                 },
                 optional=(
-                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "context_ref", "negotiation_id", "tier", "delta_digest",
+                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "context_ref", "reconnect_confirmed", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
                     "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),

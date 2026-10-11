@@ -855,6 +855,9 @@ class SourceAdapter:
         if not isinstance(siblings, list) or not siblings:
             _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub manifest requires immutable files", "siblings is empty or invalid")
         objects, licenses = [], []
+        license_files = {_text(_at(item, ('rfilename',), locator), 'rfilename', locator).upper() for item in siblings} & {
+            'LICENSE', 'LICENSE.TXT', 'LICENSE.MD', 'COPYING'}
+        card_license = info.get('cardData', {}).get('license') if isinstance(info.get('cardData'), dict) else None
         paths = set()
         for item in siblings:
             name = _text(_at(item, ("rfilename",), locator), "rfilename", locator)
@@ -901,10 +904,22 @@ class SourceAdapter:
                         _fail("SOURCE_REVISION_CHANGED", name, "Q9: license bytes must match the source digest", "license digest changed")
                 if license_file:
                     licenses.append(digest)
+                elif not license_files and name == 'README.md' and isinstance(card_license, str):
+                    try:
+                        frontmatter = content.decode('utf-8').split('---', 2)
+                    except UnicodeDecodeError:
+                        _fail('METADATA_INSUFFICIENT', locator, 'Q9: license declarations require verified UTF-8 text',
+                              'model card is not UTF-8')
+                    declarations = (re.findall(r'^license: *([\"\']?)([A-Za-z0-9_.-]+)\1 *$',
+                                    frontmatter[1], re.MULTILINE)
+                                    if len(frontmatter) == 3 and not frontmatter[0].strip() else [])
+                    if [value for _, value in declarations] == [card_license]:
+                        licenses.append(digest)
             objects.append({"rfilename": name, "size": size, "lfs": {"sha256": digest[7:]},
                             "download_url": url, "etag": validator})
         if len(licenses) != 1:
-            _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity", "one root LICENSE or COPYING file is required")
+            _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity",
+                  "one root license file or a verified model-card license declaration is required")
         objects.sort(key=lambda item: item["rfilename"])
         artifacts = [item for item in objects if item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl"))]
         assets = [item for item in objects if item not in artifacts]
@@ -2137,11 +2152,6 @@ async def transfer_artifact(
         if _source_hash_state(hasher, artifact.digest) != header["contiguous_source_hash_digest"]:
             reset_checkpoint(header, header["generation"], "hash-digest")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "serialized source hash state changed after checkpoint")
-        if header["completed_count"] == header["chunk_count"]:
-            if header["contiguous_source_hash_digest"] != artifact.digest:
-                reset_checkpoint(header, header["generation"], "completed-digest")
-                _transfer_fail("IDENTITY_MISMATCH", artifact.path, "completed checkpoint does not carry the expected whole-object digest")
-            return _partial(header, chunk_digests)
         for index, expected in enumerate(chunk_digests):
             offset = index * _TRANSFER_CHUNK_BYTES
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
@@ -2149,10 +2159,18 @@ async def transfer_artifact(
             if digest_bytes(payload) != expected:
                 reset_checkpoint(header, header["generation"], f"local-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
+        if header["completed_count"] == header["chunk_count"]:
+            if header["contiguous_source_hash_digest"] != artifact.digest:
+                reset_checkpoint(header, header["generation"], "completed-digest")
+                _transfer_fail("IDENTITY_MISMATCH", artifact.path, "completed checkpoint does not carry the expected whole-object digest")
+            partial = _partial(header, chunk_digests)
+            if checkpoint_committed is not None:
+                await checkpoint_committed(partial)
+            return partial
 
     completed = header["completed_count"]
     if completed and checkpoint_committed is not None:
-        await checkpoint_committed()
+        await checkpoint_committed(_partial(header, chunk_digests))
     while completed < header["chunk_count"]:
         indices = tuple(range(completed, min(completed + _TRANSFER_PARALLEL_RANGES, header["chunk_count"])))
         results = await asyncio.gather(*(
@@ -2247,7 +2265,7 @@ async def transfer_artifact(
             chunk_digests += (chunk.blake3_digest,)
             header = next_header
             if checkpoint_committed is not None:
-                await checkpoint_committed()
+                await checkpoint_committed(_partial(header, chunk_digests))
 
     if header["contiguous_source_hash_digest"] != artifact.digest:
         reset_checkpoint(header, header["generation"], "whole-digest")

@@ -7603,3 +7603,100 @@ records that checkpoint authorization. L05 remains IN_PROGRESS, with physical re
 source qualification, the remaining Go-to-acquisition integration, real downloads, and Drew's
 independent review still ahead. The checkpoint includes the current local review-skill revisions
 without treating their presence as a review of this work.
+
+## Codex account, continued
+
+**Codex, builder in build; task 01a0f2f9-d33d-76b1-802c-598d0512dd2b; L05 acquisition continuation**
+
+#### Entry 87 — 2026-10-10, finishing the download path after the observer missed the reconnect
+
+Drew asked for a deep review of Cassette, then directed me to repair the findings. He also narrowed
+the live test to one really tiny model. The current build stage, L05, owns source connection,
+selection, drive qualification and verified acquisition. Passing the code checks would prepare
+that stage for real execution; the actual downloaded files and drive receipts would establish
+what happened on LaCie.
+
+The sharpest review finding concerned an already completed download. The transfer code restored
+its saved hash state and returned its completed checkpoint before reading the local file again.
+A probe changed one payload byte after completion. Cassette still returned the same checkpoint,
+made no network request and left bytes that differed from the source. The checkpoint correctly
+described an earlier completion. The code wrongly treated that history as proof of the present
+file. I moved the completed return behind the existing chunk checks. An unchanged file still
+reuses its checkpoint; a changed chunk produces the canonical identity error before reuse.
+
+Three other repairs addressed specific failures. A retryable Go error now pauses its durable
+operation, and repeating Go resumes that same operation. A changed source remains a terminal
+failure. Empty source objects now carry empty transfer intervals and chunk lists instead of
+failing a rule written for nonempty files. Tensor reads validate the offset's type before doing
+arithmetic, so malformed requests produce Cassette's typed error rather than a Python exception.
+The extended fixtures failed before those repairs and passed afterward.
+
+The next missing behavior was the connection from Go's durability hold to acquisition. I joined
+the existing source transfer to the broker's continuation after drive verification and bounded
+measurement. The measurement code reuses the store's writes, readback and durable flushes.
+The storage-profile assessor moved from the campaign tool into the store and serves both callers;
+the old tool copy was removed. Python's ctypes accesses the existing macOS IOKit and CoreFoundation
+APIs to record the current device path and physical write counter. Cassette gained no numerical
+kernel, helper process or new dependency.
+
+The selected tiny source had a license declaration in its model card. The source adapter now
+accepts that declaration only when the fetched card matches its immutable Git blob and its one
+scalar license field matches the provider metadata. A root license file retains priority when
+present. The fixture then crossed the actual CLI, broker and store, deliberately truncated a
+source range, resumed in a fresh process, checked all final digests and repeated Go without
+another payload request. The October 1 candidate passed 339 tests with zero skips, fourteen
+component deletion and bypass controls, and the ordinary ledger. On October 10, a fresh hash
+comparison found all 92 checked code, schema, fixture and authority files unchanged from that
+candidate before the reconnect recovery repair described below.
+
+The live source is `llamafactory/tiny-random-qwen3`, pinned at
+`81d6f5f5e05ed53ea8a1d19431266a486e46bbd8`. Its weight file contains 4,881,064 bytes; its nine
+selected artifacts total 20,764,612 bytes. The first destination failed safely because APFS
+resolved `Cassette` to an existing unmarked directory named `cassette`. I preserved that failed
+operation and selected `drewwiberg-lacie/Cassette-tiny-test-20261001`. Cassette created its own
+identity-marked root, verified a 4,096-byte probe and committed its immutable pointer there.
+
+The original reconnect observer ended without recording the drive's absence. Drew confirmed
+that he had completed the physical action and asked me to continue. I verified the same volume,
+cartridge, pointer and probe, then prepared a successor Go operation with the current protected
+inventory. The inventories compare names, types and aggregate logical bytes outside Cassette's
+root. Some totals had changed since October 1; those snapshots do not identify the cause. The two
+October 10 preparation snapshots matched. Each complete scan took roughly a quarter of an hour.
+
+I then kept waiting for the observer to capture another absence interval. Drew corrected me:
+he had already performed the reconnect, and the build must follow his written specifications.
+His specifications require verified identity and saved bytes after reconnect. They do not require
+the observer to have been running while the drive was absent. My implementation had made that
+timing condition mandatory, and my repeated request placed the recovery work back on him.
+
+I added an explicit completed-reconnect report to the existing CLI command. The broker records
+the operator's report separately from an observed disconnect, then performs the same fresh volume,
+cartridge, immutable-pointer, probe and protected-inventory checks. The report cannot release the
+hold by itself. The extended fixture physically detaches and reattaches its disposable APFS image
+before launching verification. A deliberately corrupted probe must fail and leave Go paused;
+restoring the original probe permits verification. The original observer-driven path remains in
+that same fixture. The protocol field comes from the schema generator, with no hand-edited schema.
+The repeated verification check then exposed another recovery error: the command rejected the
+released hold before returning its existing success. I moved canonical terminal replay ahead of
+that live-hold check. Eight coupled CLI, drive and schema checks passed. I interrupted the first
+complete candidate run to include this correction, preserved its incomplete result and started
+a successor proof from the changed source.
+That successor passed all 339 tests in 339.52 seconds with zero skips. All fourteen component
+controls passed and failed under deletion and executable bypass. Its ordinary ledger reported
+zero violations. Before copying the producer's report into the checkout, I compared all 190 other
+source files with the frozen manifest and found no difference. The current accounting records
+13,414 product executable lines and 2,020 tool lines. The reconnect recovery change adds twelve
+product lines to the October 1 candidate and changes no process, runtime or dependency count.
+
+The snapshot also preserves the existing MATHS section 12 and representation research under their
+original ownership. That research records 1,728 exact source/query/method checks, but its complete
+candidate routes lose the frozen resource comparisons. A narrower support calculation wins its
+own comparison. Neither result establishes a Cassette runtime improvement, and this build does
+not adopt those research methods into the product.
+
+The live continuation retains one selected model and the same Go operation. The next receipt must
+join that operation to the measured storage profile and all nine verified external files. L05
+remains in progress until its required live source paths and established independent review pass;
+the tiny download is one bounded test within that stage. The retained machine and live records
+are under `/Users/drewwiberg/.codex/reviews/cassette/2026-10-01/`, with the successor recovery proof
+recorded under the October 10 evidence root.

@@ -51,6 +51,9 @@ from store import (
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     campaign_head,
+    campaign_profile_io,
+    drive_path_observation,
+    storage_profile,
     compare_campaign_head,
     verify_campaign_artifact,
     write_campaign_artifact,
@@ -483,11 +486,11 @@ def _partials_from(
             or record["source_revision"] != revision.immutable_revision
             or record["object_size"] != artifact.size
             or record["validator"] != artifact.validator
-            or intervals != [[0, artifact.size]]
+            or intervals != ([[0, artifact.size]] if artifact.size else [])
             or type(record["contiguous_source_hash_offset"]) is not int
             or record["contiguous_source_hash_offset"] != artifact.size
             or not isinstance(chunks, list)
-            or not chunks
+            or bool(chunks) != bool(artifact.size)
             or any(not isinstance(item, str) or _DIGEST.fullmatch(item) is None for item in chunks)
             or not isinstance(record["serialized_hash_state"], str)
         ):
@@ -1640,7 +1643,7 @@ class CanonicalBroker:
         return await self.execute(request, select)
 
     async def start_download(self, request: dict) -> dict:
-        """Q5/Q44/Q49: bind Go to its selections and reach the physical durability hold."""
+        """Q5/Q42/Q44/Q49/Q51: hold for reconnect, qualify the exact path, then acquire."""
         self.operation_id(request)
         if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
             _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
@@ -1651,12 +1654,20 @@ class CanonicalBroker:
         request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
         operation = self.issue(request)
         operation_id = operation['operation_id']
-        if operation['state'] in _TERMINAL_STATES or operation['state'] == 'PAUSED':
+        if operation['state'] in _TERMINAL_STATES:
             return operation
+        if operation['state'] == 'PAUSED':
+            pause_error = self.events(operation_id)[-1]['payload'].get('error', {})
+            released = any('drive_remounted' in event['payload'] for event in self.events(operation_id))
+            holds = [event['payload'] for event in self.events(operation_id) if 'hold' in event['payload']]
+            if pause_error.get('retryability') != 'retryable' and not (released and holds[-1].get('hold') == 'RELEASED'):
+                return operation
+            self.resume(operation_id)
         try:
-            selected = destination['selection']
+            remounts = [event['payload']['drive_remounted'] for event in self.events(operation_id) if 'drive_remounted' in event['payload']]
+            selected = remounts[-1]['selection'] if remounts else destination['selection']
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
-            selection = await asyncio.to_thread(revalidate_external_apfs_volume, selection)
+            selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
             adapter = SourceAdapter(descriptor['kind'], model['endpoint'],
                 credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
             revision = await adapter.resolve(descriptor)
@@ -1696,18 +1707,72 @@ class CanonicalBroker:
                     'selection': _json_copy(asdict(selection), operation_id, 'writer selection'),
                     'protected_inventory': observed_inventory,
                     'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}})
-            self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
-            self._append(self._load(operation_id), 'output_delta',
-                         {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
-            return self._operation(self._paused(self._load(operation_id)))
+            if not remounts:
+                self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
+                self._append(self._load(operation_id), 'output_delta',
+                             {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+                return self._operation(self._paused(self._load(operation_id)))
+            await self._qualify_download(operation_id, owner, selection, revision)
+            return await self.run_acquisition(request, AcquisitionContext(adapter, owner, None, cartridge))
         except CassetteError as error:
+            if error.retryability == 'retryable':
+                return self._operation(self._paused(self._load(operation_id), error))
             return self._operation(self._failed(self._load(operation_id), error))
 
+    async def _qualify_download(self, operation_id, owner, selection, revision):
+        """Q42/Q43/Q53: bind measured data and checkpoint extents to the current source/path."""
+        observed = await asyncio.to_thread(drive_path_observation, selection)
+        artifacts = _acquisition_artifacts(revision)
+        sizes = [size for artifact in artifacts
+                 for size in [transfer_state_bytes(artifact.size),
+                              *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
+        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': digest_bytes(bytes(size))}
+                    for size in sizes]
+        binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
+                   'path': observed['path'], 'operation': operation_id,
+                   'plan': {'source_lock': _source_record(revision), 'patterns': patterns,
+                            'queue_depth': 1, 'cache_state': 'WARM', 'working_set_bytes': 8388608,
+                            'artifact_bytes': sum(artifact.size for artifact in artifacts),
+                            'checkpoint_pattern': 'COMPLETE_EXTENT',
+                            'service_deadline_seconds': None, 'training_endurance': 'NOT_APPLICABLE',
+                            'unavailable_telemetry': ['cable_capability', 'thermal_state', 'media_health']}}
+        key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
+        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+        state = head['value'] if head else {'binding': binding, 'patterns': patterns, 'observations': []}
+        if state['binding'] != binding or state['patterns'] != patterns:
+            _reject('ROOT_INVALID', operation_id, 'saved acquisition profile differs from its source or path')
+        self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
+        for pattern in patterns[len(state['observations']):]:
+            before = await asyncio.to_thread(drive_path_observation, selection)
+            measurement = await asyncio.to_thread(campaign_profile_io, owner, str(uuid.uuid4()), pattern)
+            after = await asyncio.to_thread(drive_path_observation, selection)
+            if before['path'] != observed['path'] or after['path'] != observed['path']:
+                _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during acquisition measurement')
+            counters = (before['device_write_bytes'], after['device_write_bytes'])
+            if None in counters or counters[1] < counters[0]:
+                _reject('CAPABILITY_MISMATCH', operation_id, 'physical write telemetry is unavailable or regressed')
+            state = {**state, 'observations': [*state['observations'], {**measurement,
+                     'binding': binding, 'pattern': pattern, 'device_write_bytes': counters[1] - counters[0],
+                     'device_counter_authority': 'IOBlockStorageDriver:Bytes (Write)'}]}
+            head = await asyncio.to_thread(compare_campaign_head, owner, key, None if head is None else head['digest'], state)
+        result = storage_profile(binding, patterns, state['observations'], expected_binding=binding)
+        self._append(self._load(operation_id), 'output_delta', {'source_qualification': {
+            'status': result['status'], 'profile_digest': head['digest'], 'path': str(owner.cartridge),
+            'measurements': result}})
+
     async def watch_drive_remount(self, request: dict) -> dict:
-        """Q44/Q49: observe disconnection and verify the same cartridge after physical reconnection."""
+        """Q44/Q49: verify saved bytes after an observed or operator-reported physical reconnect."""
         self.operation_id(request)
-        if request['operation'] != 'drive.remount' or set(request['arguments']) != {'context_ref'}:
+        arguments = request['arguments']
+        if (request['operation'] != 'drive.remount'
+                or set(arguments) not in ({'context_ref'}, {'context_ref', 'reconnect_confirmed'})
+                or ('reconnect_confirmed' in arguments and arguments['reconnect_confirmed'] is not True)):
             _reject('INVALID_REQUEST', 'drive.remount', 'remount requires the held Go operation')
+        watcher_id = self.operation_id(request)
+        if self._path(watcher_id).exists():
+            recorded = self.issue(request)
+            if recorded['state'] in _TERMINAL_STATES:
+                return recorded
         operation_id = request['arguments']['context_ref']
         record = self._load(operation_id)
         prepared = [event['payload']['drive_prepared'] for event in record['events'] if 'drive_prepared' in event['payload']]
@@ -1719,7 +1784,10 @@ class CanonicalBroker:
         binding = proof['binding']
         async def verify():
             disconnected = any('drive_disconnected' in event['payload'] for event in self.events(operation_id))
-            while True:
+            reported = arguments.get('reconnect_confirmed') is True
+            if reported:
+                self._append(self._load(operation_id), 'output_delta', {'physical_reconnect_reported': 'OPERATOR'})
+            while not reported:
                 volumes = await asyncio.to_thread(list_external_apfs_volumes)
                 matches = [volume for volume in volumes if volume.volume_uuid == binding['volume_uuid']]
                 if not matches and not disconnected:
@@ -2271,6 +2339,12 @@ class CanonicalBroker:
                     _reject("INVALID_REQUEST", operation_id, "transfers must name every required source artifact exactly once")
                 partials = []
                 for artifact in artifacts:
+                    async def checkpoint_committed(partial):
+                        self._append(self._load(operation_id), 'output_delta', {
+                            'artifact': artifact.path, 'received_bytes': partial.contiguous_source_hash_offset,
+                            'verified_bytes': partial.contiguous_source_hash_offset,
+                            'verification': 'CHUNK_READBACK', 'checkpoint': 'DURABLE'})
+                        await self.hold_boundary(operation_id, 'source-checkpoint')
                     owned_extents = context.transfers is None
                     if owned_extents:
                         data_extent = await asyncio.to_thread(
@@ -2307,7 +2381,7 @@ class CanonicalBroker:
                             data_extent,
                             state_extent,
                             context.capacity_controller,
-                            checkpoint_committed=lambda: self.hold_boundary(operation_id, "source-checkpoint"),
+                            checkpoint_committed=checkpoint_committed,
                         ))
                     finally:
                         if owned_extents:
@@ -2319,6 +2393,7 @@ class CanonicalBroker:
                 ]
 
             checkpoint["partials"] = await self._controlled(operation_id, acquire, cancellable=True)
+            record = self._load(operation_id)
             artifacts = (
                 _acquisition_artifacts(revision)
                 if request["operation"] == ACQUIRE_OPERATION

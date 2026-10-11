@@ -1,0 +1,49 @@
+{
+  "source_sha256": "ad52db084ed973f81251337bb9ad2ea237249e0ca670ad8149c7c856651dc175",
+  "source_bytes": 160,
+  "exact_centered_guide_bytes": 69,
+  "replays": [
+    {
+      "method": "pair_total",
+      "retained": [
+        0,
+        1
+      ],
+      "gate_reads": [
+        0,
+        1
+      ],
+      "gate_bytes": 16,
+      "payload_bytes": 32,
+      "guide_bytes": 74,
+      "comparison_upper_differences": {
+        "1": 20
+      },
+      "output": [
+        1799,
+        1559,
+        1319,
+        1079
+      ]
+    },
+    {
+      "method": "dual",
+      "retained": [
+        0
+      ],
+      "gate_reads": [],
+      "gate_bytes": 0,
+      "payload_bytes": 32,
+      "guide_bytes": 74,
+      "comparison_upper_differences": {
+        "1": 0
+      },
+      "output": [
+        1799,
+        1559,
+        1319,
+        1079
+      ]
+    }
+  ]
+}

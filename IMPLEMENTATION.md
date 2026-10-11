@@ -5,6 +5,147 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
+## One-model acquisition resume — 2026-10-10
+
+The principal explicitly reconfirmed that the physical reconnect is complete and directed the
+builder to finish according to the written specifications. Q44/Q49 require fresh identity,
+pointer and touched-byte verification; the acquisition contract does not require the observer
+to have been running during the absence interval. Repair the CLI recovery path so an explicit
+operator reconnect report starts those same checks immediately. Record the report as reported
+evidence, preserve the missed observer history, and retain measured readback as separate proof.
+Do not request another physical reconnect merely to satisfy the old polling implementation.
+The extended CLI fixture reproduced the missing completed-reconnect trigger, then a separate
+duplicate-command check exposed rejection after the first verification released the hold.
+The repaired broker replays the canonical terminal observer record before checking for a live
+hold. Eight coupled CLI/drive/schema checks pass. The corruption case changes the saved probe,
+receives ROOT_INVALID and retains PAUSED; restoring the exact probe then verifies the remount.
+The CLI records OPERATOR-reported reconnect separately from an observed drive_disconnected event.
+The first full candidate run was interrupted to add and repair the duplicate-command check;
+retain it as incomplete. The successor candidate owns the final complete builder proof.
+The old polling observer and finite runner were stopped; its canonical cancellation record is
+preserved. The installed successor's 38 runtime/schema files match the source, and the reported
+reconnect verification is now checking LaCie's current protected inventory without another cue.
+Publication remains authorized for the complete worktree and appended build story. Keep L05
+IN_PROGRESS until its complete required live source paths and supplied independent review pass.
+Successor builder proof: `2026-10-10/reported-remount-candidate-02` passed all 339 tests in
+339.52 seconds with zero skips, all fourteen component controls with failing deletion/bypass,
+and its ordinary ledger. All 190 source files outside the generated J report matched before
+copying that producer's canonical report into this checkout. J now records 13,414 product and
+2,020 tool executable lines; runtime, process, dependency, kernel and model-branch counts are
+unchanged. This result includes the operator-reported reconnect and terminal-replay repairs.
+
+The principal confirmed the physical action and requested continuation. The old watcher process
+has ended; its durable record contains no observed disconnection or remount receipt. Do not
+release the physical hold from that confirmation alone. The current native volume UUID, cartridge
+identity, saved immutable pointer and 4096-byte probe all verify. Retain that readback separately
+from product-observed reconnect proof. A fresh CLI drive selection is recording the current
+protected inventory before further writes; nine days of unrelated drive use must not be treated
+as Cassette corruption. Reuse the same cartridge and the same sole selected tiny model. Preserve
+the earlier operation and its incomplete proof. The next action is to prepare the current Go
+binding and arm its watcher before requesting the physical observation still required by Q44/Q49.
+Evidence: `tiny-download-01/recovery-readback-20261010.json` and `select-drive-03.stdout.json`
+under the existing off-drive evidence root. No model payload has been downloaded.
+The fresh selection succeeded: protected logical-byte totals differ from October 1 in `Arup`
+and `drewwiberg-lacie`; `Writing` is unchanged. The cause of those outside-root changes is not
+established by the coarse inventory. Preserve both snapshots. Selection
+`op-1540c7b1f85af5f5697745044bfa376aac1f87e155ee71bf35d798b11a6f5ebc` binds the current
+snapshot and the existing cartridge UUID. The dead watcher and superseded paused Go were cancelled
+through the canonical broker, retaining their records and the original on-drive durability objects.
+Prepare successor Go with key `tiny-go-20261010-03`; its model selection remains unchanged.
+Successor Go `op-7358db11cbbcd3ad66f96cfbf35b42c9fa08fe74c8742f47cbaaa3b6bab8e1de`
+created and verified its new 4096-byte probe and immutable pointer. The second complete protected
+inventory matches the fresh selection. Go is PAUSED at its acknowledged CARTRIDGE-DURABILITY hold.
+Watcher `op-31c7cd42a7606c9791a7e8f26eadcac5beb56b153b8b106ca39c1d21ee703601` is running
+through the installed CLI. The principal was asked to repeat orderly eject/unplug/reconnect because
+the prior watcher retained no disconnect observation. Current checkpoint and selection identities
+are in `checkpoint-20261010.json` and `selections-20261010.json`. Physical observation, measurement
+and download remain pending; the model payload count is still zero.
+A finite off-drive test runner now waits for that watcher, recovers the same interrupted watcher
+if needed, then invokes the same Go key once. It checks all nine final source receipts, requires
+a canonical PASS storage-profile event, and records a post-download protected inventory through
+the installed CLI. It stops after success or failure; it schedules no recurring work and selects
+no additional model. Its process and log are recorded in `continuation-20261010.pid` and
+`continuation-20261010.log`. Keep this active test environment until its evidentiary purpose ends.
+
+## One-model acquisition continuation — 2026-10-01
+
+The principal authorized completion of the download path using one really tiny test model.
+Use only `llamafactory/tiny-random-qwen3` for the live test; metadata inspection of other
+candidates downloaded no model payload. This isolated test does not replace release selections.
+Finish the CLI Go continuation after verified reconnect, operation-bound storage measurement,
+direct external transfer, restart reconciliation and final digest receipts. Q5/Q9/Q42/Q44/Q49/
+Q51/Q52/Q53 and `acquisition_entry_contract` govern the proof. Extend the existing entry fixture
+to demonstrate the missing continuation before repair. Preserve the earlier review repairs and
+independent mathematics work. Physical reconnect and principal-supplied independent review remain
+separate evidence boundaries. The entry fixture reproduced the stopped continuation. Its repaired
+path now passes through native measurement, a deliberately truncated range, a fresh-process retry,
+all file digests and duplicate-Go replay. Eight focused source/transfer/entry checks passed before
+the larger interrupted-range extension; that extension also passed. The installed CLI selected
+the pinned tiny model with zero payload download. Current next action: finish the current drive
+inventory, establish the live hold, and run the final candidate proof while awaiting reconnect.
+The selected drive still has its recorded UUID. The expected Cassette identity marker is absent.
+Live Go correctly rejected the path: APFS resolves `Cassette` to the pre-existing user directory
+`cassette`, which has no cartridge marker. Nothing was written there. The isolated test now uses
+the distinct `drewwiberg-lacie/Cassette-tiny-test-20261001` destination and a new selection/Go key;
+the failed original operation remains terminal and preserved. The existing user directory enters
+the new protected inventory.
+Final candidate proof: 339 passed, zero skips, fourteen consequential Q78 removal/bypass controls,
+and zero ordinary-ledger violations. The producer's report was copied only after source hashes
+matched. Accounting is 13,402 product lines and 2,020 tool lines; there are no new runtimes,
+processes, direct dependencies, numerical kernels or model-specific branches. The existing
+storage-profile assessor moved from `tools/campaign.py` into its store authority and is reused
+by the broker. The native collector reuses macOS IOKit/CoreFoundation through stdlib ctypes;
+it captures the current registry path and IOBlockStorageDriver write counters without a helper
+process. Missing cable, thermal and health telemetry remains explicitly unknown; this acquisition
+plan imposes no training-endurance or execution-service bound.
+The installed final wheel's 38 Python/schema files match the tested source. Live model selection
+and the new scoped protected inventory passed. Go created the new cartridge, verified its
+4096-byte probe and immutable pointer, and confirmed that the protected inventory still matches.
+Go `op-01e716a3ad64d33b00bdb6e189631018bac41d3f79c7f776cfa6dbec3b796fbf` is PAUSED
+at its acknowledged physical hold. The installed `watch-remount` command is armed; the principal
+was asked to eject, physically unplug and reconnect LaCie. One model remains selected, and no
+model-bearing payload has been downloaded. The final source receipts must total 20,764,612 bytes
+across nine artifacts; the weight file is 4,881,064 bytes.
+Evidence: `/Users/drewwiberg/.codex/reviews/cassette/2026-10-01/tiny-download-01/` and
+`/Users/drewwiberg/.codex/reviews/cassette/2026-10-01/tiny-download-candidate-01/`.
+Physical reconnect, actual profile and final external bytes remain NOT_RUN until those product
+steps execute. L05 remains IN_PROGRESS; this single public-source test cannot close the release
+acquisition matrix or establish live authenticated access.
+
+## Repository review remediation — 2026-09-30
+
+The principal requested repair of the four findings from the current repository review.
+The acceptance targets are Q51/Q60 revalidation of completed transfer extents, Q5/Q6/Q49
+and `acquisition_entry_contract` recovery of retryable Go failures, Q51 verification of
+zero-byte source assets, and Q6/Q57 typed rejection of malformed tensor offsets.
+
+Repair outcome: PASS at fixture and integration level. All four extended fixtures failed before
+repair. The repaired fixtures and directly coupled broker checks passed 10/10. The isolated
+candidate producer then passed the full suite (339 passed, zero skips) and all 14 Q78 removal
+proofs. Its generated `tools/generated/s27_j_report.json` replaces the stale report after a
+hash comparison confirmed that the tested source still matched this checkout.
+The final ordinary ledger reports zero violations, and `git diff --check` passes.
+
+| Finding and authority | Repair and discriminating evidence |
+|---|---|
+| Q51/Q60 completed transfer | `sources.py` verifies retained chunks before returning a completed checkpoint. The S10 fixture flips the last payload byte after completion, receives IDENTITY_MISMATCH without a network request, and reacquires the original bytes. An unchanged completed extent reuses its checkpoint after local validation. Initial completion still performs only the existing per-chunk readback. |
+| Q5/Q6/Q49 retryable Go | `broker.py` records a retryable error as PAUSED and repeated Go resumes that operation. The L05 CLI fixture detaches its disposable APFS image, retries in a new process, reconnects, and reaches the physical hold with the same operation ID. Repeated Go leaves that hold unchanged; a changed source remains terminal FAILED. |
+| Q51 empty assets | `broker.py` accepts empty intervals and chunk records exactly for zero-byte objects. The L05 acquisition fixture verifies an empty JSON asset with its exact empty SHA-256 digest, completes the other artifacts, and replays without another transfer. |
+| Q6/Q57 tensor offset | `store.py` checks the offset type before arithmetic. The S05 fixture rejects string, null, Boolean, fractional, negative, and out-of-range offsets with INVALID_REQUEST; valid suffix and end-of-tensor reads retain their expected bytes. |
+
+The first full run passed 338 checks and failed the S12 binary-inspection check because the
+selected Xcode installation requires license acceptance. The unchanged check and the complete
+producer pass with `DEVELOPER_DIR=/Library/Developer/CommandLineTools`. This setting applies only
+to those test processes; system developer-tool selection and license state remain unchanged.
+
+Q29 records 13 additional product executable lines (13,250 product; 2,049 tools), justified by
+the named failures above. Runtime, process, dependency, numerical-kernel, and authority counts
+remain unchanged. Independent post-repair review: NOT_RUN. No live-stage acceptance is claimed.
+Evidence: `/Users/drewwiberg/.codex/reviews/cassette/2026-09-30/remediation/command-line-tools/`.
+`cli.py` is directly coupled: a retryable pause must report its error rather than claim the
+physical qualification boundary was reached. This repair does not close L05 or execute a live
+campaign. Existing AGENTS.md, MATHS.md, and representation-research edits remain preserved.
+
 ## Repository review remediation — 2026-09-04
 
 The principal authorized repairs for the six findings in the repository-wide review. These

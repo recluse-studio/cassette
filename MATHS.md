@@ -930,3 +930,359 @@ removed, specialized, or proved irrelevant at the named surface.
   not hand-edited.
 
 Every listed item is checked only because its edit or no-change audit passed the discrepancy review.
+
+## 12. Minimal abstraction, precise location, and exact reconstitution
+
+**Status: OPEN.** The principal's correction in the performance-research thread on 2026-09-20
+defines this section's objective.
+
+Construct the smallest feasible mathematical abstraction in RAM that lets Cassette identify
+the relevant region of the full external weight table, locate its encoded data, and retrieve
+or reconstitute the required weights at their source precision. Return those weights for the
+normal calculation. The mathematical abstraction may contain derived relations, encoded
+structure, or other values; it need not be a partial table of original weights.
+
+The active research record is
+[research/representation/README.md](research/representation/README.md).
+
+### 12.1 Objects and the complete path
+
+Fix a finite source weight table \(W\), its shape and scalar encoding, and a declared class of
+runtime states \(\mathcal S\). A runtime state \(s\) contains only information actually available
+before the relevant weight fetch, including the operation to execute and its available inputs.
+The encoder produces
+
+\[
+E(W)=(z_W,d_W),
+\]
+
+where \(z_W\) is the resident abstraction and \(d_W\) is the external representation retaining
+the full source information. The interpreter and its fixed rules are source independent; every
+model-dependent parameter, instruction, lookup entry, and precision witness is charged as
+stored information.
+
+The path has four separately proved stages.
+
+1. **Interpret relevance.** From \(z_W\), \(s\), and explicitly charged external observations,
+   identify a region \(S\) whose weights are sufficient for the declared next calculation.
+2. **Resolve location.** Translate the region's logical coordinates into exact external byte
+   ranges or encoded objects. Any intermediate directory reads belong to the read transcript.
+3. **Reconstitute the table.** Read or decode those objects to produce the weights \(W|_S\),
+   with their source values, precision, shape, order, and identity.
+4. **Calculate normally.** Supply \(W|_S\) to the declared ordinary numerical operation.
+   Release or reuse the region under a separately charged memory schedule.
+
+The first stage concerns which weights matter. The second concerns where their data are.
+Neither stage supplies the other for free. The third stage concerns the weight values
+themselves; an estimate of a matrix product does not satisfy it.
+
+### 12.2 Relevance and reconstitution obligations
+
+A candidate must define a checkable relevance relation
+
+\[
+\mathcal R_W(s,S)
+\]
+
+that makes \(S\) sufficient for the declared next operation. Its meaning, construction,
+available observations, and proof costs are part of the candidate. It is not a free oracle
+that already knows which weights to fetch. The work must derive how the abstraction supplies
+that information. A small sufficient region is an intended result to establish, not an
+assumption inherited from a desired RAM budget.
+
+For a read transcript \(\tau\), the reconstitution obligation is
+
+\[
+\operatorname{Decode}(z_W,S,\tau)=W|_S.
+\]
+
+Equality means recovery of the source-encoded weight values and their tensor positions.
+A lossless external transformation is admissible if it supports this local inverse within the
+declared resources. Merely proving that the whole source can eventually be inverted does not
+prove bounded-memory access to one requested region.
+
+The ordinary operation must receive the recovered weights, not a surrogate answer produced
+by weighted samples. Its established arithmetic and ordering remain the reference. Any claim
+that some source contributions can be skipped needs its own sufficiency proof. The same
+abstraction must support later runtime states that need different regions of the model.
+
+### 12.3 The quantity to minimize is total peak RAM
+
+Measure simultaneous residency, including the mathematical representation and its workspace:
+
+\[
+M_{\rm peak}
+=\max_t\left(
+M_{\rm abstraction}(t)+M_{\rm metadata}(t)+M_{\rm interpreter}(t)
++M_{\rm reads}(t)+M_{\rm reconstitution}(t)
++M_{\rm weights}(t)+M_{\rm normal\ calculation}(t)
+\right).
+\]
+
+All terms are encoded bytes. Source-specific code, caches, temporary decoded structures,
+query state, and live accumulators must appear exactly once in this account. A single
+arbitrary-precision number is charged by its encoded length and the workspace used to
+interpret it. An external directory can replace a resident directory only with its reads
+and transient memory recorded.
+
+The research seeks the minimum achievable RAM requirement while satisfying relevance,
+location, and reconstruction correctness. Report the accompanying external bytes, read
+requests, transfer bytes, construction work, and interpretation/reconstruction work. State
+the fixed constraints when claiming a minimum; trading unlimited scans or computation for
+a smaller representation is a different resource point.
+
+### 12.4 Research sequence and completion
+
+Derive candidate abstractions and their interpretation/reconstitution rules from this
+contract. Explore competing mathematical constructions in parallel. Use published work to
+identify existing results, challenge originality, and construct strong comparators; it
+does not determine the form of the new abstraction or replace the principal's objective.
+
+Stress each candidate on representation collisions, indistinguishable runtime observations,
+changes in the relevant region, precision boundaries, local decoding dependencies, and
+hidden growth of resident or temporary state. Establish correctness before claiming a
+smaller RAM requirement. Compare established and proposed methods on the same source,
+runtime-state class, required source precision, normal calculation, and read/work constraints.
+
+Completion requires a retained abstraction, an interpreter that establishes relevance and
+location, exact local weight reconstitution, explicit peak-memory and access/work bounds,
+and an independently challenged novelty claim. Its advantage must concern this complete
+path against the fully improved applicable established comparator. A minimum or exhaustive
+comparison requires a lower bound or certified optimum over its stated class.
+
+### 12.5 Status of the earlier investigation
+
+The earlier signed-sampling and coupled-column work optimized error in estimated matrix
+products. Its 7.39% finite comparison does not establish a smaller abstraction, precise
+relevance/location, or exact recovery of a needed weight region. It is not evidence of
+success for this objective.
+
+Those proofs and experiments remain recorded in
+[research/representation/COMPARISON.md](research/representation/COMPARISON.md) as a
+superseded research direction. They no longer appear here as accepted representation
+deliverables. Section 5 retains its separately scoped execution theorem; it does not answer
+section 12's abstraction and reconstitution problem. This correction does not change the
+independently owned mathematics roots, product code, or existing release gates.
+
+### 12.6 Current exact constructions and their boundary
+
+The corrected investigation now has exact constructions for finite-domain decision
+representations, source-certified geometric routing, local source-word reconstitution,
+and packets prepared while a region choice remains unresolved. The derivations and their
+source-family restrictions are indexed in
+[the active research record](research/representation/README.md#results-under-the-corrected-objective).
+
+For a Boolean degree-at-most-\(D\) record field with \(t\) unresolved identifier bits
+and \(P\) words of \(b\) bits per record, the exact universal preload requirement is
+\(Pb\sum_{j=0}^{\min(D,t)}\binom tj\) bits, counting all prior source-dependent
+information. The lower bound assumes all coefficient assignments remain possible at the
+observed prefix and no source reads occur after the remaining bits resolve. Restricted
+coefficient packets attain it. The prefix construction provides their payload in at most
+three logical extents and selects original source words after in-place branch preparation.
+Headers, physical blocks, integrity metadata, addresses, and the calculation schedule
+remain additional obligations.
+
+The finite checks establish the stated exact identities on generated source families.
+Known interpolation already matches the packet's information bound. Neither these checks
+nor the new physical slot formula establishes novel mathematics superior to the strongest
+applicable established method, or the required source structure in a frontier model.
+Section 12 remains OPEN; the construction does not admit a product path or numerical kernel.
+
+### 12.7 Query-derived relevance and original-weight experiments
+
+The next constructions derive region choices from current inputs for arbitrary integer
+source matrices within two declared operations. The
+[quotient and remainder representation](research/representation/phase-quotient-routing.md)
+preserves a source argmax by proving a candidate set, refining uncertain choices with
+original gate rows, and returning the original winning weight record. The
+[sum and moment refinements](research/representation/remainder-sum-certificates.md)
+store derived mathematical values that constrain the discarded detail. A separate
+[dense ReLU construction](research/representation/dense-relu-relevance.md) proves some
+intermediate activations exactly zero before reading their source rows, then reads and
+uses original up rows and down columns for all remaining nonzero contributions.
+
+The common column contribution may be omitted for an argmax but must be retained for a
+threshold comparison. This distinction is part of the relevance proof. Numerical scores
+that feed later calculations are recovered from original weights, not silently replaced
+by the representation's coarse values. Exact integer proofs do not establish parity with
+an arbitrary floating-point kernel. A separately scoped
+[rounding-cell certificate](research/representation/rounding-relevance.md) addresses
+finite-precision omission only for its explicitly declared arithmetic and entry states.
+
+The [routing comparison](research/representation/remainder-sum-comparison.md) records
+220 source/configuration combinations and 85,140 exact route executions on generated
+sources. The [dense comparison](research/representation/dense-relu-comparison.md) records
+seven configurations and 2,709 exact layer evaluations. These are repeated executions on
+declared finite fixture sets, not counts of independent real-model inputs. Encoded guide
+bytes, interpreter scratch, original-weight buffers, logical reads, modeled pages, and
+physical latency remain distinct costs. A compact guide can force a full source scan.
+
+Independent review retained the core containment proofs and exposed source-binding,
+tie, phase-selection, and memory-accounting boundaries. The comparisons now include exact
+centered and split encodings, moment bounds, and a streamed dense baseline that already
+skips down columns with zero activations. Established interval filtering, knapsack support,
+Cauchy–Schwarz, and lossless residual coding cover those ingredients. Joint residual
+relationships remain a research candidate; no novelty or best-method advantage is admitted
+by these fixtures. Section 12's completion condition remains unchanged.
+
+The [column-total refinement](research/representation/column-sum-propagation.md) and
+[projected joint interpretation](research/representation/projected-transport-representation.md)
+retain relationships between source regions. The latter replaces all noncompared residual
+rows with one bounded aggregate row. Its exact optimization uses dimension-sized mutable
+state and gives a safe, sometimes sharper comparison than separate row intervals using
+the same stored fields. It is a relaxation of full joint interpretation, and one exact
+optimization per challenger can still dominate latency. The finite witness establishes
+strict pruning at the same guide content, not equal total work or a novel global optimum.
+
+A subsequent [pair-total support construction](research/representation/pair-total-support.md)
+relaxes the separate compared-row totals while preserving their sum and column competition.
+Its two-piece concave coordinate objectives share a slope order determined only by the
+query. One sort and streaming integer allocation compute all anchor comparisons in
+\(O(d\log d+md)\) arithmetic and \(O(d)\) mutable words. It retains the same strict
+four-to-two witness without a flow solver, but a separate counterexample proves that it
+can be weaker than projected flow. Intersecting it with cheaper bounds preserves their
+conclusions. The executable support interpreter passes 81,000 source-containment checks
+and 4,050 exhaustive relaxed-optimum checks; these do not establish novelty or physical speed.
+
+### 12.8 Smaller joint representation and stronger interpretation
+
+The [clipped-slack representation](research/representation/saturated-slack-representation.md)
+replaces the column vectors \(u,L,V\) with
+\(\alpha_j=\min(u_j-L_j,2w_j)\) and
+\(\beta_j=\min(V_j-u_j,2w_j)\). This preserves every propagated single-row
+interval and every projected pair feasible set. A packed codec omits neutral values,
+charges its flags and coordinates, and preserves all checked bounds. If every column
+is neutral, projected pair interpretation equals separate row support: the joint step
+can be skipped. A tiny code for that extra information does not make the complete
+representation tiny; \(Q,w,t\), identity, addresses, and workspace remain charged.
+
+The [scalar-dual refinement](research/representation/pair-dual-refinement.md) restores
+the individual row totals omitted by pair-total support. For its declared projected
+pair polytope,
+
+\[
+ M^{\rm proj}_{ik}(x)
+ =\min_{\mu\in\mathbb R}\left[\mu(t_i-t_k)+B_{ik}(x-\mu\mathbf1)\right].
+\]
+
+For integer queries, the multiplier search is exact on a doubled integer grid.
+Convexity permits adjacent-value binary search; merging two sorted query arms avoids
+sorting at each evaluation. This recovers the projected bound with dimension-sized
+working state and no additional source information. It may require more computation
+than the weaker bound. The projected polytope still relaxes the full joint source,
+and established specialized optimization remains a required comparator.
+
+The [packed original-weight replay](research/representation/dual-original-weight-check.md)
+shows a strict gain after intersecting the earlier row and pair bounds: two original
+gate reads become zero while the selected original payload and ordinary calculation
+remain identical. The complete joint guide is 74 bytes on that tiny source; a lossless
+centered guide needs 69 bytes and also needs no gate discovery reads. The fixture
+therefore proves a stronger interpretation, not a better complete resource frontier.
+
+The [adaptive original-read comparator](research/representation/adaptive-source-refinement.md)
+also strengthens the established baseline. A fetched original score \(s_i\), together
+with its represented lower bound \(l_i\), gives a bound \(H\le s_i-l_i\) on the
+discarded common score. Updating that bound and the exact incumbent can exclude later
+reads without storing the common weight vector. Shared query prefixes accelerate
+row-sum support. A new representation must face this refinement as well as stronger
+read orders and exact compressed encodings. None of these results closes section 12.
+
+### 12.9 Exact interpretation of all retained residual margins
+
+The [full aggregate criterion](research/representation/full-aggregate-feasibility.md)
+tests whether the unexamined rows can actually realize a proposed aggregate.
+For omitted row totals sorted ascending, their prefix totals \(T_r\), and a
+proposed column aggregate \(z\), integral completion is equivalent to
+
+\[
+z\ge0,\qquad \sum_jz_j=T_n,\qquad
+\sum_j(z_j-sw_j)_+\le T_{n-s}\quad(0\le s\le n).
+\]
+
+An expiry-based separator checks this condition with row-sized and column-sized
+working arrays. For binary residual capacities, the same constraints become nested
+quotas and permit exact single-row support through a heap. These constructions
+preserve the uncapped column totals; the earlier clipped slacks cannot substitute
+for information they deliberately discard.
+
+The [full-pair interpreter](research/representation/full-pair-polymatroid.md)
+extends the result to arbitrary integral shared column capacities. It relaxes the
+two distinguished row totals to their sum, allocates their combined column values
+over an integral polymatroid, and restores the separate totals with an exact scalar
+dual. An increment changes a suffix of the omitted-row feasibility slacks. Batched
+suffix updates avoid both an explicit transportation matrix and iteration over
+every integer weight unit. The working state uses \(O(m+d)\) words, with integer
+widths, per-pair preparation, heap work, scalar trials, and touched-node restoration
+charged separately.
+
+This interpreter obtains the exact maximum pair difference over every residual
+table with the guide's margins and capacities. It therefore extracts the strongest
+universally valid pair upper bound available from those fields alone. This is a
+statement about a fixed information set and one comparison, not the optimality of
+the representation or the complete routing policy. Original source weights still
+supply every ordinary calculation after selection.
+
+Exhaustive small-domain references agree with the full-pair interpreter on 8,100
+queries and with its relaxed allocation on the same queries. An additional 504
+wide-query and integer-dilation checks exercise large weight magnitudes. The
+research implementation and independent review establish this stated integer
+operation; they do not measure a real model's peak RAM or physical supply time.
+
+The [original-weight replay](research/representation/full-pair-source-witness.md)
+uses the same 67-byte guide under projected and full interpretation. Full
+interpretation eliminates two gate discovery reads, then retrieves the original
+payload through decoded physical locators and returns the same ordinary result.
+A 64-byte lossless centered guide also needs no discovery reads on that fixture.
+The replay proves stronger interpretation of the same fields, not a complete
+memory advantage. The final scalar search uses a subgradient from each allocation
+to need one new support evaluation per step while preserving the exact bound.
+
+The [explicit-flow comparison](research/representation/full-pair-flow-comparison.md)
+returns identical exact supports in 16 comparisons using only the same compiled
+widths and margins. Both measured paths include fresh preparation. On the four
+32-by-32 cases, the canonical interpreter's additional traced Python allocation
+peak is 13,720--13,880 bytes; the explicit transportation graph's is
+227,088--227,248 bytes. Untraced timing also favors this interpreter in the declared
+Python runs. These observations compare two implementations, not all established
+methods, process RAM, model-scale inference, or physical storage performance.
+The result binds the measured definitions by digest. A retained-closure defect
+found during measurement was removed and checked with cyclic collection disabled.
+
+The [larger projected comparison](research/representation/joint-scale-experiment.md)
+also narrows the earlier evidence: independent, structured, and near-tie generated
+families show no pair or scalar-dual read reduction beyond propagated bounds.
+Deliberately coupled cases show small reductions under a fixed fetch policy.
+That comparison predates full-pair interpretation and does not include the improved
+adaptive-read policy. It cannot establish a best-method result. Classical flow,
+polymatroid allocation, and specialized transportation methods remain comparators;
+novelty and section 12's complete resource advantage remain OPEN.
+
+### 12.10 Improvement hypothesis and complete-path falsification
+
+The principal's 2026-09-29 instruction sets the null hypothesis to improvement.
+The [frozen experiment](research/representation/improvement-hypothesis-protocol.md)
+tests exactness, memory, elapsed time, and discovery reads separately. A finite pass
+does not prove the general hypothesis, and non-rejection does not establish improvement.
+
+The [retained result](research/representation/improvement-hypothesis-results.md) contains
+32 same-information support comparisons and 1,728 original-weight route checks across
+32 generated source cases. Every support, winner, original payload, and ordinary
+integer output matches its reference. The full-pair support solver uses less traced
+Python allocation and time in all 32 comparisons with an improved transportation
+solver using potentials and Dijkstra; median paired ratios are 0.143 and 0.0824.
+
+The complete-path result reverses that local ranking. At the frozen quotient step of
+256 and gate sizes 12 by 16 or 24 by 32, pair-total, projected scalar-dual, and full-pair
+routes use more traced allocation and time than both adaptive row sums and exact
+centered in every source case. No candidate reduces gate reads against adaptive row
+sums. The full-pair route's median paired allocation and time ratios against row sums
+are 1.199 and 7.252. These observations reject complete-path dominance for the tested
+implementations and settings. The predeclared one-sided tests reach the same conditional
+conclusion after correction for 20 comparisons.
+
+The allocation trace includes preparation, the copied guide, routing state, original
+payload reads, and ordinary calculation, but excludes shared interpreter state and
+process baseline. Cached local-file timing is not physical external-drive timing.
+The source case is the statistical unit; queries, repeat measurements, and the repair
+rerun are not additional independent samples. Section 12 remains OPEN, with no
+new admission of a product path, numerical kernel, novelty claim, or model-scale win.

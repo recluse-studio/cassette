@@ -22,6 +22,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import stat
 import struct
@@ -1156,6 +1157,75 @@ def revalidate_external_apfs_volume(selection: DriveSelection) -> DriveSelection
             "CARTRIDGE_DISCONNECTED",
         )
     return current
+
+
+def drive_path_observation(selection: DriveSelection) -> dict:
+    """Q43/Q49: capture the mounted device's native parent chain and physical write counter."""
+    selection = revalidate_external_apfs_volume(selection)
+    io = ctypes.CDLL('/System/Library/Frameworks/IOKit.framework/IOKit')
+    cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+    signatures = {
+        'IOBSDNameMatching': ([ctypes.c_uint, ctypes.c_uint, ctypes.c_char_p], ctypes.c_void_p),
+        'IOServiceGetMatchingService': ([ctypes.c_uint, ctypes.c_void_p], ctypes.c_uint),
+        'IORegistryEntryCreateCFProperties': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.c_uint], ctypes.c_int),
+        'IORegistryEntryGetParentEntry': ([ctypes.c_uint, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint)], ctypes.c_int),
+        'IORegistryEntryGetRegistryEntryID': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_uint64)], ctypes.c_int),
+        'IOObjectRelease': ([ctypes.c_uint], ctypes.c_int),
+    }
+    for name, (arguments, result) in signatures.items():
+        function = getattr(io, name)
+        function.argtypes, function.restype = arguments, result
+    cf.CFPropertyListCreateData.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_ulong, ctypes.c_void_p]
+    cf.CFPropertyListCreateData.restype = ctypes.c_void_p
+    cf.CFDataGetLength.argtypes, cf.CFDataGetLength.restype = [ctypes.c_void_p], ctypes.c_long
+    cf.CFDataGetBytePtr.argtypes, cf.CFDataGetBytePtr.restype = [ctypes.c_void_p], ctypes.c_void_p
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    cf.CFRelease.restype = None
+    matching = io.IOBSDNameMatching(0, 0, Path(selection.volume.mount_source).name.encode())
+    entry = io.IOServiceGetMatchingService(0, matching) if matching else 0
+    if not entry:
+        _drive_reject(selection.volume.volume_uuid, 'mounted device has no native registry identity')
+    chain, counters = [], []
+    try:
+        while entry:
+            properties, identifier = ctypes.c_void_p(), ctypes.c_uint64()
+            if (io.IORegistryEntryCreateCFProperties(entry, ctypes.byref(properties), None, 0)
+                    or io.IORegistryEntryGetRegistryEntryID(entry, ctypes.byref(identifier))):
+                _drive_reject(selection.volume.volume_uuid, 'native device property capture failed')
+            serialized = None
+            try:
+                serialized = cf.CFPropertyListCreateData(None, properties, 200, 0, None)
+                length = cf.CFDataGetLength(serialized) if serialized else 0
+                if not 0 < length <= 4 * 1024 * 1024:
+                    _drive_reject(selection.volume.volume_uuid, 'native device properties exceed their bounded capture')
+                values = plistlib.loads(ctypes.string_at(cf.CFDataGetBytePtr(serialized), length))
+            finally:
+                if serialized:
+                    cf.CFRelease(serialized)
+                cf.CFRelease(properties)
+            fields = ('BSD Name', 'UUID', 'Content', 'Whole', 'Size', 'Preferred Block Size',
+                      'Physical Block Size', 'Device Characteristics', 'Protocol Characteristics',
+                      'USB Product Name', 'USB Serial Number', 'locationID', 'idVendor', 'idProduct',
+                      'bcdDevice', 'PortNum', 'IOClass', 'IOProviderClass', 'APFSEncrypted', 'Encrypted',
+                      'IOPlatformUUID')
+            descriptors = {key: plistlib.dumps({'value': values[key]}, fmt=plistlib.FMT_BINARY).hex()
+                           for key in fields if key in values}
+            chain.append({'registry_id': str(identifier.value), 'descriptors': descriptors})
+            statistics = values.get('Statistics', {})
+            if type(statistics.get('Bytes (Write)')) is int:
+                counters.append(statistics['Bytes (Write)'])
+            parent = ctypes.c_uint()
+            status = io.IORegistryEntryGetParentEntry(entry, b'IOService', ctypes.byref(parent))
+            io.IOObjectRelease(entry)
+            entry = 0 if status else parent.value
+    finally:
+        if entry:
+            io.IOObjectRelease(entry)
+    return {'path': {'volume_uuid': selection.volume.volume_uuid, 'mount_path': selection.volume.mount_path,
+                     'mount_source': selection.volume.mount_source, 'device': selection.volume.device,
+                     'filesystem': selection.volume.filesystem, 'chain': chain,
+                     'host': {'name': platform.node(), 'os': platform.platform()}},
+            'device_write_bytes': sum(counters) if counters else None}
 
 
 def _inventory_reject(object_id: object, detail: str) -> None:
@@ -3839,8 +3909,10 @@ def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str
         _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} is absent or duplicated")
     spans = matches[0]["spans"]
     size = sum(span["length"] for span in spans)
+    if type(offset) is not int:
+        _q57_reject(root_digest, "tensor byte offset must be an integer", "INVALID_REQUEST")
     length = size-offset if length is None else length
-    if type(offset) is not int or type(length) is not int or offset < 0 or length < 0 or offset+length > size:
+    if type(length) is not int or offset < 0 or length < 0 or offset+length > size:
         _q57_reject(root_digest, "tensor byte interval is outside its verified span map", "INVALID_REQUEST")
     locations = _read_index(cartridge, root_digest)
     output = bytearray()
@@ -6070,6 +6142,52 @@ def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: 
             "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
             "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
             "physical_write_bytes": None, "path": str(path)}
+
+
+def storage_profile(binding, patterns, observations, *, expected_binding):
+    """Q41-Q44: assess independent read/write/flush observations for exact plan patterns."""
+    def reject(object_id, detail):
+        raise CassetteError('PROVENANCE_VIOLATION', str(object_id), 'Q41-Q44: exact storage profile', 'terminal', detail)
+    def number(value, field, *, integer=False, positive=False, maximum=None):
+        if (type(value) not in ({int} if integer else {int, float})
+                or not math.isfinite(value) or value < 0 or (positive and value == 0)
+                or (maximum is not None and value > maximum)):
+            reject(field, 'measurement has an invalid type, unit count or range')
+        return value
+    if binding != expected_binding or not {'drive', 'host', 'path', 'operation', 'plan'} <= binding.keys():
+        reject('profile', 'drive, host, path, operation or plan identity differs')
+    if not patterns or len(patterns) != len(observations):
+        reject('profile', 'profile observation coverage is incomplete')
+    for pattern, observed in zip(patterns, observations, strict=True):
+        if observed.get('pattern') != pattern or observed.get('binding') != binding:
+            reject('profile', 'observation differs from the exact plan pattern')
+        for field in ('read_bytes', 'write_bytes'):
+            number(pattern.get(field), field, integer=True)
+        for field in ('host_write_bytes', 'device_write_bytes', 'errors'):
+            number(observed.get(field), field, integer=True)
+        number(observed.get('duration_seconds'), 'duration seconds', positive=True)
+        for field in ('read_seconds', 'write_seconds', 'flush_seconds'):
+            if field in observed:
+                number(observed[field], field, maximum=observed['duration_seconds'])
+        if (observed.get('errors') != 0 or observed.get('readback_ok') is not True
+                or observed.get('flush_ok') is not True or observed.get('duration_seconds', 0) <= 0):
+            reject('profile', 'readback, flush, error or timing evidence failed')
+        if observed.get('host_write_bytes', -1) < pattern.get('write_bytes', 0):
+            reject('profile', 'observed host writes omit planned writes')
+        if observed.get('device_write_bytes') is None:
+            reject('profile', 'physical write observation is unavailable')
+    latencies = sorted(x['duration_seconds'] for x in observations)
+    def percentile(values, q):
+        return values[max(0, math.ceil(q * len(values)) - 1)]
+    throughput = sorted((p.get('read_bytes', 0) + p.get('write_bytes', 0)) / o['duration_seconds']
+                        for p, o in zip(patterns, observations, strict=True))
+    for value in throughput:
+        number(value, 'derived throughput bytes per second')
+    return {"binding": binding, "status": "PASS", "patterns_digest": digest_bytes(canonical_bytes(patterns)),
+            "throughput_bytes_per_second": {str(q): percentile(throughput, q) for q in (.05, .5, .95)},
+            "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
+            "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
+            "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
 
 
 def _journal_path(cartridge: Path, transaction_id: str) -> Path:

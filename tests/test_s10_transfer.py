@@ -187,7 +187,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
 
 
 def test_q51_random_interruption_corruption_validator_resume_without_final_reread(tmp_path, monkeypatch):
-    """Q51 acceptance: multi-shard resume rejects every mismatch and needs no post-completion artifact reread."""
+    """Q51/Q60: resume verifies stored chunks; initial completion needs no redundant final reread."""
 
     rng = random.Random(51)
     first_payload = _payload(b"cassette-s10-first-shard/", 2 * CHUNK + 317)
@@ -331,11 +331,25 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             })
 
             data_reads.clear()
+            requests_before_completed_check = len(server.requests)
             with monkeypatch.context() as patcher:
                 patcher.setattr(sources_module.os, "pread", tracked_pread)
                 repeated = _run(adapter, revision, first, extents, capacity_coordinator)
             assert repeated == first_result
-            assert data_reads == []
+            assert data_reads == [(0, CHUNK), (CHUNK, CHUNK), (2 * CHUNK, len(first_payload) - 2 * CHUNK)]
+            assert len(server.requests) == requests_before_completed_check
+
+            first_data = extents[first.path][0]
+            changed_offset = len(first_payload) - 1
+            os.pwrite(first_data.fd, bytes([first_payload[changed_offset] ^ 1]), first_data.offset + changed_offset)
+            os.fsync(first_data.fd)
+            with pytest.raises(CassetteError) as changed_completed_bytes:
+                _run(adapter, revision, first, extents, capacity_coordinator)
+            assert changed_completed_bytes.value.code == "IDENTITY_MISMATCH"
+            assert "local transfer chunk 2" in changed_completed_bytes.value.detail
+            assert len(server.requests) == requests_before_completed_check
+            assert _run(adapter, revision, first, extents, capacity_coordinator) == first_result
+            assert os.pread(first_data.fd, len(first_payload), first_data.offset) == first_payload
 
             first_record_offset = first_state.offset + HEADER_BYTES
             original_record = os.pread(first_state.fd, RECORD_BYTES, first_record_offset)
