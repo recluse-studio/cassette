@@ -33,6 +33,49 @@ and its ordinary ledger. All 190 source files outside the generated J report mat
 copying that producer's canonical report into this checkout. J now records 13,414 product and
 2,020 tool executable lines; runtime, process, dependency, kernel and model-branch counts are
 unchanged. This result includes the operator-reported reconnect and terminal-replay repairs.
+Commit `37f897ef70b0b3e7a6a94dec073e25c4f1a95918` contains the complete worktree and Entry 87;
+the normal push succeeded and remote/local hashes matched. The first reported-remount attempt
+verified cartridge identity, immutable pointer and probe but failed the protected-inventory
+comparison. Preserve its FAILED observer and the separate PASS readback capture; the changed
+outside-root totals are not attributed to Cassette by this observation. A fresh installed-CLI
+selection is recording the current baseline before any payload write. The superseded Go remains
+PAUSED; cancellation waits for that selection's sole broker owner to close. The same sole source
+and cartridge remain selected. A successor
+attempt must preserve this failed interval, join new receipts to its own operation, and report
+any new pointer readback separately from the principal's already completed physical reconnect.
+
+Fresh selection 04 succeeded; Go 03 was then cancelled and Go 04 started its preparation.
+The live observer failure exposed a duplicate guard: remount verification compared outside-root
+inventory even though Go compares that inventory before qualification and payload access.
+The extended Q49/Q44/acquisition-entry fixture reproduces rejection of an intact cartridge
+after an outside file changes. Remove the duplicate comparison from remount verification;
+retain Go's comparison and prove that it still rejects the change before any weight GET.
+The finite continuation helper was stopped before launching another observer; its already
+running Go preparation remains active. Continue from its receipt using the repaired installed CLI.
+The repaired fixture passes all eight coupled checks. Live Go 04 subsequently failed the retained
+pre-qualification inventory guard with PROVENANCE_VIOLATION; no model payload was transferred.
+Open-file and render-log observations show a separate film repeatability job writing frames and
+logs under LaCie's film directory during these comparisons. Preserve its user-owned process.
+Wait for that finite job to stop writing before the final fresh selection and acquisition;
+the principal's completed reconnect remains recorded and requires no additional physical action.
+Candidate 03 passed 339 tests in 562.62 seconds with zero skips, all fourteen deletion/bypass
+controls and the ordinary ledger. The 188 other source files match its frozen snapshot;
+BUILD_STORY.md and this worklog contain later observed results, recorded as documentary deltas.
+The generated report comes unchanged from that producer. J is now
+(0,0,15433,1,1,9,0,0,8425096): 13,413 product and 2,020 tool executable lines.
+All 38 installed program/schema files match candidate 03. The finite CLI continuation waits for
+the separate film job and the already running selection 05 before taking a final fresh selection.
+The film process has now ended. Selection 05 completed; selection 06 is recording the fresh
+post-film baseline through the installed CLI. The next action is the same single-model Go,
+cartridge verification using the existing reconnect report, and measured acquisition.
+During selection 06, a new film repeatability-03 job began writing to the same outside-root
+inventory. The observed write handles belong to its controller and Blender preparation, not
+Cassette. Stop the agent-owned finite continuation before it launches Go from that moving
+baseline; leave selection 06 to finish and retain its observation. AGENTS.md requires permission
+before closing another task's test environment, so the builder requested permission to stop
+that separate film test. Pending an answer, finish and publish the already verified code repair.
+
+### Earlier acquisition attempt — superseded by the current direction above
 
 The principal confirmed the physical action and requested continuation. The old watcher process
 has ended; its durable record contains no observed disconnection or remount receipt. Do not

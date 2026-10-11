@@ -1806,7 +1806,6 @@ class CanonicalBroker:
             probe = binding['probe']
             await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
                                    probe['digest'], probe['bytes'])
-            compare_inventory(proof['protected_inventory'], await self._protected_inventory(selection, binding['folder']))
             result = {'go_operation_id': operation_id, 'campaign_digest': head['digest'],
                       'selection': _json_copy(asdict(selection), operation_id, 'remounted selection'),
                       'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}

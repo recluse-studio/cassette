@@ -321,6 +321,8 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert reported_record['state'] == 'PAUSED'
             assert not any('drive_remounted' in event['payload'] for event in reported_record['events'])
             probe_path.write_bytes(saved_probe)
+            user_path = mount / 'drewwiberg-lacie/user.txt'
+            user_path.write_bytes(b'changed outside the cartridge')
             confirmed = launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount')
             assert confirmed['result']['go_operation_id'] == reported['operation_id']
             assert launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount') == confirmed
@@ -329,6 +331,12 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                        for event in reported_record['events'])
             assert not any('drive_disconnected' in event['payload'] for event in reported_record['events'])
             assert any('drive_remounted' in event['payload'] for event in reported_record['events'])
+            payload_count = sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests)
+            refused = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                             drive['operation_id'], '--key', 'go-reported', expected_code=1)
+            assert refused['error']['code'] == 'PROVENANCE_VIOLATION'
+            assert sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests) == payload_count
+            user_path.write_bytes(b'protected')
             interrupted = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                                  drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                                  expected_message='Go paused: SOURCE_UNAVAILABLE:')

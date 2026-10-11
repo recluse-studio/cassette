@@ -7700,3 +7700,37 @@ remains in progress until its required live source paths and established indepen
 the tiny download is one bounded test within that stage. The retained machine and live records
 are under `/Users/drewwiberg/.codex/reviews/cassette/2026-10-01/`, with the successor recovery proof
 recorded under the October 10 evidence root.
+
+### The next live failure separated reconnect from drive preservation
+
+The first reported-reconnect command verified cartridge identity, its immutable pointer and the
+saved probe, then rejected a changed inventory outside the cartridge. That failed receipt remains
+failed. Go already compares the preserved inventory before qualification or model payload access;
+repeating that check during cartridge verification made unrelated drive activity a reconnect
+failure. Q49 places the reconnect condition on cartridge identity, root and touched pages.
+
+I extended the same fixture to change an outside file after restoring the probe. The old observer
+rejected the intact cartridge. Removing its duplicate comparison allowed cartridge verification;
+the next Go still rejected the changed outside file before any weight request. All eight coupled
+checks passed. The correction removes one product line and keeps the Go protection intact.
+
+Live Go 04 then failed that retained protection before any model payload transferred. Open-file
+records and the film render log showed a separate repeatability job writing frames and logs to
+LaCie during the scans. Those records establish concurrent writes; they do not attribute every
+changed byte in the coarse totals. I left that user-owned job running and continued Cassette's
+machine proof while waiting for the drive inventory to settle. Drew's completed physical action
+remains recorded. The build requires no repeated reconnect to recover from these timing errors.
+
+The corrected candidate passed all 339 tests in 562.62 seconds with zero skips, all fourteen
+component deletion and bypass checks, and the ordinary ledger. Its accounting records 13,413
+product executable lines and 2,020 tool lines. The one-line removal changes no process, runtime,
+dependency, kernel or model-specific branch. All 38 installed program and schema files match the
+frozen candidate. The later narrative and worklog additions record observations after that
+snapshot; the executable code, tests and acceptance authorities remain identical.
+
+The film job ended, and Cassette started its fresh scan. During that scan, another film attempt
+started under `repeatability-03`. Its controller and Blender preparation held write handles to
+outside-root logs. I stopped my continuation helper before it could launch Go from another moving
+baseline and retained the active scan. The repository rules require permission before stopping
+another task's test environment, so I asked Drew whether to stop that film test. The verified code
+repair, package and machine proof remain complete; the model payload is still zero at this point.
