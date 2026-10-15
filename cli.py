@@ -13,9 +13,9 @@ from broker import CanonicalBroker
 from errors import CassetteError
 
 
-async def _download(broker, request):
+async def _download(broker, request, *, qualification_only=False):
     operation_id = broker.operation_id(request)
-    task = asyncio.create_task(broker.start_download(request))
+    task = asyncio.create_task(broker.start_download(request, qualification_only=qualification_only))
     seen = 0
     while True:
         await asyncio.sleep(.1)
@@ -66,13 +66,15 @@ def main(argv=None):
     drive.add_argument('--folder', default='Cassette')
     drive.add_argument('--cartridge-uuid')
     go = commands.add_parser('go', help='Start the selected download; first establish durable drive access.')
-    go.add_argument('--model-selection', required=True)
-    go.add_argument('--drive-selection', required=True)
+    qualify = commands.add_parser('qualify', help='Measure the selected download path without starting or continuing payload transfer.')
+    for command in (go, qualify):
+        command.add_argument('--model-selection', required=True)
+        command.add_argument('--drive-selection', required=True)
     remount = commands.add_parser('watch-remount', help='Wait for physical reconnection and verify the held drive.')
     remount.add_argument('operation_id')
     remount.add_argument('--reconnected', action='store_true',
                          help='Report a completed physical reconnect and verify the saved drive data now.')
-    for command in (models, connect, select, drives, drive, go, remount):
+    for command in (models, connect, select, drives, drive, go, qualify, remount):
         command.add_argument('--key', default=None, help='Reuse this key to reconcile the same operation.')
     status = commands.add_parser('status', help='Read a recorded operation.')
     status.add_argument('operation_id')
@@ -114,15 +116,19 @@ def main(argv=None):
                 'volume_uuid': args.volume, 'folder': args.folder, 'cartridge_uuid': args.cartridge_uuid}})
             print('Recording the existing files on the selected drive before Cassette writes.', file=sys.stderr, flush=True)
             result = asyncio.run(broker.select_drive(request))
-        elif args.command == 'go':
+        elif args.command in {'go', 'qualify'}:
             request.update(operation='acquire', target=args.drive_selection, arguments={'acquisition': {
                 'model_selection_id': args.model_selection, 'drive_selection_id': args.drive_selection}})
             print('Checking the selected source and creating the durable Cassette folder.', file=sys.stderr, flush=True)
-            result = asyncio.run(_download(broker, request))
+            result = asyncio.run(_download(broker, request, qualification_only=args.command == 'qualify'))
             if result['state'] == 'PAUSED':
                 pause_error = broker.events(result['operation_id'])[-1]['payload'].get('error')
                 if pause_error:
-                    print(f"Go paused: {pause_error['code']}: {pause_error['detail']}. Retry Go with the same key.", file=sys.stderr)
+                    print(f"{args.command.capitalize()} paused: {pause_error['code']}: {pause_error['detail']}. Retry {args.command} with the same key.", file=sys.stderr)
+                elif args.command == 'qualify' and any(
+                        event['payload'].get('source_qualification', {}).get('status') == 'PASS'
+                        for event in broker.events(result['operation_id'])):
+                    print('Drive check passed. Download remains paused.', file=sys.stderr)
                 else:
                     print('Go paused at the physical drive qualification boundary. Model bytes have not been downloaded.', file=sys.stderr)
         elif args.command == 'watch-remount':

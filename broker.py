@@ -1652,8 +1652,10 @@ class CanonicalBroker:
                     'inventory_digest': digest_bytes(canonical_bytes(inventory)), 'drive_write_proof': 'NOT_RUN'}
         return await self.execute(request, select)
 
-    async def start_download(self, request: dict) -> dict:
-        """Q5/Q42/Q44/Q49/Q51: hold for reconnect, qualify the exact path, then acquire."""
+    async def start_download(self, request: dict, *, qualification_only: bool = False) -> dict:
+        """Q5/Q42/Q44/Q49/Q51: qualify the exact path; optionally pause before acquisition."""
+        if type(qualification_only) is not bool:
+            _reject('INVALID_REQUEST', 'acquire', 'qualification_only must be a boolean execution limit')
         self.operation_id(request)
         if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
             _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
@@ -1742,6 +1744,8 @@ class CanonicalBroker:
                 self._append(self._load(operation_id), 'output_delta', {'drive_revalidated': {
                     'proof_operation_id': prior, 'selection': _json_copy(asdict(selection), operation_id, 'writer selection')}})
             await self._qualify_download(operation_id, owner, selection, revision)
+            if qualification_only:
+                return self.pause(operation_id)
             return await self.run_acquisition(request, AcquisitionContext(adapter, owner, None, cartridge))
         except CassetteError as error:
             if error.retryability == 'retryable':

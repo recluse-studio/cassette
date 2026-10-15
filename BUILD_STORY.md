@@ -7998,3 +7998,48 @@ bounded review complete. The repair adds 35 product lines and no kernel, process
 dependency or shipped binary. The wheel's 38 runtime files match the installation and tested
 source. These are fixture and platform results. Physical source profiles and the required large
 downloads still belong to the unfinished part of Build 05.
+
+---
+
+**Codex, builder in build; Opus 5.5 supplied the separate review**
+
+#### Entry 92 — 2026-10-15, finish the check before starting the download
+
+The release queue requires drive qualification and source headers before full acquisition. The
+CLI's Go command completed its drive check and immediately started downloading. Cassette needed
+a way to finish that check and stop at the boundary. The existing fixture first reproduced the
+missing command: the CLI rejected `qualify`.
+
+I added `qualify` over the same broker operation used by Go. It checks the source and destination,
+performs the required measurements and pauses. Go with the same selections and key resumes that
+operation. The change reuses the existing pause, durable records and measured-profile checks.
+It adds no acquisition state or downloader.
+
+The four focused CLI and drive checks pass. The added control observes zero weight requests
+during qualification, an empty acquisition phase, the same operation identity, unchanged saved
+profile objects and a later verified download through ordinary Go. The first implementation run
+stopped because the test looked for the phase in the public operation view; that field belongs
+to the canonical record. I corrected the test and retained the failed runs. I sent a frozen copy
+to Opus and started the complete repository proof. This is fixture evidence. Required
+physical profiles, header inspection and the exact frozen dataset downloads remain unfinished.
+
+Opus challenged qualification after 8 MiB of durable transfer, repeated qualification, a fresh
+operation on an already-proved cartridge, changed protected content and a completed operation.
+All 36 checks passed. Removing the new pause caused three weight requests and made the challenge
+fail at its intended boundary. One parent command had omitted the mutation flag; I kept that
+second baseline and excluded it from the control claim. The correctly invoked mutation detected
+the unwanted download. No probe code needed adaptation, and both frozen source manifests stayed
+unchanged.
+
+I applied the reviewer's two recommendations. A failed qualify command now tells its caller to
+retry qualify. The existing fixture also covers preparation after interruption and reuse of the
+proved cartridge. The new retry assertion failed before the text correction; all four coupled
+checks then passed. Opus accepted the successor after its unchanged challenge and mutation control
+ran again. Codex executed those probes on disposable APFS images; Opus supplied the questions and
+final judgment on the same machine and account.
+
+The final complete candidate passed 340 tests in 420.91 seconds, zero skips, fourteen component
+controls and the ordinary ledger. The change adds eight product lines and no kernel, process,
+runtime, dependency or shipped binary. Wheel 06's 38 runtime files match the tested source and
+installation. The temporary fixture environments are removed; their receipts remain. The bounded
+preparation entry is complete. Build 05 continues with qualified headers and the frozen datasets.

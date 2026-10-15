@@ -242,6 +242,9 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                                   drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                                   expected_message='Go paused: CARTRIDGE_DISCONNECTED:')
             assert disconnected['state'] == 'PAUSED'
+            assert launch('qualify', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                          expected_message='Retry qualify with the same key.') == disconnected
             assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                           drive['operation_id'], '--key', 'go-fixture', expected_code=2) == disconnected
             record_path = tmp_path / 'state/operations' / (disconnected['operation_id'] + '.json')
@@ -343,15 +346,42 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert refused['error']['code'] == 'PROVENANCE_VIOLATION'
             assert sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests) == payload_count
             user_path.write_bytes(b'protected')
+            payload_before_qualification = sum(method == 'GET' and path.endswith('/model.safetensors')
+                                               for method, path in requests)
+            qualified = launch('qualify', '--model-selection', selected['operation_id'], '--drive-selection',
+                               drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                               expected_message='Drive check passed. Download remains paused.')
+            assert qualified['state'] == 'PAUSED'
+            assert qualified['operation_id'] == ready['operation_id']
+            assert sum(method == 'GET' and path.endswith('/model.safetensors')
+                       for method, path in requests) == payload_before_qualification
+            qualified_record = json.loads(record_path.read_bytes())['record']
+            assert qualified_record['phase'] == 'EMPTY'
+            assert qualified_record['events'][-2]['payload']['source_qualification']['status'] == 'PASS'
+            qualified_profiles = {p.name: p.read_bytes() for p in
+                                  (mount / 'drewwiberg-lacie/Cassette/campaign/objects').iterdir()}
             interrupted = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                                  drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                                  expected_message='Go paused: SOURCE_UNAVAILABLE:')
             assert interrupted['operation_id'] == ready['operation_id']
+            interrupted_record = json.loads(record_path.read_bytes())['record']
+            payload_after_interrupt = sum(method == 'GET' and path.endswith('/model.safetensors')
+                                          for method, path in requests)
+            assert launch('qualify', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                          expected_message='Drive check passed. Download remains paused.')['operation_id'] == ready['operation_id']
+            prepared_record = json.loads(record_path.read_bytes())['record']
+            assert prepared_record['phase'] == interrupted_record['phase'] == 'ACQUIRING'
+            assert prepared_record['checkpoint'] == interrupted_record['checkpoint']
+            assert sum(method == 'GET' and path.endswith('/model.safetensors')
+                       for method, path in requests) == payload_after_interrupt
             completed = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                                drive['operation_id'], '--key', 'go-fixture')
             assert completed['state'] == 'SUCCEEDED'
             assert completed['operation_id'] == ready['operation_id']
             assert completed['result']['verified_bytes'] == len(weights) + len(license_bytes)
+            assert all((mount / 'drewwiberg-lacie/Cassette/campaign/objects' / name).read_bytes() == content
+                       for name, content in qualified_profiles.items())
             payload_requests = len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]])
             assert payload_requests >= 3
             assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
@@ -380,9 +410,17 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             fresh_drive = launch('select-drive', '--volume', volume['volume_uuid'],
                                  '--folder', 'drewwiberg-lacie/Cassette', '--cartridge-uuid',
                                  drive['result']['cartridge_uuid'], '--key', 'reuse-drive')
+            payload_before_reuse = sum(method == 'GET' and path.endswith('/model.safetensors')
+                                       for method, path in requests)
+            prepared_reuse = launch('qualify', '--model-selection', selected['operation_id'], '--drive-selection',
+                                    fresh_drive['operation_id'], '--key', 'go-reuse', expected_code=2,
+                                    expected_message='Drive check passed. Download remains paused.')
+            assert sum(method == 'GET' and path.endswith('/model.safetensors')
+                       for method, path in requests) == payload_before_reuse
             reused = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                             fresh_drive['operation_id'], '--key', 'go-reuse')
             assert reused['state'] == 'SUCCEEDED'
+            assert reused['operation_id'] == prepared_reuse['operation_id']
             reused_record = json.loads((tmp_path / 'state/operations' / (reused['operation_id'] + '.json')).read_bytes())['record']
             reused_proof = next(event['payload']['drive_revalidated'] for event in reused_record['events']
                                 if 'drive_revalidated' in event['payload'])

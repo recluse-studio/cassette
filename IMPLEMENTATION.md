@@ -7,7 +7,33 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
-Latest checkpoint: the qualification-storage repair is ready after a complete bounded Opus review.
+Latest checkpoint: qualify completes the existing drive measurement and pauses the same acquire
+operation before payload; Go with the same selections/key resumes it. The final four coupled checks
+pass in 23.96 seconds. Separate served claude-opus-5-5 review passes all three bounded questions after
+36 reviewer-designed checks and a guard-removal control that exposes three unwanted payload GETs.
+The exact probe passes on both frozen candidates. The successor also fixes retry advice and extends
+the existing fixture through interrupted transfer and prior-cartridge proof reuse. Complete candidate
+06 passes 340 tests in 420.91 seconds, zero skips, fourteen component controls and ordinary ledger.
+J=(0,0,15661,1,1,9,0,0,8425096), eight more product lines and no other J growth. Wheel 06's 38 runtime
+files match the tested source and installation. Joined record: docs/l05/2026-10-15-qualification-entry.json.
+This completes only the acquisition-profile preparation entry. L05 remains IN_PROGRESS; required
+physical profiles, headers, large model and frozen dataset acquisitions remain NOT_RUN.
+Next: implement qualified header-range preparation with the existing source/store parser and extent
+authorities, then exact frozen dataset subsets; materialize and run their required campaign records.
+Do not repeat the completed exploratory tiny-model test or the accepted qualification repair proofs.
+
+Earlier continuation checkpoint: the new qualify entry passed the four coupled CLI/drive checks in 18.43
+seconds. It pauses the same acquire operation before any weight request; ordinary Go resumes and
+reuses its immutable profile. The first post-change run failed only because the fixture read phase
+from the public view instead of the canonical record; both failures are retained. Complete candidate
+05 is running under /Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-05.
+A separate read-only Opus worker reviews the frozen qualification-entry-01/source copy; native
+events identify claude-opus-5-5. Receipts and focused logs are under
+/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01. Reconcile these jobs before
+launching a replacement. At that checkpoint the review and full proof were pending; no live profile
+or payload had started. Both jobs have since stopped; the successor results above are current.
+
+Previous checkpoint: the qualification-storage repair is ready after a complete bounded Opus review.
 The initial review and its successor remain INCOMPLETE historical reports; the final native report
 passes all four questions after the exact reviewer-designed M/K/P0-P3 controls. Codex executed those
 controls on disposable APFS images. Device counters distinguish named and unlinked writes from idle;
