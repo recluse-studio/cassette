@@ -187,6 +187,59 @@ def test_q9_descriptor_and_records_remain_secret_free_after_expiry_and_move(tmp_
         assert all(SECRET not in path.read_text(encoding="utf-8") for path in moved.iterdir())
         assert all(SECRET not in json.dumps(request, sort_keys=True) for request in server.requests)
 
+        descriptor, adapter, *_ = results[0]
+        server.hub_card_license = 'mit'
+        server.semantic_overrides['huggingface'] = (('README.md', b'---\nlicense: mit\n---\n', '"card"'),)
+        root_licensed = asyncio.run(adapter.resolve(descriptor))
+        assert root_licensed.license_digest == 'sha256:' + hashlib.sha256(b'hf-license').hexdigest()
+        server.hub_license_files = ()
+        selected_bytes = b'{"selected":true}\n'
+        selected_validator = '"' + hashlib.sha1(f'blob {len(selected_bytes)}\0'.encode() + selected_bytes).hexdigest() + '"'
+        server.artifact_overrides['huggingface'] = (('data.json', selected_bytes, selected_validator),)
+        dataset_descriptor = {**descriptor, 'artifact_selector': {'dataset_paths': ['data.json']}}
+        license_cases = (
+            ('license: mit', 'mit', True),
+            ('license:\n- mit', ['mit'], True),
+            ('license: [mit, apache-2.0]', ['mit', 'apache-2.0'], True),
+            ('license: "mit"', ['mit'], True),
+            ('license: [mit]', 'mit', True),
+            ('license: mit\nlicense: mit', 'mit', False),
+            ('license: [mit]', ['apache-2.0'], False),
+            ('license: []', [], False),
+            ('license: [[mit]]', ['mit'], False),
+            ('license: !!python/object/apply:os.system ["false"]', ['mit'], False),
+            ('license: !!int 1', '1', False),
+            ('license: &cycle [*cycle]', ['mit'], False),
+            ('license: [mit', ['mit'], False),
+            ('license: mit', True, False),
+            ('license: mit', [True], False),
+            ('license: mit\nnote: "\\U00110000"', 'mit', False),
+            ('license: mit\nnote: "\\UFFFFFFFF"', 'mit', False),
+            ('%YAML ' + '1' * 5000 + '.1\nlicense: mit', 'mit', False),
+        )
+        for declaration, claim, accepted in license_cases:
+            card = ('---\n' + declaration + '\n---\nFixture card.\n').encode()
+            server.hub_card_license = claim
+            server.semantic_overrides['huggingface'] = (('README.md', card, '"card"'),)
+            before = len(server.requests)
+            if accepted:
+                card_resolved = asyncio.run(adapter.resolve(dataset_descriptor))
+                assert card_resolved.license_digest == 'sha256:' + hashlib.sha256(card).hexdigest()
+                assert [artifact.path for artifact in card_resolved.artifacts] == ['data.json']
+            else:
+                with pytest.raises(CassetteError) as rejected_card:
+                    asyncio.run(adapter.resolve(dataset_descriptor))
+                assert rejected_card.value.code == 'METADATA_INSUFFICIENT'
+                assert rejected_card.value.failed_invariant == 'Q9: source license must have one exact byte identity'
+            assert sum(request['path'].endswith('/README.md') and request['method'] == 'GET'
+                       for request in server.requests[before:]) == 1
+            assert not any(request['path'].endswith('/data.json') and request['method'] == 'GET'
+                           for request in server.requests[before:])
+        server.hub_license_files = (("LICENSE", b"hf-license", '"license"'),)
+        server.hub_card_license = None
+        server.semantic_overrides.pop('huggingface')
+        server.artifact_overrides.pop('huggingface')
+
         before_expiry = len(server.requests)
         vault.clear()
         for (_, _), result in zip(CASES.items(), results, strict=True):

@@ -8140,3 +8140,61 @@ Cassette now prepares headers and exact dataset files through its CLI. Build 05 
 actual source qualification, model headers, larger model and dataset acquisitions. The header
 envelope's live Q42 decision and dataset transport-header materialization remain explicit.
 The next work freezes the required dataset selections and finishes their executable source plans.
+
+---
+
+**Codex, builder in build; source license repair in progress**
+
+#### Entry 96 — 2026-10-15, nine selections and one format failure
+
+Installed Cassette selected nine frozen dataset subsets. HumanEval failed before any selected
+content arrived. Its pinned README writes the MIT license as a YAML list; the API declares the
+same list. Cassette recognizes only a scalar line. The failed operation remains intact.
+
+The repair uses the already pinned YAML parser to read representation nodes without constructing
+objects. It must preserve duplicate declarations, reject conflicts and retain the verified README
+digest as the license identity. This is a source-format repair. The frozen files and revisions stay
+the inputs; actual dataset acquisition and storage qualification remain unproved.
+
+The reviewer found three malformed YAML inputs that escaped the parser's error boundary. Its
+unchanged probe reproduced all three. I extended the existing exception clause; all fifty reviewer
+cases then passed. Duplicate, tag and root-license controls reach their intended branches. Removing
+the selected-content guard produces forty-four unwanted reads. The fixture now checks an actual
+selected Git dataset, root-license precedence and the exact refusal invariant. Three coupled checks
+pass in 26.64 seconds. The final independent judgment remains pending.
+
+An extreme card just under 8 MiB costs 2.04 GiB of additional peak memory and 42.33 seconds in this
+parser. That measurement remains explicit; it is not a new resource certificate. The packaging run
+also stalled in a cache clone. I retained that incomplete attempt, then proved packaging with file
+copies and the existing pinned build backend. A second complete attempt stopped when the parser
+defect was proved. Its wheel was never installed. The corrected source needs its fresh complete proof.
+
+---
+
+**Codex, builder in build; separate Opus review complete**
+
+#### Entry 97 — 2026-10-15, all ten dataset identities are pinned
+
+Opus passed both bounded questions on the repaired source. Its original target remains a failed
+review; the successor passes all fifty independent cases. The original fixture missed a removed
+root-license guard. The stronger fixture catches it. All nine earlier dataset READMEs also pass
+the new parser against their actual provider declarations. An input collector overwrote a shared
+raw-metadata filename; the lost captures were recovered under unique names with matching original
+hashes. Both the fault and its repair remain in the evidence.
+
+Candidate 12 passed 340 tests in 450.90 seconds, zero skips, fourteen component controls and the
+ordinary ledger. The source adds seventeen product lines and no other J growth. Wheel 09's
+thirty-eight runtime files match the reviewed source, the tested source and the installed files.
+HumanEval then succeeded through that installed CLI with a new key. Its first failure remains.
+All ten dataset selections now pin thirty-four files totaling 6,034,660,843 bytes. Their contents
+have not been acquired. The next work is their exact transfer qualification and acquisition.
+
+The model-header plans also have their declared lengths for all 276 shards. Two metadata endpoints
+name newer repository commits, but their frozen files match by path, size and SHA-256. The frozen
+inputs remain unchanged. K3's index required one complete 75.8 MB metadata capture after smaller
+captures proved incomplete. None of these requests read an artifact header or tensor range. The
+actual prefix must still match its qualified plan before Cassette reads the header body.
+
+The consolidated inventory also fixes a unit ambiguity before execution: nine earlier field sets
+included the eight-byte prefix; K3's field excluded it. Every shard now names the prefix, JSON header
+length and complete header extent separately. No physical qualification is inferred from that repair.

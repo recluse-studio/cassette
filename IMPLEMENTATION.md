@@ -7,14 +7,59 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
-Active work: freeze the ten required dataset selections through installed Cassette, then finish
-source/header/acquisition request materialization and actual operation-bound qualification. The
-current SafeTensors envelope is fixture-proved but its exact live Q42 acceptance remains NOT_RUN.
-Dataset transport-header semantics also remain open. Use existing source/control metadata to
-prepare exact plans without treating declarations as parsed headers or replacing frozen revisions.
-Continue eligible coordinates independently; retain every source-entry and payload gate.
+Active work: finish exact source/header/acquisition plans and actual operation-bound qualification.
+All ten required dataset subsets are selected through installed Cassette. The current SafeTensors
+envelope still lacks exact live Q42 acceptance; use the now-complete declared lengths for 276 shards
+to implement explicit plans that refuse a mismatched prefix before reading the header body. Bind the
+profiler version under Q43. Materialize truthful headerless JSON/JSONL and Parquet framing plans under
+the dataset contract through the existing source, store and broker authorities. Freeze, independently
+review and prove the next bounded candidate before installation and live qualification. Preserve
+every source-entry and payload gate; provider declarations are not locally parsed artifact headers.
 
-Latest completed milestone: header and exact-dataset preparation are independently reviewed and
+Latest completed milestone: Q9 list-license resolution and canonical malformed-YAML errors pass
+separate served claude-opus-5-5 review. All fifty independent cases pass after the reproduced repair;
+duplicate, tag, root-license and premature-read controls are sensitive. Candidate 12 passes 340 tests
+in 450.90 seconds, zero skips, fourteen controls and ordinary ledger. J=(0,0,15872,1,1,9,0,0,8425096),
+adding seventeen product lines. Wheel 09's 38 runtime files match reviewed/tested source and the
+verified installation. HumanEval succeeds with successor key/operation
+op-6033f789acd633aafeaaf3dd946e85e5ea2f0e780517b521ed413c65f613bcab; the earlier failure stays intact.
+Ten dataset selections pin 34 files and 6,034,660,843 payload bytes; selected payload acquisition,
+physical profiles and artifact headers remain NOT_RUN. Joined receipt:
+docs/l05/2026-10-15-dataset-license-repair.json. L05 stays IN_PROGRESS; L06-L10 retain their dependencies.
+
+Header-plan preparation: declared metadata now covers all ten frozen model inputs and 276 shards.
+Eight metadata commits match directly; native Qwen 4-bit and K3 use verified per-file path, size and
+SHA-256 equivalence between the frozen and observed commits. Neither frozen revision is replaced.
+K3's index exceeds the initial 8/64 MiB research captures; one complete bounded streamed response is
+75,772,689 bytes. Its isolated JSON derivation reached an observed 533,440 KiB RSS. The consolidated
+inventory at docs/l05/2026-10-15-declared-header-lengths.json separates the eight-byte prefix from
+N_header_json_bytes and total_header_bytes. Nine older field sets included the prefix; K3's field
+excluded it. Use the explicit consolidated fields. These are metadata declarations, not artifact-byte
+reads, physical qualification or local SafeTensors-header proof.
+
+### License-repair history
+
+Dataset-selection checkpoint: installed wheel 07 selected nine exact frozen dataset subsets. HumanEval
+failed with METADATA_INSUFFICIENT because its verified README declares `license: [mit]` in block-list
+form and the API returns the same list; the current scalar regex ignores both. The failed operation
+is retained. Reuse pinned PyYAML's representation composer without constructing objects, retain
+duplicate keys, require one matching scalar/list declaration and keep the README byte digest as the
+license identity. Prove malformed/conflicting declarations refuse without payload, then review,
+install and retry HumanEval with a new key. No dataset payload or physical profile has run.
+
+License repair checkpoint: the unchanged Opus probe reproduced three non-YAMLError escapes from
+PyYAML on malformed escapes/directives. The canonical refusal now also catches ValueError and
+OverflowError. All fifty reviewer cases pass on that exact one-line successor; duplicate/tag/root
+precedence controls flip at their intended branches, and removing the selected-payload guard causes
+44 observed GETs. The existing fixture now uses a selected Git dataset and verifies root-license
+precedence, exact refusal invariants and README reads. Three coupled checks pass in 26.64 seconds.
+The size probe measured an 8 MiB pathological card at 2.04 GiB additional peak RSS and 42.33 seconds;
+this is observed cost, not an admitted resource guarantee. Review judgment remains pending.
+Candidate 10 stopped at a cache clone stall; 11 stopped after this proved successor defect. Neither
+is a pass, and wheel 08 remains uninstalled. The packaging fixture passes in 21.82 seconds using
+the existing pinned backend with documented UV_NO_BUILD_ISOLATION, UV_PYTHON and copy-mode settings.
+
+Previous completed milestone: header and exact-dataset preparation are independently reviewed and
 installed. Separate served claude-opus-5-5 passes all three bounded questions after 30 baseline
 challenges and fault controls. One combined-mutant expectation is retained as an instrument fault,
 not a passed row; independent raw observations establish the guard effect. Three reproduced header

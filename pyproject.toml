@@ -41,7 +41,7 @@ dependencies = [
     "resumablesha256==1.0",
     "tokenizers==0.23.2",
     "jinja2==3.1.6",
-    # Q33/Q80: PyYAML safe_load of the authoritative matrix and execution queue (MIT).
+    # Q33/Q80: PyYAML safe_load for the matrix/queue; Q9: compose/BaseLoader license nodes (MIT).
     "pyyaml==6.0.3",
 ]
 

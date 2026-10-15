@@ -20,6 +20,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, parse_http_list, parse_keqv_list
 
+import yaml
+
 from errors import CassetteError
 from schema.validator import validate
 from store import (
@@ -402,6 +404,32 @@ def _digest(value: object, prefix: str, field: str, object_id: str) -> str:
     if match is None or len(match.group("hex")) != _DIGEST_LENGTH.get(match.group("algorithm")):
         _fail("SOURCE_UNAVAILABLE", object_id, "Q1/Q52: immutable evidence requires a canonical digest", f"{field} is not a supported digest")
     return result
+
+
+def _card_license_matches(content: bytes, claim: object) -> bool:
+    """Q9: compare one YAML declaration without constructing objects or losing duplicate keys."""
+    expected = [claim] if isinstance(claim, str) else claim
+    if not isinstance(expected, list) or not expected or any(not isinstance(value, str) or not value for value in expected):
+        return False
+    try:
+        parts = re.split(r'(?m)^---[ \t]*\r?$', content.decode('utf-8'), maxsplit=2)
+        root = yaml.compose(parts[1], Loader=yaml.BaseLoader) if len(parts) == 3 and not parts[0].strip() else None
+    except (ValueError, OverflowError, yaml.YAMLError, RecursionError):
+        return False
+    if not isinstance(root, yaml.MappingNode) or root.tag != 'tag:yaml.org,2002:map':
+        return False
+    declarations = []
+    for key, value in root.value:
+        if not isinstance(key, yaml.ScalarNode) or key.tag != 'tag:yaml.org,2002:str':
+            return False
+        if key.value == 'license':
+            declarations.append(value)
+    if len(declarations) != 1:
+        return False
+    value = declarations[0]
+    items = (value.value if isinstance(value, yaml.SequenceNode) and value.tag == 'tag:yaml.org,2002:seq' else [value])
+    return (all(isinstance(item, yaml.ScalarNode) and item.tag == 'tag:yaml.org,2002:str' for item in items)
+            and [item.value for item in items] == expected)
 
 
 @dataclass(frozen=True, slots=True)
@@ -974,17 +1002,8 @@ class SourceAdapter:
                         _fail("SOURCE_REVISION_CHANGED", name, "Q9: license bytes must match the source digest", "license digest changed")
                 if license_file:
                     licenses.append(digest)
-                elif not license_files and name == 'README.md' and isinstance(card_license, str):
-                    try:
-                        frontmatter = content.decode('utf-8').split('---', 2)
-                    except UnicodeDecodeError:
-                        _fail('METADATA_INSUFFICIENT', locator, 'Q9: license declarations require verified UTF-8 text',
-                              'model card is not UTF-8')
-                    declarations = (re.findall(r'^license: *([\"\']?)([A-Za-z0-9_.-]+)\1 *$',
-                                    frontmatter[1], re.MULTILINE)
-                                    if len(frontmatter) == 3 and not frontmatter[0].strip() else [])
-                    if [value for _, value in declarations] == [card_license]:
-                        licenses.append(digest)
+                elif not license_files and name == 'README.md' and _card_license_matches(content, card_license):
+                    licenses.append(digest)
             objects.append({"rfilename": name, "size": size, "digest": digest,
                             "download_url": url, "etag": validator})
         if len(licenses) != 1:
