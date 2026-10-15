@@ -7,6 +7,82 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
+Active work: freeze the ten required dataset selections through installed Cassette, then finish
+source/header/acquisition request materialization and actual operation-bound qualification. The
+current SafeTensors envelope is fixture-proved but its exact live Q42 acceptance remains NOT_RUN.
+Dataset transport-header semantics also remain open. Use existing source/control metadata to
+prepare exact plans without treating declarations as parsed headers or replacing frozen revisions.
+Continue eligible coordinates independently; retain every source-entry and payload gate.
+
+Latest completed milestone: header and exact-dataset preparation are independently reviewed and
+installed. Separate served claude-opus-5-5 passes all three bounded questions after 30 baseline
+challenges and fault controls. One combined-mutant expectation is retained as an instrument fault,
+not a passed row; independent raw observations establish the guard effect. Three reproduced header
+defects are repaired. Candidate 09 passes 340 tests in 519.00 seconds, zero skips, fourteen controls
+and ordinary ledger. J=(0,0,15855,1,1,9,0,0,8425096), adding 194 product lines and no other growth.
+Wheel 07's 38 runtime files match reviewed/tested source and the installation. The installer used
+existing uv offline; an initial missing-pip attempt and premature verifier remain retained, and
+verification passed only after uv stopped. Joined receipt: docs/l05/2026-10-15-source-preparation.json.
+L05 stays IN_PROGRESS; no required large source acquisition, live header or physical profile passed
+through this bounded milestone. Do not repeat the completed exploratory one-model test.
+
+### Historical source-preparation checkpoints
+
+Final source-preparation candidate checkpoint: candidate 08 passed 340 tests in 556.30 seconds,
+zero skips and fourteen controls on the repaired source. The successor now also tells callers
+that Go remains available after a terminal header-only failure; it does not prescribe a futile
+header retry. Eight coupled checks pass in 63.74 seconds, including that recovery message. Freeze
+this final source for the corrected reviewer probe and a fresh complete candidate; 08 predates
+the final message/test change. Opus has confirmed the original defects and statically accepted
+the repairs, but its review remains INCOMPLETE until the corrected probe observations return.
+
+Current repair checkpoint: served claude-opus-5-5 found three source-header defects. Its unchanged
+657-line probe reproduced shared-operation poisoning after a header refusal, missing/zeroed local
+headers attributed to the source, and a Git SafeTensors header rejected after read. Seventeen of
+twenty-two original challenge rows matched; four differences confirmed those defects and one was
+a review observer reading the final operation after earlier pauses. Guard controls exposed unwanted
+header GETs and corrupt Git success, and showed the redundant Git resume hash could be removed.
+The successor refuses unsupported header modes before issuing an acquire, pauses header-only failures,
+requires saved extents without recreating them, identifies local prefix loss and parses against the
+local header digest. The existing fixture now covers all three repairs and same-key full acquisition
+after local header failures. Eight coupled checks pass in 42.32 seconds; the first repair check had
+only a wrong expected exit code for status on a PAUSED operation. Its failed log is retained.
+Candidate 07 passed all 340 tests in 456.18 seconds and fourteen controls on the pre-review source;
+it is not successor proof. Freeze the repaired source, resume the separate reviewer with all actual
+observations, correct its late observer and rerun affected proof. No live source profile or payload
+claim passes. The header envelope still needs its exact live Q42 decision; dataset transport-header
+materialization remains separate from the SafeTensors primitive.
+
+Active work: Q50 and source_header require a supported header-range path. The current CLI has no
+header trigger, and read_metadata discards returned ranges. Reuse SourceAdapter.open_range, sources'
+claimed extent writes and store.inspect_safetensors on a sparse full-logical-size extent. Land only
+the exact prefix/header; keep whole-source digest verification and execution compatibility unproved.
+Bind header qualification to its declared prefix and parser-bounded wire shape before any header
+request. Reuse the same canonical acquire operation and pause; publish parsed inventory through the
+existing store campaign authority, with no second parser, downloader, source-byte writer or state.
+Prove qualification sends no header request, header inspection sends no tensor range, repeat/restart
+reconciles saved evidence, and ordinary Go remains complete. Then implement the frozen dataset subsets.
+
+Source-preparation checkpoint: the missing --headers qualification option reproduced the failure.
+The new CLI header route passes five focused CLI/drive/parser checks in 30.26 seconds. It reads only
+the exact prefix and declared header, writes through sources to a store-granted sparse extent,
+parses with the existing store parser and retains whole-payload verification as NOT_RUN. Repeated
+inspection verifies and reuses the saved header. This is preliminary fixture proof, awaiting the
+joined source-preparation candidate review and complete proof. The frozen dataset inventory has
+14 non-LFS Git blobs, at most 391,058 bytes each (1,273,900 total), plus 20 SHA-256 LFS objects.
+Current resolve reads non-LFS content to derive SHA-256; dataset payload cannot use that pre-gate
+route. Add exact dataset selection and bounded post-qualification Git-blob verification through
+the existing transfer/store authorities. Do not prefetch data or add a second downloader.
+
+Joined source-preparation fixture checkpoint: exact dataset selection and post-qualification Git-blob
+verification now share the existing acquisition lifecycle. Eight focused CLI/source/transfer/preflight
+checks pass in 45.38 seconds after the final generic source-selection spelling. They observe no
+selected dataset payload during selection or qualification, exclude unselected files, and verify
+both Git and LFS inputs. Header inspection reads only its declared ranges and leaves tensor bytes
+unwritten. The ordinary ledger reports only the expected stale producer-owned J report. Freeze
+this candidate for a separate Opus review before full candidate proof, packaging or live operation.
+No live source profile, header, dataset acquisition or global source-entry verdict is implied.
+
 Latest checkpoint: qualify completes the existing drive measurement and pauses the same acquire
 operation before payload; Go with the same selections/key resumes it. The final four coupled checks
 pass in 23.96 seconds. Separate served claude-opus-5-5 review passes all three bounded questions after

@@ -128,14 +128,23 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
 
 
 def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
-    """Q5/Q6/Q9/Q42/Q44/Q49/Q51: selection defers payload; qualified Go completes and replays.
+    """Q5/Q6/Q9/Q42/Q44/Q49/Q50/Q51/Q60: selection and header inspection precede complete acquisition.
 
     The CLI crosses the provider boundary, survives a new process and retains its selection
     after a mutable tag changes. Payload follows reconnect proof and operation-bound measurement.
     """
-    weights = b'fixture weights must remain at the provider during selection' * 72000
+    tensor_bytes = b'fixture weights must remain at the provider during selection' * 72000
+    header_bytes = json.dumps({'weight': {'dtype': 'U8', 'shape': [len(tensor_bytes)],
+                              'data_offsets': [0, len(tensor_bytes)]}}, separators=(',', ':')).encode()
+    weights = len(header_bytes).to_bytes(8, 'little') + header_bytes + tensor_bytes
+    tiny_header = json.dumps({'weight': {'dtype': 'U8', 'shape': [1], 'data_offsets': [0, 1]}}).encode()
+    dataset_files = {'inputs.jsonl': b'{"text":"selected Git dataset"}\n',
+                     'samples.parquet': b'PAR1' + b'opaque dataset transport fixture' * 700,
+                     'tiny.safetensors': len(tiny_header).to_bytes(8, 'little') + tiny_header + b'x',
+                     'unused.jsonl': b'not selected; do not read'}
     license_bytes = b'---\nlicense: apache-2.0\n---\nFixture model card.\n'
     requests = []
+    header_ranges = []
     revision = ['a' * 40]
     interrupt = [True]
 
@@ -145,9 +154,13 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
 
         def do_HEAD(self):
             requests.append(('HEAD', self.path))
+            name = urlparse(self.path).path.rsplit('/', 1)[-1]
+            payload = dataset_files[name] if '/datasets/' in self.path else weights
+            digest = (hashlib.sha1(f'blob {len(payload)}\0'.encode() + payload).hexdigest()
+                      if '/datasets/' in self.path and not name.endswith('.parquet') else hashlib.sha256(payload).hexdigest())
             self.send_response(200)
-            self.send_header('Content-Length', str(len(weights)))
-            self.send_header('ETag', '"' + hashlib.sha256(weights).hexdigest() + '"')
+            self.send_header('Content-Length', str(len(payload)))
+            self.send_header('ETag', '"' + digest + '"')
             self.end_headers()
 
         def do_GET(self):
@@ -167,14 +180,32 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                         {'rfilename': 'README.md', 'size': len(license_bytes),
                          'blobId': hashlib.sha1(f'blob {len(license_bytes)}\0'.encode() + license_bytes).hexdigest()}
                     ]}).encode()
+            elif route.startswith('/api/datasets/fixture/data/revision/'):
+                siblings = [{'rfilename': name, 'size': len(content),
+                             **({'lfs': {'size': len(content), 'sha256': hashlib.sha256(content).hexdigest()}}
+                                if name.endswith('.parquet') else
+                                {'blobId': hashlib.sha1(f'blob {len(content)}\0'.encode() + content).hexdigest()})}
+                            for name, content in {**dataset_files, 'README.md': license_bytes}.items()]
+                payload = json.dumps({'id': 'fixture/data', 'sha': 'c' * 40, 'private': False,
+                    'gated': False, 'cardData': {'license': 'apache-2.0'}, 'siblings': siblings}).encode()
             elif route.endswith('/README.md'):
                 payload = license_bytes
                 headers['ETag'] = '"' + hashlib.sha1(f'blob {len(payload)}\0'.encode() + payload).hexdigest() + '"'
             elif route.endswith('/model.safetensors'):
                 start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
+                header_ranges.append((start, end))
                 payload = weights[start:end+1]
                 headers['ETag'] = '"' + hashlib.sha256(weights).hexdigest() + '"'
                 headers['Content-Range'] = f'bytes {start}-{end}/{len(weights)}'
+            elif route.startswith('/datasets/fixture/data/resolve/'):
+                name = route.rsplit('/', 1)[-1]
+                whole = dataset_files[name]
+                start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
+                payload = whole[start:end+1]
+                digest = (hashlib.sha1(f'blob {len(whole)}\0'.encode() + whole).hexdigest()
+                          if not name.endswith('.parquet') else hashlib.sha256(whole).hexdigest())
+                headers['ETag'] = '"' + digest + '"'
+                headers['Content-Range'] = f'bytes {start}-{end}/{len(whole)}'
             else:
                 self.send_response(404)
                 self.send_header('Content-Length', '0')
@@ -189,7 +220,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             for name, value in headers.items():
                 self.send_header(name, value)
             self.end_headers()
-            if route.endswith('/model.safetensors') and start == 0 and interrupt[0]:
+            if route.endswith('/model.safetensors') and start == 0 and len(payload) > 17 and interrupt[0]:
                 interrupt[0] = False
                 self.wfile.write(payload[:17])
                 self.close_connection = True
@@ -360,6 +391,34 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert qualified_record['events'][-2]['payload']['source_qualification']['status'] == 'PASS'
             qualified_profiles = {p.name: p.read_bytes() for p in
                                   (mount / 'drewwiberg-lacie/Cassette/campaign/objects').iterdir()}
+            header_qualified = launch('qualify', '--headers', '--model-selection', selected['operation_id'],
+                                      '--drive-selection', drive['operation_id'], '--key', 'go-fixture',
+                                      expected_code=2, expected_message='Drive check passed. Download remains paused.')
+            assert header_qualified['operation_id'] == ready['operation_id']
+            assert not header_ranges
+            headers = launch('headers', '--model-selection', selected['operation_id'], '--drive-selection',
+                             drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                             expected_message='Headers saved. Full download verification is separate.')
+            assert headers['operation_id'] == ready['operation_id']
+            assert header_ranges == [(0, 7), (8, 7 + len(header_bytes))]
+            header_record = json.loads(record_path.read_bytes())['record']
+            inspection = next(event['payload']['source_headers'] for event in reversed(header_record['events'])
+                              if 'source_headers' in event['payload'])
+            assert inspection['status'] == 'PARSED' and inspection['payload_verification'] == 'NOT_RUN'
+            assert inspection['artifacts'][0]['header_bytes'] == 8 + len(header_bytes)
+            assert inspection['artifacts'][0]['tensor_count'] == 1
+            inventory_object = mount / 'drewwiberg-lacie/Cassette/campaign/objects' / inspection['artifacts'][0]['header_record_digest'].split(':')[1]
+            parsed = json.loads(inventory_object.read_bytes())['value']['parsed']
+            assert parsed['inventory']['tensors'] == [{'semantic_tensor_id': 'weight', 'dtype': 'U8',
+                'shape': [len(tensor_bytes)], 'offset': 0, 'length': len(tensor_bytes)}]
+            header_extents = list((mount / 'drewwiberg-lacie/Cassette/transfers' / ready['operation_id']).glob('*.extent'))
+            assert len(header_extents) == 1 and header_extents[0].stat().st_size == len(weights)
+            with header_extents[0].open('rb') as handle:
+                handle.seek(8 + len(header_bytes))
+                assert handle.read(32) == bytes(32)
+            assert launch('headers', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-fixture', expected_code=2) == headers
+            assert header_ranges == [(0, 7), (8, 7 + len(header_bytes))]
             interrupted = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                                  drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                                  expected_message='Go paused: SOURCE_UNAVAILABLE:')
@@ -396,13 +455,13 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             profiles = [item for item in profile_records if item['key'].startswith('download-profile-')]
             plans = [item for item in profiles if 'pattern_count' in item['value']]
             atoms = [item for item in profiles if 'measurement' in item['value']]
-            assert len(plans) == 1
-            assert len(atoms) == plans[0]['value']['pattern_count']
+            assert len(plans) == 2
+            assert len(atoms) == sum(plan['value']['pattern_count'] for plan in plans)
             assert all(item['previous'] is None for item in profiles)
             assert all('binding' not in item['value'] and 'patterns' not in item['value'] for item in atoms)
             assert not list((mount / 'drewwiberg-lacie/Cassette').rglob('profile.bin'))
             seals = [item for item in profiles if 'atoms_digest' in item['value']]
-            assert len(seals) == 1 and seals[0]['value']['atom_count'] == len(atoms)
+            assert len(seals) == 2 and sum(seal['value']['atom_count'] for seal in seals) == len(atoms)
             qualification = next(event['payload']['source_qualification'] for event in record['events']
                                  if event['payload'].get('source_qualification', {}).get('status') == 'PASS')
             assert qualification['profile_digest'] != atoms[0]['value']['profile_digest']
@@ -460,6 +519,65 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                 assert asyncio.run(control.start_download(paused_request))['state'] == 'SUCCEEDED'
             finally:
                 control.close()
+            dataset_before = len([item for item in requests if item[0] == 'GET'
+                                  and item[1].startswith('/datasets/') and not item[1].endswith('/README.md')])
+            data_selected = launch('select-dataset', '--connection', connection['operation_id'],
+                                   '--dataset', 'fixture/data', '--revision', 'c' * 40,
+                                   '--file', 'inputs.jsonl', '--file', 'samples.parquet', '--key', 'dataset-selection')
+            assert [item['path'] for item in data_selected['result']['source_lock']['artifacts']] == [
+                'inputs.jsonl', 'samples.parquet']
+            assert data_selected['result']['source_lock']['artifacts'][0]['digest'].startswith('git-sha1:')
+            assert data_selected['result']['descriptor']['artifact_selector'] == {
+                'dataset_paths': ['inputs.jsonl', 'samples.parquet']}
+            data_prepared = launch('qualify', '--model-selection', data_selected['operation_id'],
+                                   '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go', expected_code=2)
+            assert len([item for item in requests if item[0] == 'GET' and item[1].startswith('/datasets/')
+                        and not item[1].endswith('/README.md')]) == dataset_before
+            refusal = launch('headers', '--source-selection', data_selected['operation_id'],
+                             '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go', expected_code=1)
+            assert refusal['error']['code'] == 'MODEL_UNSUPPORTED'
+            assert launch('status', data_prepared['operation_id'], expected_code=2) == data_prepared
+            data_done = launch('go', '--source-selection', data_selected['operation_id'],
+                               '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go')
+            assert data_done['operation_id'] == data_prepared['operation_id'] and data_done['state'] == 'SUCCEEDED'
+            assert data_done['result']['verified_bytes'] == sum(len(dataset_files[name]) for name in (
+                'inputs.jsonl', 'samples.parquet')) + len(license_bytes)
+            completed_requests = list(requests)
+            assert launch('go', '--model-selection', data_selected['operation_id'],
+                          '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go') == data_done
+            assert requests == completed_requests
+            assert not any('/datasets/' in path and 'unused.jsonl' in path for _, path in requests)
+            tiny_selected = launch('select-dataset', '--connection', connection['operation_id'],
+                                   '--dataset', 'fixture/data', '--revision', 'c' * 40,
+                                   '--file', 'tiny.safetensors', '--key', 'tiny-header-selection')
+            assert tiny_selected['result']['source_lock']['artifacts'][0]['digest'].startswith('git-sha1:')
+            tiny = launch('headers', '--source-selection', tiny_selected['operation_id'],
+                          '--drive-selection', fresh_drive['operation_id'], '--key', 'tiny-header', expected_code=2)
+            tiny_record = json.loads((tmp_path / 'state/operations' / (tiny['operation_id'] + '.json')).read_bytes())['record']
+            assert tiny_record['events'][-2]['payload']['source_headers']['artifacts'][0]['tensor_count'] == 1
+            for corruption in ('missing', 'zero-prefix', 'changed-byte'):
+                key = 'saved-header-' + corruption
+                saved = launch('headers', '--source-selection', selected['operation_id'],
+                               '--drive-selection', fresh_drive['operation_id'], '--key', key, expected_code=2)
+                extents = list((mount / 'drewwiberg-lacie/Cassette/transfers' / saved['operation_id']).glob('*.extent'))
+                assert len(extents) == 1
+                if corruption == 'missing':
+                    extents[0].unlink()
+                else:
+                    with extents[0].open('r+b') as handle:
+                        handle.write(bytes(8) if corruption == 'zero-prefix' else b'!')
+                range_count = len(header_ranges)
+                refused = launch('headers', '--source-selection', selected['operation_id'],
+                                 '--drive-selection', fresh_drive['operation_id'], '--key', key, expected_code=2,
+                                 expected_message='Go remains available with the same selections and key.')
+                saved_record = json.loads((tmp_path / 'state/operations' / (saved['operation_id'] + '.json')).read_bytes())['record']
+                assert refused['state'] == 'PAUSED'
+                assert saved_record['events'][-1]['payload']['error']['code'] == 'IDENTITY_MISMATCH'
+                assert len(header_ranges) == range_count
+                if corruption == 'missing':
+                    assert not extents[0].exists()
+                assert launch('go', '--source-selection', selected['operation_id'],
+                              '--drive-selection', fresh_drive['operation_id'], '--key', key)['state'] == 'SUCCEEDED'
             prior_preparation = next(event['payload']['drive_prepared'] for event in record['events']
                                      if 'drive_prepared' in event['payload'])
             prior_probe = prior_preparation['binding']['probe']

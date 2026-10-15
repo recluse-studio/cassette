@@ -39,7 +39,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
+from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -50,6 +50,7 @@ from store import (
     DriveVolume,
     WriterContext,
     GenerationPin,
+    SAFETENSORS_HEADER_BYTES,
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     campaign_head,
@@ -341,7 +342,7 @@ def _source_record(revision: ResolvedSource) -> dict:
             "validator": artifact.validator,
         }
 
-    return {
+    result = {
         "source_kind": revision.source_kind,
         "locator": revision.locator,
         "immutable_revision": revision.immutable_revision,
@@ -353,6 +354,9 @@ def _source_record(revision: ResolvedSource) -> dict:
         "credential_ref": revision.credential_ref,
         "license_acceptance_ref": revision.license_acceptance_ref,
     }
+    if revision.artifact_selector is not None:
+        result['artifact_selector'] = json.loads(revision.artifact_selector)
+    return result
 
 
 def _source_from(record: object, object_id: str) -> ResolvedSource:
@@ -361,8 +365,10 @@ def _source_from(record: object, object_id: str) -> ResolvedSource:
         "metadata_assets", "auth_scope", "license_digest", "credential_ref",
         "license_acceptance_ref",
     }
-    if not isinstance(record, dict) or set(record) != fields:
+    if not isinstance(record, dict) or set(record) not in (fields, fields | {'artifact_selector'}):
         _reject("ROOT_INVALID", object_id, "source lock has an incorrect field set")
+    if 'artifact_selector' in record and not isinstance(record['artifact_selector'], dict):
+        _reject('ROOT_INVALID', object_id, 'source lock artifact selector must be an object')
 
     def artifacts(value: object, field: str) -> tuple[Artifact, ...]:
         if not isinstance(value, list) or not value:
@@ -416,6 +422,7 @@ def _source_from(record: object, object_id: str) -> ResolvedSource:
         record["license_digest"],
         record["credential_ref"],
         record["license_acceptance_ref"],
+        canonical_bytes(record['artifact_selector']) if 'artifact_selector' in record else None,
     )
     if _source_record(revision) != record:
         _reject("ROOT_INVALID", object_id, "source lock does not round-trip exactly")
@@ -1587,8 +1594,8 @@ class CanonicalBroker:
                     'credential_ref': credential_ref, 'authentication': authentication}
         return await self.execute(request, connect)
 
-    async def select_model(self, request: dict) -> dict:
-        """Q5/Q9: freeze immutable source evidence without acquiring model payload."""
+    async def select_source(self, request: dict) -> dict:
+        """Q5/Q9: freeze immutable source evidence without acquiring its payload."""
         self.operation_id(request)
         if request['operation'] != 'source.select' or set(request['arguments']) != {'selection'}:
             _reject('INVALID_REQUEST', 'source.select', 'selection requires its generated argument record')
@@ -1599,6 +1606,7 @@ class CanonicalBroker:
         async def select():
             descriptor = {'kind': connection['source'], 'locator': args['locator']}
             for field, value in (('revision', args['revision']),
+                                 ('artifact_selector', args.get('artifact_selector')),
                                  ('credential_ref', connection['credential_ref']),
                                  ('license_acceptance_ref', args['license_acceptance_ref'])):
                 if value is not None:
@@ -1652,17 +1660,22 @@ class CanonicalBroker:
                     'inventory_digest': digest_bytes(canonical_bytes(inventory)), 'drive_write_proof': 'NOT_RUN'}
         return await self.execute(request, select)
 
-    async def start_download(self, request: dict, *, qualification_only: bool = False) -> dict:
-        """Q5/Q42/Q44/Q49/Q51: qualify the exact path; optionally pause before acquisition."""
-        if type(qualification_only) is not bool:
-            _reject('INVALID_REQUEST', 'acquire', 'qualification_only must be a boolean execution limit')
+    async def start_download(self, request: dict, *, qualification_only: bool = False,
+                             header_only: bool = False) -> dict:
+        """Q5/Q42/Q44/Q49-Q51: qualify the requested path, then pause, inspect headers or acquire."""
+        if any(type(value) is not bool for value in (qualification_only, header_only)):
+            _reject('INVALID_REQUEST', 'acquire', 'qualification_only and header_only must be boolean execution limits')
         self.operation_id(request)
         if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
             _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
         args = request['arguments']['acquisition']
-        model = self._entry_result(args['model_selection_id'], 'source.select')
+        source_selection = self._entry_result(args['model_selection_id'], 'source.select')
         destination = self._entry_result(args['drive_selection_id'], 'drive.select')
-        descriptor = model['descriptor']
+        if header_only:
+            selected = _source_from(source_selection['source_lock'], args['model_selection_id'])
+            if any(not artifact.path.endswith('.safetensors') or artifact.size <= 8 for artifact in selected.artifacts):
+                _reject('MODEL_UNSUPPORTED', args['model_selection_id'], 'header preparation requires bounded SafeTensors sources')
+        descriptor = source_selection['descriptor']
         request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
         operation = self.issue(request)
         operation_id = operation['operation_id']
@@ -1683,11 +1696,11 @@ class CanonicalBroker:
             selected = remounts[-1]['selection'] if remounts else destination['selection']
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
             selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
-            adapter = SourceAdapter(descriptor['kind'], model['endpoint'],
-                credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
+            adapter = SourceAdapter(descriptor['kind'], source_selection['endpoint'],
+                credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], source_selection['endpoint']))
             revision = await adapter.resolve(descriptor)
-            if _source_record(revision) != model['source_lock']:
-                _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable model')
+            if _source_record(revision) != source_selection['source_lock']:
+                _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable input')
             await adapter.license_and_auth(revision)
             observed_inventory = destination['protected_inventory']
             if digest_bytes(canonical_bytes(observed_inventory)) != destination['inventory_digest']:
@@ -1743,8 +1756,15 @@ class CanonicalBroker:
                     self.release_hold(operation_id, 'CARTRIDGE-DURABILITY')
                 self._append(self._load(operation_id), 'output_delta', {'drive_revalidated': {
                     'proof_operation_id': prior, 'selection': _json_copy(asdict(selection), operation_id, 'writer selection')}})
-            await self._qualify_download(operation_id, owner, selection, revision)
+            qualification = await self._qualify_download(operation_id, owner, selection, revision,
+                                                          header_only=header_only)
             if qualification_only:
+                return self.pause(operation_id)
+            if header_only:
+                try:
+                    await self._inspect_headers(operation_id, adapter, owner, revision, qualification['profile_digest'])
+                except CassetteError as error:
+                    return self._operation(self._paused(self._load(operation_id), error))
                 return self.pause(operation_id)
             return await self.run_acquisition(request, AcquisitionContext(adapter, owner, None, cartridge))
         except CassetteError as error:
@@ -1774,13 +1794,18 @@ class CanonicalBroker:
             return path.stem
         return None
 
-    async def _qualify_download(self, operation_id, owner, selection, revision):
+    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_only=False):
         """Q42/Q43/Q53: bind measured data and checkpoint extents to the current source/path."""
         observed = await asyncio.to_thread(drive_path_observation, selection)
-        artifacts = _acquisition_artifacts(revision)
-        sizes = [size for artifact in artifacts
-                 for size in [transfer_state_bytes(artifact.size),
-                              *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
+        artifacts = revision.artifacts if header_only else _acquisition_artifacts(revision)
+        if header_only:
+            sizes = [size for artifact in artifacts
+                     for size in [8, *(min(4194304, min(artifact.size, SAFETENSORS_HEADER_BYTES+8)-offset)
+                                      for offset in range(0, min(artifact.size, SAFETENSORS_HEADER_BYTES+8), 4194304))]]
+        else:
+            sizes = [size for artifact in artifacts
+                     for size in [transfer_state_bytes(artifact.size),
+                                  *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
         payload_digests = {size: digest_bytes(bytes(size)) for size in set(sizes)}
         patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': payload_digests[size]}
                     for size in sizes]
@@ -1792,6 +1817,10 @@ class CanonicalBroker:
                             'checkpoint_pattern': 'COMPLETE_EXTENT',
                             'service_deadline_seconds': None, 'training_endurance': 'NOT_APPLICABLE',
                             'unavailable_telemetry': ['cable_capability', 'thermal_state', 'media_health']}}
+        if header_only:
+            binding['plan'].update(header_only=True, header_limit_bytes=SAFETENSORS_HEADER_BYTES,
+                checkpoint_pattern='HEADER_PREFIX_AND_ENVELOPE',
+                header_write_shape='8-byte prefix, then aligned chunks through the parser-bounded envelope; actual header ranges recorded separately')
         key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
         head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         plan = {'binding': binding, 'pattern_count': len(patterns)}
@@ -1836,9 +1865,59 @@ class CanonicalBroker:
             complete = await asyncio.to_thread(compare_campaign_head, owner, key + '-complete', None, seal)
         if complete['value'] != seal:
             _reject('ROOT_INVALID', operation_id, 'completed profile differs from its measured atoms')
-        self._append(self._load(operation_id), 'output_delta', {'source_qualification': {
+        receipt = {
             'status': result['status'], 'profile_digest': complete['digest'], 'path': str(owner.cartridge),
-            'measurements': result}})
+            'measurements': result}
+        self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
+        return receipt
+
+    async def _inspect_headers(self, operation_id, adapter, owner, revision, profile_digest):
+        """Q44/Q50: publish parsed headers separately from full-source and execution proof."""
+        metadata = await adapter.read_metadata(revision)
+        summaries = []
+        source_digest = digest_bytes(canonical_bytes(_source_record(revision)))
+        for artifact in revision.artifacts:
+            binding = {'operation_id': operation_id, 'source_lock_digest': source_digest,
+                       'artifact': artifact.record(), 'validator': artifact.validator,
+                       'physical_profile_digest': profile_digest}
+            key = 'source-header-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
+            head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+            if head is not None and (not isinstance(head['value'], dict)
+                    or set(head['value']) != {'binding', 'parsed'} or head['value']['binding'] != binding
+                    or not isinstance(head['value']['parsed'], dict)
+                    or set(head['value']['parsed']) != {'header_digest', 'header_bytes', 'inventory', 'payload_verification'}
+                    or not isinstance(head['value']['parsed']['header_digest'], str)
+                    or _DIGEST.fullmatch(head['value']['parsed']['header_digest']) is None):
+                _reject('ROOT_INVALID', operation_id, 'saved header inventory differs from its source or profile')
+            extent = await asyncio.to_thread(grant_transfer_extent, owner.cartridge, operation_id,
+                _transfer_extent_id(operation_id, artifact.path, 'header'), artifact.size,
+                capacity_controller=owner, require_existing=head is not None)
+            try:
+                parsed = await transfer_header(adapter, revision, artifact, extent, owner,
+                    expected_header_digest=None if head is None else head['value']['parsed']['header_digest'])
+            finally:
+                os.close(extent.fd)
+            if head is None:
+                head = await asyncio.to_thread(compare_campaign_head, owner, key, None,
+                                               {'binding': binding, 'parsed': parsed})
+            elif head['value']['parsed'] != parsed:
+                _reject('ROOT_INVALID', operation_id, 'saved header inventory differs from its verified header bytes')
+            summaries.append({'path': artifact.path, 'header_bytes': parsed['header_bytes'],
+                'header_digest': parsed['header_digest'], 'header_record_key': key,
+                'header_record_digest': head['digest'], 'tensor_count': len(parsed['inventory']['tensors'])})
+        summary_binding = {'operation_id': operation_id, 'source_lock_digest': source_digest,
+                           'physical_profile_digest': profile_digest}
+        key = 'source-headers-' + digest_bytes(canonical_bytes(summary_binding)).split(':')[1]
+        value = {**summary_binding,
+                 'metadata': metadata, 'artifacts': summaries, 'payload_verification': 'NOT_RUN'}
+        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+        if head is None:
+            head = await asyncio.to_thread(compare_campaign_head, owner, key, None, value)
+        if head['value'] != value:
+            _reject('ROOT_INVALID', operation_id, 'completed header inventory differs from its source evidence')
+        self._append(self._load(operation_id), 'output_delta', {'source_headers': {
+            'status': 'PARSED', 'artifacts': summaries, 'metadata_record_digest': head['digest'],
+            'metadata_record_key': key, 'payload_verification': 'NOT_RUN'}})
 
     async def watch_drive_remount(self, request: dict) -> dict:
         """Q44/Q49: verify saved bytes after an observed or operator-reported physical reconnect."""

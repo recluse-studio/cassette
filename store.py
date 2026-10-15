@@ -81,7 +81,8 @@ _DARWIN_ATTR_VOL_UUID = 0x00040000
 _DRIVE_ROOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
-_SAFETENSORS_HEADER_BYTES = 100_000_000
+SAFETENSORS_HEADER_BYTES = 100_000_000
+TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
 _EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
@@ -1614,8 +1615,9 @@ def grant_transfer_extent(
     length: int,
     *,
     capacity_controller: CapacityCoordinator | None = None,
+    require_existing: bool = False,
 ) -> TransferExtent:
-    """Create one sparse transfer extent without treating its logical size as reserved space."""
+    """Grant one sparse extent; saved-evidence verification requires the existing extent."""
 
     if (
         not isinstance(operation_id, str)
@@ -1624,10 +1626,11 @@ def grant_transfer_extent(
         or _TRANSACTION_ID.fullmatch(extent_id) is None
         or type(length) is not int
         or not 0 <= length <= 2**63 - 1
+        or type(require_existing) is not bool
     ):
         _capacity_reject(
             str(operation_id),
-            "transfer extent requires valid operation and extent IDs plus a signed 64-bit length",
+            "transfer extent requires valid IDs, a signed 64-bit length and boolean require_existing",
             "INVALID_REQUEST",
         )
     cartridge = Path(cartridge)
@@ -1643,6 +1646,8 @@ def grant_transfer_extent(
             try:
                 directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
             except FileNotFoundError:
+                if require_existing:
+                    _capacity_reject(operation_id, f"saved transfer directory {name!r} is missing", "IDENTITY_MISMATCH")
                 def create_directory(claim: CapacityClaim) -> None:
                     execute_claimed_write(claim, lambda: os.mkdir(name, mode=0o700, dir_fd=parent_fd))
                     os.fsync(parent_fd)
@@ -1658,6 +1663,8 @@ def grant_transfer_extent(
         try:
             descriptor = os.open(filename, flags, dir_fd=directory_fd)
         except FileNotFoundError:
+            if require_existing:
+                _capacity_reject(operation_id, f"saved transfer extent {extent_id!r} is missing", "IDENTITY_MISMATCH")
             def create(claim: CapacityClaim) -> int:
                 created = execute_claimed_write(claim, lambda: os.open(
                     filename, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd,
@@ -1685,7 +1692,8 @@ def grant_transfer_extent(
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
             _capacity_reject(operation_id, "transfer extent must be one owned regular file", "CONTAINMENT_REJECTED")
         if metadata.st_size != length:
-            _capacity_reject(operation_id, f"existing transfer extent {extent_id!r} has another shape", "INVALID_REQUEST")
+            _capacity_reject(operation_id, f"existing transfer extent {extent_id!r} has another shape",
+                             "IDENTITY_MISMATCH" if require_existing else "INVALID_REQUEST")
         extent = TransferExtent(descriptor, 0, length, operation_id)
         descriptor = None
         return extent
@@ -1917,19 +1925,56 @@ def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
 
 
 _RESUMABLE_SHA256_STATE = struct.Struct("@64sIQ8I")
+_GIT_BLOB_TAIL_STATE = struct.Struct('<QQ20s')
+
+
+class _GitBlobTailHash:
+    """Q51: a Git blob fitting one transfer tail has only empty and complete checkpoints."""
+
+    def __init__(self, size, object_id):
+        if type(size) is not int or not 0 <= size <= TRANSFER_CHUNK_BYTES:
+            _reject('Git blob', 'resumable Git verification requires one bounded transfer tail', object_id)
+        self.size, self.object_id, self.offset = size, object_id, 0
+        self.value = artifact_hasher('git-sha1:', object_id, object_size=size).hexdigest()
+
+    def update(self, payload):
+        if type(payload) is not bytes or self.offset != 0 or len(payload) != self.size:
+            _reject('Git blob', 'one complete Git blob tail is required', self.object_id)
+        hasher = artifact_hasher('git-sha1:', self.object_id, object_size=self.size)
+        hasher.update(payload)
+        self.offset, self.value = len(payload), hasher.hexdigest()
+
+    def copy(self):
+        return copy.copy(self)
+
+    def hexdigest(self):
+        return self.value
+
+
+def _git_blob_hash_state(payload, size, offset, object_id):
+    if not isinstance(payload, bytes) or len(payload) != _GIT_BLOB_TAIL_STATE.size:
+        _reject('serialized_hash_state', 'Git blob tail state has an invalid byte shape', object_id)
+    stored_size, position, digest = _GIT_BLOB_TAIL_STATE.unpack(payload)
+    hasher = _GitBlobTailHash(size, object_id)
+    if (stored_size != size or type(offset) is not int or position != offset or offset not in {0, size}
+            or (offset == 0 and digest.hex() != hasher.hexdigest())):
+        _reject('serialized_hash_state', 'Git blob state differs from its exact tail boundary', object_id)
+    hasher.offset, hasher.value = offset, digest.hex()
+    return hasher
 
 
 def git_blob_sha256(payload: bytes, expected_blob: str, object_id: str) -> str:
     """Q9/Q51: verify a Git blob before deriving its resumable transfer digest."""
-    header = f"blob {len(payload)}\0".encode("ascii")
-    if hashlib.sha1(header + payload).hexdigest() != expected_blob:
+    hasher = artifact_hasher('git-sha1:', object_id, object_size=len(payload))
+    hasher.update(payload)
+    if hasher.hexdigest() != expected_blob:
         raise CassetteError("SOURCE_REVISION_CHANGED", object_id,
                             "Q9: Git metadata bytes must match their immutable blob", "terminal",
                             "source bytes differ from the pinned Git blob")
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def artifact_hasher(expected_digest: str, object_id: str):
+def artifact_hasher(expected_digest: str, object_id: str, *, object_size: int | None = None):
     """Return the sole whole-artifact hasher for Q1/Q51/Q57 byte verification."""
 
     algorithm = expected_digest.partition(":")[0]
@@ -1937,16 +1982,22 @@ def artifact_hasher(expected_digest: str, object_id: str):
         return blake3()
     if algorithm == "sha256":
         return hashlib.sha256()
+    if algorithm == 'git-sha1':
+        if type(object_size) is not int or object_size < 0:
+            _reject('artifacts[].size', 'Git blob hashing requires its exact byte size', object_id)
+        return hashlib.sha1(f'blob {object_size}\0'.encode('ascii'))
     _reject(
         "artifacts[].digest",
-        "artifact byte verification requires a BLAKE3 or SHA-256 digest",
+        "artifact byte verification requires a BLAKE3, SHA-256 or sized Git blob digest",
         object_id,
     )
 
 
-def resumable_artifact_hasher(expected_digest: str, object_id: str):
-    """Return Q51's pinned SHA-256 hasher whose continuation state is durable."""
+def resumable_artifact_hasher(expected_digest: str, object_id: str, *, object_size: int | None = None):
+    """Return Q51's SHA-256 continuation or one bounded Git blob tail accumulator."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        return _GitBlobTailHash(object_size, object_id)
     if expected_digest.partition(":")[0] != "sha256":
         _reject(
             "artifacts[].digest",
@@ -1957,8 +2008,14 @@ def resumable_artifact_hasher(expected_digest: str, object_id: str):
 
 
 def artifact_hash_state(hasher, expected_digest: str, offset: int, object_id: str) -> str:
-    """Serialize and structurally verify one SHA-256 continuation at an exact byte offset."""
+    """Serialize a bounded source-hash continuation at an exact durable byte boundary."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        if not isinstance(hasher, _GitBlobTailHash):
+            _reject('serialized_hash_state', 'a Git blob tail accumulator is required', object_id)
+        payload = _GIT_BLOB_TAIL_STATE.pack(hasher.size, hasher.offset, bytes.fromhex(hasher.value))
+        _git_blob_hash_state(payload, hasher.size, offset, object_id)
+        return 'git-blob-tail-v1:' + payload.hex()
     try:
         payload = hasher.__getstate__()
     except (AttributeError, TypeError, ValueError) as error:
@@ -1967,9 +2024,17 @@ def artifact_hash_state(hasher, expected_digest: str, offset: int, object_id: st
     return "sha256-state-v1:" + payload.hex()
 
 
-def resume_artifact_hasher(state: str, expected_digest: str, offset: int, object_id: str):
-    """Restore one validated Q51 SHA-256 continuation without evaluating serialized code."""
+def resume_artifact_hasher(state: str, expected_digest: str, offset: int, object_id: str,
+                          *, object_size: int | None = None):
+    """Restore one validated Q51 continuation without evaluating serialized code."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        prefix = 'git-blob-tail-v1:'
+        if (not isinstance(state, str) or not state.startswith(prefix)
+                or len(state[len(prefix):]) != 2 * _GIT_BLOB_TAIL_STATE.size
+                or not set(state[len(prefix):]) <= _HEX):
+            _reject('serialized_hash_state', 'a bounded git-blob-tail-v1 state is required', object_id)
+        return _git_blob_hash_state(bytes.fromhex(state[len(prefix):]), object_size, offset, object_id)
     if not isinstance(state, str) or not state.startswith("sha256-state-v1:"):
         _reject("serialized_hash_state", "a sha256-state-v1 value is required", object_id)
     encoded = state[16:]
@@ -2005,7 +2070,7 @@ def _safetensors_header(
     artifact_hasher.update(prefix)
     header_length = int.from_bytes(prefix, "little")
     file_size = os.fstat(handle.fileno()).st_size
-    if not 0 < header_length <= _SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
+    if not 0 < header_length <= SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
         _q57_reject(object_id, "SafeTensors header length is outside its file or 100 MB limit")
     encoded = _read_exact(handle, header_length, object_id, "SafeTensors header")
     artifact_hasher.update(encoded)

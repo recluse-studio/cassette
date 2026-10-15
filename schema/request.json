@@ -298,6 +298,9 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "additionalProperties": false,
           "properties": {
+            "artifact_selector": {
+              "$ref": "#/$defs/bounded_json_object"
+            },
             "connection_id": {
               "maxLength": 256,
               "minLength": 1,
@@ -343,7 +346,7 @@
             "locator",
             "revision"
           ],
-          "title": "Immutable model selection",
+          "title": "Immutable source selection",
           "type": "object"
         },
         "source": {

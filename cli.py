@@ -13,9 +13,10 @@ from broker import CanonicalBroker
 from errors import CassetteError
 
 
-async def _download(broker, request, *, qualification_only=False):
+async def _download(broker, request, *, qualification_only=False, header_only=False):
     operation_id = broker.operation_id(request)
-    task = asyncio.create_task(broker.start_download(request, qualification_only=qualification_only))
+    task = asyncio.create_task(broker.start_download(request, qualification_only=qualification_only,
+                                                    header_only=header_only))
     seen = 0
     while True:
         await asyncio.sleep(.1)
@@ -60,6 +61,12 @@ def main(argv=None):
     select.add_argument('--model', required=True)
     select.add_argument('--revision')
     select.add_argument('--license-acceptance-ref')
+    dataset = commands.add_parser('select-dataset', help='Freeze exact dataset files and recheck source access without reading their payload.')
+    dataset.add_argument('--connection', required=True)
+    dataset.add_argument('--dataset', required=True)
+    dataset.add_argument('--revision', required=True)
+    dataset.add_argument('--file', action='append', required=True, help='Select one exact file; repeat for every required file.')
+    dataset.add_argument('--license-acceptance-ref')
     drives = commands.add_parser('drives', help='List mounted APFS drives and observed access.')
     drive = commands.add_parser('select-drive', help='Select a drive and record the content Cassette must preserve.')
     drive.add_argument('--volume', required=True, help='APFS volume UUID from drives.')
@@ -67,14 +74,16 @@ def main(argv=None):
     drive.add_argument('--cartridge-uuid')
     go = commands.add_parser('go', help='Start the selected download; first establish durable drive access.')
     qualify = commands.add_parser('qualify', help='Measure the selected download path without starting or continuing payload transfer.')
-    for command in (go, qualify):
-        command.add_argument('--model-selection', required=True)
+    qualify.add_argument('--headers', action='store_true', help='Measure the bounded header path instead of full acquisition.')
+    headers = commands.add_parser('headers', help='Save and inspect qualified source headers without downloading tensors.')
+    for command in (go, qualify, headers):
+        command.add_argument('--source-selection', '--model-selection', dest='model_selection', required=True)
         command.add_argument('--drive-selection', required=True)
     remount = commands.add_parser('watch-remount', help='Wait for physical reconnection and verify the held drive.')
     remount.add_argument('operation_id')
     remount.add_argument('--reconnected', action='store_true',
                          help='Report a completed physical reconnect and verify the saved drive data now.')
-    for command in (models, connect, select, drives, drive, go, qualify, remount):
+    for command in (models, connect, select, dataset, drives, drive, go, qualify, headers, remount):
         command.add_argument('--key', default=None, help='Reuse this key to reconcile the same operation.')
     status = commands.add_parser('status', help='Read a recorded operation.')
     status.add_argument('operation_id')
@@ -103,11 +112,14 @@ def main(argv=None):
                     parser.error('masked token input requires an interactive terminal')
                 token = getpass.getpass('Read token (stored in macOS Keychain): ')
             result = asyncio.run(broker.connect_source(request, token=token))
-        elif args.command == 'select-model':
-            request.update(operation='source.select', target=args.model, arguments={'selection': {
-                'connection_id': args.connection, 'locator': args.model, 'revision': args.revision,
-                'license_acceptance_ref': args.license_acceptance_ref}})
-            result = asyncio.run(broker.select_model(request))
+        elif args.command in {'select-model', 'select-dataset'}:
+            locator = args.model if args.command == 'select-model' else args.dataset
+            selection = {'connection_id': args.connection, 'locator': locator, 'revision': args.revision,
+                         'license_acceptance_ref': args.license_acceptance_ref}
+            if args.command == 'select-dataset':
+                selection['artifact_selector'] = {'dataset_paths': sorted(args.file)}
+            request.update(operation='source.select', target=locator, arguments={'selection': selection})
+            result = asyncio.run(broker.select_source(request))
         elif args.command == 'drives':
             request.update(operation='drive.discover', target='mounted-apfs', arguments={})
             result = asyncio.run(broker.discover_drives(request))
@@ -116,15 +128,22 @@ def main(argv=None):
                 'volume_uuid': args.volume, 'folder': args.folder, 'cartridge_uuid': args.cartridge_uuid}})
             print('Recording the existing files on the selected drive before Cassette writes.', file=sys.stderr, flush=True)
             result = asyncio.run(broker.select_drive(request))
-        elif args.command in {'go', 'qualify'}:
+        elif args.command in {'go', 'qualify', 'headers'}:
             request.update(operation='acquire', target=args.drive_selection, arguments={'acquisition': {
                 'model_selection_id': args.model_selection, 'drive_selection_id': args.drive_selection}})
             print('Checking the selected source and creating the durable Cassette folder.', file=sys.stderr, flush=True)
-            result = asyncio.run(_download(broker, request, qualification_only=args.command == 'qualify'))
+            result = asyncio.run(_download(broker, request, qualification_only=args.command == 'qualify',
+                                          header_only=args.command == 'headers' or getattr(args, 'headers', False)))
             if result['state'] == 'PAUSED':
                 pause_error = broker.events(result['operation_id'])[-1]['payload'].get('error')
                 if pause_error:
-                    print(f"{args.command.capitalize()} paused: {pause_error['code']}: {pause_error['detail']}. Retry {args.command} with the same key.", file=sys.stderr)
+                    advice = ('Go remains available with the same selections and key.'
+                              if args.command == 'headers' and pause_error['retryability'] == 'terminal'
+                              else f'Retry {args.command} with the same key.')
+                    print(f"{args.command.capitalize()} paused: {pause_error['code']}: {pause_error['detail']}. {advice}", file=sys.stderr)
+                elif args.command == 'headers' and any('source_headers' in event['payload']
+                                                       for event in broker.events(result['operation_id'])):
+                    print('Headers saved. Full download verification is separate.', file=sys.stderr)
                 elif args.command == 'qualify' and any(
                         event['payload'].get('source_qualification', {}).get('status') == 'PASS'
                         for event in broker.events(result['operation_id'])):

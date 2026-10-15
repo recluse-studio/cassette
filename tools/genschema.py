@@ -2186,11 +2186,12 @@ CONTRACTS: dict[str, dict] = {
                         "mode": text(enum=["public", "token", "existing"]),
                         "credential_ref": nullable(bounded_text()),
                     }),
-                    "selection": record("Immutable model selection", "Q5/Q9", {
+                    "selection": record("Immutable source selection", "Q5/Q9", {
                         "connection_id": identifier(), "locator": bounded_text(),
                         "revision": nullable(bounded_text()),
                         "license_acceptance_ref": nullable(bounded_text()),
-                    }),
+                        "artifact_selector": bounded_json_object(),
+                    }, optional=("artifact_selector",)),
                     "drive": record("Mounted drive selection", "Q44/Q49", {
                         "volume_uuid": bounded_text(), "folder": bounded_text(),
                         "cartridge_uuid": nullable(bounded_text()),

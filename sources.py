@@ -33,8 +33,11 @@ from store import (
     digest_bytes,
     execute_claimed_write,
     TransferExtent,
+    SAFETENSORS_HEADER_BYTES,
+    TRANSFER_CHUNK_BYTES as _TRANSFER_CHUNK_BYTES,
     grant_transfer_extent,
     git_blob_sha256,
+    inspect_safetensors,
     pause_capacity_claim,
     resumable_artifact_hasher,
     resume_artifact_hasher,
@@ -44,7 +47,6 @@ _CONTROL_BYTES = 8 * 1024 * 1024
 _DIGEST = re.compile(r"(?P<algorithm>blake3|sha256|git-sha1):(?P<hex>[0-9a-f]+)")
 _DIGEST_LENGTH = {"blake3": 64, "sha256": 64, "git-sha1": 40}
 _SENSITIVE_HEADERS = frozenset({"authorization", "x-cassette-license-acceptance"})
-_TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
 _TRANSFER_PARALLEL_RANGES = 2
 _TRANSFER_SLOT_BYTES = 64 * 1024
 _TRANSFER_RECORD_BYTES = 33
@@ -110,16 +112,20 @@ class ResolvedSource:
     license_digest: str
     credential_ref: str | None
     license_acceptance_ref: str | None
+    artifact_selector: bytes | None = None
 
     def record(self) -> dict:
         """Return the exact durable Q9 result without authentication material."""
-        return {
+        record = {
             "immutable_revision": self.immutable_revision,
             "artifacts": [artifact.record() for artifact in self.artifacts],
             "metadata_assets": [artifact.record() for artifact in self.metadata_assets],
             "auth_scope": self.auth_scope,
             "license_digest": self.license_digest,
         }
+        if self.artifact_selector is not None:
+            record['artifact_selector'] = json.loads(self.artifact_selector)
+        return record
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,8 +276,8 @@ class _Wire:
 _WIRES = {
     "huggingface": _Wire(
         ("sha",), "git-sha1:", ("identity",), ("siblings",),
-        ("metadata_siblings",), ("rfilename",), ("size",), ("lfs", "sha256"),
-        "sha256:", ("download_url",), ("etag",), ("auth", "scope"),
+        ("metadata_siblings",), ("rfilename",), ("size",), ("digest",),
+        "", ("download_url",), ("etag",), ("auth", "scope"),
         ("license", "digest"), ("remote_metadata",), ("auth", "scope"),
         ("auth", "required"), ("license", "digest"), ("license", "acceptance_required"),
     ),
@@ -522,8 +528,8 @@ class SourceAdapter:
         return resolved
 
     async def enumerate(self, revision: ResolvedSource) -> tuple[Artifact, ...]:
-        """Enumerate every immutable model artifact without changing operation semantics."""
-        self._revision(revision)
+        """Enumerate the exact immutable source artifacts without changing operation semantics."""
+        selector = self._revision(revision)
         if self.kind == "ollama":
             actual = await self._ollama_resolved({
                 "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
@@ -533,7 +539,7 @@ class SourceAdapter:
             if actual != revision:
                 _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: enumeration must remain bound to the resolved revision", "registry manifest changed after resolve")
             return actual.artifacts
-        payload = await self._json("artifacts", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
+        payload = await self._json("artifacts", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector)
         actual_revision = self._revision_digest(payload, revision.locator)
         artifacts = self._artifacts(payload, self._wire.artifacts, revision.locator)
         assets = self._artifacts(payload, self._wire.metadata_assets, revision.locator)
@@ -543,7 +549,7 @@ class SourceAdapter:
 
     async def read_metadata(self, revision: ResolvedSource, ranges: tuple[tuple[str, int, int], ...] = ()) -> dict:
         """Read Q50-shaped evidence; optional ranges name bounded metadata inspection requests."""
-        self._revision(revision)
+        selector = self._revision(revision)
         encoded = []
         for path, offset, length in ranges:
             if not isinstance(path, str) or not path or isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or not 0 < length <= _CONTROL_BYTES:
@@ -565,7 +571,7 @@ class SourceAdapter:
                     _fail("INVALID_REQUEST", revision.locator, "Q50: metadata range must name a pinned artifact", path)
                 await self.open_range(actual, artifact, int(offset), int(length), artifact.validator)
             return self._ollama_metadata(actual)
-        payload = await self._json("metadata", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, ranges=tuple(encoded))
+        payload = await self._json("metadata", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector, ranges=tuple(encoded))
         metadata = _at(payload, self._wire.metadata, revision.locator)
         defects = validate("remote_metadata", metadata)
         if defects:
@@ -607,7 +613,7 @@ class SourceAdapter:
 
     async def license_and_auth(self, revision: ResolvedSource) -> Requirements:
         """Translate source requirements while keeping credential bytes outside every result."""
-        self._revision(revision)
+        selector = self._revision(revision)
         if self.kind == "ollama":
             actual = await self._ollama_resolved({
                 "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
@@ -617,7 +623,7 @@ class SourceAdapter:
             if actual != revision:
                 _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: requirements must remain bound to resolve", "registry manifest changed after resolve")
             return Requirements(actual.auth_scope, False, actual.license_digest, False)
-        payload = await self._json("requirements", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
+        payload = await self._json("requirements", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector)
         wire = self._wire
         requirements = Requirements(
             _text(_at(payload, wire.requirement_auth_scope, revision.locator), "auth_scope", revision.locator),
@@ -633,9 +639,19 @@ class SourceAdapter:
     def _wire(self) -> _Wire:
         return _WIRES[self.kind]
 
-    def _revision(self, revision: ResolvedSource) -> None:
+    def _revision(self, revision: ResolvedSource) -> dict | None:
         if not isinstance(revision, ResolvedSource) or revision.source_kind != self.kind:
             _fail("INVALID_REQUEST", self.kind, "Q52: revision must belong to the selected adapter", "source kind mismatch")
+        if revision.artifact_selector is None:
+            return None
+        try:
+            selector = json.loads(revision.artifact_selector, object_pairs_hook=_unique_object)
+            if (type(revision.artifact_selector) is not bytes or not isinstance(selector, dict)
+                    or canonical_bytes(selector) != revision.artifact_selector):
+                raise ValueError('noncanonical selector')
+            return selector
+        except (TypeError, ValueError, UnicodeError):
+            _fail('INVALID_REQUEST', revision.locator, 'Q9: frozen selection must be canonical JSON', 'invalid artifact selector')
 
     def _range_base_url(self) -> str:
         return self._ollama_registry_url() if self.kind == "ollama" else self.base_url
@@ -825,7 +841,7 @@ class SourceAdapter:
                 _text(_at(item, self._wire.artifact_validator, object_id), "artifact.validator", object_id),
             ))
         if not artifacts:
-            _fail("SOURCE_UNAVAILABLE", object_id, "Q9: a resolved model requires at least one artifact", "artifact collection is empty")
+            _fail("SOURCE_UNAVAILABLE", object_id, "Q9: a resolved source requires at least one artifact", "artifact collection is empty")
         return tuple(sorted(artifacts, key=lambda artifact: artifact.path))
 
     def _resolved(self, payload: object, descriptor: dict) -> ResolvedSource:
@@ -842,6 +858,7 @@ class SourceAdapter:
             _digest(_at(payload, wire.license_digest, locator), "", "license_digest", locator),
             descriptor.get("credential_ref"),
             descriptor.get("license_acceptance_ref"),
+            canonical_bytes(descriptor['artifact_selector']) if descriptor.get('artifact_selector') is not None else None,
         )
 
     @staticmethod
@@ -851,16 +868,27 @@ class SourceAdapter:
         return value
 
     async def _hub_payload(self, operation, locator, revision, credential_ref, license_ref, selector, ranges):
-        """Q9/Q52: translate public Hub records; parsed model identity remains unknown."""
+        """Q9/Q52: translate Hub records; preserve complete models or an exact dataset subset."""
         if (len(locator.split("/")) != 2 or any(part in {"", ".", ".."} for part in locator.split("/"))
                 or any(char in locator for char in "?#\\\x00")):
             _fail("INVALID_REQUEST", locator, "Q9: Hub locator must name an owner and repository", "invalid repository locator")
+        selected_paths = None
         if selector is not None:
-            _fail("MODEL_UNSUPPORTED", locator, "Q9: acquisition retains the complete pinned repository", "artifact selectors are not supported by the Hub adapter")
+            if not isinstance(selector, dict) or set(selector) != {'dataset_paths'}:
+                _fail('MODEL_UNSUPPORTED', locator, 'Q9: Hub selection names a complete model or exact dataset paths', 'unsupported artifact selector')
+            names = selector['dataset_paths']
+            if (not isinstance(names, list) or not 0 < len(names) <= 4096
+                    or any(not isinstance(name, str) or not name or len(name) > 4096
+                           or any(part in {'', '.', '..'} for part in name.split('/'))
+                           or '\\' in name or '\x00' in name for name in names)
+                    or len(set(names)) != len(names)):
+                _fail('INVALID_REQUEST', locator, 'Q9: dataset selection requires unique bounded relative paths', 'invalid dataset_paths')
+            selected_paths = set(names)
         requested = revision.removeprefix("git-sha1:") or "main"
         endpoint = self.base_url.rstrip("/")
         repo = quote(locator, safe="/")
-        uri = f"{endpoint}/api/models/{repo}/revision/{quote(requested, safe='')}?blobs=true"
+        repo_type = 'datasets' if selected_paths is not None else 'models'
+        uri = f"{endpoint}/api/{repo_type}/{repo}/revision/{quote(requested, safe='')}?blobs=true"
         _, body, _ = await self._request(uri, credential_ref, license_ref, {}, _CONTROL_BYTES, locator)
         try:
             info = json.loads(body, object_pairs_hook=_unique_object)
@@ -884,6 +912,9 @@ class SourceAdapter:
         license_files = {_text(_at(item, ('rfilename',), locator), 'rfilename', locator).upper() for item in siblings} & {
             'LICENSE', 'LICENSE.TXT', 'LICENSE.MD', 'COPYING'}
         card_license = info.get('cardData', {}).get('license') if isinstance(info.get('cardData'), dict) else None
+        if selected_paths is not None and any(name.upper() in {'README.MD', 'LICENSE', 'LICENSE.TXT', 'LICENSE.MD', 'COPYING'}
+                                              for name in selected_paths):
+            _fail('MODEL_UNSUPPORTED', locator, 'Q9: dataset payload selection is separate from source license metadata', 'selected dataset paths include a source metadata asset')
         paths = set()
         for item in siblings:
             name = _text(_at(item, ("rfilename",), locator), "rfilename", locator)
@@ -892,10 +923,14 @@ class SourceAdapter:
                     or "\\" in name or "\x00" in name or type(size) is not int or size < 0):
                 _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub paths and sizes must be exact and unique", name)
             paths.add(name)
-            url = f"{endpoint}/{repo}/resolve/{commit[9:]}/{quote(name, safe='/')}"
             license_file = name.upper() in {"LICENSE", "LICENSE.TXT", "LICENSE.MD", "COPYING"}
+            selected_payload = selected_paths is not None and name in selected_paths
+            if selected_paths is not None and not selected_payload and not license_file and not (name == 'README.md' and not license_files):
+                continue
+            source_repo = 'datasets/' + repo if selected_paths is not None else repo
+            url = f"{endpoint}/{source_repo}/resolve/{commit[9:]}/{quote(name, safe='/')}"
             lfs = item.get("lfs")
-            if lfs is None and name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
+            if lfs is None and not selected_payload and name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
                 _fail("METADATA_INSUFFICIENT", name,
                       "Q9/Q50: non-LFS model bytes require a qualified metadata mechanism",
                       "resolution cannot read model-bearing Git content")
@@ -913,7 +948,16 @@ class SourceAdapter:
                 if not blob.startswith("git-sha1:"):
                     _fail("SOURCE_UNAVAILABLE", locator, "Q9: ordinary Hub files require Git blob identities", name)
                 validator = '"' + blob[9:] + '"'
-            if lfs is None or license_file:
+                if selected_payload:
+                    if size > _TRANSFER_CHUNK_BYTES:
+                        _fail('MODEL_UNSUPPORTED', name, 'Q51: Git payload verification requires one bounded transfer tail', 'selected Git blob exceeds the supported tail')
+                    digest = blob
+                    status, _, headers = await self._request(url, credential_ref, license_ref, {}, 0, name,
+                        allow_cross_origin_redirect=True, method='HEAD')
+                    if status != 200 or headers.get('Content-Length') != str(size) or not (
+                            headers.get('X-Cassette-Source-ETag') == validator or headers.get('ETag') == validator):
+                        _fail('SOURCE_REVISION_CHANGED', name, 'Q9: dataset HEAD must retain its Git blob and size', 'selected Git blob HEAD differs')
+            if (lfs is None and not selected_payload) or license_file:
                 if size > _CONTROL_BYTES:
                     _fail("METADATA_INSUFFICIENT", name, "Q50: inline Git metadata must fit the bounded control read", f"{size} exceeds {_CONTROL_BYTES} bytes")
                 status, content, headers = await self._request(url, credential_ref, license_ref,
@@ -941,19 +985,23 @@ class SourceAdapter:
                                     if len(frontmatter) == 3 and not frontmatter[0].strip() else [])
                     if [value for _, value in declarations] == [card_license]:
                         licenses.append(digest)
-            objects.append({"rfilename": name, "size": size, "lfs": {"sha256": digest[7:]},
+            objects.append({"rfilename": name, "size": size, "digest": digest,
                             "download_url": url, "etag": validator})
         if len(licenses) != 1:
             _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity",
                   "one root license file or a verified model-card license declaration is required")
+        if selected_paths is not None and not selected_paths <= paths:
+            _fail('METADATA_INSUFFICIENT', locator, 'Q9: every selected dataset path must exist at the pinned revision',
+                  'selected paths absent from manifest: ' + ', '.join(sorted(selected_paths-paths)))
         objects.sort(key=lambda item: item["rfilename"])
-        artifacts = [item for item in objects if item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl"))]
+        artifacts = [item for item in objects if (item['rfilename'] in selected_paths if selected_paths is not None
+                                                else item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl")))]
         assets = [item for item in objects if item not in artifacts]
         authority = f"source:huggingface:{locator}@{commit}"
         fields = (*_PREFLIGHT_REQUIRED, "processor", "revision_ancestry", "training_precision")
         metadata = {field: {"trust": "ABSENT", "authority": authority} for field in fields}
         values = {"total_bytes": sum(item["size"] for item in artifacts), "artifact_count": len(artifacts),
-                  "artifact_digests": ["sha256:" + item["lfs"]["sha256"] for item in artifacts],
+                  "artifact_digests": [item['digest'] for item in artifacts],
                   "license": licenses[0], "gating": gated is not False,
                   "source_validators": {item["rfilename"]: item["etag"] for item in objects}}
         metadata.update({field: {"value": value, "trust": "DECLARED", "authority": authority}
@@ -965,7 +1013,7 @@ class SourceAdapter:
                    "remote_metadata": metadata}
         if ranges:
             resolved = self._resolved(payload, {"locator": locator, "credential_ref": credential_ref,
-                                               "license_acceptance_ref": license_ref})
+                                               "license_acceptance_ref": license_ref, 'artifact_selector': selector})
             by_path = {item.path: item for item in (*resolved.artifacts, *resolved.metadata_assets)}
             for encoded in ranges:
                 name, start, count = encoded.rsplit(":", 2)
@@ -1189,7 +1237,7 @@ def _verified_metadata_candidates(
         artifact = available[path]
         if len(payload) != artifact.size or len(payload) > _CONTROL_BYTES:
             _preflight_fail(path, "verified metadata bytes must match one bounded resolved asset")
-        hasher = artifact_hasher(artifact.digest, path)
+        hasher = artifact_hasher(artifact.digest, path, object_size=artifact.size)
         hasher.update(payload)
         actual = f"{artifact.digest.partition(':')[0]}:{hasher.hexdigest()}"
         if actual != artifact.digest:
@@ -1968,7 +2016,7 @@ def _reset_state(
     boundary_id: str,
 ) -> dict:
     identity = {name: material[name] for name in _TRANSFER_IDENTITY_FIELDS}
-    source = resumable_artifact_hasher(identity["expected_digest"], object_id)
+    source = resumable_artifact_hasher(identity["expected_digest"], object_id, object_size=identity['object_size'])
     records = resumable_artifact_hasher("sha256:" + "0" * 64, object_id)
     record = {
         **identity,
@@ -2040,9 +2088,11 @@ def _transfer_identity(
     else:
         manifest_digest = None
     if (not isinstance(artifact.digest, str)
-            or re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.digest) is None
+            or not (re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.digest)
+                    or (re.fullmatch(r'git-sha1:[0-9a-f]{40}', artifact.digest)
+                        and artifact.size <= _TRANSFER_CHUNK_BYTES))
             or not isinstance(artifact.validator, str) or not artifact.validator):
-        _transfer_fail("SOURCE_UNAVAILABLE", artifact.path, "an authoritative SHA-256 digest and stable validator are required")
+        _transfer_fail("SOURCE_UNAVAILABLE", artifact.path, "SHA-256 or one bounded Git blob tail and a stable validator are required")
     artifact_id = digest_bytes(canonical_bytes({
         "source_revision": revision.immutable_revision,
         "path": artifact.path,
@@ -2110,6 +2160,62 @@ def _checkpoint_transition(
     )
 
 
+async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, artifact: Artifact,
+                          extent: TransferExtent, owner: CapacityCoordinator,
+                          *, expected_header_digest: str | None = None) -> dict:
+    """Q44/Q50/Q53: land only a SafeTensors header; never certify the whole artifact digest."""
+    if not isinstance(adapter, SourceAdapter) or not isinstance(owner, CapacityCoordinator):
+        _transfer_fail('INVALID_REQUEST', 'source-header', 'source adapter and store capacity owner are required')
+    adapter._revision(revision)
+    if artifact not in revision.artifacts or not artifact.path.endswith('.safetensors'):
+        _transfer_fail('MODEL_UNSUPPORTED', revision.locator, 'header inspection requires a resolved SafeTensors artifact')
+    if (not isinstance(extent, TransferExtent) or extent.offset != 0 or not owner.owns_descriptor(extent.fd)
+            or _extent(extent, artifact.size, artifact.path, 'header extent').st_size != artifact.size):
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'header inspection requires a complete logical source extent')
+    if artifact.size <= 8:
+        _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'source is too short for a SafeTensors header')
+    if expected_header_digest is not None:
+        if not _digest(expected_header_digest, 'blake3:', 'header digest', artifact.path).startswith('blake3:'):
+            _transfer_fail('INVALID_REQUEST', artifact.path, 'saved header digest requires BLAKE3')
+
+    async def land(offset, length, leading=b''):
+        if expected_header_digest is not None:
+            return leading + await asyncio.to_thread(_pread_exact, extent, offset, length, artifact.path)
+        write_bytes = length + len(leading)
+        claim = _transfer_claim(owner, _checkpoint_transition(extent.operation_id,
+            f'header:{artifact.path}:{offset}', payload_bytes=write_bytes, checkpoint_bytes=0,
+            write_bytes=(write_bytes, 0)), artifact.path)
+        try:
+            payload = leading + await adapter.open_range(revision, artifact, offset, length, artifact.validator)
+            await asyncio.to_thread(_pwrite_verified, extent, offset-len(leading), payload,
+                                    artifact.path, 'source header', claim)
+            await asyncio.to_thread(_sync_fd, extent.fd, artifact.path, claim)
+            complete_capacity_claim(claim)
+            return payload
+        except Exception:
+            _pause_transfer_claim(claim, 'header range did not reach its durable readback boundary')
+            raise
+
+    prefix = await land(0, 8)
+    length = int.from_bytes(prefix, 'little')
+    if not 0 < length <= SAFETENSORS_HEADER_BYTES or length + 8 > artifact.size:
+        if expected_header_digest is not None:
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header length differs from its file or parser bound')
+        _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'SafeTensors header exceeds its source or parser bound')
+    total = length + 8
+    hasher = artifact_hasher('blake3:', artifact.path)
+    first = min(_TRANSFER_CHUNK_BYTES, total)
+    hasher.update(await land(8, first-8, prefix))
+    for offset in range(first, total, _TRANSFER_CHUNK_BYTES):
+        hasher.update(await land(offset, min(_TRANSFER_CHUNK_BYTES, total-offset)))
+    digest = 'blake3:' + hasher.hexdigest()
+    if expected_header_digest is not None and digest != expected_header_digest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header differs from its immutable receipt')
+    inventory = await asyncio.to_thread(inspect_safetensors, extent.fd, digest)
+    return {'header_digest': digest, 'header_bytes': total, 'inventory': inventory,
+            'payload_verification': 'NOT_RUN'}
+
+
 async def transfer_artifact(
     adapter: SourceAdapter,
     revision: ResolvedSource,
@@ -2146,6 +2252,7 @@ async def transfer_artifact(
             "transfer extents must belong to the coordinator's cartridge filesystem",
         )
     identity = _transfer_identity(revision, artifact, authoritative_chunk_digests)
+    hash_bounds = {'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}
     state_required = transfer_state_bytes(artifact.size)
     data_metadata = _extent(data_extent, artifact.size, artifact.path, "data extent")
     state_metadata = _extent(state_extent, state_required, artifact.path, "checkpoint extent")
@@ -2174,7 +2281,7 @@ async def transfer_artifact(
         f"{identity['artifact_id']}:checkpoint-clear",
     )
     if loaded is None:
-        hasher = resumable_artifact_hasher(artifact.digest, artifact.path)
+        hasher = resumable_artifact_hasher(artifact.digest, artifact.path, **hash_bounds)
         header = {
             **identity,
             "generation": 0,
@@ -2223,6 +2330,7 @@ async def transfer_artifact(
                 artifact.digest,
                 header["contiguous_source_hash_offset"],
                 artifact.path,
+                **hash_bounds,
             )
         except CassetteError:
             reset_checkpoint(header, header["generation"], "hash-state")
@@ -2360,7 +2468,7 @@ def training_records(artifact: Artifact, extent: TransferExtent, state: PartialS
             or type(record_limit_bytes) is not int or not 0 < record_limit_bytes <= 4194304):
         _transfer_fail("INVALID_REQUEST", "training-dataset", "dataset requires a complete transfer and a bounded record size")
     _extent(extent, artifact.size, artifact.path, "dataset")
-    hasher = artifact_hasher(artifact.digest, artifact.path)
+    hasher = artifact_hasher(artifact.digest, artifact.path, object_size=artifact.size)
     for offset in range(0, artifact.size, 65536):
         hasher.update(_pread_exact(extent, offset, min(65536, artifact.size-offset), artifact.path))
     if hasher.hexdigest() != artifact.digest.split(":")[1]:

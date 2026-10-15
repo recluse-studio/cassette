@@ -8043,3 +8043,100 @@ controls and the ordinary ledger. The change adds eight product lines and no ker
 runtime, dependency or shipped binary. Wheel 06's 38 runtime files match the tested source and
 installation. The temporary fixture environments are removed; their receipts remain. The bounded
 preparation entry is complete. Build 05 continues with qualified headers and the frozen datasets.
+
+---
+
+**Codex, builder in build; joined source-preparation review pending**
+
+#### Entry 93 — 2026-10-15, read the header and leave the tensors
+
+The next missing command was header preparation. The fixture rejected `qualify --headers`. I added
+that qualification mode and a `headers` trigger over the same acquire operation. Sources writes
+only the eight-byte prefix and the declared header into a store-granted sparse extent. The existing
+store parser checks the tensor geometry against the full logical source size. Its parsed inventory
+and local header digest remain separate from the unverified full-artifact digest.
+
+Five focused CLI, drive and parser checks pass. The source fixture observes exactly the prefix and
+header ranges, with no tensor range. A second invocation checks the saved header and uses no new
+header request. Ordinary Go still completes. These are preliminary fixture results; the joined
+source-preparation review and complete proof remain pending. No live source profile or model header
+has been claimed.
+
+The frozen dataset list exposes a second part of the same preparation problem. Fourteen selected
+files use Git blob checksums, and the largest is 391,058 bytes. The other twenty use SHA-256 LFS
+identities. Cassette currently reads ordinary Git files during selection to derive SHA-256. That
+would fetch these dataset contents before their qualified acquisition. I am adding exact selected-file
+handling and post-qualification verification through the existing source and store path. The frozen
+files, revisions and checksum choices remain the inputs.
+
+Exact dataset selection now uses the same source selection, qualification and Go lifecycle. Git
+files retain their frozen blob identity until acquisition; the existing tail checkpoint records
+the stdlib hash result after the bytes arrive. LFS files keep the SHA-256 path. A CLI fixture
+selects two files, observes no payload during selection or qualification, verifies both formats
+and proves that an unselected file is untouched. Eight coupled checks pass in 45.38 seconds.
+The independent review and complete candidate proof remain pending.
+
+---
+
+**Codex, builder in build; separate Opus repair review pending**
+
+#### Entry 94 — 2026-10-15, a failed header must leave the download usable
+
+The complete candidate passed 340 tests and fourteen component controls. Opus then found three
+paths the green suite had missed. Asking for unsupported headers failed the shared download.
+Deleting a saved header recreated an empty extent and blamed the source. A SafeTensors file stored
+as a Git blob failed after its header arrived. The reviewer supplied a new probe; I ran it unchanged
+on two disposable APFS images. It reproduced all three defects. Removing the qualification guard
+fetched unwanted headers; removing the final Git check accepted corrupted content. The frozen
+source stayed unchanged.
+
+The repair keeps the source selection and download usable. Unsupported header requests fail before
+an acquisition is issued. Failures inside header inspection pause that acquisition. Saved evidence
+must exist; verification cannot recreate it. A broken local prefix names local evidence loss.
+The parser uses the header's local digest, leaving the full source digest unverified. The existing
+fixture now proves these cases and completes Go under the same keys after the header failures.
+Eight coupled checks pass. One earlier check expected a successful status exit for a paused operation;
+I corrected that observer and retained its failed run.
+
+I also removed six redundant Git resume-check lines after the reviewer's deletion control preserved
+the result. Saved chunks still receive the common BLAKE3 readback check, and the checkpoint retains
+the whole-source hash verified during acquisition. Header profile labels now describe the measured
+envelope separately from the actual header ranges. Its live Q42 acceptance remains unproved.
+
+The review probe itself read earlier pause errors only after the operation had completed. Its
+request counts and stderr show both interruptions, but that observer lost their canonical error
+fields. The original run remains intact; the reviewer must correct the observer before its next
+judgment. The repaired source still needs independent review and a fresh complete candidate.
+
+Candidate 08 passed all 340 tests and fourteen controls after the three repairs. I then made the
+header error message name the usable next action: Go with the same selections and key. The eight
+coupled checks pass with that message. The final wording and fixture change require their own
+complete candidate; the reviewer's corrected probe is ready to run on that final source.
+
+---
+
+**Codex, builder in build; separate Opus review complete**
+
+#### Entry 95 — 2026-10-15, preparation survives the refusals
+
+Opus completed all three review questions on the final source. All thirty baseline challenges pass.
+The fault controls expose unwanted header reads, corrupt Git success, recreated evidence and
+shared-operation failure. One combined control expected a pause while another mutation explicitly
+forced failure. The reviewer kept that bad expectation as an instrument fault, then established the
+guard's effect from operation creation, its later error and the changed prior record. That row is
+not counted as a pass. Both incomplete reviews and every original result remain retained.
+
+The final candidate passed 340 tests in 519.00 seconds, zero skips, fourteen component controls
+and the ordinary ledger. The source adds 194 product lines and no kernel, process, runtime,
+dependency, model branch, duplicate authority or shipped binary. Wheel 07's thirty-eight runtime
+files match the reviewed source, the tested source and the installed files.
+
+The existing install environment had no pip. I used its existing uv installer offline. I also
+started one verifier before replacement had finished; it could not import broker and was discarded.
+After uv stopped, a fresh verifier matched every file and exercised the installed command help.
+Those attempts remain in the receipt. No live operation used the incomplete installation.
+
+Cassette now prepares headers and exact dataset files through its CLI. Build 05 still owes its
+actual source qualification, model headers, larger model and dataset acquisitions. The header
+envelope's live Q42 decision and dataset transport-header materialization remain explicit.
+The next work freezes the required dataset selections and finishes their executable source plans.

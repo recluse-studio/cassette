@@ -16,7 +16,7 @@ from errors import CassetteError
 from fixture_server import source_fixture_server
 import sources as sources_module
 from sources import SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
-from store import CapacityCoordinator, grant_transfer_extent, resume_artifact_hasher
+from store import CapacityCoordinator, artifact_hash_state, grant_transfer_extent, resumable_artifact_hasher, resume_artifact_hasher
 
 CHUNK = 4 * 1024 * 1024
 HEADER_BYTES = 2 * 64 * 1024
@@ -188,6 +188,21 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
 
 def test_q51_random_interruption_corruption_validator_resume_without_final_reread(tmp_path, monkeypatch):
     """Q51/Q60: resume verifies stored chunks; initial completion needs no redundant final reread."""
+
+    git_payload = b'{"text":"qualified dataset bytes"}\n'
+    git_prefix = f'blob {len(git_payload)}\0'.encode()
+    git_digest = 'git-sha1:' + hashlib.sha1(git_prefix + git_payload).hexdigest()
+    tail_hash = resumable_artifact_hasher(git_digest, 'dataset-tail', object_size=len(git_payload))
+    empty_state = artifact_hash_state(tail_hash, git_digest, 0, 'dataset-tail')
+    tail_hash = resume_artifact_hasher(empty_state, git_digest, 0, 'dataset-tail', object_size=len(git_payload))
+    assert tail_hash.hexdigest() == hashlib.sha1(git_prefix).hexdigest()
+    completed_hash = tail_hash.copy()
+    completed_hash.update(git_payload)
+    assert completed_hash.hexdigest() == git_digest[9:]
+    completed_state = artifact_hash_state(completed_hash, git_digest, len(git_payload), 'dataset-tail')
+    assert len(completed_state) < 256 and git_payload.decode().strip() not in completed_state
+    assert resume_artifact_hasher(completed_state, git_digest, len(git_payload), 'dataset-tail',
+                                 object_size=len(git_payload)).hexdigest() == git_digest[9:]
 
     rng = random.Random(51)
     first_payload = _payload(b"cassette-s10-first-shard/", 2 * CHUNK + 317)
