@@ -8424,3 +8424,26 @@ process has stopped. The proposed helper repair and raw failures are back with t
 A separate read-only observation also confirms that requesting F_NOCACHE after a file is already
 cached does not evict those bytes on this host. A fresh-file comparison is under way; no cold-storage
 acceptance follows from a successful flag request.
+
+
+The measurement method now passes its separate, bounded review. The reviewer-designed probes checked
+three-chunk transfers, exact claim sizes, short reads and writes, parser reads and cleanup faults.
+They also exposed a setup-reporting gap: failures before execution left no final record or a stale
+PREPARING label. Successor04 now records those failures as incomplete. Its five focused challenges
+pass. The original failures remain intact. The final claim scan has static support; full-scale
+retained memory and the complete physical profiles remain unproved.
+
+Claude's refreshed account page reached 100 percent session use. The approved handoff sent only the
+remaining review to Opus 5.5 through Copilot's existing Arup account. The served-model receipt confirms
+claude-opus-5.5, and the final reviewer used read-only tools. No account or billing setting changed.
+The review passes capture fidelity and truthful records, not sustained storage qualification.
+
+With every dependent probe stopped, I installed wheel 14 offline. Its thirty-eight runtime files match
+the committed, reviewed and tested source at 43488a3. The prior installation pointer remains retained.
+A preparatory evidence check first used the wrong followup-manifest filename; that instrument failure
+is recorded. The corrected frozen-source/evidence check and isolated installation verification pass.
+
+The Ollama planning record also now includes all predicted sidecars, the exact license and runtime
+config: 490 artifacts, 61,078,535,699 bytes and 14,996 chunks. Those are metadata-derived sizes. Actual tensor
+blob hashes, the final manifest and real provider acquisition remain open. The next code repair must
+replace isolated warm atoms with the real source executor's operation sequence and retained files.

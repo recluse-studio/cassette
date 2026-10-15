@@ -64,25 +64,25 @@ Next integrate exact binding and source-executor profiling with applicable cache
 sustained and interval telemetry. The complete physical profiles, Ollama plan, graph seals and
 SOURCE_ENTRY_PASS remain NOT_RUN. Receipt: docs/l05/2026-10-15-source-profile-witness.json.
 
-The source-profile raw-capture method is now frozen separately at full-acquisition-profile-01/source,
-207 repository files, HEAD ff1bdfaa2f451aa60bd195ee65f925ffdaf67fe3. Its served claude-opus-5-5 review
-run-01 stopped cleanly, session 67bf88a4-89d1-4f39-90c6-bf75d4e5e182, no errors or denials.
-Review remains INCOMPLETE: its original challenge stopped (tool76002); exact original results and
-private successor03 are back with the same stopped reviewer (run-02, tool55100). The original A5
-cleanup-fault challenge required SIGKILL after420seconds plus15seconds graceful-stop wait. It
-retained a leaked-owned-descriptor observation and two non-daemonthreads. The worker is now stopped.
-The reviewer found grant-phase I/O/timing omissions, unpinned geometry and lost claim history in the
-private helper. The original helper and raw captures remain frozen. A private successor records
-grant/directory I/O, pins the geometry digest, streams native samples and exact claims, and attempts
-each cleanup independently. Its small author capture completes, with no qualification PASS.
-The original reviewer analyzer also matches capture-source-profile.py as a capture directory, so its
-per-case result extraction is incomplete; retain raw outputs and obtain the reviewer correction.
-No product defect or behavioral verdict follows from that instrument fault.
-Two author captures are CAPTURED_NOT_QUALIFIED: BFCL's fourteen synthetic model/metadata-shaped files
-and F4's three synthetic headers. Author comparison matches 224 dataset I/O rows and thirty header
-rows exactly; omitting a fullsync is detected. Sample gaps reach 1.375 seconds despite a requested
-0.5-second period, so do not claim gap-free/exhaustive thermal events. No physical-profile PASS or
-actual source payload follows from these captures. Original scripts and captures remain retained.
+The raw-capture method successor-04 now passes separate Opus Q1/Q2 review at PLATFORM level within
+its bounded scope. Original candidate failures and successor-03's preparation-reporting failure remain
+retained. Eleven unchanged reviewer-designed cases establish source I/O, checkpoint widths, exact
+claims, short-return handling, parser F_NOCACHE requests and contained failure cleanup. Five focused
+successor-04 cases establish truthful setup refusals, a small exact transfer and retained interrupted
+claims. All 207 source files, 38 installed runtime files and 20 selection records matched before/after;
+root rechecked frozen source and evidence after final review. Full-scale memory retention remains
+unproved. Native observations are sampled states with retained gaps up to 2.796 seconds; no exhaustive
+thermal-event, cold-read or per-read physical attribution is claimed. Final scan-past-ACTIVE reasoning
+is static only. The original cleanup timeout and forced termination after 435 seconds and original analyzer fault remain visible.
+All capture/review workers and owned servers stopped; no required provider payload was read.
+
+Native Claude review session 67bf88a4-89d1-4f39-90c6-bf75d4e5e182 stopped cleanly after round 3. Refreshed
+native account Usage then showed 100 percent session use. The skill-authorized handoff completed the
+remaining adjudication through Copilot as Drew-Wiberg_ArupEMU, actual served claude-opus-5.5, session
+a48c8835-da51-40e5-b6b0-5c1066255ca7, clean exit 0 and read-only tools. No native rate-limit event was
+invented. Keep per-worker routing and return to preferred Claude when included allowance is available.
+Portable receipt: docs/l05/2026-10-15-source-capture-review.json. Private: full-acquisition-profile-01.
+This accepted raw-capture method is support for the production profile repair, not physical acceptance.
 
 A fresh installed-version check now reports Ollama 0.40.4. Official tag commit
 45e6011815c74acde6a346512856b69dd79dd22b separates metadata-only planning from weight writes and
@@ -98,10 +98,11 @@ e35c36ff-04c1-4e63-bcbb-c6efa985c4da. The 29-case probe runs eight variants: 24 
 cases pass, one P4 aggregate-branch observer FAIL is retained and resolved by correct title output
 and the existing M2/M3/M4 controls, four cases remain observational. All six fault controls and the
 original-base reproduction are sensitive; three GGUF cases match base. A first outside-cwd Glob
-denial is preserved; final run has no denials. No permissions changed. Wheel14matches all38current,
-reviewed and producer-tested runtime files but is NOT_INSTALLED while the ongoing source-profile
-challenge relies on unchanged wheel13. Portable: docs/l05/2026-10-15-ollama-native-layers.json.
-The bounded code repair is accepted at fixture level; installation remains pending.
+denial is preserved; final run has no denials. No permissions changed. Wheel 14 is installed offline. Isolated verification matches all 38 installed
+runtime files to current, reviewed, producer-tested and wheel files at commit
+43488a3235f65c9c159706b87d1db518af3b4122. The old wheel 13 pointer is preserved. Every dependent
+probe/reviewer stopped before installation. Portable: docs/l05/2026-10-15-ollama-native-layers.json.
+The bounded code repair and installation pass at fixture/platform level.
 Private source/provenance and repair evidence: ollama-plan-01. This is provider wire compatibility,
 not proof of the generated Ollama manifest/layout, semantic identity, or real reimport.
 
@@ -110,8 +111,10 @@ Metadata-only Ollama planning now accounts for all 18,867 declared Qwen3-30B-A3B
 48 expert groups; output SHA-256 identities and the final manifest are not materialized. A fresh
 10,934-byte reread of the already-selected three small config files verifies their exact source
 digests and establishes Qwen3MoeForCausalLM. No model header, tensor payload or LFS tokenizer was read.
-The predicted layout is supporting evidence; its derivation, complete metadata/config binding and
-actual provider route still require review and eventual generated-source verification.
+The metadata-derived plan now predicts 490 acquired artifacts, 61,078,535,699 bytes and 14,996 chunks,
+including five JSON sidecars, exact LICENSE and a 279-byte generated config. Its digest is recorded in
+the portable source-capture receipt. Synthetic fixed-width digest placeholders do not establish actual
+blob or manifest identity. The derivation and provider route still require review and actual RUN proof.
 
 Next repair the proved full-acquisition and retained-header physical-profile gaps before qualifying
 or acquiring large inputs. Current isolated warm atoms omit the exact alternating checkpoint sequence,

@@ -1,0 +1,104 @@
+{
+  "stage": "L05",
+  "recorded_at": "2026-10-15T21:13:34.087322+00:00",
+  "status": "BOUNDED_METHOD_REVIEW_AND_INSTALLATION_PASS",
+  "scope": "Synthetic exact-source-executor raw capture; installed native Ollama wire compatibility. No full physical profile or required model download.",
+  "capture_method": {
+    "candidate_sha256": "2944980645bfd1ff45b90fb8d252e73d4062ff8c9ef860445758e40f4412620d",
+    "geometry_sha256": "bbb03d425b10bac5ad0851e55304f0149e26aced56709e4be8554a1a0a96500d",
+    "frozen_source_commit": "ff1bdfaa2f451aa60bd195ee65f925ffdaf67fe3",
+    "frozen_source_files_verified": 207,
+    "selection_records_verified": 20,
+    "original_candidate": "FAIL retained: missing grant I/O/timing, geometry binding, claim evidence and cleanup hang",
+    "successor03": "FAIL retained: setup refusals leave absent or PREPARING results",
+    "successor04": "Q1/Q2 PASS at PLATFORM level; review complete within declared scope",
+    "native_claude_session": "67bf88a4-89d1-4f39-90c6-bf75d4e5e182",
+    "final_served_model": "claude-opus-5.5",
+    "final_provider": "GitHub Copilot CLI via existing Drew-Wiberg_ArupEMU GCM identity",
+    "final_provider_session": "a48c8835-da51-40e5-b6b0-5c1066255ca7",
+    "handoff_evidence": "Refreshed native Claude account UI at2026-10-15T21:07:47.076Z showed100percent session use,42percent weekly,zero usage-credit balance,auto-reload off. No fabricated native rate-limit event. Preferred Claude renewal will be rechecked at the next segment.",
+    "reviewer_designed_probe02": {
+      "cases": 11,
+      "exact_sequence_and_claim_mismatches": 0,
+      "cases_covered": [
+        "14-artifact BFCL sequence",
+        "three F4 header/parser reads",
+        "three-chunk SHA256 artifact",
+        "short pread/pwrite",
+        "EIO",
+        "post-close error",
+        "pre-close error",
+        "interrupted active claim",
+        "pin and row controls"
+      ],
+      "preparation_reporting_failures_retained": true
+    },
+    "reviewer_designed_probe03": {
+      "cases": 5,
+      "runtime_guard_fault_reached": true,
+      "setup_refusals": "3 INCOMPLETE; no operation or cartridge calls",
+      "small_success": "exact oracle, sequence, widths and5COMPLETED claims; partial selection explicitly reported",
+      "interrupted_write": "4COMPLETED+1ACTIVE claims match oracle; INCOMPLETE; exact partial trace retained",
+      "max_sample_gap_ms": [
+        2617.554,
+        2796.293
+      ],
+      "owned_descriptors_and_server_closed": true,
+      "live_nondaemon_threads": 0,
+      "source_runtime_selection_identity_checks": "207/38/20 unchanged before and after probe; frozen source/evidence rechecked after final reviewer"
+    },
+    "review_instrument_failure": "Original analyzer selected a script as a capture directory; unchanged analysis-only correction recovered raw outcomes. Original failed extraction retained.",
+    "cleanup_fault_original": "Original A5 needed SIGKILL after420seconds plus15seconds graceful wait; raw leaked-descriptor and thread observations retained. All workers now stopped.",
+    "static_only": "Final scan-past-ACTIVE branch; no demonstrated reachable later claim in these probes.",
+    "limitations": [
+      "Same Mac/account for implementer, reviewer and root executor",
+      "Private _issued list observed read-only",
+      "Full-scale retained-memory cost unproved",
+      "Sampled native state is not exhaustive event coverage",
+      "F_NOCACHE request is not verified cold or per-read physical attribution"
+    ],
+    "optional_improvements_deferred": [
+      "claim summaries in failed result.json",
+      "descriptive expected/actual row assertion",
+      "rejected geometry hash before pin check"
+    ],
+    "private_evidence_root": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01",
+    "retained_sha256": {
+      "capture-method-final-review-04.json": "39ffe259d6ca538121cb293c24913d5a519b0f48b6ef6da8bbc6f7171ba12dfe",
+      "copilot-final-review-04.md": "edf2dcef2a5a6c8565c5e73b061c195d9b442ff49fa1d3b3a64a1d089796747d",
+      "copilot-final-04-events.jsonl": "6a70606b8b28070c5b5f4d293f2df05a49dec0c51bec2509047eb30de2b7168d",
+      "reviewer-probe-02-out/review-probe-02.json": "92b5d09c7ad1ab5235642da9850dcd34f1541662b7ef3845f315ce3014f22472",
+      "reviewer-probe-03-out/review-probe-03.json": "68d23a9e4d0b6fa9b235e4db410006a09ca0545d77e6bc691210044469ca0460",
+      "uncached-observation-feasibility-01.json": "ebf125e5f82e3e3e8b7a4b473a926dba3a0053b724802081fdc16d68752278aa",
+      "uncached-observation-feasibility-02.json": "3ae03377c669aed1a270e5a2e8a7e265cb281969ce87a84836bbfbfe6fb755a6",
+      "fresh-file-mode-comparison-01.json": "a6cedd5abd2511a357e83ae454e2fe3cd088bd19258b2fdbf78b1f89f7492789"
+    }
+  },
+  "installation": {
+    "source_commit": "43488a3235f65c9c159706b87d1db518af3b4122",
+    "wheel_sha256": "26f4179f727da8fd33fb3cd3815046bd69d40ecd9a0231aa3c50c8e798629424",
+    "runtime_files_matched": 38,
+    "producer_candidate": "17;340tests/zero skips/14component controls; reviewed native repair already committed43488a3",
+    "installer": "uv0.10.10 offline/no-index/no-deps/copy; stopped exit0 before isolated verification",
+    "verification": "Python3.13.14 -I from/private/tmp; installed=current=review=producer=wheel for all38runtime files; CLI help checked",
+    "predecessor_pointer_preserved": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/installed-current-before-wheel14.json",
+    "private_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/wheel-14-verification.json",
+    "private_receipt_sha256": "48a3d2b5786e0dbd5c5f6946c095025e7fa54c1c0b6af9afe91ad9f817295e41",
+    "preparatory_instrument_failure": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01/post-review-recheck-attempt-01.json"
+  },
+  "metadata_only_ollama_plan": {
+    "status": "DERIVED_NOT_REVIEWED_NOT_MATERIALIZED",
+    "artifacts": 490,
+    "source_bytes": 61078535699,
+    "chunks": 14996,
+    "operation_plan_digest": "blake3:b13bfd3f0f9bb54834a5e35e87f027412270fb587be265b1ff7f94e0a4226e79",
+    "private_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/parametric-operation-plan-01.json",
+    "generated_blob_and_manifest_digests": "UNKNOWN; required at RUN",
+    "real_provider_route_binding": "NOT_RUN"
+  },
+  "physical_qualification": "NOT_RUN",
+  "required_provider_headers_and_payloads": "NOT_RUN",
+  "SOURCE_ENTRY_PASS": "NOT_RUN",
+  "L05": "IN_PROGRESS",
+  "L06_L10": "DEPENDENCIES_RETAINED"
+}
