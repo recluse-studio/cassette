@@ -19,7 +19,6 @@
     "handoff_evidence": "Refreshed native Claude account UI at2026-10-15T21:07:47.076Z showed100percent session use,42percent weekly,zero usage-credit balance,auto-reload off. No fabricated native rate-limit event. Preferred Claude renewal will be rechecked at the next segment.",
     "reviewer_designed_probe02": {
       "cases": 11,
-      "exact_sequence_and_claim_mismatches": 0,
       "cases_covered": [
         "14-artifact BFCL sequence",
         "three F4 header/parser reads",
@@ -31,7 +30,18 @@
         "interrupted active claim",
         "pin and row controls"
       ],
-      "preparation_reporting_failures_retained": true
+      "preparation_reporting_failures_retained": true,
+      "nominal_complete_cases_T1_T2_T3": {
+        "OS_oracle_mismatches": 0,
+        "exact_sequence_mismatches": 0,
+        "claim_mismatches": 0
+      },
+      "short_return_case_P1": {
+        "OS_oracle_mismatches": 0,
+        "split_rows_detected": 2,
+        "unsplit_sequence_comparison": "EXPECTED_MISMATCH_RETAINED; split calls remain exact against the OS oracle"
+      },
+      "failure_cases": "Partial-sequence differences are retained; exact claim/state/oracle and cleanup comparisons decide the failure checks."
     },
     "reviewer_designed_probe03": {
       "cases": 5,
@@ -84,7 +94,14 @@
     "predecessor_pointer_preserved": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/installed-current-before-wheel14.json",
     "private_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/wheel-14-verification.json",
     "private_receipt_sha256": "48a3d2b5786e0dbd5c5f6946c095025e7fa54c1c0b6af9afe91ad9f817295e41",
-    "preparatory_instrument_failure": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01/post-review-recheck-attempt-01.json"
+    "preparatory_instrument_failure": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01/post-review-recheck-attempt-01.json",
+    "changed_function_loaded_code_identity": {
+      "status": "PASS",
+      "semantic_code_fields": 13,
+      "private_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01/installed14-native-code-identity-01.json",
+      "private_receipt_sha256": "d809a181811e1237eccc9f3338d208f03943391000198f6ccfa7a84e23ce32e7",
+      "evidence": "Isolated author check: loaded native resolver equals a fresh compile of installed reviewed source; provider requests0; no cartridge I/O. This supplements rather than rewrites the independent review limits."
+    }
   },
   "metadata_only_ollama_plan": {
     "status": "DERIVED_NOT_REVIEWED_NOT_MATERIALIZED",
@@ -100,5 +117,68 @@
   "required_provider_headers_and_payloads": "NOT_RUN",
   "SOURCE_ENTRY_PASS": "NOT_RUN",
   "L05": "IN_PROGRESS",
-  "L06_L10": "DEPENDENCIES_RETAINED"
+  "L06_L10": "DEPENDENCIES_RETAINED",
+  "runtime14_capture_guard": {
+    "status": "PASS_BOUNDED_RUNTIME14_ADMISSION",
+    "review_complete": true,
+    "observed_at": "2026-10-15T21:38:50.472850+00:00",
+    "candidate_sha256": "1cc0bbef4e5d5de33b7d99e1055bfd4189dd07b30e06578e42f388f111751b9a",
+    "reviewed_runtime_manifest_sha256": "48a3d2b5786e0dbd5c5f6946c095025e7fa54c1c0b6af9afe91ad9f817295e41",
+    "geometry_sha256": "bbb03d425b10bac5ad0851e55304f0149e26aced56709e4be8554a1a0a96500d",
+    "served_model": "claude-opus-5.5",
+    "provider": "GitHub Copilot CLI existing Arup GCM route",
+    "session_id": "a48c8835-da51-40e5-b6b0-5c1066255ca7",
+    "process_stopped": true,
+    "tools": [
+      "glob",
+      "grep",
+      "view"
+    ],
+    "guard_cases": 7,
+    "all_guard_predicates_match": true,
+    "cartridge_tree_unchanged": true,
+    "source_runtime_selection_identity_counts": [
+      207,
+      38,
+      20
+    ],
+    "script_functions_changed": [],
+    "runtime_changed_file": [
+      "sources.py"
+    ],
+    "runtime_changed_function": "SourceAdapter._ollama_resolved",
+    "masked_entire_source_ast_equal": true,
+    "runtime_behavior_carryover": "STATIC deduction from complete equivalence and source reachability, not a repeated independent transfer",
+    "limitations": [
+      "Same Mac/account for implementer, executor and reviewer",
+      "Imports precede source hashing",
+      "Independent review did not hash cached pyc",
+      "Guard status clause not separately triggered from commit clause"
+    ],
+    "optional_improvements_deferred": [
+      "Give commit/status assertion a descriptive message",
+      "Record rejected admitted manifest digest before hash pin assertion"
+    ],
+    "prior_failures_preserved": true,
+    "physical_qualification": "NOT_RUN",
+    "SOURCE_ENTRY_PASS": "NOT_RUN",
+    "private_final_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01/capture-runtime14-final-review-06.json",
+    "private_receipt_sha256": "cb5775afa142a0e03e99404f43e6f336b660e65374dbdee1db427051758751ac"
+  },
+  "file_local_cache_invalidation_feasibility": {
+    "status": "NEGATIVE_OBSERVATION_NOT_QUALIFIED",
+    "private_receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01/uncached-observation-feasibility-03.json",
+    "private_receipt_sha256": "82bff7b9d73387438ebdac4b2ed614cdb42753f607ad179b8d04a565b1eda5bf",
+    "native_read_deltas": [
+      4194304,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "requests": "Read-only4MiB mmap MAP_PRIVATE|MAP_NOCACHE then msync MS_SYNC|MS_INVALIDATE; three successful invalidation requests",
+    "existing_file_metadata_unchanged": true,
+    "meaning": "Requests did not establish uncached observation. No cold, physical-media or full-plan proof."
+  }
 }

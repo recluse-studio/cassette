@@ -8447,3 +8447,21 @@ The Ollama planning record also now includes all predicted sidecars, the exact l
 config: 490 artifacts, 61,078,535,699 bytes and 14,996 chunks. Those are metadata-derived sizes. Actual tensor
 blob hashes, the final manifest and real provider acquisition remain open. The next code repair must
 replace isolated warm atoms with the real source executor's operation sequence and retained files.
+
+
+The capture helper's installation check is now bound to wheel 14. Its independent seven-case probe
+accepts the reviewed installation, then deliberately stops before cartridge work. Six altered-record
+or altered-read cases refuse at their intended checks. The cartridge tree stays unchanged. Whole-file
+comparisons establish that the recorder's executable functions remain the same and that the runtime's
+only change is the already-reviewed Ollama resolver. Opus passes this bounded change. Prior capture
+failures remain retained; no new transfer or physical acceptance follows from those seven checks.
+
+I also compared the loaded native resolver with a fresh compile of the installed reviewed source.
+All thirteen semantic code fields match. The check sends no provider request and reads no cartridge.
+The full installation is therefore joined to its tested source, and its changed function is loaded.
+
+The file-local cache experiment supplies a negative result. The public mapping and invalidation calls
+succeed, but their three subsequent reads still report zero process-counted disk bytes. The first
+ordinary read reports 4 MiB and its warm repeat reports zero. None of those requests establishes a
+cold read. The original files and results remain intact. The next repair is the production profile's
+persistent scratch-file lifecycle and source-executor integration. That work remains open.

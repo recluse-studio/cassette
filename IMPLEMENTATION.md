@@ -84,6 +84,29 @@ invented. Keep per-worker routing and return to preferred Claude when included a
 Portable receipt: docs/l05/2026-10-15-source-capture-review.json. Private: full-acquisition-profile-01.
 This accepted raw-capture method is support for the production profile repair, not physical acceptance.
 
+The installed-runtime guard now has a private successor-05, SHA-256
+1cc0bbef4e5d5de33b7d99e1055bfd4189dd07b30e06578e42f388f111751b9a. It admits only reviewed wheel 14
+and pins a copied installation manifest before checking every actual runtime file. All capture functions
+are unchanged; 37 runtime files match wheel 13, and the entire sources.py AST except the reviewed native
+Ollama resolver is equal. One small author-only synthetic capture stops successfully, with explicit
+partial coverage. Separate served claude-opus-5.5 G1 review now PASSES. Its unchanged seven-case
+probe verifies positive guard reach and six altered-evidence refusals before any cartridge call, with
+no cartridge-tree change. All 207/38/20 identities match before/after. Whole-script and runtime AST
+comparisons establish unchanged behavior by deduction; that carryover is STATIC, not another
+independent transfer. Review and probe have stopped. Final receipt: capture-runtime14-final-review-06.json.
+An additional isolated author check compares the loaded changed native resolver with a fresh compile
+of the installed reviewed source: thirteen semantic code fields match. No provider request or
+cartridge I/O is involved. Preserve the reviewer's general import/bytecode limitations. Do not reuse
+successor-04 against the new installation or count this work as physical qualification.
+
+The file-local cache-invalidation feasibility attempt also stopped. Public read-only mmap plus msync
+invalidation succeeds, yet its three subsequent 4 MiB reads each report zero process-counted disk bytes.
+The warm control also reports zero after the first ordinary read reports 4 MiB. Preserve this negative
+observation at full-acquisition-profile-01/uncached-observation-feasibility-03.json. No cold-read claim
+follows. Do not repeat the three completed cache feasibility attempts. The concrete production
+integration map is next-source-profile-integration-01.md in that private evidence root; next repair
+the profile's named extent lifecycle and exact source-executor route, not optional capture polish.
+
 A fresh installed-version check now reports Ollama 0.40.4. Official tag commit
 45e6011815c74acde6a346512856b69dd79dd22b separates metadata-only planning from weight writes and
 supports named SafeTensors tensor/JSON layers. The existing Cassette reader rejects that real wire
