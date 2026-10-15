@@ -7847,3 +7847,89 @@ to the previous total and adds no kernel, process, runtime, direct dependency or
 The portable source receipt includes the complete builder proof. This finishes the existing-login
 repair and live source-selection checks. Required model and dataset payload acquisitions, the
 specified Ollama reimport and Drew's supplied independent review remain open in L05.
+
+---
+
+**Codex, builder in build; exact model variant is not exposed in this session**
+
+#### Entry 89 — 2026-10-15, removing the routine handoffs
+
+Drew changed the operating contract. The remaining build must proceed without routine human gates.
+Only an indispensable physical action or a legally required acceptance or consent should bring him
+back to the keyboard. He also assigned independent review to Opus through the existing subscription
+route. The builder must launch that review, use its findings and continue the queue.
+
+The old contract had already allowed much ordinary work without another prompt, but its live policy
+began at L06 and still required Drew to supply review. L05 therefore retained a human handoff at the
+very stage that needed downloads. I extended the policy across L05-L10, assigned review invocation
+to Codex and bound routine cards to the current instruction. The frozen release inputs remain the
+inputs; the completed tiny-model test remains a separate result. Exact cards, protected content,
+physical evidence, source digests, acceptance thresholds and independent review still govern closure.
+
+The Claude CLI reports an existing first-party subscription login. Its native account settings show
+Max 5x, 97 percent of the session allowance used and 28 percent of the weekly allowance used.
+The prepaid credit balance is zero with auto-reload off. I changed no account or security setting.
+The internal Codex browser surface was unavailable, so I read the account's native Claude settings
+and restored the window. A provider limit can delay the reviewer; it cannot become an instruction
+for Drew to arrange one. No review or live acquisition passes merely because the contract changed.
+
+The subscription reviewer began on concrete model `claude-opus-5-5`, then the provider rejected
+its five-hour window. The launcher stopped its process. I preserved the incomplete stream and used
+the skill's configured handoff to Copilot, still on Opus 5.5, with scoped tool permissions. The shared
+routing command required a terminal result that the stopped launcher had not received; its existing
+observation function accepted the native rejected-window event after I verified process termination.
+No result was invented. The return time and both provider receipts remain recorded.
+
+The next CLI check exposed a second human gate in code. A new operation asked for another physical
+reconnect even after a successful acquisition on the same cartridge. The extended disposable-drive
+fixture failed at that pause. I added reuse of the completed operation's exact durability evidence.
+Cassette matches volume, cartridge and folder, rereads the saved pointer and probe, and records the
+prior operation. Corrupting the old probe now fails before a model-byte request. The four coupled
+CLI/drive checks passed. A fresh source still needs its own measured profile; reuse does not claim
+a new physical observation. The required F4 revision also passed source selection through the
+installed CLI. Complete builder proof and independent review still follow.
+
+---
+
+**Codex, builder in build; Opus 5.5 supplied the separate reviews**
+
+#### Entry 90 — 2026-10-15, a green suite meets an independent question
+
+The first complete candidate passed all 340 tests and fourteen removal controls. Opus then found
+stale active instructions that still asked Drew to arrange review, a family that asked for a
+host-wide permission change, and a continuation rule that did not explicitly resume an incomplete
+review. I corrected those clauses and regenerated their projections. The revised contract review
+found no remaining defect; its last condition was the exact deferred-fixture digest in the runbook.
+That comparison passed. The reviewer designed the probe and judged the contract; I executed the
+unchanged probe after the review CLI denied its exact command, and recorded that role separately.
+
+The code review mattered just as much. A reused Go has no physical hold, so its pause guard could
+index an empty hold list after an operator pause. The ordinary suite had not exercised that path.
+The new control reproduced the uncaught IndexError. Another control left a REQUESTED hold across
+a restart and exposed a terminal refusal after valid proof reuse. I corrected both paths, preserving
+the exact acknowledgement and release events. The original first-use hold still needs its genuine
+proof; the saved proof is reread before reuse. The focused controls now pass. Earlier passing
+candidates remain evidence of what they checked, not proof of the corrected successor.
+
+The reviewer's first execution instrument failed before reaching durability: its source fixture
+returned two catalogue entries to a request for one. I retained that failed instrument, made its
+external fixture honor the requested page bound and ran the reviewer-designed attacks. Missing,
+changed and mismatched proof refused before payload; removing those guards exposed the false pass.
+The pause attack reached the actual defect. The same probes are running against the corrected source.
+
+I also prepared the source records for four primary/F4 models, six native reference candidates and
+ten dataset subsets. Their selected bytes and revisions are frozen; physical qualification and
+payload verification remain separate work. A continuation check now returns to this same task every
+thirty minutes, reads the worklog and reconciles live receipts before moving. Drew need not arrange
+the next review or repeatedly tell the builder to continue. Large payloads have not yet transferred.
+
+The corrected complete candidate passed 340 tests in 360.88 seconds with zero skips, fourteen
+component controls and the ordinary ledger. Opus's final code review accepted the repairs and
+identified one remaining instrument gap: its failed-prior case selected a new cartridge UUID in
+an occupied folder, so it stopped before the state guard. I reran the exact two cases with the
+existing UUID. The ordinary branch reached preparation and held; removing the state guard released
+it using the FAILED prior. That satisfied the reviewer's stated closure condition. The joined
+record retains thirty-six passing observations, eight detected false passes and one nongating
+observation, with unchanged source hashes. The repair adds thirty product lines and no kernel,
+process, runtime, dependency or shipped binary. The work continues under the amended contract;
+Build 05's required large payloads and full live review remain open.

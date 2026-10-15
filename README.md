@@ -21,7 +21,7 @@ move onto internal storage, and no hosted model answers behind the curtain.
 > On 2026-09-02, the storage contract changed before any live model write. L01.25 must now
 > implement and prove adaptive next-transition capacity control and remove storage-media, class,
 > connector, and nominal-capacity admission gates using fixtures only; L01.5 then qualifies
-> operation-bound physical-drive paths with the principal present. The prior
+> operation-bound physical-drive paths; human action is reserved for necessary physical or legal steps. The prior
 > S28 proof does not prove that amendment. No PHASE MACHINE step downloaded a live model, contacted
 > a live model service, touched a physical external drive, or established F4/F5 quality, scale, or
 > service performance. Cassette is not yet a user-ready release, and every live row remains
@@ -306,7 +306,7 @@ release:
    $J$ and removal proof, and the generated PHASE LIVE runbook.
 10. **L01.25–L05 — next live campaign:** implement and prove adaptive capacity and liberal
     APFS-drive admission with fixtures, qualify each exact drive-operation-plan profile with the
-    principal present, acquire real pinned
+    required physical intervention when needed, acquire real pinned
     models, execute the 3–8B and 20–120B gates, run frontier training, protocol, failure, offline,
     and privacy rows, and produce one reproducible Q80 completion digest.
 

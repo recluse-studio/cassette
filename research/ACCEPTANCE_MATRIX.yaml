@@ -226,7 +226,7 @@ storage_eligibility_control:
 physical_storage_qualification:
   contract: Q39-Q44
   live_proof_phase: L01.5
-  principal_presence: required
+  principal_presence: only_for_indispensable_physical_or_legal_action
   status: NOT_RUN
   required_assertions:
     - coarse_top_level_protected_content_inventory_created_off_drive_before_first_write
@@ -315,7 +315,7 @@ acquisition_entry_contract:
     Bind each new behavior to the assertions below, demonstrate its missing or failing path,
     implement the smallest complete change and pass its focused fixture/integration checks before
     live execution. Then test the actual supported-launch CLI on the real source and drive. Retain
-    the established principal-supplied independent review, selected remediation, build-story and
+    autonomous independent Opus review under IMPLEMENTATION.md, selected remediation, build-story and
     authorized commit sequence. This amendment supplies requirements, not implementation evidence;
     no existing result is relabeled to satisfy it and no extra review cycle is introduced.
   source_connection: >-
@@ -720,9 +720,11 @@ failure_rows:
       - insufficient_capacity_during_candidate_write
       - source_revision_change_during_transfer
     rule: >-
-      a general campaign card never authorizes a physical fault, filler write, remount, or source
-      mutation; an agent-executed action still requires an approved exact disk, path, byte or state
-      bound, and stop conditions
+      every injection retains an exact disk, path, byte or state bound and stop conditions; under
+      the 2026-10-15 instruction the agent binds contained nonphysical probes on agent-owned objects
+      to the recorded campaign authority without a new human approval. Physical interventions and
+      legally required consent remain human actions. Ordinary cards never authorize protected-content
+      changes, formatting, partitioning, new spending or host-wide security changes.
   requalification_after_recovery:
     required_for:
       - cartridge_disconnect

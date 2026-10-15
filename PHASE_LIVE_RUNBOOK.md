@@ -1,5 +1,24 @@
 # PHASE LIVE runbook
 
+## Autonomous execution amendment — 15 October 2026
+
+Drew authorizes autonomous continuation through L05-L10. IMPLEMENTATION.md's autonomous execution
+and live participation policy governs current work and supersedes earlier participation rules below.
+Routine cards, source access, qualified downloads, contained repairs, measurements, review, evidence,
+build story, commits and normal pushes need no new human handoff. The agent uses existing accounts
+and authorization, binds exact cards, preserves protected content and executes every required check.
+Human action is limited to indispensable physical intervention and legally required acceptance or
+consent. New spending, security changes and protected-content changes remain outside this scope.
+
+Codex autonomously invokes a separate Opus reviewer through use-opus and the repository review skill
+on each frozen completed candidate, integrates findings and schedules affected proof again. Review
+remains mandatory evidence for closure; Drew need not arrange or relay it. Historical reviews,
+physical reports, failed attempts and sealed cards remain unchanged. A physical report is not an
+observed cold cycle. This amendment supplies authority, not a passing live result.
+
+The earlier dated sections retain their historical observations. Current execution follows this
+amendment, the current matrix and IMPLEMENTATION.md; their unchanged assertions still govern.
+
 S28 handed Cassette from deterministic machine proof to one live campaign with the principal
 present. On 2026-09-02, before any live model write, the principal amended the storage eligibility
 and capacity contracts. S28 remains historical machine evidence. L01.25 implements and proves the
@@ -38,8 +57,8 @@ acquisition. It retains canonical checkpoints, cancellation, resume and final di
 
 Keep the established test cadence: demonstrate each missing behavior against its acceptance check,
 implement it, pass focused fixture/integration checks, then execute the actual CLI on the live path.
-The principal supplies the independent review; selected remediations, build story and authorized
-commit follow as before. This amendment passes no implementation or live assertion. The existing
+Codex invokes independent Opus review automatically; selected remediations, build story and authorized
+commit follow under the current execution policy. This amendment passes no implementation or live assertion. The existing
 failed folder-creation capture remains failure evidence and is not retried as the product entrypoint.
 
 Authorization, catalogue queries and bounded non-payload metadata may precede physical source-entry
@@ -85,8 +104,8 @@ physical drive.
 
 | Record | Immutable identity |
 |---|---|
-| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:f198dd8c92a067178e3f3c8f52590c4945d55820f74e822d89573a88349dae0e` |
-| Deferred-live projection, `s26-deferred-live-v4` | `blake3:6301c9ce23177665696aa5dc80cd0f52e2884bfe239bc9df32656c33d69b1f50` |
+| Acceptance matrix `cassette-first-complete-release`, schema version 5 | `blake3:63a45472b787beddef056bf5a77ae9aeb80bee899e685f03a803cba9e32ee712` |
+| Deferred-live projection, `s26-deferred-live-v4` | `blake3:d8055f7e49b99e765ca355a11d991d1bc0b47fd3fc671016a8e33d79cafb2643` |
 | Prior S26 machine fixture; not proof of the acquisition-entry amendment | `blake3:ef484712e4f2bca5c416632e765ddffd23de2f619c6fbd18f71def4c4559fa83` |
 | Historical S27 complete J report | `sha256:15b81c535a4aada190ae31a1ed4ae2d273b827118901f220167a8c1fb4edf184` |
 | Current complete J report after L04 remediation | `sha256:37fe5e7a7ff26735843d38ff99ebb95d352415aa2f539089563f2d951b91a660` |
@@ -158,12 +177,12 @@ evidence digests.
 These controls govern live human approval and user-owned hardware. They add no product acceptance
 row, but an action taken without them cannot supply usable live evidence.
 
-For execution stages L06-L10, `IMPLEMENTATION.md`'s **Live participation policy** governs when
+For execution stages L05-L10, `IMPLEMENTATION.md`'s **Live participation policy** governs when
 the principal must act. An exact card is an evidence record, not automatically a permission request.
 Read-only identity, health, capacity and coarse-inventory checks, documents, plans and evidence
 preparation need no fresh approval. Ordinary operations within the authorized campaign scope proceed
-without the principal present. Initial L05 campaign-root authorization and physical setup remain
-required; later work reuses that scope rather than requesting approval for each write.
+without the principal present. The current instruction covers ordinary L05 campaign-root work; request human physical setup only
+when an indispensable hardware action remains. Later work reuses that scope for each contained write.
 
 Before a bounded live storage action, append one run card to an off-drive campaign control record.
 After the campaign directory exists, mirror each card into its append-only campaign manifest. The
@@ -186,8 +205,8 @@ principal may approve that card directly, or the agent records that an existing 
 covers its disk, root, permission, command class, byte-claim rule and stop conditions. The agent
 prepares and binds contained cards automatically; a new digest or operation ID does not require a
 new approval. Record inherited authority without claiming the principal separately approved the
-card. An explicit `principal_action: none` retains this lineage. Ask only for an uncovered scope or
-required physical intervention under the live participation policy.
+card. An explicit `principal_action: none` retains this lineage. Ask only for indispensable physical intervention or legally required consent under the current
+execution policy. A missing permitted route blocks its exact action while eligible work continues.
 
 Before the first write to a data-bearing drive, create an inventory outside that drive for every
 pre-existing top-level entry. Record only its name, object type, and aggregate logical byte count,
@@ -202,10 +221,11 @@ traces, and leaves the affected work `BLOCKED` unless a declared acceptance asse
 in which case the owning row is `FAIL`. This benchmark detects broad size changes; it is not
 content-integrity proof and cannot prove that physical wear or controller risk was absent.
 
-General campaign approval covers only the recorded campaign root and ordinary operations. It does
-not authorize formatting, erasure, repartitioning, filesystem repair, firmware changes, endurance
-stress, or a physical fault injection. Each such action needs exact authorization naming the physical
-disk and action. Reuse an unchanged authorized nonphysical action scope without another confirmation;
+General campaign approval covers only the recorded campaign root and ordinary operations. The
+2026-10-15 instruction also covers required Q48 bounded above/below-duty experiments on exact cards,
+with Q74 admission and health/endurance stop limits. It does not authorize formatting, erasure,
+repartitioning, filesystem repair, firmware changes or an uncued physical fault. A required physical
+fault retains its exact disk, action and timed cue. Reuse an unchanged authorized nonphysical scope;
 physical interventions still require their timed cues. A data-bearing drive may serve ordinary
 L01.5-L05 rows from a clean Cassette campaign root; it need not be blank. Destructive and physical-fault rows use separately approved
 hardware and never inherit authority from an ordinary campaign card.
@@ -475,17 +495,17 @@ with above/below-duty-cycle evidence on each applicable Apple class and the unch
 admission. Unknown mandatory cache evidence blocks the volume claim. An evidenced absence of SLC cache may
 produce a zero SLC estimate; the complete duration, duty-cycle and service proof still applies.
 TRAINING-THERMAL-ALL-PASS is required before FINAL-PROVENANCE and its producers belong in Q80 replay.
-Ordinary qualified training and passive thermal capture need no fresh approval. Before a distinct
-above-duty or endurance-stress experiment, bind its exact separate authorization; request approval
-only when that experiment's scope is not already covered.
+Ordinary qualified training and passive thermal capture need no fresh approval. Before a required
+bounded above/below-duty experiment, bind its exact card to the 2026-10-15 instruction; preserve
+Q74 admission, the frozen duty plan, automatic stop conditions and the exact measured resource profile.
 
 Every inference, training, protocol and sustained operation keeps external networking disabled
 from activation through terminal evidence capture. Overlapping operations hold separate leases;
 restore networking only after the last lease closes under its exact cue. Training START capture
 never restores access while the job remains active. A missing interval requires a new attempt.
-The agent controls restrictions confined to its own test processes. Host-wide network changes
-require prior authorization when they affect the principal's session; an authorized disable/restore
-sequence runs without a separate confirmation for each cue.
+The agent controls restrictions confined to its own test processes. Use an already authorized
+host-wide sequence only when needed. Otherwise preserve the principal's session, record the exact
+unavailable isolation route as BLOCKED and continue eligible work.
 
 ### Live failure rows
 

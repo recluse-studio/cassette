@@ -1668,13 +1668,16 @@ class CanonicalBroker:
             return operation
         if operation['state'] == 'PAUSED':
             pause_error = self.events(operation_id)[-1]['payload'].get('error', {})
-            released = any('drive_remounted' in event['payload'] for event in self.events(operation_id))
+            released = any('drive_remounted' in event['payload'] or 'drive_revalidated' in event['payload']
+                           for event in self.events(operation_id))
             holds = [event['payload'] for event in self.events(operation_id) if 'hold' in event['payload']]
-            if pause_error.get('retryability') != 'retryable' and not (released and holds[-1].get('hold') == 'RELEASED'):
+            if pause_error.get('retryability') != 'retryable' and not (
+                    released and (not holds or holds[-1].get('hold') == 'RELEASED')):
                 return operation
             self.resume(operation_id)
         try:
-            remounts = [event['payload']['drive_remounted'] for event in self.events(operation_id) if 'drive_remounted' in event['payload']]
+            remounts = [event['payload'][field] for event in self.events(operation_id)
+                       for field in ('drive_remounted', 'drive_revalidated') if field in event['payload']]
             selected = remounts[-1]['selection'] if remounts else destination['selection']
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
             selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
@@ -1718,16 +1721,54 @@ class CanonicalBroker:
                     'protected_inventory': observed_inventory,
                     'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}})
             if not remounts:
-                self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
-                self._append(self._load(operation_id), 'output_delta',
-                             {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
-                return self._operation(self._paused(self._load(operation_id)))
+                prior = await self._revalidate_durability(cartridge, binding)
+                holds = [event['payload'] for event in self.events(operation_id) if 'hold' in event['payload']]
+                if prior is None:
+                    if not holds:
+                        self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
+                    elif holds[-1] not in ({'hold': 'REQUESTED', 'boundary': 'CARTRIDGE-DURABILITY'},
+                                           {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}):
+                        _reject('ROOT_INVALID', operation_id, 'durability preparation conflicts with its saved hold')
+                    if not holds or holds[-1]['hold'] == 'REQUESTED':
+                        self._append(self._load(operation_id), 'output_delta',
+                                     {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+                    return self._operation(self._paused(self._load(operation_id)))
+                if holds and holds[-1] == {'hold': 'REQUESTED', 'boundary': 'CARTRIDGE-DURABILITY'}:
+                    self._append(self._load(operation_id), 'output_delta',
+                                 {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+                    holds[-1] = {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}
+                if holds and holds[-1] == {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}:
+                    self.release_hold(operation_id, 'CARTRIDGE-DURABILITY')
+                self._append(self._load(operation_id), 'output_delta', {'drive_revalidated': {
+                    'proof_operation_id': prior, 'selection': _json_copy(asdict(selection), operation_id, 'writer selection')}})
             await self._qualify_download(operation_id, owner, selection, revision)
             return await self.run_acquisition(request, AcquisitionContext(adapter, owner, None, cartridge))
         except CassetteError as error:
             if error.retryability == 'retryable':
                 return self._operation(self._paused(self._load(operation_id), error))
             return self._operation(self._failed(self._load(operation_id), error))
+
+    async def _revalidate_durability(self, cartridge, binding):
+        """Q44/Q49: reread a completed operation's exact durable proof on the same cartridge."""
+        for path in sorted(self.operation_log.glob('op-*.json')):
+            record = self._load(path.stem)
+            if record['kind'] != 'acquire' or record['state'] != 'SUCCEEDED':
+                continue
+            if not any('drive_remounted' in event['payload'] for event in record['events']):
+                continue
+            prepared = next((event['payload']['drive_prepared'] for event in record['events']
+                             if 'drive_prepared' in event['payload']), None)
+            if prepared is None or any(prepared['binding'][field] != binding[field]
+                                       for field in ('volume_uuid', 'cartridge_uuid', 'folder')):
+                continue
+            head = await asyncio.to_thread(campaign_head, cartridge, prepared['campaign_key'])
+            if head is None or head['digest'] != prepared['campaign_digest'] or head['value'] != prepared['binding']:
+                _reject('ROOT_INVALID', path.stem, 'prior cartridge durability pointer no longer verifies')
+            probe = head['value']['probe']
+            await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                   probe['digest'], probe['bytes'])
+            return path.stem
+        return None
 
     async def _qualify_download(self, operation_id, owner, selection, revision):
         """Q42/Q43/Q53: bind measured data and checkpoint extents to the current source/path."""

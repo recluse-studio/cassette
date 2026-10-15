@@ -211,6 +211,14 @@ and malformed, duplicate, prospective, unknown-target, or already-answered repai
 
 ## Worklog and current direction
 
+- Drew's 2026-10-15 instruction authorizes autonomous completion of the remaining queue. Apply
+  IMPLEMENTATION.md's autonomous execution and live participation policy to L05-L10. Codex invokes
+  use-opus and run-independent-build-review without asking Drew to supply a reviewer. Keep the
+  implementer and reviewer separate and retain every acceptance and evidence requirement.
+- Human handoffs are limited to indispensable physical actions and legally required acceptance or
+  consent. Existing authorization covers routine execution, contained repairs, review, evidence,
+  build story, commits and normal pushes. Preserve protected content, security and spending limits.
+
 - Keep a compact written worklog of the user's goal and material changes in direction. Use the active task record or the repository's existing worklog when one exists.
 - Re-read the worklog before choosing each next action. Follow the user's latest explicit direction over the assistant's earlier steer.
 - Before starting new work, check that it follows the letter and intent of the user's asks. Ask before changing direction or adding work beyond those asks.

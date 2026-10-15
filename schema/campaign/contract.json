@@ -115,7 +115,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "Supply a hosted-reference credential only for the exact hosted coordinate and only as an opaque terminal or keychain reference; every other coordinate requires none.",
+      "principal_action": "none when existing authorized access suffices; reuse opaque credential references. An unavoidable new human credential or legal consent step blocks only its exact hosted coordinate.",
       "records_per_coordinate": [
         "FREEZE"
       ],
@@ -146,7 +146,7 @@
       "matrix_phase": "L01.5",
       "owner_stage": "inherit_consumer_stage",
       "path_change_rule": "Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new request and blocks resumed I/O until its VERIFY record passes.",
-      "principal_action": "Attach or move hardware only when needed; resolve identity only if the agent cannot match it unambiguously. From L06 onward, ordinary START and VERIFY use existing campaign authority; bind each exact profile card without requesting fresh approval for measurement.",
+      "principal_action": "none for ordinary START and VERIFY from L05 onward; bind each exact profile card to current authority. Ask only for an indispensable hardware action or legally required consent.",
       "records_per_request": [
         "START",
         "VERIFY"
@@ -191,7 +191,7 @@
       "materialized_by": "SOURCE-QUALIFICATION-REQUESTS",
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "Accept source terms or supply credentials only when the service requires a new human action. From L06 onward, bind HEADER writes to existing campaign authority without another prompt.",
+      "principal_action": "none for qualified HEADER writes from L05 onward. Reuse source access; human action is limited to an indispensable physical or legally required service step.",
       "records_per_instance": [
         "RUN"
       ],
@@ -221,7 +221,7 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "From L06 onward, START binds the exact write card to existing campaign authority. A different drive requires target authorization if absent and its own qualification PASS. VERIFY requires none.",
+      "principal_action": "none for START and VERIFY from L05 onward; bind the exact write card to current authority. A changed path still requires its own qualification and an unambiguous authorized target.",
       "records_per_instance": [
         "START",
         "VERIFY"
@@ -254,7 +254,7 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "From L06 onward, START binds its exact bounded write card to existing campaign authority; no new confirmation is required. VERIFY requires none.",
+      "principal_action": "none for START and VERIFY from L05 onward; bind the exact bounded write card to current authority.",
       "records_per_instance": [
         "START",
         "VERIFY"
@@ -366,7 +366,7 @@
       ],
       "matrix_phase": "L02",
       "owner_stage": "L09",
-      "principal_action": "none for in-scope local qualification and export/reimport; bind both exact cards to existing authority. Ask only for an uncovered external account, disclosure, spend or action scope.",
+      "principal_action": "none for in-scope local qualification and export/reimport; bind both exact cards to current authority. Use existing permitted external access; an unavailable permitted route blocks only its coordinate.",
       "qualify_start_work": "Under existing campaign authority, begin the exact export and re-import profile measurement.",
       "qualify_verify_work": "Verify the terminal Q41-Q44 and Q74 profile.",
       "records_per_instance": [
@@ -681,7 +681,7 @@
       "matrix_phase": "L04",
       "operation_subjects": "matrix.failure_rows.phase_live_operation_bindings",
       "owner_stage": "L09",
-      "principal_action": "ARM and ordinary REQUALIFY_START use existing campaign authority with exact cards. INJECT retains the matrix-required exact injection approval; RECOVER retains exact recovery scope. Ask for physical interventions at their cues or for uncovered fault/recovery scope. An already authorized nonphysical injection needs no second confirmation. Ordinary campaign approval never authorizes an injection.",
+      "principal_action": "none for ARM, ordinary requalification and exact bounded nonphysical injections on agent-owned objects. Bind each matrix-required fault/recovery card automatically. Physical intervention and legally required consent retain their exact cues; preserve protected content and restoration.",
       "recover_work": "Bind the exact recovery card and request the physical intervention only when required; restore or refuse the named identity and seal the resulting boundary.",
       "requalification_field_rule": "requalification_required is true exactly for an injection listed in matrix.failure_rows.requalification_after_recovery.required_for and false exactly for one listed in not_applicable_for; no runtime observation may change the materialized value",
       "requalification_records": [
@@ -716,7 +716,7 @@
       ],
       "matrix_phase": "L04",
       "owner_stage": "L09",
-      "principal_action": "none for restrictions confined to agent-owned test processes. Obtain authorization for an uncovered host-wide change, then execute the recorded network-off and network-restore sequence without another prompt; restore only after terminal evidence and the last overlapping lease closes.",
+      "principal_action": "none for restrictions confined to agent-owned test processes. Preserve host-wide security and user sessions; use an already authorized host-wide sequence only when required. Restore networking only after terminal evidence and the last overlapping lease closes. If no permitted isolation route exists, block only its exact coordinate and continue eligible work.",
       "records_per_row": [
         "START",
         "VERIFY"
@@ -810,7 +810,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L05",
-      "principal_action": "none for workload documents and frozen-input verification; remote input acquisition binds its exact source card to existing authority and asks only for uncovered scope.",
+      "principal_action": "none for workload documents, frozen-input verification and required remote input acquisition; bind the exact qualified source card to current authority.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "FREEZE"
@@ -853,7 +853,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L06",
-      "principal_action": "none within the recorded reference host, source and campaign scope; prepare exact qualification/write cards and execute automatically. Disable networking during local reference execution under the live participation policy; ask only for a missing human action or uncovered scope.",
+      "principal_action": "none within the recorded reference host, source and campaign scope; prepare exact qualification/write cards and execute automatically. Disable networking during local reference execution under the current execution policy; ask only for indispensable physical or legally required action.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "PLAN",
@@ -944,7 +944,7 @@
       "materialized_by": "BASELINE-DESCRIPTORS",
       "matrix_phase": "L02",
       "owner_stage": "L06",
-      "principal_action": "Supply an unavailable opaque credential or authorize uncovered account, compute, disclosure or spending scope. Reuse existing authority for all contained reference requests and writes.",
+      "principal_action": "none for contained reference requests using existing authorized account and compute access. Preserve current spending and disclosure boundaries; if no permitted route exists, record the exact coordinate as BLOCKED and continue eligible work.",
       "provenance": "REFERENCE_ONLY",
       "records_per_coordinate": [
         "PLAN",
@@ -1032,7 +1032,7 @@
       "materialized_by": "the_training_coordinate_materializer_before_any_coordinate_member_executes",
       "matrix_phase": "L04",
       "owner_stage": "inherit_training_stage",
-      "principal_action": "Ordinary qualified training and its passive thermal capture use existing authority. Obtain exact approval for each uncovered above-duty/endurance-stress experiment before execution; reuse an unchanged approved experiment scope without another confirmation. Retain every exact card and network restriction through terminal VERIFY and all overlapping leases; ordinary approval excludes stress.",
+      "principal_action": "none for qualified training and passive thermal capture. Prepare exact required bounded stress cards under current authority and retain Q74 admission and hardware stop limits; no card permits exceeding an admitted duty/endurance envelope. Retain network restriction through terminal VERIFY and all overlapping leases.",
       "records_per_coordinate": [
         "PLAN",
         "QUALIFY_START",
@@ -1119,7 +1119,7 @@
       "matrix_phase": "L05",
       "membership_rule": "Start with every required original matrix and supplemental terminal owner plus FINAL-PROVENANCE. Traverse all predecessor nodes regardless of evidence level. Keep LIVE product/physical nodes, including checkpoint and independent verification producers, and their aggregates. Freeze only explicitly declared REFERENCE_ONLY nodes and machine/selection proofs as immutable inputs. No unlabelled LIVE producer may be omitted. Exclude the replay family itself. Expected replay count equals this exact retained vertex set.",
       "owner_stage": "L10",
-      "principal_action": "Apply the live participation policy to the original action. Reuse ordinary authority for fresh agent-owned roots under the authorized campaign root, with exact cards and fresh identities. Physical cues and uncovered exceptional action scopes still require the principal.",
+      "principal_action": "none for fresh agent-owned roots and contained replay under current authority; bind exact cards and fresh identities. Ask only for indispensable physical or legally required action.",
       "records_per_member": [
         "REPLAY"
       ],
@@ -1145,7 +1145,7 @@
         "bus_reset",
         "port_migration"
       ],
-      "rule": "a general campaign card never authorizes a physical fault, filler write, remount, or source mutation; an agent-executed action still requires an approved exact disk, path, byte or state bound, and stop conditions"
+      "rule": "every injection retains an exact disk, path, byte or state bound and stop conditions; under the 2026-10-15 instruction the agent binds contained nonphysical probes on agent-owned objects to the recorded campaign authority without a new human approval. Physical interventions and legally required consent remain human actions. Ordinary cards never authorize protected-content changes, formatting, partitioning, new spending or host-wide security changes."
     },
     "expand_over_operations": [
       "acquisition",

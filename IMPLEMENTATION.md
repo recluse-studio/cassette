@@ -5,6 +5,77 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
+## Current direction — 2026-10-15
+
+Drew authorizes autonomous execution of the remaining L05-L10 work, including the frozen release
+model and dataset acquisitions, required experiments, repairs, verification, build story, commits
+and normal pushes. The completed single-tiny-model test remains the sole exploratory payload test;
+it does not restrict the required release inputs now authorized. Preserve those exact input choices.
+Remove routine human gates. Request human action only for an indispensable physical intervention
+or a legally required acceptance/consent that the agent cannot supply. Reuse existing accounts,
+credentials, target identities and valid authorization. Do not change security settings, incur new
+spending, disclose unrelated private data, delete protected content or widen the requested remit.
+If an authorized route cannot proceed, record the exact technical blocker and continue eligible work.
+
+Codex owns implementation and queue decisions. It autonomously launches a separate Opus reviewer
+through use-opus and the repository's run-independent-build-review skill on a frozen candidate.
+Review remains an evidence gate; Drew does not have to arrange, supply or relay the review. Resolve
+findings through the existing repair/rerun rules and continue without a new instruction. Append
+BUILD_STORY.md after a material contract change, proved repair, completed review or live milestone,
+and before an unattended handoff. Retain earlier evidence and historical directions as history.
+Current acceptance: revised contract has no routine human handoff; independent review executes on
+the requested model route; remaining live work has an actual operation receipt or a named blocker.
+The current implementation stage remains L05 IN_PROGRESS; no release assertion passes by amendment.
+
+Execution checkpoint: the installed CLI selected the required F4 Qwen3-4B revision successfully;
+its payload remains NOT_RUN. The schema, deferred-live projection and actual machine-outcome producer
+were refreshed against the amended matrix; the machine replay passed with live_evidence NOT_RUN.
+The Opus subscription reviewer served claude-opus-5-5, then its five-hour window rejected work.
+Its process is stopped and its incomplete receipt is retained. The configured handoff continues
+through scoped Copilot permissions with served claude-opus-5.5; no billing or security setting changed.
+
+The Q44/Q49/acquisition-entry fixture reproduced a redundant reconnect hold on a second operation
+on the same cartridge after a verified successful acquisition. The broker now reuses only a prior
+SUCCEEDED acquisition with recorded remount evidence and matching volume, cartridge and folder,
+after rereading its exact immutable pointer and probe. It records drive_revalidated with the prior
+operation ID, never a new physical reconnect. Each new source still receives its exact qualification.
+The four coupled CLI/drive checks pass, including corrupted prior probe refusal before any payload
+request. Full candidate proof and separate review of this repair remain pending at this checkpoint.
+The first two complete candidates passed 340 tests and fourteen removal controls, but the separate
+Opus review then exposed an untested retry defect: an operator-paused reused Go had no hold entry,
+and the pause guard indexed an empty list. The added real-broker control reproduced IndexError.
+A second control reproduced a REQUESTED hold surviving restart but preventing success after reuse.
+The repaired guard and exact acknowledge/release sequence now pass; the original no-prior-proof
+hold also resumes through its persisted REQUESTED state. Final coupled proof passed with the added
+controls. Candidate 03 owns the complete successor; earlier green suites remain pre-review evidence.
+
+The contract review's D1-D4 clauses and continuation gap were corrected. Its corrected report finds
+no remaining contract defect and makes PASS conditional only on the deferred-fixture/runbook digest
+equality. That exact frozen-source equality passed in contract-review-final-identity.json. Opus
+questions and judgment are independent; Codex executed the unchanged static probe after scoped CLI
+execution was denied, with explicit executor provenance. No independent executor staffing is claimed.
+
+Source qualification preparation now covers all four required primary/F4 models, six frozen native
+reference candidates and ten selected dataset subsets, plus the dependent pinned Ollama reimport.
+The portable preparation record marks physical profiles, headers and payloads NOT_RUN. The continuing
+thread heartbeat continue-cassette-build is ACTIVE every 30 minutes and reconciles existing operations
+before resuming; it must not duplicate an active job.
+Final bounded review reconciliation: the corrected contract's last identity condition passed; the
+repair review's only missing branch was an S3 fixture with a new UUID in an occupied cartridge.
+Its exact two-case rerun used the existing cartridge UUID, reached drive_prepared in both arms,
+held for the FAILED prior and released only under the removed-state-guard mutant. Both conditional
+review closure rules are now satisfied. The final review record contains 36 PASS results, eight
+detected guard-removal false passes and one explicitly nongating observation, with zero source-hash
+differences. Candidate 03 passed all 340 tests in 360.88 seconds, zero skips, all fourteen component
+controls and its ordinary ledger. All 195 non-report source files match. J is
+(0, 0, 15618, 1, 1, 9, 0, 0, 8425096): thirty added product lines repair Q5/Q6/Q44/Q49; no kernel,
+process, runtime, dependency or binary was added. The canonical report was copied unchanged.
+Portable joined evidence: docs/l05/2026-10-15-autonomous-execution.json. L05's complete live input
+acquisition and review remain open; these are bounded contract and repair verdicts.
+ Before a live protected-inventory interval,
+finish or freeze agent-owned evidence writes outside the cartridge on LaCie. Retain ordinary non-model
+operation logs off the selected drive; unrelated user jobs remain untouched.
+
 ## One-model acquisition resume — 2026-10-10
 
 Current direction, 2026-10-11: The principal clarified that Cassette must handle downloads through
@@ -437,20 +508,20 @@ its own independent PASS.
 - No polishing loops: formatting, renaming, and restructuring of DONE code are defects unless a
   named invariant demands them.
 
-**Check-in policy.** Ask only for a remit-level decision the ledger does not answer, a missing
-credential or account action, unapproved spending, a physical intervention, or an action outside
-existing authorization. Two steps BLOCKED on the same root cause warrant a report; request a
-decision only when the principal can resolve that cause. Routine inspection, documents, evidence
-records and reversible work within the requested scope proceed without confirmation. Physical
-hardware being involved does not itself require the principal to be present. For L06-L10, apply
-the live participation policy below to each actual action.
+**Check-in policy.** Apply the autonomous execution and live participation policy below throughout
+the remaining queue. Human action is reserved for indispensable physical interventions and legally
+required acceptance or consent. Resolve technical failures, missing evidence, queue routing,
+reviewer assignment and ordinary retries autonomously. A shared technical blocker receives a compact
+report and does not stop independent eligible work. Preserve scope, credentials, protected content,
+spending limits and security controls; the absence of a permitted route is a specific blocker,
+not permission to expand access or an automatic request for a human decision.
 
 **Phase boundary.** PHASE MACHINE contains S00 through S28 and uses only deterministic generated or
 checked-in model fixtures, loopback source fixtures, scratch cartridge images, and simulated
 recorded storage classes. It performs no live model download, touches no physical external drive,
 inspects no attached storage or local model cache, and asks the principal for no physical action.
-S28 closes this machine and emits the runbook. PHASE LIVE begins only afterward, with the principal
-present for the required initial physical setup, and owns the first live source request, selected
+S28 closes this machine and emits the runbook. PHASE LIVE begins only afterward, with human action
+only for an indispensable physical setup step, and owns the first live source request, selected
 real-model download, physical-drive use and real matrix execution. No audit, research obligation,
 or dependency correction may move those inputs earlier.
 
@@ -1929,15 +2000,17 @@ to the earlier guard repair resolve to new L01, not to new L02.
 
 Matrix phase labels L01.25, L01.5 and L02-L05 remain unchanged and are separate from execution-stage
 numbers. The six drive-stage workloads, evidence recipes, dependencies and thresholds are preserved.
-The live participation policy below amends approval frequency from L06 onward. A renamed owner
+The autonomous participation policy below governs approval frequency throughout L05-L10. A renamed owner
 does not change a matrix phase or establish a live pass.
 
 ### Execute, verify and resume
 
-Execute the named deliverable using implementation-rigor. The principal arranges the independent
-review and supplies its findings. The builder assesses those findings, implements selected
-remediations, appends the build story and commits before advancing. A builder-appointed review
-does not replace this review or authorize stage closure. Reviewers use run-independent-build-review.
+Execute the named deliverable using implementation-rigor. Codex launches a separate independent
+Opus reviewer under the autonomous policy; Drew does not arrange or relay the review. The builder
+assesses its findings, repairs supported defects, reruns affected proof, appends the build story
+and commits before advancing. Review by the implementer itself is not independent; appointment by
+Codex is authorized and does not make the separate reviewer the implementer. Reviewers use
+run-independent-build-review, and stage closure still requires their independent PASS_READY.
 Resolve the required outcome, its existing implementation and the smallest deciding proof before
 editing. Keep the component authorities, pinned primitives and generated-schema rules. Run focused
 proof and directly coupled regressions as each behavior changes. Full suite/ledger/J gates belong
@@ -1963,14 +2036,32 @@ qualify the approved operation before acquisition. No physical qualification has
 this consolidation. PHASE_LIVE_RUNBOOK.md records run cards, protected-content inventory and exact
 action scopes. The following policy determines when those records require new human input.
 
-### Live participation policy — L06 through L10
+### Autonomous execution and live participation policy — L05 through L10
 
-The principal's 2026-09-12 instruction reserves live check-ins for work that needs their physical
-presence or a decision the agent cannot make under existing authority. Execute the requested stage
-or range through its eligible work. A new operation, document, measurement, checkpoint, verification
-record or stage within that range does not create a permission gate. Required independent review
-still governs stage closure; preparation of review material needs no approval, and an existing
-review requirement must not become a review of every internal operation.
+Drew's 2026-10-15 instruction authorizes the remaining queue and replaces routine human check-ins.
+Execute eligible work through L10, in dependency order. A new operation, document, measurement,
+checkpoint, verification record, retry, session or stage does not create a human gate. Codex makes
+queue decisions from the contract, including routing after attempt limits and scheduling a new
+bounded approach when evidence supports it. Preserve finite attempt/review histories and exact
+failure records. A numerical limit triggers autonomous diagnosis and routing, not a fresh request
+to Drew or an unrecorded extension of the same attempt.
+
+**Independent review runs automatically.** Codex freezes the candidate and invokes the existing
+use-opus launcher with --family opus and the repository's run-independent-build-review skill.
+Use a fresh reviewer session and isolated source/output; record the concrete served model from
+native receipts, source/evidence identities, questions, attacks, results and state preservation.
+The reviewer may challenge an author's result but does not implement the work it reviews. Codex
+assesses findings, repairs proved defects, reruns affected proof and requests review of the corrected
+candidate. Follow the selected skill's authentication, included-usage, isolation and fallback rules;
+never change billing or security settings. A provider limit blocks only that review while other
+work continues. A reviewer report is not a builder assertion, and a missing review is never PASS.
+Stage closure still requires every acceptance clause and independent PASS at the required level.
+After INCOMPLETE, Codex resumes or re-invokes review on the same frozen candidate when the missing
+evidence or provider allowance becomes available; changed source receives a new frozen candidate.
+At an attempt limit, Codex records the diagnosis and exact new approach, then may return a BLOCKED
+stage to IN_PROGRESS through a new queue-authorized attempt. Never reset, overwrite or silently
+extend the exhausted attempt or its finite review history. If no new permitted approach exists,
+retain the specific blocker and continue independent eligible work.
 
 **Proceed without asking.** Read drive identity, mount state, health and capacity; capture or compare
 the prescribed coarse inventory; inspect source metadata; write documents, plans, cards and evidence;
@@ -1987,35 +2078,52 @@ within the established campaign scope. An earlier narrower instruction still lim
 Reuse authorization across checkpoints, ordinary retries, verification and resumed sessions while
 its scope remains valid. Record inherited authority honestly; never invent a fresh human approval.
 A new card, digest, operation ID, plan or evidence path within that scope is not a scope change.
-If existing authorization covers only the initial bootstrap write, prepare one consolidated ordinary
-operation scope for the requested range and ask once before the first uncovered action. Complete
-independent preparation first; do not turn that missing scope into permission requests for documents.
+The current instruction supplies the ordinary remaining campaign scope on the identified LaCie
+volume and Cassette-owned roots. Bind new exact cards to that instruction and the existing target
+identity. It authorizes required frozen input downloads and contained nonphysical failure probes
+on agent-owned campaign objects. It does not authorize new paid services, protected-content changes,
+formatting, partitioning, host-wide security changes or interference with user-owned processes.
 
-**Ask at the actual boundary.** Human input is required to attach, detach, reconnect or move hardware;
-resolve an ambiguous target identity; supply unavailable credentials or accept account terms; approve
-new spending or external disclosure; or authorize a destructive action or work outside the existing
-disk, root, account, service or command scope. Retain exact approval for physical faults, remounts,
-capacity-filler tests, source mutation and above-duty/endurance stress. An ordinary campaign approval
-does not cover those actions. Prepare the complete card and recovery procedure before asking, and
-explain the specific intervention or scope change. Previously authorized nonphysical fault actions
-may execute under their exact unchanged scope without another confirmation. Human physical cues
-still occur at the required live boundary.
+**Ask only at a necessary physical or legal boundary.** A required cable move, detach, reconnect,
+power action or hardware attachment needs the person who can physically perform it. New agreement
+acceptance, credential entry or mandatory consent remains with the authorized person where the
+service, platform or applicable rules require that person. Prepare the exact action and recovery
+procedure first. Reuse a completed physical report honestly and verify current identity and saved
+bytes; never manufacture a new observed cold cycle or require another reconnect for a software
+retry. First try existing authorized account/session routes without copying secrets or changing
+settings. Mere credential absence, review assignment or a new card does not justify a human gate.
+An unresolved target identity blocks only writes to that target while identification continues.
+
+Exact fault cards still govern physical faults, remounts, bounded capacity probes and source
+mutation. Codex prepares and authorizes contained nonphysical probes on agent-owned objects under
+this instruction, preserving the matrix's limits, byte claims, restoration and stop conditions.
+Physical fault injection still requires its actual cue. Required Q48 above/below-duty experiments
+use separate exact bounded cards under the current instruction, with Q74 admission, health/endurance
+limits and automatic stop conditions. Those cards authorize the specified experiment, never open-ended
+stress, exceeding an admitted hardware envelope or changing hardware protection settings.
 
 **Agent-controlled operations stay with the agent.** Required process kill/resume, cancellation and
 recovery checks on agent-owned campaign jobs proceed with exact interruption records; they do not
 authorize killing user-owned processes or replacing a required physical-fault observation. Apply and
 restore a declared network restriction automatically when it is confined to agent-owned test
-processes. A host-wide change that affects the principal's session requires prior authorization;
-once authorized, execute its recorded disable/restore sequence without separate prompts. Keep every
+processes. Use an already authorized host-wide sequence only when needed; otherwise preserve the
+principal's session, record the exact unavailable isolation route and continue eligible work. Keep every
 offline lease active through terminal verification and restore only after the last lease closes.
+
+A readonly_remount coordinate may use only an already authorized dedicated resource whose remount
+cannot interfere with protected content or user-owned processes. Bind its exact recovery and new
+qualification before execution. If no such resource exists, mark that coordinate BLOCKED and retain
+its requirement; never substitute directory permissions for a physical read-only remount or remount
+the shared LaCie volume merely to make the row green. Seek an already available eligible resource;
+request attachment only when that indispensable physical action is the actual remaining prerequisite.
 
 For L10, create fresh agent-owned replay directories under the authorized campaign root, with new
 operation and evidence identities. Preserve existing source and accepted evidence. Clean replay does
 not authorize deleting an earlier campaign or require approval for each fresh directory. Reuse
-ordinary authority and unchanged action templates; request only a new physical cue or uncovered scope.
+ordinary authority and unchanged action templates; request only an indispensable physical or legal action.
 
-Pause only the operation that needs human input and continue independent authorized work within the
-requested range. This amendment changes future participation rules; it does not execute L06-L10,
+Pause only the operation that needs human input or lacks a permitted route and continue independent
+eligible work. This amendment changes future participation rules; it does not execute L05-L10,
 change stage status, waive an assertion or review, or rewrite sealed cards and historical evidence.
 
 Preserve causal order: freeze inputs before measurement, qualify/acquire candidates before selection,
@@ -2820,7 +2928,7 @@ phase_live_queue:
       Hugging Face and Ollama; SOURCE-ENTRY-PASS, required acquisition/Ollama receipts and
       BASELINE-INPUTS-FROZEN pass with preserved inventory and exact source identities. Each CLI Go
       operation joins to its verified external download. Builder checks precede the established
-      principal-supplied independent review; no lower-level capture substitutes for this path.
+      autonomously invoked independent Opus review; no lower-level capture substitutes for this path.
     acceptance_boundary: Only this stage complete required live evidence. Later gate, runtime and clean-replay
       claims retain their named owners.
     timing_evidence: NOT_RUN
@@ -2858,7 +2966,7 @@ phase_live_queue:
       repairs: Q9/Q52 public source protocol; Q1/Q5 identity derivation before planning; Q80 staged ownership, historical dependencies, declared aggregates and literal record-kind dependencies; truthful builder review status.
       baseline_inputs: FROZEN_DESCRIPTORS
       baseline_results: NOT_RUN
-      next_action: Observe the principal's orderly physical disconnect and reconnect with the installed watch-remount command, then verify the same record and protected inventory. Source qualification, the remaining Go-to-acquisition integration and verified external downloads follow; independent review remains principal-supplied.
+      next_action: Reconcile the retained completed tiny-model and authenticated-source receipts; prepare exact source qualification and acquisition records for the frozen release inputs. Codex invokes independent Opus review and continues under the current autonomous execution policy. The earlier physical report remains historical evidence, not a new reconnect claim.
       routine_action_authority: The principal approved routine non-destructive, non-physical L05 continuation without repeated approval questions. Preserve exact action bindings and record inherited authorization honestly.
       entry_amendment_status: IN_PROGRESS; the installed CLI created and verified the nested Cassette root on LaCie, preserved the protected inventory, recovered the same hold in a fresh process and repeated Go without changing the cartridge namespace. Physical reconnect, source qualification and external downloads remain NOT_RUN.
       entry_builder_progress:
@@ -3166,7 +3274,7 @@ phase_live_queue:
     depends:
     - L04
     evidence_level: PLATFORM
-    principal_action: Choose one printed candidate row and place any required token in the terminal or keychain.
+    principal_action: none; retain the already selected immutable Qwen3-4B revision. Reuse existing credentials and request only indispensable physical or legally required action under the autonomous execution policy.
     work: Resolve candidate immutable revisions, artifact bytes, and license evidence without moving model
       payload; write the exact selection through the matrix's canonical amendment path.
     done_when: The matrix contains the exact F4 model, immutable revision, and selection-record digest; license
@@ -3265,9 +3373,8 @@ phase_live_queue:
     depends:
     - BASELINE-INPUTS-FROZEN
     evidence_level: LIVE
-    principal_action: Attach the candidate drive, confirm the printed disk identifier and APFS UUID, and approve
-      the READ_ONLY card.
-    work: After approval, capture host and path telemetry and the off-drive top-level name, type, and aggregate-byte
+    principal_action: none for an already attached, unambiguously identified drive. Prepare and bind the READ_ONLY card automatically; ask only if a required hardware attachment cannot be performed by the agent.
+    work: Bind the card to current authority, then capture host and path telemetry and the off-drive top-level name, type, and aggregate-byte
       inventory.
     done_when: Identity and inventory are sealed; the drive has no recorded byte change.
     status: IN_PROGRESS
@@ -3300,8 +3407,7 @@ phase_live_queue:
     depends:
     - DRIVE-INVENTORY
     evidence_level: LIVE
-    principal_action: Approve the exact CAMPAIGN_DIRECTORY_WRITE and PHYSICAL_FAULT cards; detach and reattach
-      only on their printed cues.
+    principal_action: none for contained creation, flush, readback and current-identity checks under existing authority. Reuse the recorded completed reconnect honestly; ask only for an indispensable physical intervention, never for a software retry.
     work: Exercise the tested CLI drive-selection/access and Go operations under acquisition_entry_contract.
       The broker calls store to create the campaign root as the first write; execute write, readback hash,
       F_FULLFSYNC, root, pointer, F_FULLFSYNC; remount on the physical cue, revalidate access by exact
@@ -3862,8 +3968,7 @@ phase_live_queue:
     work: Freeze one exact immutable reference manifest or native candidate manifest, including Q16 harness,
       eligibility, source and compute provenance, settings and honest NON_EQUIVALENT fields. Candidate membership
       and evaluation policy freeze before results; selection occurs in native_baseline_selection.
-    principal_action: Supply a hosted-reference credential only for the exact hosted coordinate and only as
-      an opaque terminal or keychain reference; every other coordinate requires none.
+    principal_action: none when existing authorized access suffices; reuse opaque credential references. An unavoidable new human credential or legal consent step blocks only its exact hosted coordinate.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record: BASELINE-INPUTS-FROZEN
@@ -3907,9 +4012,7 @@ phase_live_queue:
     verify_work: After terminal state, verify all plan sizes, alignments, patterns, cache crossing, p05, p50,
       p95, p99, maximum latency, IOPS, flushes, errors, thermal events, writes, health, endurance, Q44 ordering,
       and inventory effects that apply.
-    principal_action: Attach or move hardware only when needed; resolve identity only if the agent cannot
-      match it unambiguously. From L06 onward, ordinary START and VERIFY use existing campaign authority;
-      bind each exact profile card without requesting fresh approval for measurement.
+    principal_action: none for ordinary START and VERIFY from L05 onward; bind each exact profile card to current authority. Ask only for an indispensable hardware action or legally required consent.
     path_change_rule: Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
       request and blocks resumed I/O until its VERIFY record passes.
     group_aggregate_id_format: <request-group>-ALL-PASS
@@ -3940,8 +4043,7 @@ phase_live_queue:
     work: With the required source and campaign authority recorded, exercise live resolve, enumerate,
       metadata, license, authentication and header-range paths; land only header bytes; inventory dtypes,
       shapes, operators and semantics, and execute no remote code.
-    principal_action: Accept source terms or supply credentials only when the service requires a new human
-      action. From L06 onward, bind HEADER writes to existing campaign authority without another prompt.
+    principal_action: none for qualified HEADER writes from L05 onward. Reuse source access; human action is limited to an indispensable physical or legally required service step.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record: HEADERS-ALL-PASS
@@ -3976,8 +4078,7 @@ phase_live_queue:
       kill/resume separately.
     verify_work: After terminal state, prove immutable revision, complete intervals, final source and local
       digests, exact byte total, and no internal model file.
-    principal_action: From L06 onward, START binds the exact write card to existing campaign authority.
-      A different drive requires target authorization if absent and its own qualification PASS. VERIFY requires none.
+    principal_action: none for START and VERIFY from L05 onward; bind the exact write card to current authority. A changed path still requires its own qualification and an unambiguous authorized target.
     status_per_record: TODO
     attempts_per_record: []
     expand_over: F4_and_every_matrix_immutable_model_and_every_frozen_native_candidate
@@ -4007,8 +4108,7 @@ phase_live_queue:
       of the pinned Qwen3-30B-A3B identity with a durable receipt and first-boundary hold.
     verify_work: After terminal state, prove complete manifest and blob digests, semantic identity, source
       identity, and the shared Q5 lifecycle.
-    principal_action: From L06 onward, START binds its exact bounded write card to existing campaign authority;
-      no new confirmation is required. VERIFY requires none.
+    principal_action: none for START and VERIFY from L05 onward; bind the exact bounded write card to current authority.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4110,7 +4210,7 @@ phase_live_queue:
       Tinker re-import with a durable receipt and first-boundary hold for each long operation.
     verify_work: Prove terminal weight identity, parent, training provenance, digests, and shared lifecycle.
     principal_action: none for in-scope local qualification and export/reimport; bind both exact cards to
-      existing authority. Ask only for an uncovered external account, disclosure, spend or action scope.
+      current authority. Use existing permitted external access; an unavailable permitted route blocks only its coordinate.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4399,10 +4499,7 @@ phase_live_queue:
       Q41-Q44 profile under that authority; a changed plan or mechanism still requires its own measured profile.
     requalify_verify_work: Verify the terminal replacement profile before any resumed I/O.
     verify_work: Prove all six failure assertions and inventory effects from the coordinate's own lineage.
-    principal_action: ARM and ordinary REQUALIFY_START use existing campaign authority with exact cards.
-      INJECT retains the matrix-required exact injection approval; RECOVER retains exact recovery scope.
-      Ask for physical interventions at their cues or for uncovered fault/recovery scope. An already authorized
-      nonphysical injection needs no second confirmation. Ordinary campaign approval never authorizes an injection.
+    principal_action: none for ARM, ordinary requalification and exact bounded nonphysical injections on agent-owned objects. Bind each matrix-required fault/recovery card automatically. Physical intervention and legally required consent retain their exact cues; preserve protected content and restoration.
     status_per_record: TODO
     attempts_per_record: []
     injection_precondition: Before the separate INJECT cue, verify the same logical operation, live access
@@ -4431,9 +4528,10 @@ phase_live_queue:
     start_work: After the network-off cue, start the complete row through loopback while tracing processes,
       sockets, files, identities, credentials, and persistence.
     verify_work: Recompute every offline and privacy assertion and restore networking only on its sealed cue.
-    principal_action: none for restrictions confined to agent-owned test processes. Obtain authorization
-      for an uncovered host-wide change, then execute the recorded network-off and network-restore sequence
-      without another prompt; restore only after terminal evidence and the last overlapping lease closes.
+    principal_action: none for restrictions confined to agent-owned test processes. Preserve host-wide
+      security and user sessions; use an already authorized host-wide sequence only when required. Restore
+      networking only after terminal evidence and the last overlapping lease closes. If no permitted isolation
+      route exists, block only its exact coordinate and continue eligible work.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4517,8 +4615,7 @@ phase_live_queue:
     evidence_level: INTEGRATION
     provenance: REFERENCE_ONLY
     replay_policy: FROZEN_REFERENCE
-    principal_action: none for workload documents and frozen-input verification; remote input acquisition
-      binds its exact source card to existing authority and asks only for uncovered scope.
+    principal_action: none for workload documents, frozen-input verification and required remote input acquisition; bind the exact qualified source card to current authority.
     aggregate_record: WORKLOADS-FROZEN
     aggregate_dependencies:
     - every-WORKLOAD-<coordinate>-FREEZE
@@ -4572,7 +4669,7 @@ phase_live_queue:
     replay_policy: FROZEN_REFERENCE
     principal_action: none within the recorded reference host, source and campaign scope; prepare exact
       qualification/write cards and execute automatically. Disable networking during local reference execution
-      under the live participation policy; ask only for a missing human action or uncovered scope.
+      under the current execution policy; ask only for indispensable physical or legally required action.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN
@@ -4654,8 +4751,7 @@ phase_live_queue:
     evidence_level: LIVE
     provenance: REFERENCE_ONLY
     replay_policy: FROZEN_REFERENCE
-    principal_action: Supply an unavailable opaque credential or authorize uncovered account, compute,
-      disclosure or spending scope. Reuse existing authority for all contained reference requests and writes.
+    principal_action: none for contained reference requests using existing authorized account and compute access. Preserve current spending and disclosure boundaries; if no permitted route exists, record the exact coordinate as BLOCKED and continue eligible work.
     aggregate_record_per_model: REFERENCE-<model>-ALL-PASS
     aggregate_dependencies:
     - every-required-REFERENCE-<model>-<baseline>-<batch>-VERIFY
@@ -4734,10 +4830,9 @@ phase_live_queue:
       before TRAIN START and exact plan, both minima, duty experiment, raw coverage and continuous restriction
       match; otherwise execute the separate thermal START. The finite graph and every member remain present
       in either case, and reuse binds actual raw inputs rather than skipping the record.
-    principal_action: Ordinary qualified training and its passive thermal capture use existing authority.
-      Obtain exact approval for each uncovered above-duty/endurance-stress experiment before execution;
-      reuse an unchanged approved experiment scope without another confirmation. Retain every exact card and
-      network restriction through terminal VERIFY and all overlapping leases; ordinary approval excludes stress.
+    principal_action: none for qualified training and passive thermal capture. Prepare exact required bounded
+      stress cards under current authority and retain Q74 admission and hardware stop limits; no card permits
+      exceeding an admitted duty/endurance envelope. Retain network restriction through terminal VERIFY and all overlapping leases.
     evidence_level: LIVE
     invariants:
     - Q28
@@ -4831,9 +4926,7 @@ phase_live_queue:
     work: Re-execute one exact original record against the fresh clean-root operation and input bindings. Verification
       producers rerun their complete independent jobs. Reference identities and measured selections remain
       frozen inputs; remote reference material never answers a product runtime request.
-    principal_action: Apply the live participation policy to the original action. Reuse ordinary authority
-      for fresh agent-owned roots under the authorized campaign root, with exact cards and fresh identities.
-      Physical cues and uncovered exceptional action scopes still require the principal.
+    principal_action: none for fresh agent-owned roots and contained replay under current authority; bind exact cards and fresh identities. Ask only for indispensable physical or legally required action.
     status_per_record: TODO
     attempts_per_record: []
     aggregate_record: Q80-ALL-PASS

@@ -1,0 +1,129 @@
+{
+  "builder_proof": {
+    "candidate_source_files_matched": 195,
+    "component_controls_passed": 14,
+    "j": {
+      "labels": [
+        "failed_acceptance_rows",
+        "new_numerical_kernels",
+        "authored_executable_LOC",
+        "independent_processes",
+        "language_runtimes",
+        "direct_dependencies",
+        "model_specific_branches",
+        "duplicate_authorities",
+        "shipped_binary_bytes"
+      ],
+      "values": [
+        0,
+        0,
+        15618,
+        1,
+        1,
+        9,
+        0,
+        0,
+        8425096
+      ]
+    },
+    "records": [
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-03/result.json",
+        "sha256": "1bdb7b7dd522b783f151d9895472d9be273b4c63352dcde9f2f05f079a83a9b2"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-03/complete-j-report.json",
+        "sha256": "aba447971cce693cb04739aebfe545a144be96382311829fc97c69efe75d5c5b"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-03/source-manifest.json",
+        "sha256": "0d9c8bc00e70b242d2735ca9bfa67718e21c2c2e2c20e211ddb0b4302cbe3289"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-03/suite.log",
+        "sha256": "62a58909fdf0587986eb800322cfdc86adcd6e78d2b79f05068de6b8f28932db"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-03/ledger.json",
+        "sha256": "ee0fa7b9d1175a9b167a510b108f79cb9c1a0a4bd28ed7a4597b6c340bea5b2a"
+      }
+    ],
+    "status": "PASS",
+    "suite_seconds": 360.88,
+    "tests_passed": 340,
+    "tests_skipped": 0
+  },
+  "continuation": {
+    "automation_id": "continue-cassette-build",
+    "current_stage": "L05 IN_PROGRESS",
+    "full_L05_review": "NOT_RUN",
+    "interval_minutes": 30,
+    "prepared_source_instances": 20,
+    "required_dataset_downloads": "NOT_RUN",
+    "required_large_payload_downloads": "NOT_RUN",
+    "required_release_input_profiles": "NOT_RUN",
+    "status": "ACTIVE"
+  },
+  "contract": {
+    "conditional_check": {
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/contract-review-final-identity.json",
+      "sha256": "8372df144a31f6ba98fc7c6b6c42e5fd545406e18f81ba08fe9c99e868e512f8"
+    },
+    "conditional_closure": "Codex ran the exact final check specified by Opus; the stated condition passed, without further review scope",
+    "human_gates": "Indispensable physical intervention or legally required acceptance/consent only",
+    "independent_review_owner": "Codex launches a separate Opus reviewer and acts on supported findings",
+    "native_review_verdict": "INCOMPLETE with an explicit conditional closure rule for the named final check",
+    "preserved": "Frozen inputs, numerical and live acceptance, protected content, current security and spending limits",
+    "review_report": {
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/contract-review-source-02/_review/report.md",
+      "sha256": "c4989a1a736984587693f71d9967d7ad5d570b0b28af56e8c67a9cc5444d13fd"
+    },
+    "review_status": "PASS"
+  },
+  "date": "2026-10-15",
+  "model_route": {
+    "handoff": "Configured Copilot route served claude-opus-5.5; scoped permissions; no account, billing or security change",
+    "initial": "Claude subscription via use-opus served claude-opus-5-5 and reached confirmed five-hour quota",
+    "native_receipts": [
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/opus-contract-run-01/contract-review/summary.json",
+        "sha256": "1fcac66ae2d7a5f22e88e78e985eabd91da2a3a642f3cbead8f09a0e49d84bc6"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/copilot-contract-rereview-events.jsonl",
+        "sha256": "844ad78aaf41e5517f6b0d83d123d5c2034e64984befb0eff45fa40a63ff5a5f"
+      },
+      {
+        "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/copilot-durability-rereview-events.jsonl",
+        "sha256": "6de42ebe509bc1c9e0e80fde29b26e3b8d06bcd7b4d800eaefc6e511ac79498e"
+      }
+    ]
+  },
+  "prior_candidates": "Candidates 01/02 passed their earlier suite; independent review identified the added control gaps. They do not certify the corrected successor.",
+  "repair": {
+    "classification": "STATIC/FIXTURE/INTEGRATION only",
+    "conditional_closure": "Codex ran the exact final check specified by Opus; the stated condition passed, without further review scope",
+    "executed_review_results": {
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/durability-review-source-02/_review/probe_results.json",
+      "sha256": "e80e9dbc37fdf23e32b9d2f6b513683d7878567c7dd13b2365b9fbf08d9d418a"
+    },
+    "executor": "Codex executed Opus-designed probes and the exact final checks specified by the reviewer; independent executor staffing is not claimed",
+    "final_counts": {
+      "DETECTED": 8,
+      "OBSERVED": 1,
+      "PASS": 36
+    },
+    "native_review_verdict": "INCOMPLETE with an explicit conditional closure rule for the named final check",
+    "remaining_conditional_check": {
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/durability-review-source-02/_review/s3-check/results.json",
+      "sha256": "57cb01cd9c1819d41b36a9af09f7fd69f516f33e8a6612bf6bf92192790bce0a"
+    },
+    "review_report": {
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/durability-review-source-02/_review/report.md",
+      "sha256": "0108a0ba2097efe418e3389af56ad9d44641db4581d684a4f256c121f21c7615"
+    },
+    "status": "PASS_READY",
+    "superseded_instrument_results": "The original S3 FAIL and NOT_DETECTED were a wrong-cartridge-UUID setup refusal; preserved raw results are replaced only in this reconciliation by the discriminating two-case rerun."
+  },
+  "scope": "Autonomous contract and bounded Go durability reuse repair; not complete L05 or release acceptance"
+}

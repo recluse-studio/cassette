@@ -1,7 +1,8 @@
-# test_l05_entry.py — L05 product CLI source and drive entry proof (Q5/Q9/Q44/Q49/Q52); depends on cli.py, tests/test_l05_drive.py.
+# test_l05_entry.py — L05 product CLI source and drive entry proof (Q5/Q9/Q44/Q49/Q52); depends on broker.py, cli.py, tests/test_l05_drive.py.
 """Exercise the installed-module launch against an external HTTP boundary fixture."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import asyncio
 import hashlib
 import json
 from pathlib import Path
@@ -14,6 +15,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 import cli
+from broker import CanonicalBroker
 from test_l05_drive import _attached_apfs_image
 
 
@@ -252,6 +254,10 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             mount = next(Path(item['mount-point']) for item in plistlib.loads(remounted.stdout)['system-entities'] if 'mount-point' in item)
             parent = mount / 'drewwiberg-lacie'
             attached = True
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            control.resume(disconnected['operation_id'])
+            control.request_hold(disconnected['operation_id'], 'CARTRIDGE-DURABILITY')
+            control.close()
             ready = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                            drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                            expected_message='Go paused at the physical drive qualification boundary.')
@@ -354,6 +360,63 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             record = json.loads(record_path.read_bytes())['record']
             assert any(event['payload'].get('source_qualification', {}).get('status') == 'PASS' for event in record['events'])
             assert any(event['payload'].get('received_bytes') == len(weights) for event in record['events'])
+            fresh_drive = launch('select-drive', '--volume', volume['volume_uuid'],
+                                 '--folder', 'drewwiberg-lacie/Cassette', '--cartridge-uuid',
+                                 drive['result']['cartridge_uuid'], '--key', 'reuse-drive')
+            reused = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                            fresh_drive['operation_id'], '--key', 'go-reuse')
+            assert reused['state'] == 'SUCCEEDED'
+            reused_record = json.loads((tmp_path / 'state/operations' / (reused['operation_id'] + '.json')).read_bytes())['record']
+            reused_proof = next(event['payload']['drive_revalidated'] for event in reused_record['events']
+                                if 'drive_revalidated' in event['payload'])
+            assert reused_proof['proof_operation_id'] == ready['operation_id']
+            assert not any('physical_reconnect_reported' in event['payload'] or
+                           'drive_remounted' in event['payload'] for event in reused_record['events'])
+            held_request = {'protocol_version': '1', 'operation': 'acquire',
+                'idempotency_key': 'go-reuse-requested-hold', 'target': fresh_drive['operation_id'],
+                'arguments': {'acquisition': {'model_selection_id': selected['operation_id'],
+                                             'drive_selection_id': fresh_drive['operation_id']}}}
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            held_operation = control.issue({**held_request, 'arguments': {
+                **held_request['arguments'], 'source': selected['result']['descriptor']}})
+            control.request_hold(held_operation['operation_id'], 'CARTRIDGE-DURABILITY')
+            control.close()
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            try:
+                assert asyncio.run(control.start_download(held_request))['state'] == 'SUCCEEDED'
+                held_events = control.events(held_operation['operation_id'])
+                assert [event['payload']['hold'] for event in held_events if 'hold' in event['payload']] == [
+                    'REQUESTED', 'ACKNOWLEDGED', 'RELEASED']
+            finally:
+                control.close()
+            paused_request = {'protocol_version': '1', 'operation': 'acquire',
+                'idempotency_key': 'go-reuse-paused', 'target': fresh_drive['operation_id'],
+                'arguments': {'acquisition': {'model_selection_id': selected['operation_id'],
+                                             'drive_selection_id': fresh_drive['operation_id']}}}
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            paused_operation = control.issue({**paused_request, 'arguments': {
+                **paused_request['arguments'], 'source': selected['result']['descriptor']}})
+            control._append(control._load(paused_operation['operation_id']), 'output_delta',
+                            {'drive_revalidated': reused_proof})
+            assert control.pause(paused_operation['operation_id'])['state'] == 'PAUSED'
+            control.close()
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            try:
+                assert asyncio.run(control.start_download(paused_request))['state'] == 'SUCCEEDED'
+            finally:
+                control.close()
+            prior_preparation = next(event['payload']['drive_prepared'] for event in record['events']
+                                     if 'drive_prepared' in event['payload'])
+            prior_probe = prior_preparation['binding']['probe']
+            prior_probe_path = mount / 'drewwiberg-lacie/Cassette/captures' / prior_probe['attempt'] / prior_probe['name']
+            prior_probe_bytes = prior_probe_path.read_bytes()
+            prior_probe_path.write_bytes(b'x' * len(prior_probe_bytes))
+            payload_requests = sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests)
+            corrupt_reuse = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                                   fresh_drive['operation_id'], '--key', 'go-reuse-corrupt', expected_code=1)
+            assert corrupt_reuse['error']['code'] == 'ROOT_INVALID'
+            assert sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests) == payload_requests
+            prior_probe_path.write_bytes(prior_probe_bytes)
         finally:
             if watcher is not None and watcher.poll() is None:
                 watcher.terminate()
