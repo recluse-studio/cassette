@@ -5870,17 +5870,26 @@ def _read_envelope(path: Path, object_id: str, error_code: str) -> dict:
 
 
 def _fullsync_file(path: Path, object_id: str) -> None:
-    command = getattr(fcntl, "F_FULLFSYNC", None)
-    if command is None:
-        _transaction_reject(object_id, "macOS F_FULLFSYNC is unavailable", "DURABILITY_UNSUPPORTED")
     try:
         with path.open("rb") as handle:
-            os.fsync(handle.fileno())
-            fcntl.fcntl(handle.fileno(), command)
+            _fullsync_descriptor(handle.fileno(), object_id, path.name)
     except OSError as error:
         if error.errno == errno.ENOSPC:
             raise
         _transaction_reject(object_id, f"F_FULLFSYNC failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
+
+
+def _fullsync_descriptor(descriptor: int, object_id: str, name: str) -> None:
+    command = getattr(fcntl, "F_FULLFSYNC", None)
+    if command is None:
+        _transaction_reject(object_id, "macOS F_FULLFSYNC is unavailable", "DURABILITY_UNSUPPORTED")
+    try:
+        os.fsync(descriptor)
+        fcntl.fcntl(descriptor, command)
+    except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
+        _transaction_reject(object_id, f"F_FULLFSYNC failed for {name!r}: {error}", "DURABILITY_UNSUPPORTED")
 
 
 def _sync_directory(path: Path, object_id: str) -> None:
@@ -6118,7 +6127,7 @@ def verify_campaign_artifact(
 
 
 def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: dict) -> dict:
-    """Q42/Q44/Q53: perform one measured scratch write, readback and full-sync boundary."""
+    """Q42/Q44/Q53: measure one claimed, unlinked temporary extent; closing or process exit frees it."""
     import time
     if set(pattern) != {"write_bytes", "read_bytes", "payload_digest"}:
         _transaction_reject(operation_id, "profile pattern requires exact write/read bytes and payload digest")
@@ -6128,20 +6137,30 @@ def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: 
     payload = bytes(write_bytes)
     if digest_bytes(payload) != pattern["payload_digest"]:
         _transaction_reject(operation_id, "profile payload digest differs from its planned atom")
-    started = time.monotonic_ns()
-    path = write_campaign_artifact(owner, operation_id, "profile.bin", payload)
-    written = time.monotonic_ns()
-    with path.open("rb") as handle:
-        observed = handle.read(read_bytes)
-    read_done = time.monotonic_ns()
-    _fullsync_file(path, operation_id)
-    finished = time.monotonic_ns()
-    if observed != payload[:read_bytes]:
-        _transaction_reject(operation_id, "profile readback differs from written bytes")
-    return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
-            "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
-            "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
-            "physical_write_bytes": None, "path": str(path)}
+    def measure(claim):
+        started = time.monotonic_ns()
+        with execute_claimed_write(claim, lambda: tempfile.TemporaryFile(dir=owner.cartridge)) as handle:
+            count = execute_claimed_write(claim, lambda: handle.write(payload))
+            if count != write_bytes:
+                raise OSError(errno.ENOSPC, "profile scratch write was incomplete")
+            handle.flush()
+            handle.seek(0)
+            if digest_bytes(handle.read(write_bytes)) != pattern["payload_digest"]:
+                _transaction_reject(operation_id, "profile full-extent readback digest differs")
+            written = time.monotonic_ns()
+            handle.seek(0)
+            observed = handle.read(read_bytes)
+            read_done = time.monotonic_ns()
+            _fullsync_descriptor(handle.fileno(), operation_id, "temporary profile extent")
+            finished = time.monotonic_ns()
+            if observed != payload[:read_bytes]:
+                _transaction_reject(operation_id, "profile readback differs from written bytes")
+        return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
+                "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
+                "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
+                "physical_write_bytes": None, "path": str(owner.cartridge), "scratch_retention": "TEMPORARY_UNLINKED"}
+    return _run_claimed_writes(owner, CapacityTransition(operation_id, "profile-atom", payload_bytes=write_bytes,
+                               declared_writes=2, write_bytes=(0, write_bytes)), measure)
 
 
 def storage_profile(binding, patterns, observations, *, expected_binding):
@@ -6167,8 +6186,7 @@ def storage_profile(binding, patterns, observations, *, expected_binding):
             number(observed.get(field), field, integer=True)
         number(observed.get('duration_seconds'), 'duration seconds', positive=True)
         for field in ('read_seconds', 'write_seconds', 'flush_seconds'):
-            if field in observed:
-                number(observed[field], field, maximum=observed['duration_seconds'])
+            number(observed.get(field), field, maximum=observed['duration_seconds'])
         if (observed.get('errors') != 0 or observed.get('readback_ok') is not True
                 or observed.get('flush_ok') is not True or observed.get('duration_seconds', 0) <= 0):
             reject('profile', 'readback, flush, error or timing evidence failed')

@@ -1777,11 +1777,12 @@ class CanonicalBroker:
         sizes = [size for artifact in artifacts
                  for size in [transfer_state_bytes(artifact.size),
                               *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
-        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': digest_bytes(bytes(size))}
+        payload_digests = {size: digest_bytes(bytes(size)) for size in set(sizes)}
+        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': payload_digests[size]}
                     for size in sizes]
         binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
                    'path': observed['path'], 'operation': operation_id,
-                   'plan': {'source_lock': _source_record(revision), 'patterns': patterns,
+                   'plan': {'source_lock': _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
                             'queue_depth': 1, 'cache_state': 'WARM', 'working_set_bytes': 8388608,
                             'artifact_bytes': sum(artifact.size for artifact in artifacts),
                             'checkpoint_pattern': 'COMPLETE_EXTENT',
@@ -1789,11 +1790,26 @@ class CanonicalBroker:
                             'unavailable_telemetry': ['cable_capability', 'thermal_state', 'media_health']}}
         key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
         head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
-        state = head['value'] if head else {'binding': binding, 'patterns': patterns, 'observations': []}
-        if state['binding'] != binding or state['patterns'] != patterns:
+        plan = {'binding': binding, 'pattern_count': len(patterns)}
+        if head is None:
+            head = await asyncio.to_thread(compare_campaign_head, owner, key, None, plan)
+        if head['value'] != plan:
             _reject('ROOT_INVALID', operation_id, 'saved acquisition profile differs from its source or path')
+        observations, atom_digests = [], []
         self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
-        for pattern in patterns[len(state['observations']):]:
+        for index, pattern in enumerate(patterns):
+            atom_key = key + '-' + str(index)
+            atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
+            if atom is not None:
+                if (not isinstance(atom['value'], dict)
+                        or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
+                        or atom['value']['profile_digest'] != head['digest']
+                        or atom['value']['pattern'] != pattern
+                        or not isinstance(atom['value']['measurement'], dict)):
+                    _reject('ROOT_INVALID', operation_id, 'saved profile atom differs from its source or pattern')
+                observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
+                atom_digests.append(atom['digest'])
+                continue
             before = await asyncio.to_thread(drive_path_observation, selection)
             measurement = await asyncio.to_thread(campaign_profile_io, owner, str(uuid.uuid4()), pattern)
             after = await asyncio.to_thread(drive_path_observation, selection)
@@ -1802,13 +1818,22 @@ class CanonicalBroker:
             counters = (before['device_write_bytes'], after['device_write_bytes'])
             if None in counters or counters[1] < counters[0]:
                 _reject('CAPABILITY_MISMATCH', operation_id, 'physical write telemetry is unavailable or regressed')
-            state = {**state, 'observations': [*state['observations'], {**measurement,
-                     'binding': binding, 'pattern': pattern, 'device_write_bytes': counters[1] - counters[0],
-                     'device_counter_authority': 'IOBlockStorageDriver:Bytes (Write)'}]}
-            head = await asyncio.to_thread(compare_campaign_head, owner, key, None if head is None else head['digest'], state)
-        result = storage_profile(binding, patterns, state['observations'], expected_binding=binding)
+            measurement = {**measurement, 'device_write_bytes': counters[1] - counters[0],
+                           'device_counter_authority': 'IOBlockStorageDriver:Bytes (Write)'}
+            atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
+                                          {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
+            observations.append({**measurement, 'binding': binding, 'pattern': pattern})
+            atom_digests.append(atom['digest'])
+        result = storage_profile(binding, patterns, observations, expected_binding=binding)
+        seal = {'profile_digest': head['digest'], 'atom_count': len(atom_digests),
+                'atoms_digest': digest_bytes(canonical_bytes(atom_digests)), 'measurements': result}
+        complete = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-complete')
+        if complete is None:
+            complete = await asyncio.to_thread(compare_campaign_head, owner, key + '-complete', None, seal)
+        if complete['value'] != seal:
+            _reject('ROOT_INVALID', operation_id, 'completed profile differs from its measured atoms')
         self._append(self._load(operation_id), 'output_delta', {'source_qualification': {
-            'status': result['status'], 'profile_digest': head['digest'], 'path': str(owner.cartridge),
+            'status': result['status'], 'profile_digest': complete['digest'], 'path': str(owner.cartridge),
             'measurements': result}})
 
     async def watch_drive_remount(self, request: dict) -> dict:

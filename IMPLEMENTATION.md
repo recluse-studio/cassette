@@ -7,6 +7,42 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
+Latest checkpoint: the qualification-storage repair is ready after a complete bounded Opus review.
+The initial review and its successor remain INCOMPLETE historical reports; the final native report
+passes all four questions after the exact reviewer-designed M/K/P0-P3 controls. Codex executed those
+controls on disposable APFS images. Device counters distinguish named and unlinked writes from idle;
+SIGKILL with the temporary extent open releases its bytes, and the next claim succeeds. Before the
+completion seal exists, the original binding guard refuses foreign evidence and its removal mutant
+passes. Distinct-pattern and missing-timing cases refuse at their intended guards. Source hashes stay
+unchanged and every disposable environment is removed. This proves fixture/platform behavior only.
+The final candidate passed 340 tests in 540.89 seconds, zero skips, fourteen component controls and
+the ordinary ledger. J=(0,0,15653,1,1,9,0,0,8425096), adding 35 product lines. Wheel 05 and all 38
+installed runtime files match that source. Joined evidence: docs/l05/2026-10-15-profile-storage-repair.json.
+The campaign graph successor ae56d3f536e103a583e06a59327a24d838fe978776fde6a59cd2ec3985c675dc
+preserves 109 inherited nodes and adds SOURCE-QUALIFICATION-REQUESTS, for 110 nodes; no acceptance
+outcome changes. Required physical profiles, headers and large acquisitions remain NOT_RUN.
+Next implementation: expose qualified source/header preparation before payload, then support exact
+frozen dataset subsets through the existing broker/source/store path. Do not rerun the passed repair
+proof or launch another exploratory model. L05 remains IN_PROGRESS; L06-L10 retain their dependencies.
+
+Continuation checkpoint, 13:10 UTC heartbeat: Git was clean at a3338cc; retained review processes
+were stopped and no Cassette acquisition was active. The required large inputs remain unacquired.
+The download qualifier repeats its complete pattern plan inside each observation, then retains
+every accumulated prefix as an immutable record. Exact serialized-size lower bounds are 499.7 GB
+of control bytes for the 8.06 GB F4 input, 211.8 TB for Qwen30B and 3.51 EB for Kimi. These are
+static lower bounds, not allocated bytes. Q42's bounded profiler and Q53's feasible next-step
+requirement fail. The broker repair stores one immutable plan and one independently bound record
+per measured atom; it preserves every planned write and observation. The old broker fails the
+new existing-fixture control at the accumulated-history assertion. A first coupled run encountered
+interference between two concurrently remounted disposable APFS images before reaching the repair;
+that run is retained. Subsequent APFS checks run sequentially. Separate Opus review is running
+against a frozen source copy; native inference served claude-opus-5-5. Current usage and zero
+prepaid balance with auto-reload off were observed before launch; no account setting changed.
+Next: complete the bounded repair proof and review, then implement the verified missing preparation
+entry before payload. Current Go qualifies and immediately acquires; the live queue first requires
+SOURCE-ENTRY-PASS and each source's header. Dataset acquisition also lacks the frozen selected-file
+provider path. These software gaps require implementation, not a new human handoff.
+
 Drew authorizes autonomous execution of the remaining L05-L10 work, including the frozen release
 model and dataset acquisitions, required experiments, repairs, verification, build story, commits
 and normal pushes. The completed single-tiny-model test remains the sole exploratory payload test;

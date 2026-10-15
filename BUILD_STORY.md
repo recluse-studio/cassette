@@ -7933,3 +7933,68 @@ record retains thirty-six passing observations, eight detected false passes and 
 observation, with unchanged source hashes. The repair adds thirty product lines and no kernel,
 process, runtime, dependency or shipped binary. The work continues under the amended contract;
 Build 05's required large payloads and full live review remain open.
+
+---
+
+**Codex, builder in build; Opus 5.5 supplied the separate review questions**
+
+#### Entry 91 — 2026-10-15, the drive check was larger than the download
+
+Drew had authorized the remaining release inputs. Before starting their payloads, I followed the
+download preparation code through its saved measurements. Each observation carried the entire
+pattern plan. Every saved checkpoint then carried all earlier observations. For the required
+8.06 GB Qwen3-4B input, those repeated plans alone would occupy at least 499.7 GB. The corresponding
+lower bounds were 211.8 TB for Qwen30B and 3.51 EB for Kimi. These were exact size calculations
+from the frozen artifact lists, not bytes allocated on Drew's drive. The old broker failed the
+new control in the existing CLI fixture.
+
+I changed the broker to save the binding once and each measured atom once. It still performs
+every planned write and read. A compact final receipt identifies the complete ordered set of
+measurement records, so changing a measured record cannot retain the old completion proof. The
+focused CLI and drive checks passed. An earlier run had stopped at an unrelated mount mismatch
+because I ran two fixtures that remounted equally named disposable volumes concurrently. I kept
+that failed run and repeated those fixtures sequentially.
+
+Opus found another cost in the same path. Every scratch measurement left its zero-filled file
+on the drive. The independent probe retained 8,654,129 bytes for 8,390,619 declared source bytes,
+including one interrupted measurement. A second operation retained another complete scratch set.
+Opus also found malformed saved records that escaped Cassette's error handling. The parent-run
+probe reproduced the uncaught errors and a profile that passed without its required phase timings.
+
+I replaced the retained scratch files with Python's temporary files inside the selected cartridge.
+The store claims the exact next bytes, verifies the complete write, measures the requested read
+and performs the full flush before closing the file. The operating system releases the unlinked
+file when its handle closes. The broker checks saved-record shapes, and the profile assessor now
+requires read, write and flush timings. The corrected probe left zero retained profile bytes
+after interruption, restart and a second operation. Corrupt, foreign and malformed records refused.
+The two focused store checks also passed.
+
+Opus's own write and execution tools were denied. I preserved its raw incomplete report and ran
+its unchanged original probe in an isolated drive image. For the successor, I recorded the exact
+instrument changes needed by the new record fields and restored each damaged baseline before
+later independent cases. The original source copies remain intact. Opus supplies the questions
+and judgment; Codex supplies this execution. The corrected version is back with Opus for review,
+and the complete repository proof is running. Neither result is a live drive qualification.
+
+The campaign now has a verified successor that preserves its 109 inherited records and adds the
+source-qualification materializer. This extends the work queue; it passes no acquisition row.
+The required large payloads remain unacquired. Build 05 next needs a supported preparation path
+that completes source-entry qualification and headers before full download, plus the exact frozen
+dataset selection path. Those are software tasks under the existing authorization.
+
+Opus challenged the first instrument before giving its final judgment. Counting only files named
+`profile.bin` could not observe the new temporary files. The first pattern swap exchanged two
+identical patterns, and the interruption happened after the scratch handle had closed. I ran
+Opus's replacement instrument unchanged. Idle device counters stayed at zero; each unlinked
+4 MiB write produced 8,519,680 bytes at the disk image's counter. A child killed with the extent
+open released its 4 MiB allocation, left no temporary filename and allowed the next profile call.
+Before a completion seal existed, the original binding guard refused foreign evidence; removing
+that guard let the mutant pass. A genuinely different pattern and missing timings also refused.
+Both source comparisons remained exact, and the disposable image was removed.
+
+The complete candidate passed 340 tests in 540.89 seconds, zero skips, fourteen component controls
+and the ordinary ledger. Opus's final native report passes all four questions and declares this
+bounded review complete. The repair adds 35 product lines and no kernel, process, runtime,
+dependency or shipped binary. The wheel's 38 runtime files match the installation and tested
+source. These are fixture and platform results. Physical source profiles and the required large
+downloads still belong to the unfinished part of Build 05.

@@ -136,13 +136,15 @@ def test_q41_q43_q47_q48_q74_q79_inventory_and_measurements(tmp_path):
     binding = dict.fromkeys(['drive','host','path','operation','plan'], 'exact')
     patterns = [{'read_bytes':100,'write_bytes':100},{'read_bytes':200,'write_bytes':0}]
     observations = [{'binding':binding,'pattern':p,'duration_seconds':t,'errors':0,'readback_ok':True,
-                     'flush_ok':True,'host_write_bytes':p['write_bytes'],'device_write_bytes':p['write_bytes']}
+                     'flush_ok':True,'host_write_bytes':p['write_bytes'],'device_write_bytes':p['write_bytes'],
+                     'read_seconds':t/3,'write_seconds':t/3,'flush_seconds':t/3}
                     for p,t in zip(patterns,[1,2])]
     profile = campaign.storage_profile(binding,patterns,observations,expected_binding=binding)
     assert profile['latency_seconds']['0.5'] == 1
     assert profile['throughput_bytes_per_second']['0.05'] == 100
     for field, value in [('duration_seconds',True),('duration_seconds',float('nan')),('duration_seconds',5e-324),
                          ('device_write_bytes',-1),('device_write_bytes',.5),('host_write_bytes',True),
+                         ('read_seconds',None),('write_seconds',None),('flush_seconds',None),
                          ('errors',False),('readback_ok',1),('flush_ok',1)]:
         changed = copy.deepcopy(observations); changed[0][field] = value
         with pytest.raises(CassetteError): campaign.storage_profile(binding,patterns,changed,expected_binding=binding)
@@ -339,6 +341,9 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     profile = campaign.storage_profile(binding,patterns,second['value']['observations'],expected_binding=binding)
     assert profile['device_write_bytes'] == 8192
     assert profile['host_write_bytes'] == 768
+    assert not list(tmp_path.rglob('profile.bin'))
+    assert all(observation['scratch_retention'] == 'TEMPORARY_UNLINKED'
+               for observation in second['value']['observations'])
     assert campaign.measure_profile(owner,binding,patterns,collector,expected=second['digest']) == second
     assert campaign.expand_coordinates('X-<row>-<record>',{'row':['a','b'],'record':['START','VERIFY']}) == [
         'X-a-START','X-b-START','X-a-VERIFY','X-b-VERIFY']

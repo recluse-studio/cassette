@@ -359,6 +359,23 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]]) == payload_requests
             record = json.loads(record_path.read_bytes())['record']
             assert any(event['payload'].get('source_qualification', {}).get('status') == 'PASS' for event in record['events'])
+            # Q42/Q53: immutable measurement controls grow once per atom, not once per history prefix.
+            profile_records = [json.loads(path.read_bytes()) for path in
+                               (mount / 'drewwiberg-lacie/Cassette/campaign/objects').iterdir()]
+            assert all(len(item['value'].get('observations', [])) <= 1 for item in profile_records)
+            profiles = [item for item in profile_records if item['key'].startswith('download-profile-')]
+            plans = [item for item in profiles if 'pattern_count' in item['value']]
+            atoms = [item for item in profiles if 'measurement' in item['value']]
+            assert len(plans) == 1
+            assert len(atoms) == plans[0]['value']['pattern_count']
+            assert all(item['previous'] is None for item in profiles)
+            assert all('binding' not in item['value'] and 'patterns' not in item['value'] for item in atoms)
+            assert not list((mount / 'drewwiberg-lacie/Cassette').rglob('profile.bin'))
+            seals = [item for item in profiles if 'atoms_digest' in item['value']]
+            assert len(seals) == 1 and seals[0]['value']['atom_count'] == len(atoms)
+            qualification = next(event['payload']['source_qualification'] for event in record['events']
+                                 if event['payload'].get('source_qualification', {}).get('status') == 'PASS')
+            assert qualification['profile_digest'] != atoms[0]['value']['profile_digest']
             assert any(event['payload'].get('received_bytes') == len(weights) for event in record['events'])
             fresh_drive = launch('select-drive', '--volume', volume['volume_uuid'],
                                  '--folder', 'drewwiberg-lacie/Cassette', '--cartridge-uuid',
