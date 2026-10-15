@@ -755,7 +755,9 @@ class SourceAdapter:
         layers = _at(manifest, ("layers",), locator)
         if not isinstance(config, Mapping) or not isinstance(layers, list):
             _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama registry manifest must list config and layers", "invalid registry manifest shape")
-        entries = [("config.json", config)] + [(f"layer-{index:06d}", layer) for index, layer in enumerate(layers)]
+        tensor_media_type = "application/vnd.ollama.image.tensor"
+        has_tensor_layers = any(isinstance(layer, Mapping) and layer.get("mediaType") == tensor_media_type for layer in layers)
+        entries = [("ollama-config.json" if has_tensor_layers else "config.json", config)] + [(f"layer-{index:06d}", layer) for index, layer in enumerate(layers)]
         artifacts, metadata_assets = [], []
         license_digests = []
         seen = set()
@@ -771,6 +773,8 @@ class SourceAdapter:
             seen.add(digest)
             annotations = entry.get("annotations")
             title = annotations.get("org.opencontainers.image.title") if isinstance(annotations, Mapping) else None
+            if title is None and has_tensor_layers:
+                title = entry.get("name")
             if title is not None:
                 if (not isinstance(title, str) or not title or any(part in {"", ".", ".."} for part in title.split("/"))
                         or "\\" in title or "\x00" in title):
@@ -778,10 +782,12 @@ class SourceAdapter:
                 path = title
             elif media_type == "application/vnd.ollama.image.model":
                 path += ".gguf"
+            if media_type == tensor_media_type and not path.endswith(".safetensors"):
+                path += ".safetensors"
             if any(existing.path == path for existing in (*artifacts, *metadata_assets)):
                 _fail("SOURCE_UNAVAILABLE", locator, "Q9: Ollama blob paths must be unique", path)
             artifact = Artifact(path, size, digest, f"{registry}/v2/{quote(repo, safe='/')}/blobs/{digest}", digest)
-            (artifacts if media_type == "application/vnd.ollama.image.model" else metadata_assets).append(artifact)
+            (artifacts if media_type in {"application/vnd.ollama.image.model", tensor_media_type} else metadata_assets).append(artifact)
             if media_type == "application/vnd.ollama.image.license":
                 license_digests.append(digest)
         if len(license_digests) != 1:

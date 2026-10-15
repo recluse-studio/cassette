@@ -8375,3 +8375,52 @@ identity and checkpoint encoder derive each shape. I also verified read-only pub
 host-memory and process-I/O observations through Python. No new native code or dependency was needed.
 The current host has 24 GiB, and the observed thermal state was FAIR. These observations establish
 available measurement tools; complete operation intervals and physical qualification remain open.
+
+The new raw capture records the entire selected BFCL file sequence and the F4 header sequence
+through the installed executor. Author checks match 224 dataset I/O rows and thirty header rows,
+and detect a removed fullsync. These are captured measurements, not qualified source profiles.
+A separate Opus review is examining the frozen method. Thermal sample gaps reached 1.375 seconds;
+I have not claimed continuous observation or an absence of events between samples.
+
+The current Ollama executable is0.40.4. Its official importer plans SafeTensors blobs from metadata
+before writing weights. That exposes another concrete defect: Cassette's old reader treats only
+.image.model as model content and rejects the current .image.tensor format. The existing source
+fixture now reproduces the refusal in0.74 seconds. A six-line product repair passes in0.69 seconds,
+retaining the old GGUF path and preserving named tensor/config files. Review and full proof remain
+open. The installed copy has not changed, and no actual required model has been downloaded.
+
+The native Ollama repair also passes the shared five-operation source fixture and the CLI existing-login
+signing/pull-grant fixture: two checks in4.19 seconds. The final named-layer fixture checks metadata too.
+Complete candidate17 will supply the full accounting proof before installation.
+
+Complete candidate 17 passes all 340 tests in 493.01 seconds, with zero skips and fourteen component
+controls. The native Ollama change adds six product lines and no dependency or runtime. Its separate
+Opus review is running; installation waits for that review.
+
+The raw-capture review found real measurement gaps: extent creation happened before tracing and
+timing, the geometry file was not pinned, and exact claims were discarded. I retained that original
+method and repaired a private successor. Its small author capture retains 393 I/O rows and all
+fifty-seven completed claims, including extent creation and directory syncs. Native samples stream
+to a retained file with their actual gaps. Independent challenge results and adjudication remain open.
+The review's first analyzer also counts the helper script as a capture directory; its raw captures
+remain usable, but its missing extracted results are an instrument defect.
+
+The metadata-only Ollama recipe accounts for every declared Qwen3 tensor once. It predicts 483
+unquantized tensor blobs without reading weights. A verified reread of three small config files
+establishes the actual architecture and defaults. Those predictions do not establish generated blob
+digests, a real Ollama download or source qualification.
+
+The separate native-layer review passes both questions at fixture/platform level. Its eight variants
+cover twenty-nine cases each, and all six mutations expose the intended faults. Three legacy GGUF
+records equal the rebuilt base. One branch-observer FAIL remains visible: it combined unrelated
+manifest entries, while the annotated tensor output and existing controls prove the correct title
+precedence. The first review's outside-directory denial is also retained; final review needed no
+broader permission. Wheel 14 matches all thirty-eight reviewed and tested runtime files. It is built
+but not installed while the measurement challenge still requires the unchanged wheel 13 environment.
+
+The original capture helper's cleanup fault is now reproduced: the owned child required termination
+after its retained timeout, and its oracle recorded an open state extent and surviving threads. That
+process has stopped. The proposed helper repair and raw failures are back with the same reviewer.
+A separate read-only observation also confirms that requesting F_NOCACHE after a file is already
+cached does not evict those bytes on this host. A fresh-file comparison is under way; no cold-storage
+acceptance follows from a successful flag request.

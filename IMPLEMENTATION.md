@@ -64,6 +64,55 @@ Next integrate exact binding and source-executor profiling with applicable cache
 sustained and interval telemetry. The complete physical profiles, Ollama plan, graph seals and
 SOURCE_ENTRY_PASS remain NOT_RUN. Receipt: docs/l05/2026-10-15-source-profile-witness.json.
 
+The source-profile raw-capture method is now frozen separately at full-acquisition-profile-01/source,
+207 repository files, HEAD ff1bdfaa2f451aa60bd195ee65f925ffdaf67fe3. Its served claude-opus-5-5 review
+run-01 stopped cleanly, session 67bf88a4-89d1-4f39-90c6-bf75d4e5e182, no errors or denials.
+Review remains INCOMPLETE: its original challenge stopped (tool76002); exact original results and
+private successor03 are back with the same stopped reviewer (run-02, tool55100). The original A5
+cleanup-fault challenge required SIGKILL after420seconds plus15seconds graceful-stop wait. It
+retained a leaked-owned-descriptor observation and two non-daemonthreads. The worker is now stopped.
+The reviewer found grant-phase I/O/timing omissions, unpinned geometry and lost claim history in the
+private helper. The original helper and raw captures remain frozen. A private successor records
+grant/directory I/O, pins the geometry digest, streams native samples and exact claims, and attempts
+each cleanup independently. Its small author capture completes, with no qualification PASS.
+The original reviewer analyzer also matches capture-source-profile.py as a capture directory, so its
+per-case result extraction is incomplete; retain raw outputs and obtain the reviewer correction.
+No product defect or behavioral verdict follows from that instrument fault.
+Two author captures are CAPTURED_NOT_QUALIFIED: BFCL's fourteen synthetic model/metadata-shaped files
+and F4's three synthetic headers. Author comparison matches 224 dataset I/O rows and thirty header
+rows exactly; omitting a fullsync is detected. Sample gaps reach 1.375 seconds despite a requested
+0.5-second period, so do not claim gap-free/exhaustive thermal events. No physical-profile PASS or
+actual source payload follows from these captures. Original scripts and captures remain retained.
+
+A fresh installed-version check now reports Ollama 0.40.4. Official tag commit
+45e6011815c74acde6a346512856b69dd79dd22b separates metadata-only planning from weight writes and
+supports named SafeTensors tensor/JSON layers. The existing Cassette reader rejects that real wire
+shape as SOURCE_UNAVAILABLE (model layer absent): the extended existing Q9/Q52 fixture fails in
+0.74 seconds before any native blob GET. A six-product-line repair recognizes tensor media and safe
+native names, keeps the runtime/HF configs separate, and retains legacy GGUF mapping. The same fixture
+passes in 0.69 seconds; the final fixture also checks native metadata. Two directly coupled source/auth
+checks pass in 4.19 seconds. Complete candidate 17 passes 340 tests in 493.01 seconds, zero skips,
+fourteen component controls and ordinary ledger. J=(0,0,15928,1,1,9,0,0,8425096), six more product lines.
+Separate served claude-opus-5-5 review now passes Q1/Q2 at fixture/platform level, session
+e35c36ff-04c1-4e63-bcbb-c6efa985c4da. The 29-case probe runs eight variants: 24 expected candidate
+cases pass, one P4 aggregate-branch observer FAIL is retained and resolved by correct title output
+and the existing M2/M3/M4 controls, four cases remain observational. All six fault controls and the
+original-base reproduction are sensitive; three GGUF cases match base. A first outside-cwd Glob
+denial is preserved; final run has no denials. No permissions changed. Wheel14matches all38current,
+reviewed and producer-tested runtime files but is NOT_INSTALLED while the ongoing source-profile
+challenge relies on unchanged wheel13. Portable: docs/l05/2026-10-15-ollama-native-layers.json.
+The bounded code repair is accepted at fixture level; installation remains pending.
+Private source/provenance and repair evidence: ollama-plan-01. This is provider wire compatibility,
+not proof of the generated Ollama manifest/layout, semantic identity, or real reimport.
+
+Metadata-only Ollama planning now accounts for all 18,867 declared Qwen3-30B-A3B BF16 tensors and
+61,064,245,248 payload bytes. The pinned unquantized recipe predicts 483 tensor blobs, including
+48 expert groups; output SHA-256 identities and the final manifest are not materialized. A fresh
+10,934-byte reread of the already-selected three small config files verifies their exact source
+digests and establishes Qwen3MoeForCausalLM. No model header, tensor payload or LFS tokenizer was read.
+The predicted layout is supporting evidence; its derivation, complete metadata/config binding and
+actual provider route still require review and eventual generated-source verification.
+
 Next repair the proved full-acquisition and retained-header physical-profile gaps before qualifying
 or acquiring large inputs. Current isolated warm atoms omit the exact alternating checkpoint sequence,
 retained working files and complete header parser read. Source/header ordering, cache/working-set,

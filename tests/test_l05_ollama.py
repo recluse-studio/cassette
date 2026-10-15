@@ -126,6 +126,34 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
         assert len(requests) == before + 1 and '/manifests/' in requests[-1][0]
         provider_manifest['bytes'] = manifest
 
+        # Q9/Q52: current Ollama publishes named SafeTensors and JSON layers.
+        native_header = json.dumps({'weight': {'dtype': 'U8', 'shape': [len(model)],
+                                              'data_offsets': [0, len(model)]}}, separators=(',', ':')).encode()
+        native_payload = len(native_header).to_bytes(8, 'little') + native_header + model
+        native_digest = 'sha256:' + hashlib.sha256(native_payload).hexdigest()
+        native_config = b'{"model_format":"safetensors","model_family":"fixture"}'
+        native_config_digest = 'sha256:' + hashlib.sha256(native_config).hexdigest()
+        blobs.update({native_digest: native_payload, native_config_digest: native_config})
+        native = json.loads(manifest)
+        native['config'].update(digest=native_config_digest, size=len(native_config))
+        native['layers'][0].update(mediaType='application/vnd.ollama.image.tensor',
+                                   digest=native_digest, size=len(native_payload), name='model.weight')
+        native['layers'].append({'mediaType': 'application/vnd.ollama.image.json',
+                                 'digest': config_digest, 'size': len(config), 'name': 'config.json'})
+        provider_manifest['bytes'] = json.dumps(native, separators=(',', ':')).encode()
+        before = len(requests)
+        native_source = asyncio.run(adapter.resolve({'kind': 'ollama', 'locator': 'fixture-model:latest'}))
+        assert len(requests) == before + 1 and '/manifests/' in requests[-1][0]
+        assert [(a.path, a.digest) for a in native_source.artifacts] == [('model.weight.safetensors', native_digest)]
+        assert [a.path for a in native_source.metadata_assets] == ['config.json', 'layer-000001', 'ollama-config.json']
+        assert asyncio.run(adapter.enumerate(native_source)) == native_source.artifacts
+        native_metadata = asyncio.run(adapter.read_metadata(native_source))
+        assert native_metadata['total_bytes']['value'] == len(native_payload)
+        assert asyncio.run(adapter.open_range(native_source, native_source.artifacts[0], 0, 8,
+                                               native_digest)) == native_payload[:8]
+        assert asyncio.run(adapter.license_and_auth(native_source)).license_digest == license_digest
+        provider_manifest['bytes'] = manifest
+
         with pytest.raises(CassetteError) as opaque_private:
             asyncio.run(adapter._validate_credential("keychain:ollama/private"))
         assert opaque_private.value.code == "CAPABILITY_MISMATCH"
