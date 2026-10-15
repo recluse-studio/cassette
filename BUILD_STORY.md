@@ -8358,3 +8358,20 @@ large transfer's checkpoint sequence, retained working set or complete header pa
 
 Wheel 13 is installed through the existing offline environment. Isolated verification confirms all
 thirty-eight runtime files, import paths and supported CLI flags. The prior wheel receipt is retained.
+
+The bounded broker repair is committed and pushed as 141bf342312f7f6f884898524908f4269f81ec56.
+The fresh remote read matches the installed code's commit.
+
+For storage qualification, I tested a smaller route: reuse the actual source executor. Installed
+header and transfer functions produced 91 recorded I/O rows on LaCie, with fifteen completed atomic
+claims. The witness includes a full-size retained file, fresh and cached header reads, pause/resume,
+checkpoint-slot alternation and a headerless Git dataset. A first harness selected LICENSE instead
+of data.json and failed; its log remains. The corrected exact-path harness passes. This synthetic
+witness reads no frozen provider payload and passes no sustained or cold-storage acceptance.
+
+The twenty frozen selections now have exact metadata-derived geometry for 440 acquired artifacts,
+including their metadata files: 2,317,561,823,564 source bytes and 552,843 chunks. The source's own
+identity and checkpoint encoder derive each shape. I also verified read-only public macOS thermal,
+host-memory and process-I/O observations through Python. No new native code or dependency was needed.
+The current host has 24 GiB, and the observed thermal state was FAIR. These observations establish
+available measurement tools; complete operation intervals and physical qualification remain open.

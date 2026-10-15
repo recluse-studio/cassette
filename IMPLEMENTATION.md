@@ -38,9 +38,31 @@ rejected unexecuted internal-method S4. Complete candidate 16 passes 340 tests i
 zero skips, fourteen component controls and ordinary ledger. J=(0,0,15922,1,1,9,0,0,8425096), fourteen
 additional product lines. Candidate 15 and never-installed wheel 12 predate the final renderer.
 Wheel 13 is installed and isolated verification passes: thirty-eight installed runtime files match
-the reviewed and tested source. Finish commit/push of this milestone. Receipt:
+the reviewed and tested source. Committed and pushed as 141bf342312f7f6f884898524908f4269f81ec56;
+fresh remote parity passes. Receipt:
 docs/l05/2026-10-15-bounded-acquisition-records.json. Private: acquisition-record-01. The final reviewer
 and complete producer have stopped. No new source physical profile or required payload has run.
+
+Source-profile support now proves the existing executor can supply the required I/O sequence;
+do not author a parallel checkpoint/profile writer. Installed wheel 13 ran unchanged transfer_header
+and transfer_artifact against a deterministic loopback boundary on the authorized external APFS
+cartridge: 91 recorded I/O rows, fifteen completed next-transition claims, fresh/cached headers,
+pause/resume, completed-source revalidation and a Git dataset. No real provider payload was read.
+The first harness chose LICENSE instead of data.json and failed HTTP404; no raw trace was flushed.
+Retain that failed log/receipt. Successor-02 selects data.json by exact path and passes the bounded
+witness. Both workers and HTTP servers have stopped; descriptors are closed. Their two owned scratch
+operation directories remain for review. This is supporting evidence, not source qualification.
+Twenty canonical source selections now have exact metadata-derived checkpoint geometry: 440 transfer
+artifacts including acquired metadata, 2,317,561,823,564 source bytes and 552,843 chunks. Source-owned
+identity/envelope encoding derives byte lengths; placeholder states are not actual source hash proof.
+The earlier 551,197 callbacks bound covered the ten model inputs; this count also includes datasets.
+Read-only public NSProcessInfo and proc_pid_rusage observations work through Python ctypes, with no
+native source, dependency or security change. Host physical memory is 25,769,803,776 bytes; observed
+thermal state FAIR. This is API feasibility, not interval coverage. Public F_NOCACHE documentation
+supports a descriptor I/O-mode request, not automatic eviction or per-read device attribution.
+Next integrate exact binding and source-executor profiling with applicable cache, working-set,
+sustained and interval telemetry. The complete physical profiles, Ollama plan, graph seals and
+SOURCE_ENTRY_PASS remain NOT_RUN. Receipt: docs/l05/2026-10-15-source-profile-witness.json.
 
 Next repair the proved full-acquisition and retained-header physical-profile gaps before qualifying
 or acquiring large inputs. Current isolated warm atoms omit the exact alternating checkpoint sequence,
