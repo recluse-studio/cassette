@@ -138,7 +138,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                               'data_offsets': [0, len(tensor_bytes)]}}, separators=(',', ':')).encode()
     weights = len(header_bytes).to_bytes(8, 'little') + header_bytes + tensor_bytes
     tiny_header = json.dumps({'weight': {'dtype': 'U8', 'shape': [1], 'data_offsets': [0, 1]}}).encode()
-    dataset_files = {'inputs.jsonl': b'{"text":"selected Git dataset"}\n',
+    dataset_files = {'empty.json': b'', 'inputs.jsonl': b'{"text":"selected Git dataset"}\n',
                      'samples.parquet': b'PAR1' + b'opaque dataset transport fixture' * 700,
                      'tiny.safetensors': len(tiny_header).to_bytes(8, 'little') + tiny_header + b'x',
                      'unused.jsonl': b'not selected; do not read'}
@@ -200,6 +200,8 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             elif route.startswith('/datasets/fixture/data/resolve/'):
                 name = route.rsplit('/', 1)[-1]
                 whole = dataset_files[name]
+                if name == 'inputs.jsonl':
+                    time.sleep(.3)
                 start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
                 payload = whole[start:end+1]
                 digest = (hashlib.sha1(f'blob {len(whole)}\0'.encode() + whole).hexdigest()
@@ -236,6 +238,9 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                 str(tmp_path / 'state'), *arguments], cwd=Path(__file__).resolve().parents[1],
                 capture_output=True, text=True, timeout=30)
             assert result.returncode == expected_code, result.stderr + result.stdout
+            if arguments[0] == 'go' and 'dataset-go' in arguments:
+                progress_lines = [line for line in result.stderr.splitlines() if ': received ' in line]
+                assert len(progress_lines) == len(set(progress_lines)), result.stderr
             if expected_message is not None:
                 assert expected_message in result.stderr
             return json.loads(result.stdout)
@@ -553,12 +558,12 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                                   and item[1].startswith('/datasets/') and not item[1].endswith('/README.md')])
             data_selected = launch('select-dataset', '--connection', connection['operation_id'],
                                    '--dataset', 'fixture/data', '--revision', 'c' * 40,
-                                   '--file', 'inputs.jsonl', '--file', 'samples.parquet', '--key', 'dataset-selection')
+                                   '--file', 'empty.json', '--file', 'inputs.jsonl', '--file', 'samples.parquet', '--key', 'dataset-selection')
             assert [item['path'] for item in data_selected['result']['source_lock']['artifacts']] == [
-                'inputs.jsonl', 'samples.parquet']
+                'empty.json', 'inputs.jsonl', 'samples.parquet']
             assert data_selected['result']['source_lock']['artifacts'][0]['digest'].startswith('git-sha1:')
             assert data_selected['result']['descriptor']['artifact_selector'] == {
-                'dataset_paths': ['inputs.jsonl', 'samples.parquet']}
+                'dataset_paths': ['empty.json', 'inputs.jsonl', 'samples.parquet']}
             data_prepared = launch('qualify', '--model-selection', data_selected['operation_id'],
                                    '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go', expected_code=2)
             assert len([item for item in requests if item[0] == 'GET' and item[1].startswith('/datasets/')

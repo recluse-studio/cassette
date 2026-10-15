@@ -8289,3 +8289,72 @@ finishes without fetching that prefix again. A synthetic 60,000-chunk checkpoint
 the operation record's 4 MiB cap before any envelope or history. Its compact broker certificate stays
 below 1 KiB while source-owned binary checkpoints retain every digest. Separate review and the
 coupled checks are still required. No large source download has begun.
+
+The header milestone is committed and pushed as 372a2ecee6af8eb44c43da8b3d090e820be23702. A fresh
+remote read matches the local commit. The installed wheel receipt now records that exact publication.
+
+The broker repair is integrated for proof. Its source-owned checkpoints are unchanged; the broker
+stores a count and digest commitment instead of copying the full chunk list. Every committed source
+chunk still reaches its control boundary. Complete artifact events remain durable and ordered, while
+copied live observations show byte progress without becoming resume input. The focused fixture passes
+in 20.10 seconds, including generated Operation conformance. Eleven additional product lines serve
+the repair before a small renderer deduplication change.
+
+The first coupled run is not a pass: prepare process recovery passed, but one CLI Go exceeded its
+unchanged thirty-second subprocess limit on an external-backed APFS test image. The saved log shows
+qualification passed and the README checkpoint was displayed. It does not prove why the command
+exceeded the limit. I retained that attempt and am rerunning only the failed CLI fixture serially
+on the internal scratch setup used by complete candidate 14. No timeout or acceptance was relaxed.
+
+The unaltered CLI recovery fixture passes in 32.72 seconds on the normal internal test setup. Its
+per-command thirty-second limit stayed unchanged. The failed external-backed attempt remains a
+separate observation; this rerun does not establish external latency or explain the first timeout.
+The repaired source is ready to freeze for separate review and complete candidate accounting.
+
+The broker candidate is frozen at 204 files for a separate Opus review. Native assistant receipts
+show claude-opus-5-5; no verdict exists yet. Complete candidate 15 is running on the same runtime
+source. I also traced the next full-acquisition profile repair: its data, 33-byte record and alternating
+checkpoint-envelope writes must remain one exact sequence. The current warm single-file atoms do
+not establish retained working-set or cache-crossing behavior. Those gaps remain failed, with no
+profile or required source payload started.
+
+Complete candidate 15 passes 340 tests in 606.80 seconds and fourteen component controls. The objective
+is (0,0,15922,1,1,9,0,0,8425096), fourteen more product lines. It predates a supplementary defect and
+is not the final successor's proof. Wheel 12 matches the original thirty-eight runtime files but
+was never installed.
+
+The supplementary real CLI case exposed a repeated progress line after an empty Git file. It
+printed README48, empty0, then README48 again. The first renderer remembered only its last line;
+the old live observation survived the intervening empty-file event. The case fails in 29.67 seconds.
+The renderer now remembers the last displayed byte tuple for each artifact, using space bounded by
+artifact count. The extended existing fixture passes in 51.17 seconds. Source checkpoints and
+broker verification are unchanged.
+
+The separate Opus review remains incomplete. Its proposed renderer probe redirected an internal
+broker method, so I have not executed it. The review must use the real CLI path and finish reading
+the governing authorities before acceptance. I am returning the proved display defect, contained
+repair and failed/passed cases to the same stopped reviewer.
+
+Installed wheel 11 has freshly rechecked the existing LaCie proof. The mounted volume and logical
+cartridge match; the immutable campaign pointer and its 4096-byte integrity probe verify again.
+The completed operation record remains byte-identical. This reuses the reconnect already reported
+and records no new physical event, cartridge write or model payload read. A first readback harness
+assumed an unsupported context manager and stopped before revalidation; using contextlib.closing
+with the existing broker close method repaired the harness. Both attempts are retained. This is
+supporting live readback, with source-specific profiles and SOURCE_ENTRY_PASS still open.
+
+The separate Opus reviewer now passes both bounded broker questions. Its 49 core checks pass;
+the real CLI's 56 checks match the expected baseline and fault-control outcomes. The original
+empty-file duplicate remains a recorded low-severity display failure. The repaired renderer passes,
+as do interruption, two restarts, committed-prefix resume, legacy receipts and same-key replay.
+The reviewer rejected its own internal-method replacement and corrected its integer-limit probe;
+those attempts remain visible. Prepare recovery is author evidence with separate static tracing.
+
+Complete candidate 16 passes all 340 tests in 629.71 seconds, zero skips and fourteen component
+controls. J remains (0,0,15922,1,1,9,0,0,8425096), adding fourteen product lines for the broker repair.
+Wheel 13 matches every one of the thirty-eight reviewed and tested runtime files. The next task
+is the exact source-operation storage profile. Current isolated warm files do not prove the
+large transfer's checkpoint sequence, retained working set or complete header parser read.
+
+Wheel 13 is installed through the existing offline environment. Isolated verification confirms all
+thirty-eight runtime files, import paths and supported CLI flags. The prior wheel receipt is retained.

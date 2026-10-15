@@ -18,15 +18,22 @@ async def _download(broker, request, *, qualification_only=False, header_only=Fa
     task = asyncio.create_task(broker.start_download(request, qualification_only=qualification_only,
                                                     header_only=header_only, header_json_bytes=header_json_bytes))
     seen = 0
+    latest_progress = {}
     while True:
         await asyncio.sleep(.1)
         result = await task if task.done() else None
         events = broker.events(operation_id)
-        for event in events[seen:]:
-            payload = event['payload']
+        status = result if result is not None else broker.status(operation_id)
+        payloads = [event['payload'] for event in events[seen:]]
+        payloads.append(status.get('result', {}).get('transfer_progress', {}))
+        for payload in payloads:
             if 'source_qualification' in payload:
                 print('Drive check: ' + payload['source_qualification']['status'], file=sys.stderr, flush=True)
             if 'received_bytes' in payload:
+                progress = (payload['received_bytes'], payload['verified_bytes'])
+                if progress == latest_progress.get(payload['artifact']):
+                    continue
+                latest_progress[payload['artifact']] = progress
                 print(f"{payload['artifact']}: received {payload['received_bytes']} bytes; "
                       f"readback verified {payload['verified_bytes']} bytes; checkpoint saved.", file=sys.stderr, flush=True)
         seen = len(events)

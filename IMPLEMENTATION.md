@@ -7,7 +7,7 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
-Active work: repair full-acquisition checkpoint profiling and bounded broker transfer receipts before
+Active work: repair full-acquisition checkpoint and retained-header physical profiles before
 qualifying or acquiring the frozen large inputs. Preserve source-entry and payload gates.
 
 Completed exact-header milestone: successor-02 passes the separate served claude-opus-5-5 review
@@ -26,17 +26,30 @@ reviewers and producer jobs have stopped; do not repeat them. Real provider head
 profiles and required payloads remain NOT_RUN. The parser's unused expected_digest parameter remains
 an optional pre-existing recommendation, not a proved failure in this path.
 
-Root has prepared the bounded broker-record repair in an isolated copy at acquisition-record-01/working.
-Its extended Q5/Q6/Q51/Q53 fixture passes in 6.29 seconds: hold after one durable 4 MiB chunk, visible
-verified bytes, pause, restart and completion without refetching that prefix. Coupled CLI/prepare proof
-is running under tool session 87738; reconcile it before starting a replacement. The proposed broker
-receipt retains digest count and commitment while source checkpoints retain the full digest sequence.
-Live byte observations are never resume input. No new journal or storage writer is introduced. This
-candidate still needs integration, separate review and complete proof before installation/acceptance.
+Completed bounded acquisition-record milestone: separate served claude-opus-5-5 review passes Q1/Q2
+on successor-01, session 8217f4b4-ba4d-43c6-a452-4df10e58722c. Core baseline passes 49/49;
+actual CLI and negative controls match all 56 expected predicates. Nine sensitive controls detect
+faults; C9 establishes a redundant public terminal gate. Source-owned complete binary checkpoints
+remain unchanged. Broker receipts hold compact count/digest commitments; copied live observations
+never drive resume. The original renderer's empty-file duplicate fails and the per-artifact repair
+passes. Prepare has reviewer static tracing plus author process recovery, not reviewer execution.
+Retain coupled-01's unexplained external-backed CLI timeout, original S5 instrument fault and the
+rejected unexecuted internal-method S4. Complete candidate 16 passes 340 tests in 629.71 seconds,
+zero skips, fourteen component controls and ordinary ledger. J=(0,0,15922,1,1,9,0,0,8425096), fourteen
+additional product lines. Candidate 15 and never-installed wheel 12 predate the final renderer.
+Wheel 13 is installed and isolated verification passes: thirty-eight installed runtime files match
+the reviewed and tested source. Finish commit/push of this milestone. Receipt:
+docs/l05/2026-10-15-bounded-acquisition-records.json. Private: acquisition-record-01. The final reviewer
+and complete producer have stopped. No new source physical profile or required payload has run.
 
-Then repair two proved full-acquisition gaps before qualifying/acquiring large inputs. The coarse
-state-extent profile omits per-chunk record and alternating-header writes. The canonical operation
-record also rewrites accumulated progress under a 4 MiB cap. Static frozen-size bounds prove K3,
+Next repair the proved full-acquisition and retained-header physical-profile gaps before qualifying
+or acquiring large inputs. Current isolated warm atoms omit the exact alternating checkpoint sequence,
+retained working files and complete header parser read. Source/header ordering, cache/working-set,
+operation-bound next-byte claims and applicable telemetry need actual evidence. UNKNOWN remains UNKNOWN.
+
+The retained pre-repair traces establish both original gaps. The coarse state-extent profile omits
+per-chunk record and alternating-header writes. The original canonical operation record rewrote
+accumulated progress under a 4 MiB cap. Static frozen-size bounds prove K3,
 Qwen235 and two native inputs exceed that cap from progress alone; final digest arrays independently
 exceed it for K3 and Qwen235. The 551,197 callbacks imply at least 22.09 TB of event serialization,
 not measured physical writes or time. See full-acquisition-gap-trace.json and
@@ -54,9 +67,13 @@ acquisition. These plans are not materialized profiles or accepted graph gates.
 The prior completed durability operation op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e
 is now available in release-inputs/state through CanonicalBroker._write. Original and reference bytes
 match SHA-256 b5a77156c9b6d2b4a2c77e0e7e28e62158c5843a57247a4e838e6e90f6fde935 after current validation.
-No active/mutable record was copied. This reuses the existing operator-reported reconnect proof;
-it records no new physical event. Fresh immutable pointer/probe revalidation still precedes live work.
-Do not ask Drew to repeat the reconnect. See exact-header-01/durability-proof-reference.json.
+No active/mutable record was copied. Installed wheel 11 now freshly revalidates the mounted APFS
+volume, logical cartridge identity, immutable campaign pointer and its 4096-byte integrity probe.
+The canonical record hash remains unchanged. This supports reuse of the existing operator-reported
+reconnect; it records no new physical event or source payload read. A first harness attempt used an
+unsupported context manager and failed before revalidation; contextlib.closing repaired that harness.
+Do not ask Drew to repeat the reconnect. Receipt: docs/l05/2026-10-15-durability-proof-reuse.json.
+Fresh source-specific path/profile and inventory checks still precede their own actual operations.
 
 Latest completed milestone: Q9 list-license resolution and canonical malformed-YAML errors pass
 separate served claude-opus-5-5 review. All fifty independent cases pass after the reproduced repair;

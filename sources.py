@@ -2067,7 +2067,7 @@ def _reset_state(
     return record
 
 
-def _chunk_count(size: int) -> int:
+def transfer_chunk_count(size: int) -> int:
     return (size + _TRANSFER_CHUNK_BYTES - 1) // _TRANSFER_CHUNK_BYTES
 
 
@@ -2095,7 +2095,7 @@ def _transfer_identity(
 ) -> dict:
     if type(artifact.size) is not int or not 0 <= artifact.size <= _MAX_FILE_OFFSET:
         _transfer_fail("INVALID_REQUEST", artifact.path, "artifact size must fit a signed 64-bit file offset")
-    count = _chunk_count(artifact.size)
+    count = transfer_chunk_count(artifact.size)
     if authoritative_chunk_digests is not None:
         if (not isinstance(authoritative_chunk_digests, tuple)
                 or len(authoritative_chunk_digests) != count
@@ -2526,7 +2526,7 @@ def training_records(artifact: Artifact, extent: TransferExtent, state: PartialS
         hasher.update(_pread_exact(extent, offset, min(65536, artifact.size-offset), artifact.path))
     if hasher.hexdigest() != artifact.digest.split(":")[1]:
         _transfer_fail("IDENTITY_MISMATCH", artifact.path, "dataset bytes differ from their immutable source digest")
-    if len(state.chunk_digests) != _chunk_count(artifact.size):
+    if len(state.chunk_digests) != transfer_chunk_count(artifact.size):
         _transfer_fail("INVALID_REQUEST", artifact.path, "dataset checkpoint lacks its complete chunk digest sequence")
     buffer = bytearray()
     for index, offset in enumerate(range(0, artifact.size, _TRANSFER_CHUNK_BYTES)):

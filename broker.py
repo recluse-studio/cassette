@@ -39,7 +39,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, transfer_artifact, transfer_header, transfer_state_bytes
+from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -436,7 +436,8 @@ def _partial_record(path: str, partial: PartialState) -> dict:
         "object_size": partial.object_size,
         "validator": partial.validator,
         "completed_interval_set": [list(interval) for interval in partial.completed_interval_set],
-        "chunk_digests": list(partial.chunk_digests),
+        "chunk_digests": {"count": len(partial.chunk_digests),
+                          "digest": digest_bytes(canonical_bytes(list(partial.chunk_digests)))},
         "contiguous_source_hash_offset": partial.contiguous_source_hash_offset,
         "serialized_hash_state": partial.serialized_hash_state,
     }
@@ -470,17 +471,17 @@ def _transfer_extent_id(operation_id: str, path: str, role: str) -> str:
     })).removeprefix("blake3:")
 
 
-def _partials_from(
+def _verify_partials(
     records: object,
     revision: ResolvedSource,
     object_id: str,
     artifacts: tuple[Artifact, ...] | None = None,
-) -> tuple[PartialState, ...]:
+) -> None:
+    """Validate broker certificates; sources retains every full Q51 checkpoint and chunk digest."""
     artifacts = _compiler_artifacts(revision) if artifacts is None else artifacts
     if not isinstance(records, list) or len(records) != len(artifacts):
         _reject("ROOT_INVALID", object_id, "source verification must contain one record per artifact")
     by_path = {artifact.path: artifact for artifact in artifacts}
-    result = []
     for record in records:
         if not isinstance(record, dict) or set(record) != {
             "path", "source_revision", "object_size", "validator", "completed_interval_set",
@@ -490,6 +491,15 @@ def _partials_from(
         artifact = by_path.get(record["path"])
         intervals = record["completed_interval_set"]
         chunks = record["chunk_digests"]
+        chunks_valid = (
+            isinstance(chunks, list) and bool(chunks) == bool(artifact and artifact.size)
+            and all(isinstance(item, str) and _DIGEST.fullmatch(item) is not None for item in chunks)
+        ) or (
+            isinstance(chunks, dict) and set(chunks) == {"count", "digest"}
+            and type(chunks["count"]) is int and artifact is not None
+            and chunks["count"] == transfer_chunk_count(artifact.size)
+            and isinstance(chunks["digest"], str) and _DIGEST.fullmatch(chunks["digest"]) is not None
+        )
         if (
             artifact is None
             or record["source_revision"] != revision.immutable_revision
@@ -498,24 +508,12 @@ def _partials_from(
             or intervals != ([[0, artifact.size]] if artifact.size else [])
             or type(record["contiguous_source_hash_offset"]) is not int
             or record["contiguous_source_hash_offset"] != artifact.size
-            or not isinstance(chunks, list)
-            or bool(chunks) != bool(artifact.size)
-            or any(not isinstance(item, str) or _DIGEST.fullmatch(item) is None for item in chunks)
+            or not chunks_valid
             or not isinstance(record["serialized_hash_state"], str)
         ):
             _reject("ROOT_INVALID", object_id, f"source verification for {record.get('path')!r} is incomplete")
-        result.append(PartialState(
-            record["source_revision"],
-            record["object_size"],
-            record["validator"],
-            tuple(tuple(interval) for interval in intervals),
-            tuple(chunks),
-            record["contiguous_source_hash_offset"],
-            record["serialized_hash_state"],
-        ))
     if [record["path"] for record in records] != sorted(by_path):
         _reject("ROOT_INVALID", object_id, "source verification records are not canonically ordered")
-    return tuple(result)
 
 
 def _compiler_source(revision: ResolvedSource, descriptor: Mapping[str, object]) -> dict:
@@ -637,6 +635,8 @@ class CanonicalBroker:
         self._control_signals: dict[str, asyncio.Event] = {}
         self._event_signals: dict[str, asyncio.Event] = {}
         self._active: dict[str, bool] = {}
+        # Observations of source-owned durable prefixes, never input to resume or verification.
+        self._transfer_progress: dict[str, dict] = {}
         self._profiles: dict[str, dict] = {}
         self._profile_activators: dict[str, Callable[[ScheduledLease, dict], object]] = {}
         self._revision_profiles: dict[str, list[str]] = {}
@@ -2506,10 +2506,10 @@ class CanonicalBroker:
                 partials = []
                 for artifact in artifacts:
                     async def checkpoint_committed(partial):
-                        self._append(self._load(operation_id), 'output_delta', {
+                        self._transfer_progress[operation_id] = {
                             'artifact': artifact.path, 'received_bytes': partial.contiguous_source_hash_offset,
                             'verified_bytes': partial.contiguous_source_hash_offset,
-                            'verification': 'CHUNK_READBACK', 'checkpoint': 'DURABLE'})
+                            'verification': 'CHUNK_READBACK', 'checkpoint': 'DURABLE'}
                         await self.hold_boundary(operation_id, 'source-checkpoint')
                     owned_extents = context.transfers is None
                     if owned_extents:
@@ -2553,6 +2553,11 @@ class CanonicalBroker:
                         if owned_extents:
                             os.close(state_extent.fd)
                             os.close(data_extent.fd)
+                    progress = {'artifact': artifact.path, 'received_bytes': artifact.size,
+                                'verified_bytes': artifact.size, 'verification': 'SOURCE_DIGEST', 'checkpoint': 'DURABLE'}
+                    current = self._load(operation_id)
+                    if not any(event['payload'] == progress for event in current['events']):
+                        self._append(current, 'output_delta', progress)
                 return [
                     _partial_record(artifact.path, partial)
                     for artifact, partial in zip(artifacts, partials, strict=True)
@@ -2565,7 +2570,7 @@ class CanonicalBroker:
                 if request["operation"] == ACQUIRE_OPERATION
                 else _compiler_artifacts(revision)
             )
-            _partials_from(checkpoint["partials"], revision, operation_id, artifacts)
+            _verify_partials(checkpoint["partials"], revision, operation_id, artifacts)
             if request["operation"] == ACQUIRE_OPERATION:
                 result = {
                     "immutable_revision": revision.immutable_revision,
@@ -2583,7 +2588,7 @@ class CanonicalBroker:
                     event_payload={"phase": "SOURCE_VERIFIED", "result": result},
                 )
             return self._phase(record, "SOURCE_VERIFIED", checkpoint)
-        partials = _partials_from(checkpoint["partials"], revision, operation_id)
+        _verify_partials(checkpoint["partials"], revision, operation_id)
         if phase == "SOURCE_VERIFIED":
             material = await self._controlled(operation_id,
                 lambda: asyncio.to_thread(inspect_source_identity,
@@ -2919,7 +2924,7 @@ class CanonicalBroker:
             else _compiler_artifacts(revision)
         )
         if phase >= PHASES.index("SOURCE_VERIFIED"):
-            _partials_from(checkpoint["partials"], revision, object_id, artifacts)
+            _verify_partials(checkpoint["partials"], revision, object_id, artifacts)
         if record["kind"] == ACQUIRE_OPERATION:
             return
         if phase >= PHASES.index("PLANNED"):
@@ -2990,6 +2995,9 @@ class CanonicalBroker:
             result["result"] = record["result"]
         if record["error"] is not None:
             result["error"] = record["error"]
+        if (record["state"] not in _TERMINAL_STATES and record["phase"] == "ACQUIRING"
+                and record["operation_id"] in self._transfer_progress):
+            result["result"] = {"transfer_progress": dict(self._transfer_progress[record["operation_id"]])}
         return result
 
     def _phase(self, record: dict, phase: str, checkpoint: dict) -> dict:
@@ -3090,6 +3098,8 @@ class CanonicalBroker:
         event = self._event(record["operation_id"], len(record["events"]), event_type, payload)
         updated = {**record, **changes, "events": [*record["events"], event]}
         self._write(updated)
+        if updated["state"] in _TERMINAL_STATES or updated["phase"] != "ACQUIRING":
+            self._transfer_progress.pop(record["operation_id"], None)
         signal = self._event_signals.get(record["operation_id"])
         if signal is not None:
             signal.set()
