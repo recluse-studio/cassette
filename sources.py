@@ -2179,9 +2179,40 @@ def _checkpoint_transition(
     )
 
 
+def header_ranges(artifact: Artifact, json_bytes: int) -> tuple[tuple[int, int], ...]:
+    """Q42/Q50: bind one prefix and exact body ranges before any source-header request."""
+    if not isinstance(artifact, Artifact):
+        _transfer_fail('INVALID_REQUEST', 'source-header', 'header plan requires a resolved artifact')
+    if not artifact.path.endswith('.safetensors') or artifact.size <= 8:
+        _transfer_fail('MODEL_UNSUPPORTED', artifact.path, 'header preparation requires bounded SafeTensors sources')
+    if type(json_bytes) is not int or not 0 < json_bytes <= min(SAFETENSORS_HEADER_BYTES, artifact.size-8):
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'declared JSON header bytes exceed the source or parser bound')
+    return ((0, 8), *((offset, min(_TRANSFER_CHUNK_BYTES, json_bytes+8-offset))
+                      for offset in range(8, json_bytes+8, _TRANSFER_CHUNK_BYTES)))
+
+
+def source_header_lengths(revision: ResolvedSource, declarations: list[str] | None) -> dict[str, int]:
+    """Q42/Q50: require one exact PATH=N declaration per selected SafeTensors artifact."""
+    if any(not artifact.path.endswith('.safetensors') or artifact.size <= 8 for artifact in revision.artifacts):
+        _transfer_fail('MODEL_UNSUPPORTED', revision.locator, 'header preparation requires bounded SafeTensors sources')
+    if not isinstance(declarations, list) or not declarations:
+        _transfer_fail('INVALID_REQUEST', revision.locator, 'declare JSON header bytes for every selected artifact')
+    lengths = {}
+    for declaration in declarations:
+        name, separator, value = declaration.rpartition('=') if isinstance(declaration, str) else ('', '', '')
+        if not separator or not name or name in lengths or re.fullmatch(r'[1-9][0-9]{0,8}', value) is None:
+            _transfer_fail('INVALID_REQUEST', revision.locator, 'header declarations require unique exact PATH=N positive byte counts')
+        lengths[name] = int(value)
+    if set(lengths) != {artifact.path for artifact in revision.artifacts}:
+        _transfer_fail('INVALID_REQUEST', revision.locator, 'header declarations must match every selected artifact path')
+    for artifact in revision.artifacts:
+        header_ranges(artifact, lengths[artifact.path])
+    return lengths
+
+
 async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, artifact: Artifact,
                           extent: TransferExtent, owner: CapacityCoordinator,
-                          *, expected_header_digest: str | None = None) -> dict:
+                          *, expected_header_json_bytes: int, expected_header_digest: str | None = None) -> dict:
     """Q44/Q50/Q53: land only a SafeTensors header; never certify the whole artifact digest."""
     if not isinstance(adapter, SourceAdapter) or not isinstance(owner, CapacityCoordinator):
         _transfer_fail('INVALID_REQUEST', 'source-header', 'source adapter and store capacity owner are required')
@@ -2193,20 +2224,21 @@ async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, arti
         _transfer_fail('INVALID_REQUEST', artifact.path, 'header inspection requires a complete logical source extent')
     if artifact.size <= 8:
         _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'source is too short for a SafeTensors header')
+    ranges = header_ranges(artifact, expected_header_json_bytes)
     if expected_header_digest is not None:
         if not _digest(expected_header_digest, 'blake3:', 'header digest', artifact.path).startswith('blake3:'):
             _transfer_fail('INVALID_REQUEST', artifact.path, 'saved header digest requires BLAKE3')
 
-    async def land(offset, length, leading=b''):
+    async def land(offset, length):
         if expected_header_digest is not None:
-            return leading + await asyncio.to_thread(_pread_exact, extent, offset, length, artifact.path)
-        write_bytes = length + len(leading)
+            return await asyncio.to_thread(_pread_exact, extent, offset, length, artifact.path)
+        write_bytes = length
         claim = _transfer_claim(owner, _checkpoint_transition(extent.operation_id,
             f'header:{artifact.path}:{offset}', payload_bytes=write_bytes, checkpoint_bytes=0,
             write_bytes=(write_bytes, 0)), artifact.path)
         try:
-            payload = leading + await adapter.open_range(revision, artifact, offset, length, artifact.validator)
-            await asyncio.to_thread(_pwrite_verified, extent, offset-len(leading), payload,
+            payload = await adapter.open_range(revision, artifact, offset, length, artifact.validator)
+            await asyncio.to_thread(_pwrite_verified, extent, offset, payload,
                                     artifact.path, 'source header', claim)
             await asyncio.to_thread(_sync_fd, extent.fd, artifact.path, claim)
             complete_capacity_claim(claim)
@@ -2221,12 +2253,14 @@ async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, arti
         if expected_header_digest is not None:
             _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header length differs from its file or parser bound')
         _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'SafeTensors header exceeds its source or parser bound')
+    if length != expected_header_json_bytes:
+        _transfer_fail('IDENTITY_MISMATCH' if expected_header_digest is not None else 'METADATA_INSUFFICIENT',
+                       artifact.path, f'actual JSON header bytes {length} differ from qualified declaration {expected_header_json_bytes}')
     total = length + 8
     hasher = artifact_hasher('blake3:', artifact.path)
-    first = min(_TRANSFER_CHUNK_BYTES, total)
-    hasher.update(await land(8, first-8, prefix))
-    for offset in range(first, total, _TRANSFER_CHUNK_BYTES):
-        hasher.update(await land(offset, min(_TRANSFER_CHUNK_BYTES, total-offset)))
+    hasher.update(prefix)
+    for offset, count in ranges[1:]:
+        hasher.update(await land(offset, count))
     digest = 'blake3:' + hasher.hexdigest()
     if expected_header_digest is not None and digest != expected_header_digest:
         _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header differs from its immutable receipt')

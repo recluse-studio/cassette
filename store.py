@@ -83,6 +83,7 @@ PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 SAFETENSORS_HEADER_BYTES = 100_000_000
 TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
+STORAGE_PROFILER_VERSION = '2-exact-offset-sync-before-read'
 _EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
@@ -6194,9 +6195,13 @@ def verify_campaign_artifact(
 def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: dict) -> dict:
     """Q42/Q44/Q53: measure one claimed, unlinked temporary extent; closing or process exit frees it."""
     import time
-    if set(pattern) != {"write_bytes", "read_bytes", "payload_digest"}:
+    if set(pattern) not in ({"write_bytes", "read_bytes", "payload_digest"},
+                            {"write_bytes", "read_bytes", "payload_digest", "offset_bytes"}):
         _transaction_reject(operation_id, "profile pattern requires exact write/read bytes and payload digest")
     write_bytes, read_bytes = pattern["write_bytes"], pattern["read_bytes"]
+    offset = pattern.get('offset_bytes', 0)
+    if type(offset) is not int or not 0 <= offset < SAFETENSORS_HEADER_BYTES + 8:
+        _transaction_reject(operation_id, 'profile offset exceeds the bounded file-offset range', 'INVALID_REQUEST')
     if type(write_bytes) is not int or type(read_bytes) is not int or not 0 < read_bytes <= write_bytes <= 16 * 1024 * 1024:
         _transaction_reject(operation_id, "profile atom exceeds its bounded positive extent", "INVALID_REQUEST")
     payload = bytes(write_bytes)
@@ -6205,23 +6210,25 @@ def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: 
     def measure(claim):
         started = time.monotonic_ns()
         with execute_claimed_write(claim, lambda: tempfile.TemporaryFile(dir=owner.cartridge)) as handle:
+            handle.seek(offset)
             count = execute_claimed_write(claim, lambda: handle.write(payload))
             if count != write_bytes:
                 raise OSError(errno.ENOSPC, "profile scratch write was incomplete")
             handle.flush()
-            handle.seek(0)
+            handle.seek(offset)
             if digest_bytes(handle.read(write_bytes)) != pattern["payload_digest"]:
                 _transaction_reject(operation_id, "profile full-extent readback digest differs")
             written = time.monotonic_ns()
-            handle.seek(0)
+            _fullsync_descriptor(handle.fileno(), operation_id, "temporary profile extent")
+            flushed = time.monotonic_ns()
+            handle.seek(offset)
             observed = handle.read(read_bytes)
             read_done = time.monotonic_ns()
-            _fullsync_descriptor(handle.fileno(), operation_id, "temporary profile extent")
-            finished = time.monotonic_ns()
+            finished = read_done
             if observed != payload[:read_bytes]:
                 _transaction_reject(operation_id, "profile readback differs from written bytes")
         return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
-                "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
+                "read_seconds": (read_done-flushed)/1e9, "flush_seconds": (flushed-written)/1e9,
                 "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
                 "physical_write_bytes": None, "path": str(owner.cartridge), "scratch_retention": "TEMPORARY_UNLINKED"}
     return _run_claimed_writes(owner, CapacityTransition(operation_id, "profile-atom", payload_bytes=write_bytes,

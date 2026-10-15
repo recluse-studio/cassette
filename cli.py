@@ -13,10 +13,10 @@ from broker import CanonicalBroker
 from errors import CassetteError
 
 
-async def _download(broker, request, *, qualification_only=False, header_only=False):
+async def _download(broker, request, *, qualification_only=False, header_only=False, header_json_bytes=None):
     operation_id = broker.operation_id(request)
     task = asyncio.create_task(broker.start_download(request, qualification_only=qualification_only,
-                                                    header_only=header_only))
+                                                    header_only=header_only, header_json_bytes=header_json_bytes))
     seen = 0
     while True:
         await asyncio.sleep(.1)
@@ -76,6 +76,9 @@ def main(argv=None):
     qualify = commands.add_parser('qualify', help='Measure the selected download path without starting or continuing payload transfer.')
     qualify.add_argument('--headers', action='store_true', help='Measure the bounded header path instead of full acquisition.')
     headers = commands.add_parser('headers', help='Save and inspect qualified source headers without downloading tensors.')
+    for command in (qualify, headers):
+        command.add_argument('--header-json-bytes', action='append', metavar='PATH=N',
+                             help='Declare exact JSON header bytes, excluding its eight-byte prefix; repeat per artifact.')
     for command in (go, qualify, headers):
         command.add_argument('--source-selection', '--model-selection', dest='model_selection', required=True)
         command.add_argument('--drive-selection', required=True)
@@ -133,7 +136,8 @@ def main(argv=None):
                 'model_selection_id': args.model_selection, 'drive_selection_id': args.drive_selection}})
             print('Checking the selected source and creating the durable Cassette folder.', file=sys.stderr, flush=True)
             result = asyncio.run(_download(broker, request, qualification_only=args.command == 'qualify',
-                                          header_only=args.command == 'headers' or getattr(args, 'headers', False)))
+                                          header_only=args.command == 'headers' or getattr(args, 'headers', False),
+                                          header_json_bytes=getattr(args, 'header_json_bytes', None)))
             if result['state'] == 'PAUSED':
                 pause_error = broker.events(result['operation_id'])[-1]['payload'].get('error')
                 if pause_error:

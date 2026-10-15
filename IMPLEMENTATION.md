@@ -7,14 +7,56 @@ dependency-ordered, machine-checkable, resumable.
 
 ## Current direction — 2026-10-15
 
-Active work: finish exact source/header/acquisition plans and actual operation-bound qualification.
-All ten required dataset subsets are selected through installed Cassette. The current SafeTensors
-envelope still lacks exact live Q42 acceptance; use the now-complete declared lengths for 276 shards
-to implement explicit plans that refuse a mismatched prefix before reading the header body. Bind the
-profiler version under Q43. Materialize truthful headerless JSON/JSONL and Parquet framing plans under
-the dataset contract through the existing source, store and broker authorities. Freeze, independently
-review and prove the next bounded candidate before installation and live qualification. Preserve
-every source-entry and payload gate; provider declarations are not locally parsed artifact headers.
+Active work: repair full-acquisition checkpoint profiling and bounded broker transfer receipts before
+qualifying or acquiring the frozen large inputs. Preserve source-entry and payload gates.
+
+Completed exact-header milestone: successor-02 passes the separate served claude-opus-5-5 review
+(session b4ddfab7-47c9-4bbe-a2e6-78aabc13ae86). Both bounded questions pass at fixture/platform level.
+The unchanged independent probe passes 104/104; the offset case passes six rows and its original
+control exposes two failures. Six fault controls establish declaration, prefix, profiler-version,
+sync-order and offset sensitivity. C5 retains predicates rather than raw traces; C6's early refusal
+does not cover later paths. The original EFBIG defect and rejected broad catch remain retained.
+Complete candidate 14 passes 340 tests in 658.49 seconds, zero skips, fourteen component controls and
+ordinary ledger. J=(0,0,15908,1,1,9,0,0,8425096), adding thirty-six product lines and no other growth.
+Wheel 11 is installed and verified; its thirty-eight runtime files match reviewed/tested source.
+Wheel 10 is superseded and was never installed. Portable receipt:
+docs/l05/2026-10-15-exact-header-repair.json. Private receipts remain under
+/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/exact-header-01. All owned header probes, controls,
+reviewers and producer jobs have stopped; do not repeat them. Real provider headers, source physical
+profiles and required payloads remain NOT_RUN. The parser's unused expected_digest parameter remains
+an optional pre-existing recommendation, not a proved failure in this path.
+
+Root has prepared the bounded broker-record repair in an isolated copy at acquisition-record-01/working.
+Its extended Q5/Q6/Q51/Q53 fixture passes in 6.29 seconds: hold after one durable 4 MiB chunk, visible
+verified bytes, pause, restart and completion without refetching that prefix. Coupled CLI/prepare proof
+is running under tool session 87738; reconcile it before starting a replacement. The proposed broker
+receipt retains digest count and commitment while source checkpoints retain the full digest sequence.
+Live byte observations are never resume input. No new journal or storage writer is introduced. This
+candidate still needs integration, separate review and complete proof before installation/acceptance.
+
+Then repair two proved full-acquisition gaps before qualifying/acquiring large inputs. The coarse
+state-extent profile omits per-chunk record and alternating-header writes. The canonical operation
+record also rewrites accumulated progress under a 4 MiB cap. Static frozen-size bounds prove K3,
+Qwen235 and two native inputs exceed that cap from progress alone; final digest arrays independently
+exceed it for K3 and Qwen235. The 551,197 callbacks imply at least 22.09 TB of event serialization,
+not measured physical writes or time. See full-acquisition-gap-trace.json and
+large-acquisition-log-bounds.json. Preserve one journal authority and complete ordered history.
+Network range concurrency is two; disk commits are serial, so storage queue depth one is consistent.
+
+Source preparation completed: six frozen native references are selected through installed wheel 09,
+43 files and 211,004,232,280 declared bytes, zero payload bytes acquired. Portable receipt:
+docs/l05/2026-10-15-native-source-selections.json. All ten dataset subsets are selected too. Private
+exact plans bind every 276 model shard and 34 dataset file to its canonical selected identity.
+Model headers total 84,126,336 declared source bytes. Dataset plans declare no separate pre-acquisition
+header read; JSON/JSONL are headerless and Parquet framing remains unparsed until complete verified
+acquisition. These plans are not materialized profiles or accepted graph gates.
+
+The prior completed durability operation op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e
+is now available in release-inputs/state through CanonicalBroker._write. Original and reference bytes
+match SHA-256 b5a77156c9b6d2b4a2c77e0e7e28e62158c5843a57247a4e838e6e90f6fde935 after current validation.
+No active/mutable record was copied. This reuses the existing operator-reported reconnect proof;
+it records no new physical event. Fresh immutable pointer/probe revalidation still precedes live work.
+Do not ask Drew to repeat the reconnect. See exact-header-01/durability-proof-reference.json.
 
 Latest completed milestone: Q9 list-license resolution and canonical malformed-YAML errors pass
 separate served claude-opus-5-5 review. All fifty independent cases pass after the reproduced repair;

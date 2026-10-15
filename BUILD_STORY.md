@@ -8198,3 +8198,94 @@ actual prefix must still match its qualified plan before Cassette reads the head
 The consolidated inventory also fixes a unit ambiguity before execution: nine earlier field sets
 included the eight-byte prefix; K3's field excluded it. Every shard now names the prefix, JSON header
 length and complete header extent separately. No physical qualification is inferred from that repair.
+
+---
+
+**Codex, builder in build; live source metadata**
+
+#### Entry 98 — 2026-10-15, six native references are selected
+
+The installed CLI selected all six frozen native references. Their forty-three weight files total
+211,004,232,280 declared bytes. Every pinned path, size and SHA-256 matches the frozen input.
+No model payload or artifact header was read. Selection establishes the source identity; execution
+compatibility, physical qualification and acquisition remain unproved.
+
+The next repair replaces the broad header envelope with exact declared lengths. It also removes
+a redundant prefix rewrite and binds the storage profiler's version to each new download profile.
+The actual eight-byte prefix must match the plan before a header body can arrive.
+
+---
+
+**Codex, builder in build; separate Opus review in progress**
+
+#### Entry 99 — 2026-10-15, qualify the header Cassette will actually read
+
+The old qualifier accepted a request with no exact header declaration. The strengthened fixture
+reproduced that failure. Its successor passes both coupled checks in 25.88 seconds: missing and
+malformed plans refuse, a wrong plan lands only the prefix, and the corrected plan completes on
+the same operation. Saved-header reuse and full-download recovery still pass. Separate review,
+complete candidate proof and installation remain pending.
+
+Candidate 13 passed all 340 tests in 389.53 seconds, with zero skips and fourteen component controls.
+The ordinary ledger passed. The change adds thirty-six product lines. All thirty-eight runtime
+files in wheel 10 match the frozen review target and the complete producer; the wheel remains
+uninstalled while the separate Opus review runs. These machine results do not qualify a live source.
+
+The remaining full-download profile has a concrete omission. After each data chunk, the transfer
+writes a 33-byte record and a new envelope into an alternating checkpoint slot. Its current profile
+measures the complete checkpoint extent only once. Those are different write patterns. The next
+repair must represent the actual checkpoint writes before live acquisition can claim Q42. The
+transfer's two concurrent network requests do not change its serial disk queue.
+
+The independent probe passed 104 of 104 checks on the original candidate. Its informational
+maximum-offset case exposed a raw filesystem exception. A separate one-byte APFS reproduction
+confirmed EFBIG. I kept the failed attempt, translated that boundary to the canonical error and
+proved the focused fixture. Candidate 13 and wheel 10 predate this repair; the wheel remains
+uninstalled. The original controls, successor review and complete proof remain pending.
+
+A second static check established a harder large-input limit. The broker rewrites accumulated
+progress into a record capped at 4 MiB. The frozen inputs require 551,197 chunk callbacks. K3,
+Qwen235 and two native inputs exceed the cap from progress events alone. The final digest arrays
+also exceed the cap for K3 and Qwen235. The event arrays imply at least 22.09 TB of serialization
+across these inputs; this is a source-derived lower bound, not measured physical writes or time.
+The single operation journal needs a bounded representation before those acquisitions can finish.
+
+The reviewer rejected my first error repair. A broad terminal error catch could turn a transient
+unplug into a failed operation. It proposed the smaller correction: limit the new offset argument
+to the current header plan's range and reject larger values before any claim. I removed the catch.
+The corrected fixture passes in 0.28 seconds and observes no allocation claim for refused offsets.
+The broad attempt remains retained. The separate parser-digest recommendation remains optional;
+the review has not proved a failure in that unchanged parser.
+
+The independent offset case now passes all six rows on the smaller repair. The original source
+fails at both refusal boundaries, so the test detects the defect. Wheel 11 matches the thirty-eight
+frozen successor runtime files; it remains uninstalled until review and complete proof pass.
+
+I also made the previous completed reconnect proof available to the current broker through its
+canonical writer. The original and reference bytes match exactly. This records no new physical
+event. The next live operation still rereads its immutable pointer and integrity probe, and it can
+reuse the reconnect Drew already reported without asking him to repeat it.
+
+The separate Opus reviewer has now passed both bounded header questions on successor-02. It
+inspected the six fault controls and the actual results, including the controls that stopped early.
+The unchanged successor probe passes 104 checks; the targeted offset case passes six. The original
+source remains failed on its raw file-offset error. The rejected broad catch remains excluded.
+
+This is fixture and platform evidence. It proves declaration binding, prefix-only refusal, cached
+header checks, exact temporary offsets, synchronization order and profiler identity. It does not
+prove real source bytes, live throughput or the full acquisition plan. Complete candidate 14 is
+running before installation and publication of this milestone.
+
+Complete candidate 14 passes 340 tests in 658.49 seconds, with zero skips and fourteen component
+controls. The ordinary ledger passes. The objective remains (0,0,15908,1,1,9,0,0,8425096): thirty-six
+additional product lines, no new kernel, process, runtime, dependency or duplicate authority.
+Wheel 11 is installed. All thirty-eight runtime files match the reviewed source and complete proof.
+The supported installed CLI exposes the exact per-artifact JSON header counts. Source-entry and
+payload acceptance remain open; this milestone supplies a verified primitive for that work.
+
+In an isolated copy, the next repair passes its first focused acquisition test. A real loopback
+transfer commits one 4 MiB chunk, shows its saved received and verified bytes, pauses, restarts and
+finishes without fetching that prefix again. A synthetic 60,000-chunk checkpoint previously exceeded
+the operation record's 4 MiB cap before any envelope or history. Its compact broker certificate stays
+below 1 KiB while source-owned binary checkpoints retain every digest. Separate review and the
+coupled checks are still required. No large source download has begun.

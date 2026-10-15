@@ -303,7 +303,7 @@ asyncio.run(main())
 
 
 def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
-    """Q33/Q42/Q44/Q53/Q80: count launches, retain command bytes and resume exact measured atoms."""
+    """Q6/Q33/Q42/Q44/Q53/Q80: resume exact measured atoms and retain canonical failure boundaries."""
     owner = CapacityCoordinator(tmp_path)
     template = {'command':[sys.executable,'-c','import json,os; b=json.loads(os.environ["CASSETTE_EXECUTION_BINDING"]); print(json.dumps({"binding_digest":b["digest"],"result":b["inputs"]["operand"]*2}))'], 'cwd':str(tmp_path),
                 'permission':'CAMPAIGN_DIRECTORY_WRITE','host':'fixture','disk':'scratch','path':str(tmp_path),
@@ -345,6 +345,13 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     assert all(observation['scratch_retention'] == 'TEMPORARY_UNLINKED'
                for observation in second['value']['observations'])
     assert campaign.measure_profile(owner,binding,patterns,collector,expected=second['digest']) == second
+    for offset in (100_000_008, (1 << 63)-1-16*1024*1024):
+        claims_before = len(owner.claims())
+        with pytest.raises(CassetteError) as unsupported:
+            campaign.campaign_profile_io(owner, str(campaign.uuid.uuid4()), {
+                'write_bytes':1, 'read_bytes':1, 'payload_digest':digest_bytes(bytes(1)), 'offset_bytes':offset})
+        assert unsupported.value.code == 'INVALID_REQUEST'
+        assert len(owner.claims()) == claims_before
     assert campaign.expand_coordinates('X-<row>-<record>',{'row':['a','b'],'record':['START','VERIFY']}) == [
         'X-a-START','X-b-START','X-a-VERIFY','X-b-VERIFY']
     with pytest.raises(CassetteError): campaign.expand_coordinates('X-<row>',{'row':['a','a']})

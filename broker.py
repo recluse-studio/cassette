@@ -39,7 +39,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact, transfer_header, transfer_state_bytes
+from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, transfer_artifact, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -50,7 +50,7 @@ from store import (
     DriveVolume,
     WriterContext,
     GenerationPin,
-    SAFETENSORS_HEADER_BYTES,
+    STORAGE_PROFILER_VERSION,
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     campaign_head,
@@ -1661,7 +1661,7 @@ class CanonicalBroker:
         return await self.execute(request, select)
 
     async def start_download(self, request: dict, *, qualification_only: bool = False,
-                             header_only: bool = False) -> dict:
+                             header_only: bool = False, header_json_bytes: list[str] | None = None) -> dict:
         """Q5/Q42/Q44/Q49-Q51: qualify the requested path, then pause, inspect headers or acquire."""
         if any(type(value) is not bool for value in (qualification_only, header_only)):
             _reject('INVALID_REQUEST', 'acquire', 'qualification_only and header_only must be boolean execution limits')
@@ -1671,10 +1671,12 @@ class CanonicalBroker:
         args = request['arguments']['acquisition']
         source_selection = self._entry_result(args['model_selection_id'], 'source.select')
         destination = self._entry_result(args['drive_selection_id'], 'drive.select')
+        header_lengths = None
         if header_only:
             selected = _source_from(source_selection['source_lock'], args['model_selection_id'])
-            if any(not artifact.path.endswith('.safetensors') or artifact.size <= 8 for artifact in selected.artifacts):
-                _reject('MODEL_UNSUPPORTED', args['model_selection_id'], 'header preparation requires bounded SafeTensors sources')
+            header_lengths = source_header_lengths(selected, header_json_bytes)
+        elif header_json_bytes is not None:
+            _reject('INVALID_REQUEST', 'acquire', 'header declarations require header-only execution')
         descriptor = source_selection['descriptor']
         request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
         operation = self.issue(request)
@@ -1757,12 +1759,13 @@ class CanonicalBroker:
                 self._append(self._load(operation_id), 'output_delta', {'drive_revalidated': {
                     'proof_operation_id': prior, 'selection': _json_copy(asdict(selection), operation_id, 'writer selection')}})
             qualification = await self._qualify_download(operation_id, owner, selection, revision,
-                                                          header_only=header_only)
+                                                          header_lengths=header_lengths)
             if qualification_only:
                 return self.pause(operation_id)
             if header_only:
                 try:
-                    await self._inspect_headers(operation_id, adapter, owner, revision, qualification['profile_digest'])
+                    await self._inspect_headers(operation_id, adapter, owner, revision,
+                                                qualification['profile_digest'], header_lengths)
                 except CassetteError as error:
                     return self._operation(self._paused(self._load(operation_id), error))
                 return self.pause(operation_id)
@@ -1794,33 +1797,36 @@ class CanonicalBroker:
             return path.stem
         return None
 
-    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_only=False):
+    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_lengths=None):
         """Q42/Q43/Q53: bind measured data and checkpoint extents to the current source/path."""
         observed = await asyncio.to_thread(drive_path_observation, selection)
-        artifacts = revision.artifacts if header_only else _acquisition_artifacts(revision)
-        if header_only:
-            sizes = [size for artifact in artifacts
-                     for size in [8, *(min(4194304, min(artifact.size, SAFETENSORS_HEADER_BYTES+8)-offset)
-                                      for offset in range(0, min(artifact.size, SAFETENSORS_HEADER_BYTES+8), 4194304))]]
+        artifacts = revision.artifacts if header_lengths is not None else _acquisition_artifacts(revision)
+        if header_lengths is not None:
+            ranges = [(offset, size) for artifact in artifacts
+                      for offset, size in header_ranges(artifact, header_lengths[artifact.path])]
         else:
-            sizes = [size for artifact in artifacts
+            ranges = [(0, size) for artifact in artifacts
                      for size in [transfer_state_bytes(artifact.size),
                                   *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
-        payload_digests = {size: digest_bytes(bytes(size)) for size in set(sizes)}
-        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': payload_digests[size]}
-                    for size in sizes]
+        payload_digests = {size: digest_bytes(bytes(size)) for size in {size for _, size in ranges}}
+        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': payload_digests[size],
+                     **({'offset_bytes': offset} if header_lengths is not None else {})}
+                    for offset, size in ranges]
         binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
                    'path': observed['path'], 'operation': operation_id,
+                   'profiler_version': STORAGE_PROFILER_VERSION,
                    'plan': {'source_lock': _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
                             'queue_depth': 1, 'cache_state': 'WARM', 'working_set_bytes': 8388608,
                             'artifact_bytes': sum(artifact.size for artifact in artifacts),
                             'checkpoint_pattern': 'COMPLETE_EXTENT',
                             'service_deadline_seconds': None, 'training_endurance': 'NOT_APPLICABLE',
                             'unavailable_telemetry': ['cable_capability', 'thermal_state', 'media_health']}}
-        if header_only:
-            binding['plan'].update(header_only=True, header_limit_bytes=SAFETENSORS_HEADER_BYTES,
-                checkpoint_pattern='HEADER_PREFIX_AND_ENVELOPE',
-                header_write_shape='8-byte prefix, then aligned chunks through the parser-bounded envelope; actual header ranges recorded separately')
+        if header_lengths is not None:
+            binding['plan'].update(header_only=True, header_json_bytes=header_lengths,
+                artifact_ranges={artifact.path: [list(pair) for pair in header_ranges(artifact, header_lengths[artifact.path])]
+                                 for artifact in artifacts}, checkpoint_pattern='EXACT_HEADER_PREFIX_AND_BODY',
+                working_set_bytes=max(8388608, max(header_lengths.values())+8),
+                header_write_shape='prefix once, exact body chunks, each write readback-hashed and synced; warm parser read follows')
         key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
         head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         plan = {'binding': binding, 'pattern_count': len(patterns)}
@@ -1871,7 +1877,7 @@ class CanonicalBroker:
         self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
         return receipt
 
-    async def _inspect_headers(self, operation_id, adapter, owner, revision, profile_digest):
+    async def _inspect_headers(self, operation_id, adapter, owner, revision, profile_digest, header_lengths):
         """Q44/Q50: publish parsed headers separately from full-source and execution proof."""
         metadata = await adapter.read_metadata(revision)
         summaries = []
@@ -1879,6 +1885,7 @@ class CanonicalBroker:
         for artifact in revision.artifacts:
             binding = {'operation_id': operation_id, 'source_lock_digest': source_digest,
                        'artifact': artifact.record(), 'validator': artifact.validator,
+                       'header_json_bytes': header_lengths[artifact.path],
                        'physical_profile_digest': profile_digest}
             key = 'source-header-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
             head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
@@ -1894,6 +1901,7 @@ class CanonicalBroker:
                 capacity_controller=owner, require_existing=head is not None)
             try:
                 parsed = await transfer_header(adapter, revision, artifact, extent, owner,
+                    expected_header_json_bytes=header_lengths[artifact.path],
                     expected_header_digest=None if head is None else head['value']['parsed']['header_digest'])
             finally:
                 os.close(extent.fd)

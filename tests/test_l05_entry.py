@@ -128,7 +128,7 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
 
 
 def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
-    """Q5/Q6/Q9/Q42/Q44/Q49/Q50/Q51/Q60: selection and header inspection precede complete acquisition.
+    """Q5/Q6/Q9/Q42/Q43/Q44/Q49/Q50/Q51/Q60: exact header plans precede complete acquisition.
 
     The CLI crosses the provider boundary, survives a new process and retains its selection
     after a mutable tag changes. Payload follows reconnect proof and operation-bound measurement.
@@ -391,16 +391,36 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert qualified_record['events'][-2]['payload']['source_qualification']['status'] == 'PASS'
             qualified_profiles = {p.name: p.read_bytes() for p in
                                   (mount / 'drewwiberg-lacie/Cassette/campaign/objects').iterdir()}
+            for declarations in ([], ['wrong.safetensors=10'], ['model.safetensors=0'],
+                                 ['model.safetensors=999999999999999999999'],
+                                 ['model.safetensors=１２'], ['model.safetensors=-1'],
+                                 [f'model.safetensors={len(header_bytes)}'] * 2):
+                flags = [value for entry in declarations for value in ('--header-json-bytes', entry)]
+                refused = launch('qualify', '--headers', '--model-selection', selected['operation_id'],
+                                 '--drive-selection', drive['operation_id'], '--key', 'go-fixture',
+                                 *flags, expected_code=1)
+                assert refused['error']['code'] == 'INVALID_REQUEST'
+                assert not header_ranges
+            wrong = launch('headers', '--header-json-bytes', f'model.safetensors={len(header_bytes)+1}',
+                           '--model-selection', selected['operation_id'], '--drive-selection',
+                           drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+                           expected_message='Go remains available with the same selections and key.')
+            assert wrong['operation_id'] == ready['operation_id']
+            assert header_ranges == [(0, 7)]
+            wrong_record = json.loads(record_path.read_bytes())['record']
+            assert wrong_record['events'][-1]['payload']['error']['code'] == 'METADATA_INSUFFICIENT'
             header_qualified = launch('qualify', '--headers', '--model-selection', selected['operation_id'],
+                                      '--header-json-bytes', f'model.safetensors={len(header_bytes)}',
                                       '--drive-selection', drive['operation_id'], '--key', 'go-fixture',
                                       expected_code=2, expected_message='Drive check passed. Download remains paused.')
             assert header_qualified['operation_id'] == ready['operation_id']
-            assert not header_ranges
-            headers = launch('headers', '--model-selection', selected['operation_id'], '--drive-selection',
-                             drive['operation_id'], '--key', 'go-fixture', expected_code=2,
+            assert header_ranges == [(0, 7)]
+            headers = launch('headers', '--model-selection', selected['operation_id'],
+                             '--header-json-bytes', f'model.safetensors={len(header_bytes)}',
+                             '--drive-selection', drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                              expected_message='Headers saved. Full download verification is separate.')
             assert headers['operation_id'] == ready['operation_id']
-            assert header_ranges == [(0, 7), (8, 7 + len(header_bytes))]
+            assert header_ranges == [(0, 7), (0, 7), (8, 7 + len(header_bytes))]
             header_record = json.loads(record_path.read_bytes())['record']
             inspection = next(event['payload']['source_headers'] for event in reversed(header_record['events'])
                               if 'source_headers' in event['payload'])
@@ -416,9 +436,10 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             with header_extents[0].open('rb') as handle:
                 handle.seek(8 + len(header_bytes))
                 assert handle.read(32) == bytes(32)
-            assert launch('headers', '--model-selection', selected['operation_id'], '--drive-selection',
-                          drive['operation_id'], '--key', 'go-fixture', expected_code=2) == headers
-            assert header_ranges == [(0, 7), (8, 7 + len(header_bytes))]
+            assert launch('headers', '--model-selection', selected['operation_id'],
+                          '--header-json-bytes', f'model.safetensors={len(header_bytes)}',
+                          '--drive-selection', drive['operation_id'], '--key', 'go-fixture', expected_code=2) == headers
+            assert header_ranges == [(0, 7), (0, 7), (8, 7 + len(header_bytes))]
             interrupted = launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
                                  drive['operation_id'], '--key', 'go-fixture', expected_code=2,
                                  expected_message='Go paused: SOURCE_UNAVAILABLE:')
@@ -455,13 +476,22 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             profiles = [item for item in profile_records if item['key'].startswith('download-profile-')]
             plans = [item for item in profiles if 'pattern_count' in item['value']]
             atoms = [item for item in profiles if 'measurement' in item['value']]
-            assert len(plans) == 2
+            assert len(plans) == 3
+            assert all(plan['value']['binding']['profiler_version'] == '2-exact-offset-sync-before-read'
+                       for plan in plans)
+            header_plans = [plan['value']['binding']['plan'] for plan in plans
+                            if plan['value']['binding']['plan'].get('header_only')]
+            assert sorted(plan['header_json_bytes']['model.safetensors'] for plan in header_plans) == [
+                len(header_bytes), len(header_bytes)+1]
+            assert sorted((atom['value']['pattern']['offset_bytes'], atom['value']['pattern']['write_bytes'])
+                          for atom in atoms if 'offset_bytes' in atom['value']['pattern']) == [
+                              (0, 8), (0, 8), (8, len(header_bytes)), (8, len(header_bytes)+1)]
             assert len(atoms) == sum(plan['value']['pattern_count'] for plan in plans)
             assert all(item['previous'] is None for item in profiles)
             assert all('binding' not in item['value'] and 'patterns' not in item['value'] for item in atoms)
             assert not list((mount / 'drewwiberg-lacie/Cassette').rglob('profile.bin'))
             seals = [item for item in profiles if 'atoms_digest' in item['value']]
-            assert len(seals) == 2 and sum(seal['value']['atom_count'] for seal in seals) == len(atoms)
+            assert len(seals) == 3 and sum(seal['value']['atom_count'] for seal in seals) == len(atoms)
             qualification = next(event['payload']['source_qualification'] for event in record['events']
                                  if event['payload'].get('source_qualification', {}).get('status') == 'PASS')
             assert qualification['profile_digest'] != atoms[0]['value']['profile_digest']
@@ -552,12 +582,14 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                                    '--file', 'tiny.safetensors', '--key', 'tiny-header-selection')
             assert tiny_selected['result']['source_lock']['artifacts'][0]['digest'].startswith('git-sha1:')
             tiny = launch('headers', '--source-selection', tiny_selected['operation_id'],
+                          '--header-json-bytes', f'tiny.safetensors={len(tiny_header)}',
                           '--drive-selection', fresh_drive['operation_id'], '--key', 'tiny-header', expected_code=2)
             tiny_record = json.loads((tmp_path / 'state/operations' / (tiny['operation_id'] + '.json')).read_bytes())['record']
             assert tiny_record['events'][-2]['payload']['source_headers']['artifacts'][0]['tensor_count'] == 1
             for corruption in ('missing', 'zero-prefix', 'changed-byte'):
                 key = 'saved-header-' + corruption
                 saved = launch('headers', '--source-selection', selected['operation_id'],
+                               '--header-json-bytes', f'model.safetensors={len(header_bytes)}',
                                '--drive-selection', fresh_drive['operation_id'], '--key', key, expected_code=2)
                 extents = list((mount / 'drewwiberg-lacie/Cassette/transfers' / saved['operation_id']).glob('*.extent'))
                 assert len(extents) == 1
@@ -568,6 +600,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                         handle.write(bytes(8) if corruption == 'zero-prefix' else b'!')
                 range_count = len(header_ranges)
                 refused = launch('headers', '--source-selection', selected['operation_id'],
+                                 '--header-json-bytes', f'model.safetensors={len(header_bytes)}',
                                  '--drive-selection', fresh_drive['operation_id'], '--key', key, expected_code=2,
                                  expected_message='Go remains available with the same selections and key.')
                 saved_record = json.loads((tmp_path / 'state/operations' / (saved['operation_id'] + '.json')).read_bytes())['record']
