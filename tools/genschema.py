@@ -2196,9 +2196,14 @@ CONTRACTS: dict[str, dict] = {
                         "volume_uuid": bounded_text(), "folder": bounded_text(),
                         "cartridge_uuid": nullable(bounded_text()),
                     }),
-                    "acquisition": record("Selected model and destination", "Q5/Q44/Q49", {
-                        "model_selection_id": identifier(), "drive_selection_id": identifier(),
-                    }),
+                    "acquisition": {"anyOf": [
+                        record("Selected model and destination", "Q5/Q44/Q49", {
+                            "model_selection_id": identifier(), "drive_selection_id": identifier(),
+                        }),
+                        record("Unresolved operation geometry and destination", "Q42/Q44/Q49", {
+                            "operation_geometry": ref("operation_geometry"), "drive_selection_id": identifier(),
+                        }),
+                    ]},
                     "checkpoint_root": blake3_digest(),
                     "manifest_digest": blake3_digest(),
                     "messages": array(bounded_json_object(), minimum=1, maximum=64),
@@ -2329,6 +2334,18 @@ CONTRACTS: dict[str, dict] = {
             "extensions": Q31_EXTENSIONS,
         },
         optional=("extensions",),
+    )),
+    "operation_geometry": with_bounded_json(record(
+        "Unresolved source operation geometry", "Q42/Q43",
+        {"source_lock": {"type": "null"},
+         "source_kind": text(enum=["huggingface", "ollama", "tinker"]),
+         "revision_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
+         "provenance": bounded_json_object(),
+         "artifacts": array(record("Planned source object", "Q42", {
+             "path": bounded_text(), "size": integer(maximum=2**63 - 1),
+             "digest_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
+             "validator_template": bounded_text(),
+         }), minimum=1, maximum=1048576)},
     )),
     "source_catalogue": record(
         "Bounded source discovery page", "Q9/Q52",

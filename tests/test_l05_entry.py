@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 import cli
 from broker import CanonicalBroker
 from errors import CassetteError
-from store import CapacityCoordinator, canonical_bytes, compare_inventory, digest_bytes, source_profile_trace, write_campaign_artifact
+from store import CapacityCoordinator, campaign_head, canonical_bytes, compare_inventory, digest_bytes, source_profile_trace, write_campaign_artifact
 from test_l05_drive import _attached_apfs_image
 
 
@@ -861,6 +861,88 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert data_done['result']['verified_bytes'] == sum(len(dataset_files[name]) for name in (
                 'inputs.jsonl', 'samples.parquet')) + len(license_bytes)
             completed_requests = list(requests)
+            # Q42/Q43: unresolved operation geometry executes the same retained profiler,
+            # without source resolution, access claims or a payload-capable operation.
+            geometry = {'source_lock': None, 'source_kind': 'ollama', 'revision_algorithm': 'sha256',
+                'provenance': {'recipe_commit': 'f' * 40, 'upstream_revision': 'git-sha1:' + 'e' * 40},
+                'artifacts': [{'path': 'empty.bin', 'size': 0, 'digest_algorithm': 'sha256',
+                               'validator_template': 'sha256:{digest}'},
+                              {'path': 'weight.safetensors', 'size': 65553, 'digest_algorithm': 'sha256',
+                               'validator_template': 'sha256:{digest}'}]}
+            geometry_file = tmp_path / 'operation-geometry.json'
+            geometry_file.write_bytes(canonical_bytes(geometry))
+            measured = launch('qualify', '--operation-plan', str(geometry_file),
+                '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-profile', expected_code=2,
+                expected_message='Drive check passed. Download remains paused.')
+            geometry_record = json.loads((tmp_path / 'state/operations' / (measured['operation_id'] + '.json')).read_bytes())['record']
+            proof = [event['payload']['source_qualification'] for event in geometry_record['events']
+                     if event['payload'].get('source_qualification', {}).get('status') == 'PASS'][-1]
+            geometry_complete = campaign_head(mount / 'drewwiberg-lacie/Cassette', proof['profile_key'])
+            saved_plan = geometry_complete['value']['measurements']['binding']['plan']
+            assert saved_plan['source_lock'] is None and saved_plan['source_identity_verification'] == 'NOT_RUN'
+            assert saved_plan['operation_geometry'] == geometry
+            assert saved_plan['operation_geometry_digest'] == digest_bytes(canonical_bytes(geometry))
+            assert geometry_record['phase'] == 'EMPTY' and geometry_record['checkpoint'] == {}
+            assert geometry_record['result'] is None and measured['state'] == 'PAUSED'
+            assert requests == completed_requests
+            assert launch('qualify', '--operation-plan', str(geometry_file),
+                '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-profile', expected_code=2) == measured
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            geometry_request = {'protocol_version': '1', 'operation': 'acquire', 'idempotency_key': 'geometry-no-payload',
+                'target': fresh_drive['operation_id'], 'arguments': {'acquisition': {
+                    'operation_geometry': geometry, 'drive_selection_id': fresh_drive['operation_id']}}}
+            try:
+                for limits in ({}, {'qualification_only': True, 'header_only': True},
+                               {'qualification_only': True, 'header_json_bytes': []}):
+                    try:
+                        asyncio.run(control.start_download(geometry_request, **limits))
+                    except CassetteError as error:
+                        assert error.code == 'INVALID_REQUEST'
+                    else:
+                        raise AssertionError('unresolved geometry entered a payload/header path')
+            finally:
+                control.close()
+            assert not (tmp_path / 'state/operations' / (CanonicalBroker.operation_id(geometry_request) + '.json')).exists()
+            for change in ('source-lock', 'duplicate', 'unsafe', 'unknown-variable', 'empty-provenance', 'bad-size',
+                           'unsupported-digest', 'large-git', 'unicode-validator', 'whitespace-validator'):
+                invalid = json.loads(canonical_bytes(geometry))
+                if change == 'source-lock':
+                    invalid['source_lock'] = selected['result']['source_lock']
+                elif change == 'duplicate':
+                    invalid['artifacts'].append(invalid['artifacts'][0])
+                elif change == 'unsafe':
+                    invalid['artifacts'][0]['path'] = '../outside'
+                elif change == 'unknown-variable':
+                    invalid['artifacts'][0]['validator_template'] = '{source-secret}'
+                elif change == 'empty-provenance':
+                    invalid['provenance'] = {}
+                elif change == 'unsupported-digest':
+                    invalid['artifacts'][0]['digest_algorithm'] = 'blake3'
+                elif change == 'large-git':
+                    invalid['artifacts'][0].update(digest_algorithm='git-sha1', size=4 * 1024 * 1024 + 1)
+                elif change == 'unicode-validator':
+                    invalid['artifacts'][0]['validator_template'] = 'sha256:{digest}\u2713'
+                elif change == 'whitespace-validator':
+                    invalid['artifacts'][0]['validator_template'] = 'sha256:{digest} '
+                else:
+                    invalid['artifacts'][0]['size'] = True
+                geometry_file.write_bytes(canonical_bytes(invalid))
+                assert launch('qualify', '--operation-plan', str(geometry_file),
+                    '--drive-selection', fresh_drive['operation_id'], '--key', 'invalid-geometry-' + change,
+                    expected_code=1)['error']['code'] == 'INVALID_REQUEST'
+            geometry_file.write_bytes(canonical_bytes({**geometry, 'provenance': {'recipe_commit': 'a' * 40}}))
+            assert launch('qualify', '--operation-plan', str(geometry_file),
+                '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-profile',
+                expected_code=1)['error']['code'] == 'IDEMPOTENCY_CONFLICT'
+            for label, payload in (('deep-json', b'[' * 1200 + b'0' + b']' * 1200),
+                                   ('oversized-control', b' ' * (4 * 1024 * 1024 + 1))):
+                geometry_file.write_bytes(payload)
+                refused = launch('qualify', '--operation-plan', str(geometry_file),
+                    '--drive-selection', fresh_drive['operation_id'], '--key', label, expected_code=1)
+                assert refused['error']['code'] == 'INVALID_REQUEST'
+                assert ('acquisition' in refused['error']['detail'] if label == 'deep-json'
+                        else 'control bytes' in refused['error']['detail'])
+            assert requests == completed_requests
             assert launch('go', '--model-selection', data_selected['operation_id'],
                           '--drive-selection', fresh_drive['operation_id'], '--key', 'dataset-go') == data_done
             assert requests == completed_requests

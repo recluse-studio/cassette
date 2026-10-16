@@ -8951,7 +8951,7 @@ the intended host, disk and connection path still match. I am publishing this ac
 and binding its new package before the next physical attempt. The larger build remains unfinished.
 
 The accepted correction is committed and pushed. I built its exact internal package and checked
-all38 installed files and the command people will actually run. The new campaign keeps all115 old
+all 38 installed files and the command people will actually run. The new campaign keeps all 115 old
 records intact and adds the five records for this fresh attempt. The failed attempt stays failed.
 
 The real drive qualification started at10:36UTC. Its own controller holds the recovery test until
@@ -8959,3 +8959,84 @@ the first saved-data acknowledgement appears, then performs the recorded interru
 It is running, not passed. No required model download has completed, and no action is needed from Drew.
 While it runs, I am implementing the remaining generic plan route needed to break Ollama's ordering
 cycle without removing its entry checks or inventing a model identity.
+
+The new plan input now passes the existing product-command fixture. It measures declared bytes
+through the same source transfer and retained-read machinery while recording that no real source
+identity has been verified. It makes no request to the model provider. Attempts to use the plan
+for headers or payload fail, as do borrowed source identities, unsafe paths and changed same-key
+plans. This is fixture proof only. The complete build and independent review are next; the generated
+model still needs its actual writer, location, geometry match and real-source qualification.
+
+The complete candidate now passes all 340 checks in 465.55 seconds, all fourteen component controls
+and the accounting check. It adds 60 executable lines and reuses the existing profiler. The first
+schema check caught an incomplete test inventory for the new grammar; I kept that failure, updated
+the existing fixture and reran it successfully before the complete build.
+
+I also checked all 490 declared Ollama objects against the existing checkpoint encoder. Their
+planned byte widths match. Their actual model hashes remain unknown until the real bytes exist.
+The installed Ollama version changed since the frozen source capture, so I am retaining that exact
+recipe and examining a local generation route that needs no cloud upload or new account.
+
+Separate Opus workers are examining the completed code and that proposed generation route. Their
+decisions are pending. The physical check still owns its original process and is traversing the
+drive; a native sample confirms directory and file-stat calls. It has reached no saved-data ACK yet.
+The full build remains unfinished, and no action is needed from Drew.
+
+A separate input check found a real gap after the green build: a deeply nested plan file escaped
+as a Python error instead of Cassette's normal refusal. I rejected that candidate. The repair reuses
+the broker's existing control-record size limit, bounds the read before parsing and returns the
+normal typed error for excessive nesting. The source and drive rules stay intact. The added cases,
+the complete repaired candidate and its independent review still need to pass.
+
+That first repair did not pass. The retained traceback showed that decoding had succeeded: the new
+union used a schema keyword the existing validator did not support, so invalid requests reached the
+encoder. I replaced it with the supported union form over the same two exact record shapes. The
+existing schema fixture now checks both valid choices and rejects missing, foreign and mixed fields.
+The bounded file read remains useful, but it did not fix the schema gap by itself.
+
+The independent challenges confirmed the union gap and found two more bad inputs: hash shapes
+that the existing resumable transfer cannot handle, and HTTP validator values that can never work.
+I now reject those inputs before issuing an operation or writing to a drive. The repair reuses the
+existing hash admission and HTTP encoding rules. All five focused schema and command checks pass.
+The complete repaired build and the final independent decision are next.
+
+The local generation route can preserve the required model identity without uploading it anywhere.
+The static review also makes its missing work concrete: a stable local address, source reads that
+leave the original evidence intact, and a profile that measures reading and writing the same drive.
+Those conditions remain open. A local source will not stand in for the separate real-provider test.
+
+## 16 October 2026 — the repaired input passes the complete checks
+
+The independent probes found real errors in the first operation-plan change. A schema keyword was
+not supported by our validator. Some hash and HTTP validator shapes were accepted even though the
+existing transfer path could not use them. We kept those failures and repaired the input boundary.
+The new version reuses the supported schema union, existing resumable hash check and bounded control
+reader. It passes all340 checks and all fourteen component controls.
+
+Opus is examining the exact repaired version and the actual earlier probe results. That review is
+still unfinished. The separate installed drive check continues on its original accepted code. No
+large model has been downloaded, and the build is still open.
+
+## 16 October 2026 — settle the local Ollama route
+
+The next Ollama change will keep the generated blobs on the external drive, then serve those blobs
+through Cassette. We can measure that exact source-read and destination-write pattern using synthetic
+counterparts before touching a real model. The later conversion from verified Hugging Face bytes gets
+its own exact measurement after headers are available.
+
+The independent design review corrected its earlier suggestion to generate each response directly
+from Hugging Face files. That proposal needed read positions we cannot know before the required entry
+check. We kept the entry rule and chose the retained-file route. This settles the implementation
+direction; the reader, generation, serving and real download still need to be built and proved.
+
+## 16 October 2026 — independent review accepts the input repair
+
+The repaired operation-plan input passes the independent review. Its44 deciding follow-up checks
+match the expected results. Removing each of six safeguards makes the corresponding bad input get
+through or lose its typed error. A suspected extra HTTP defect did not reproduce, so we added no
+speculative fix. The old failed version remains failed in the record.
+
+Opus accepts this limited code change. The complete suite also passes all340 checks. We preserved
+the exact review copies and their raw results. The next implementation adds real reads from retained
+external source extents to the profiler; the real drive check continues separately. This is a proved
+repair within the unfinished build.

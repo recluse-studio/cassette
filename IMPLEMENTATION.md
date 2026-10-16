@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 10:38 UTC
+## Current direction — 2026-10-16 11:40 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -551,6 +551,167 @@ NOT_RESOLVED; do not replace it with a public model, invented hash or waiver. Co
 physical-profile coordinates while retaining that exact dependency gap.
 Full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain incomplete.
 Ollama's actual generated identity remains unresolved; the parametric geometry is not a source lock.
+
+The contained C3 input repair now targets Q42/Q43's failed operation-plan boundary: the current
+qualifier requires a resolved SourceLock although the frozen generated geometry exists first.
+The generated operation_geometry contract declares source_lock:null, source adapter wire, revision
+hash algorithm, immutable recipe/upstream provenance and ordered unique relative artifact paths,
+sizes, digest algorithms and literal validator templates. Only {digest} is a permitted template
+variable. The CLI may supply this plan only to whole-operation qualify, never headers or Go.
+It reuses the existing broker drive/inventory/durability route and sole source profiler; private
+loopback synthetic identities are not published as real source locks. The durable measurement binds
+the complete canonical plan/digest, source_lock:null and source_identity_verification:NOT_RUN.
+This change alone cannot close SOURCE_ENTRY_PASS. Generated-model single-writer/locator ownership,
+the exact later geometry/materialization join and actual SourceLock qualification still need their
+own execution and evidence. The existing Q42 product CLI fixture is extended, not duplicated.
+Focused proof, full candidate proof and separate independent fixed review remain pending. The live
+physical03 owner continues on installed21 bytes and is not redirected to this source candidate.
+
+Candidate33 now PASSES all 340 tests in 465.55 seconds, zero skips, all fourteen raw component
+controls and the ordinary ledger. J=(0,0,17093,1,1,9,0,0,8425096); Q42's previously unavailable
+unresolved operation-plan input justifies 60 net executable lines. All 211 current source files join
+the producer, including its unchanged generated complete J report. Source-manifest SHA-256:
+de74325ac7f287339a66537f25f38ed4130c00cea7f3870d6dadfbd1c144a55e.
+The focused CLI fixture passed in 47.21 seconds. The coupled run retained one schema-set failure
+and five passes: the existing F0 expected-contract inventory lacked the newly generated grammar.
+That fixture now includes its fields and golden value; its corrected four checks pass in 1.63 seconds.
+No earlier failed result is relabelled. The complete producer includes the corrected fixture.
+
+The normalized frozen Ollama plan has 490 artifacts and 61,078,535,699 bytes. Its projected geometry
+binds the original plan/recipe/input receipts and matches all 490 actual checkpoint-envelope width
+derivations. This is metadata proof only, no profile, model read, generated identity or SourceLock.
+The SHA-256 revision and validator shape follows the frozen manifest description and actual Ollama
+adapter, not the upstream Git commit or the plan's BLAKE3 digest. The installed Ollama reports 0.40.5;
+its equality to the frozen 0.40.4 importer recipe remains unproved. No version or recipe is replaced.
+
+The completed candidate and evidence are frozen in geometry33-review01, with 265 files hashed.
+Two separate native workers use the supported opus alias and actual served claude-opus-5-5 through
+Read/Glob/Grep only: one examines the bounded input change and designs independent executable
+challenges; the other decides a STATIC proposed local materialization/registry route. The proposal
+is not adopted or implemented. Both reviews remain pending; neither is a code or live PASS. Tool28170
+owns their launcher, PIDs 61082 and 61083. Fresh included usage was 17 percent session, 54 percent
+weekly and four percent Fable, credits off; the owned account reader exited0. Root will execute
+independently designed finite probes in internal disposable scratch and return their actual receipts.
+
+A finite exact-owner observation at 10:56 UTC matches controller9325, CLI9654 and waiter9671 to their
+literal commands and parent ownership. Native sample9654 succeeds and contains readdir/lstat stacks.
+This is observed inventory traversal, not a completed inventory or entry count. Canonical state is
+still PENDING/EMPTY, error:null, with only REQUESTED hold and no first-data ACK. Do not restart or
+duplicate it based on elapsed time. first-profile-03/owned-activity01 retains raw sample and ownership.
+
+Root's separate parser-boundary check now REJECTS candidate33 despite its complete machine PASS:
+a 2,401-byte deeply nested JSON input leaks RecursionError with empty stdout instead of Q6's typed
+error. No operation is issued and no provider or external path is touched. The coupled decoded
+300-level provenance case already returns the existing typed schema-depth refusal; do not invent
+a second schema recursion guard. geometry-cli-deep-input01 and geometry-cli-deep-provenance01 retain
+both observations. The independent reviewer continues its other original questions on frozen33;
+this new Root finding does not turn that pending review into a completed verdict.
+
+The contained repair moves file decoding into the canonical broker control authority, reuses its
+existing 4 MiB record limit before JSON parsing and translates parser recursion into INVALID_REQUEST.
+The CLI stays a thin trigger and the source/profile/geometry contracts stay unchanged. The existing
+CLI fixture adds the reached parser failure and oversize refusal; no new same-stage fixture is added.
+This is a new bounded child pending focused proof, complete candidate34 and separate fixed review.
+The installed21 physical operation and all frozen33 files remain unchanged.
+
+The first focused repair check FAILS in 35.03 seconds and stays retained. Its traceback corrects
+Root's initial causal label: JSON decoding succeeds; the recursive failure occurs during RFC8785
+request encoding. The new union used oneOf, which the existing generated validator does not implement,
+so malformed acquisition objects bypassed validation. A separate direct schema control accepts
+{acquisition:{unexpected:true}} with zero defects, confirming this Q6/Q33 failure independently of
+file parsing. The decoded 300-level geometry refusal still remains correctly typed later.
+The definitive correction reuses the supported anyOf primitive over the two exact mutually exclusive
+record shapes. No validator implementation is added. The existing F0 malformed-input fixture now
+checks both valid branches, missing/foreign fields, mixed branches, invalid types and nonobject plans.
+The CLI deep-input assertion names the actual acquisition-schema refusal; the broker's bounded file
+reader remains the Q6 control-byte admission. Focused34-02 and complete candidate34 remain pending.
+
+The native code reviewer completes its design checkpoint at 11:06:46 UTC, exit0/stopped, served
+claude-opus-5-5, no error or denial. It does not grant a final verdict. Root executes its unchanged
+284-line challenge against frozen33. The first instrument stops at a missing validator field in the
+capture summary and uses a malformed drive-lookup control; its owned image detaches and is removed.
+A declared execution copy reads the validator from the same exact source-lock artifact and uses a
+canonical missing operation ID. All other predicates stay unchanged. That complete run confirms the
+mixed-union failure plus unsupported hash and HTTP validator admission. G1/G2 pass complete retained
+profile, raw chunk/checkpoint/envelope shape, revalidation, reclamation and idempotency checks.
+The actual removed-limit guard mutant creates an operation for Go and leaks TypeError for headers;
+the original rejects both before issue. The sentinel sees no nonloopback traffic. Its first positive
+control is rejected before transport; a separate HTTPS control reaches the owned proxy CONNECT.
+Both images are removed, all 265 frozen files remain unchanged and the shared host/account is explicit.
+
+Root REJECTS33 in root-adjudication33.json. The native initial claim that the union was exclusive
+missed the validator's unsupported keyword and is corrected by actual direct and independent cases.
+The hash/HTTP findings are repaired before another complete candidate: constructor admission reuses
+store's existing resumable_artifact_hasher, HTTP Latin1 encoding and literal whitespace checks. No
+hash implementation, model branch, state machine, source identity or profile assertion is added.
+The updated existing schema/CLI fixtures pass all five focused checks in 58.20 seconds. The earlier
+35.03-second failed repair and 51.54-second partial fixed result remain retained. Complete candidate34
+and the independent fixed adjudication remain next; the old candidate never becomes a PASS.
+
+The separate static generation-route review completes at 11:04:43 UTC, exit0/stopped, served
+claude-opus-5-5, no error or denial. It supports a local generated stream/registry without provider
+upload or a particular native importer binary, subject to explicit later ownership, stable origin,
+nonmutating source-chunk verification, same-cartridge source-read profiling and a separate real
+provider range-wire proof. Its recommendation is STATIC, not adoption, implementation or live proof.
+The reported four upstream capture gaps are missing packet links: the existing pinned follow-up
+receipt matches all four actual files. Preserve this correction and the report's other exact limits.
+The same-cartridge read side must be measured before its consumer; the present write/readback plan
+input alone cannot close SOURCE_ENTRY_PASS. Continue that eligible design and implementation after
+this contained input repair is independently accepted. Do not replace the frozen recipe, waive a
+profile, claim a provider-live result from loopback data or add a new human gate.
+
+
+Complete candidate34 PASSES all340 tests in412.39seconds, zero skips, all fourteen raw component
+controls and the ordinary ledger. J=(0,0,17107,1,1,9,0,0,8425096),74 net executable lines over the
+accepted32 input boundary. Source-manifest SHA-256 is
+4cec214c407293c61a129ab454b462abf0dbeaaf7e884394eeaeb86622957183. All211 current source files
+join the complete producer before this narrative update. The new221-file fixed34 source/evidence
+packet and425 actual independent33 evidence files are frozen under geometry33-review01/reviewer-work;
+all265 original files remain unchanged. The same separate stopped Opus reviewer is explicitly resumed
+through the current supported alias for affected input probes and Q1-Q3 adjudication. Tool49482 owns
+that native worker, PID43811; its verdict is pending. Fresh native allowance is28percent session,
+55percent weekly and4percent Fable, Usage credits off, with owned reader exit0 and no inference or
+settings change. No Copilot fallback, new dependency, model/provider operation or physical pass.
+The new generated contract makes any prospective complete runtime39 files; installed21 remains its
+actual unchanged38 files and sole owner of physical03. No running operation is redirected.
+
+
+The separate native static clarification completes at11:34:40UTC on served claude-opus-5-5, exit0,
+no error or denial. It retracts the earlier conditional B recommendation: the proposed on-demand
+HF read route needs tensor offsets unavailable before entry, and no existing Q42 authority proves
+an upper-bound read envelope equivalent to the actual pattern. Root adopts A as the next contained
+implementation direction: retain generated external blobs and serve those exact extents through the
+production adapter. Their490 frozen sizes permit a matching synthetic same-cartridge source before
+entry. The separate later HF-to-generated operation keeps its own exact profile after headers and
+before generation. No acceptance assertion, global order or source identity is waived. No measured
+LOC superiority or general impossibility theorem is claimed.
+
+The four existing upstream source-capture links are resolved by their original successful follow-up
+receipt and actual hash/size/commit joins; the initial404 named a different path. All265 original packet
+files remain unchanged. static-route-root-adjudication02.json records only a STATIC design decision,
+not implemented or live proof. Next contained piece: add the generic retained-source read/write
+profile and prove that removing its source reads breaks the exact trace join. Keep source geometry,
+nonmutating verified reads, generation writer/durability, stable locator, actual byte/layout join,
+real SourceLock qualification and provider LIVE range/authentication obligations separate and open.
+
+The affected native challenge now runs unchanged on frozen34:44 deciding observations match with
+zero deviation, plus one explicitly information-only ADJ record. All six isolated guard removals
+flip their intended result; Root independently verifies actual import paths and changed-file hashes
+rather than the script's tautological identity boolean. The NEL HTTP hypothesis does not reproduce:
+interior NEL and ordinary Latin1 both execute with matching body hashes. No speculative fix follows.
+Exact unchanged deciding-function/input joins retain the earlier33 G1/G2 platform evidence; this is
+not represented as a new fixed34 APFS run. No broad suite or physical operation is repeated.
+
+The same separate native reviewer finishes at11:38:53UTC, exit0/stopped, served claude-opus-5-5,
+no error or permission denial, with Q1/Q2/Q3 PASS_READY only for this bounded input amendment/repair.
+Root verifies all265 originals,221 fixed34,425 actual33 and1118 actual34 files unchanged and accepts
+fixed34-adjudication.json. Its explicit corrections distinguish the real provider adapter skipped by
+entry from the intentional synthetic loopback adapter, the4MiB admitted limit from its extra read
+sentinel byte, authority roles and old duplicated failure manifestations. Optional schema-keyword
+lint and API simplification remain recommendations, not added acceptance gates. Rejected33 stays
+rejected. Source-entry, same-cartridge source reads, real generated identity and all required downloads
+remain incomplete. Publish the accepted source now under existing commit/push authority; continue
+A's generic read/write profiling work without redirecting the running installed21 physical03 owner.
 
 ## Historical worklog — superseded checkpoints
 

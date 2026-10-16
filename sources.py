@@ -136,6 +136,61 @@ class ResolvedSource:
 
 
 @dataclass(frozen=True, slots=True)
+class PlannedArtifact:
+    """An operation's byte and checkpoint shape, without a claimed source digest."""
+
+    path: str
+    size: int
+    digest_algorithm: str
+    validator_template: str
+
+    def record(self) -> dict:
+        return {"path": self.path, "size": self.size, "digest_algorithm": self.digest_algorithm,
+                "validator_template": self.validator_template}
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class OperationGeometry:
+    """Freeze a Q42 plan separately from any resolved source identity or access claim."""
+
+    encoded: bytes
+
+    def __init__(self, record: dict):
+        defects = validate('operation_geometry', record)
+        if defects:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry must match its generated contract', '; '.join(defects))
+        paths = [item['path'] for item in record['artifacts']]
+        if paths != sorted(set(paths)) or any(
+                any(part in {'', '.', '..'} for part in path.split('/')) or '\\' in path for path in paths):
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry paths must be unique ordered relative paths', 'unsafe or unordered artifact path')
+        if not record['provenance'] or any(
+                '{' in item['validator_template'].replace('{digest}', '')
+                or '}' in item['validator_template'].replace('{digest}', '')
+                or item['validator_template'] != item['validator_template'].strip() for item in record['artifacts']):
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry binds provenance and literal validator shape', 'missing provenance, unknown validator variable or surrounding whitespace')
+        try:
+            for item in record['artifacts']:
+                item['validator_template'].encode('latin-1')
+                resumable_artifact_hasher(item['digest_algorithm'] + ':', item['path'], object_size=item['size'])
+            encoded = canonical_bytes(record)
+        except (CassetteError, ValueError) as error:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry hash, validator and metadata must execute the existing source path',
+                  error.detail if isinstance(error, CassetteError) else str(error))
+        object.__setattr__(self, 'encoded', encoded)
+
+    def record(self) -> dict:
+        return json.loads(self.encoded)
+
+    @property
+    def source_kind(self) -> str:
+        return self.record()['source_kind']
+
+    @property
+    def artifacts(self) -> tuple[PlannedArtifact, ...]:
+        return tuple(PlannedArtifact(**item) for item in self.record()['artifacts'])
+
+
+@dataclass(frozen=True, slots=True)
 class Requirements:
     """Source requirements translated without retaining the resolved credential."""
 
@@ -1188,14 +1243,29 @@ class SourceAdapter:
 
 @asynccontextmanager
 async def source_profile_boundary(
-    revision: ResolvedSource,
-    artifacts: tuple[Artifact, ...],
+    revision: ResolvedSource | OperationGeometry,
+    artifacts: tuple[Artifact | PlannedArtifact, ...],
     *,
     header_lengths: Mapping[str, int] | None = None,
 ):
     """Serve deterministic bounded source ranges through the real adapter boundary."""
-    if not isinstance(revision, ResolvedSource):
-        _fail("INVALID_REQUEST", "source-profile", "Q42: profile boundary requires a resolved source", "revision is not a ResolvedSource")
+    if not isinstance(revision, (ResolvedSource, OperationGeometry)):
+        _fail("INVALID_REQUEST", "source-profile", "Q42: profile boundary requires a source or frozen geometry", "revision has no source or operation geometry")
+    geometry = isinstance(revision, OperationGeometry)
+    if geometry:
+        # Synthetic identities exist only inside the loopback executor; the plan keeps source_lock=null.
+        plan = OperationGeometry(revision.record())
+        if tuple(artifacts) != plan.artifacts:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: profile must use its complete frozen geometry', 'selected artifacts differ from the operation plan')
+        plan_digest = digest_bytes(plan.encoded)
+        algorithm = plan.record()['revision_algorithm']
+        revision = ResolvedSource(plan.source_kind, 'synthetic-operation-profile',
+            algorithm + ':' + plan_digest.split(':')[1][:_DIGEST_LENGTH[algorithm]], None,
+            tuple(Artifact(item.path, item.size,
+                item.digest_algorithm + ':' + digest_bytes(canonical_bytes({'plan': plan_digest, 'artifact': item.path})).split(':')[1][:_DIGEST_LENGTH[item.digest_algorithm]],
+                '/synthetic-only', item.validator_template.replace('{digest}', '0' * _DIGEST_LENGTH[item.digest_algorithm]))
+                for item in plan.artifacts), (), 'synthetic-profile-only', digest_bytes(b''), None, None)
+        artifacts = revision.artifacts
     if revision.source_kind not in _WIRES:
         _fail("MODEL_UNSUPPORTED", revision.locator, "Q42: profile boundary requires a declared source adapter wire", "source kind has no adapter wire")
     try:

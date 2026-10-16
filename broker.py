@@ -42,7 +42,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
+from sources import Artifact, OperationGeometry, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -706,6 +706,18 @@ class CanonicalBroker:
             self._owner_fd = None
             with suppress(OSError):
                 os.close(descriptor)
+
+    @staticmethod
+    def read_operation_plan(path: str | Path) -> object:
+        """Q6/Q42: bound operator metadata before parsing it or issuing any operation."""
+        try:
+            with Path(path).open('rb') as stream:
+                payload = stream.read(_MAX_RECORD_BYTES + 1)
+            if len(payload) > _MAX_RECORD_BYTES:
+                _reject('INVALID_REQUEST', str(path), f'operation plan exceeds {_MAX_RECORD_BYTES} control bytes')
+            return json.loads(payload)
+        except (OSError, ValueError, RecursionError) as error:
+            _reject('INVALID_REQUEST', str(path), 'operation plan cannot be parsed as bounded UTF-8 JSON: ' + type(error).__name__)
 
     @staticmethod
     def operation_id(request: dict) -> str:
@@ -1677,7 +1689,10 @@ class CanonicalBroker:
         if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
             _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
         args = request['arguments']['acquisition']
-        source_selection = self._entry_result(args['model_selection_id'], 'source.select')
+        geometry = OperationGeometry(args['operation_geometry']) if 'operation_geometry' in args else None
+        if geometry is not None and (not qualification_only or header_only or header_json_bytes is not None):
+            _reject('INVALID_REQUEST', 'acquire', 'unresolved geometry permits only whole-operation qualification')
+        source_selection = None if geometry is not None else self._entry_result(args['model_selection_id'], 'source.select')
         destination = self._entry_result(args['drive_selection_id'], 'drive.select')
         header_lengths = None
         if header_only:
@@ -1685,8 +1700,9 @@ class CanonicalBroker:
             header_lengths = source_header_lengths(selected, header_json_bytes)
         elif header_json_bytes is not None:
             _reject('INVALID_REQUEST', 'acquire', 'header declarations require header-only execution')
-        descriptor = source_selection['descriptor']
-        request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
+        if geometry is None:
+            descriptor = source_selection['descriptor']
+            request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
         operation = self.issue(request)
         operation_id = operation['operation_id']
         if operation['state'] in _TERMINAL_STATES:
@@ -1706,12 +1722,14 @@ class CanonicalBroker:
             selected = remounts[-1]['selection'] if remounts else destination['selection']
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
             selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
-            adapter = SourceAdapter(descriptor['kind'], source_selection['endpoint'],
-                credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], source_selection['endpoint']))
-            revision = await adapter.resolve(descriptor)
-            if _source_record(revision) != source_selection['source_lock']:
-                _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable input')
-            await adapter.license_and_auth(revision)
+            revision = geometry
+            if geometry is None:
+                adapter = SourceAdapter(descriptor['kind'], source_selection['endpoint'],
+                    credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], source_selection['endpoint']))
+                revision = await adapter.resolve(descriptor)
+                if _source_record(revision) != source_selection['source_lock']:
+                    _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable input')
+                await adapter.license_and_auth(revision)
             observed_inventory = destination['protected_inventory']
             if digest_bytes(canonical_bytes(observed_inventory)) != destination['inventory_digest']:
                 _reject('ROOT_INVALID', operation_id, 'selected protected inventory digest does not verify')
@@ -1719,10 +1737,12 @@ class CanonicalBroker:
                 destination['folder'], operation_id=operation_id, cartridge_uuid=destination['cartridge_uuid'])
             owner = CapacityCoordinator(cartridge)
             key = 'go-durability-' + operation_id.removeprefix('op-')
-            binding = {'operation_id': operation_id, 'source_revision': revision.immutable_revision,
-                'model_selection_id': args['model_selection_id'], 'drive_selection_id': args['drive_selection_id'],
+            binding = {'operation_id': operation_id, 'source_revision': None if geometry is not None else revision.immutable_revision,
+                'model_selection_id': args.get('model_selection_id'), 'drive_selection_id': args['drive_selection_id'],
                 'volume_uuid': selection.volume.volume_uuid, 'cartridge_uuid': cartridge_uuid,
                 'folder': destination['folder'], 'inventory_digest': destination['inventory_digest']}
+            if geometry is not None:
+                binding['operation_geometry_digest'] = digest_bytes(geometry.encoded)
             head = await asyncio.to_thread(campaign_head, cartridge, key)
             if head is None:
                 probe_id = str(uuid.uuid4())
@@ -2196,7 +2216,8 @@ class CanonicalBroker:
         """Q42/Q53/Q60: measure the source executor and retain its whole operation working set."""
         observed = await asyncio.to_thread(drive_path_observation, selection)
         host = await asyncio.to_thread(storage_host_observation)
-        artifacts = revision.artifacts if header_lengths is not None else _acquisition_artifacts(revision)
+        geometry = isinstance(revision, OperationGeometry)
+        artifacts = revision.artifacts if geometry or header_lengths is not None else _acquisition_artifacts(revision)
         patterns = [{'artifact': artifact.path,
                      'write_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8,
                      'read_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8}
@@ -2206,7 +2227,7 @@ class CanonicalBroker:
         binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
                    'path': observed['path'], 'operation': operation_id,
                    'profiler_version': STORAGE_PROFILER_VERSION,
-                   'plan': {'source_lock': _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
+                   'plan': {'source_lock': None if geometry else _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
                             'queue_depth': 1, 'network_range_concurrency': 2,
                             'cache_state': 'FRESH_READBACK_AND_RETAINED_REVALIDATION',
                             'working_set_bytes': (sum(sum(item.values()) for item in lengths) if header_lengths is None
@@ -2222,6 +2243,10 @@ class CanonicalBroker:
                             'uncached_read_request_available': getattr(fcntl, 'F_NOCACHE', None) is not None,
                             'cache_crossing_required': sum(pattern['read_bytes'] for pattern in patterns) > host['host_memory_bytes'],
                             'cold_read_verification': 'RETAINED_SOURCE_WINDOW; FLAG_ALONE_IS_NOT_PROOF'}}
+        if geometry:
+            binding['plan'].update(operation_geometry=revision.record(),
+                                   operation_geometry_digest=digest_bytes(revision.encoded),
+                                   source_identity_verification='NOT_RUN')
         if header_lengths is not None:
             binding['plan'].update(header_only=True, header_json_bytes=header_lengths,
                 artifact_ranges={artifact.path: [list(pair) for pair in header_ranges(artifact, header_lengths[artifact.path])]

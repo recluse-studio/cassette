@@ -87,7 +87,10 @@ def main(argv=None):
         command.add_argument('--header-json-bytes', action='append', metavar='PATH=N',
                              help='Declare exact JSON header bytes, excluding its eight-byte prefix; repeat per artifact.')
     for command in (go, qualify, headers):
-        command.add_argument('--source-selection', '--model-selection', dest='model_selection', required=True)
+        source = command.add_mutually_exclusive_group(required=True)
+        source.add_argument('--source-selection', '--model-selection', dest='model_selection')
+        if command is qualify:
+            source.add_argument('--operation-plan', type=Path, help='Measure frozen byte geometry with no resolved source or payload access.')
         command.add_argument('--drive-selection', required=True)
     remount = commands.add_parser('watch-remount', help='Wait for physical reconnection and verify the held drive.')
     remount.add_argument('operation_id')
@@ -140,8 +143,15 @@ def main(argv=None):
             result = asyncio.run(broker.select_drive(request))
         elif args.command in {'go', 'qualify', 'headers'}:
             request.update(operation='acquire', target=args.drive_selection, arguments={'acquisition': {
-                'model_selection_id': args.model_selection, 'drive_selection_id': args.drive_selection}})
-            print('Checking the selected source and creating the durable Cassette folder.', file=sys.stderr, flush=True)
+                'drive_selection_id': args.drive_selection}})
+            if getattr(args, 'operation_plan', None) is not None:
+                request['arguments']['acquisition']['operation_geometry'] = broker.read_operation_plan(args.operation_plan)
+            else:
+                request['arguments']['acquisition']['model_selection_id'] = args.model_selection
+            message = ('Checking the selected drive and measuring unresolved operation geometry.'
+                       if getattr(args, 'operation_plan', None) is not None
+                       else 'Checking the selected source and creating the durable Cassette folder.')
+            print(message, file=sys.stderr, flush=True)
             result = asyncio.run(_download(broker, request, qualification_only=args.command == 'qualify',
                                           header_only=args.command == 'headers' or getattr(args, 'headers', False),
                                           header_json_bytes=getattr(args, 'header_json_bytes', None)))

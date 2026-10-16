@@ -896,7 +896,7 @@ formal_contract:
 evidence:
   - status: INFERRED
     result: "E-005 requires assembled-path measurement; E-009 converts measured values into service bounds."
-build_instruction: "Ship one bounded profiler that emits a content-addressed operation profile from captured native or compiled page traces. Keep the optional broad reference comparison separate from admission."
+build_instruction: "Ship one bounded profiler that emits a content-addressed operation profile from captured native or compiled page traces. Keep the optional broad reference comparison separate from admission. The 2026-10-16 autonomous C3 repair permits an explicit unresolved operation_geometry input: source_lock is null, immutable recipe/upstream provenance and ordered path/size/hash-algorithm/validator-template shapes are frozen, and deterministic synthetic bytes exercise the existing adapter, transfer, checkpoint, retained-read, trace and reclamation path. Its result proves only physical operation geometry, never real source identity, authentication, headers or payload. The later actual generated layout must join that exact plan; real SourceLock qualification remains mandatory before source reacquisition. A geometry-only operation cannot advance into header inspection or acquisition."
 acceptance_check: "Qualify a small operation and a demanding operation on the same path, then throttle or exhaust the cache only where the bound plan can do so. Classification must follow the operation's sustained p05/p99 values; an advertised link rate or reference-profile result must never substitute for measured Bs."
 depends_on: [Q12, Q19, Q41]
 reopen_only_if: "Live traces introduce a materially different I/O distribution."
