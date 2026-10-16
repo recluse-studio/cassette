@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 import cli
 from broker import CanonicalBroker
 from errors import CassetteError
-from store import CapacityCoordinator, canonical_bytes, digest_bytes, source_profile_trace, write_campaign_artifact
+from store import CapacityCoordinator, canonical_bytes, compare_inventory, digest_bytes, source_profile_trace, write_campaign_artifact
 from test_l05_drive import _attached_apfs_image
 
 
@@ -104,10 +104,22 @@ def test_q9_q52_cli_catalogue_uses_broker_and_bounded_provider_pages(tmp_path):
 
 
 def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path):
-    """Q49 acceptance: CLI selection binds its volume and inventory without creating the destination."""
+    """Q49: exact OS-owned top-level exclusions preserve nested and ordinary user inventory guards."""
     image, mount = _attached_apfs_image(tmp_path)
+    locked = []
     try:
         (mount / 'user.txt').write_bytes(b'keep this user file')
+        user = mount / 'UserFolder'
+        user.mkdir()
+        (user / 'a.bin').write_bytes(bytes(1000))
+        (user / '.TemporaryItems').mkdir()
+        (user / '.TemporaryItems' / 'x').write_bytes(bytes(10))
+        for name, size in (('.DocumentRevisions-V100', 5), ('.TemporaryItems', 7)):
+            path = mount / name
+            path.mkdir()
+            (path / 'owned-fixture').write_bytes(bytes(size))
+            path.chmod(0)
+            locked.append(path)
         def launch(*arguments, expected_code=0):
             result = subprocess.run([sys.executable, '-B', '-m', 'cli', '--state',
                 str(tmp_path / 'state'), *arguments], cwd=Path(__file__).resolve().parents[1],
@@ -116,15 +128,46 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
             return json.loads(result.stdout)
         drives = launch('drives')
         volume = next(item for item in drives['result']['volumes'] if item['mount_path'] == str(mount))
-        selection = launch('select-drive', '--volume', volume['volume_uuid'], '--folder', 'Cassette',
-                           '--key', 'selected-drive')
+        def select(key, expected_code=0):
+            return launch('select-drive', '--volume', volume['volume_uuid'], '--folder', 'Cassette',
+                          '--key', key, expected_code=expected_code)
+        selection = select('selected-drive')
+        assert selection['state'] == 'SUCCEEDED'
         assert selection['result']['selection']['volume']['volume_uuid'] == volume['volume_uuid']
-        assert selection['result']['protected_inventory']['user.txt'] == {'type': 'file', 'logical_bytes': 19}
+        before = selection['result']['protected_inventory']
+        assert before == {'user.txt': {'type': 'file', 'logical_bytes': 19},
+                          'UserFolder': {'type': 'directory', 'logical_bytes': 1010}}
         assert selection['result']['folder'] == 'Cassette'
         assert not (mount / 'Cassette').exists()
-        assert launch('select-drive', '--volume', volume['volume_uuid'], '--folder', 'Cassette',
-                      '--key', 'selected-drive') == selection
+        assert select('selected-drive') == selection
+        for path in (mount / 'LockedUser', user / '.DocumentRevisions-V100'):
+            path.mkdir()
+            path.chmod(0)
+            locked.append(path)
+            failure = select('denied-' + path.parent.name + '-' + path.name, expected_code=1)
+            assert failure['state'] == 'FAILED' and failure.get('result') is None
+            assert failure['error']['code'] == 'CAPABILITY_MISMATCH'
+            assert 'PermissionError' in failure['error']['detail']
+            path.chmod(0o755)
+            path.rmdir()
+            locked.remove(path)
+        (user / 'a.bin').write_bytes(bytes(1001))
+        after = select('changed-user')['result']['protected_inventory']
+        assert after['UserFolder']['logical_bytes'] == 1011
+        try:
+            compare_inventory(before, after)
+        except CassetteError as error:
+            assert error.code == 'PROVENANCE_VIOLATION'
+        else:
+            raise AssertionError('protected byte change was not detected')
+        temporary = mount / '.TemporaryItems'
+        temporary.chmod(0o755)
+        (temporary / 'new-owned-fixture').write_bytes(bytes(100))
+        temporary.chmod(0)
+        assert select('changed-excluded')['result']['protected_inventory'] == after
     finally:
+        for path in locked:
+            path.chmod(0o755)
         subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
         image.unlink()
 

@@ -8640,3 +8640,56 @@ The final preservation check also passes: all 2,079 packet files, the 210 source
 209 original reference files match, with no missing or altered content. The reviewer and every
 owned test process have stopped. The bounded review is complete. Full physical qualification
 and the required source downloads remain separate work.
+
+
+I committed and pushed the accepted repair as 8b6bafb and installed the replacement. All thirty-eight
+actual installed files and the CLI entrypoint match the tested and reviewed source. The first install
+controller stopped before installation because Homebrew adds a suffix to its pinned uv version label;
+I retained that attempt, checked the numeric version and completed the offline install. The normal
+push also preceded completion of an extra post-commit accounting read because my parent shell did
+not stop on an empty, still-running result file. I retained that ordering error. The actual accounting
+check then passed, and the remote commit hash matches. No failed or pending result was counted as proof.
+
+The first fresh LaCie selection then stopped before a source profile began. macOS denied listing its
+root-owned document-revisions directory. A read-only diagnostic found the temporary-items directory
+as the next denial. I preserved the failed selection and both observations. I am checking whether the
+existing rule for named volatile filesystem paths covers those exact directories; no production rule
+or access setting has changed. The completed restart repair remains installed and accepted in its
+bounded scope. The full physical profile and required downloads remain outstanding.
+
+
+Apple's installed sandbox policies supplied the missing evidence: the revision service owns a
+volume-root revision store, and native safe saves use the temporary-items directory. A separate
+Opus 5.5 review accepted those two exact names under the existing volatile-system-path rule. Its
+earlier Time Machine suggestion was one evidence route, not an extra acceptance condition.
+I added the two names to the existing list. The inventory algorithm and access settings are unchanged.
+The next proof must still reject an unreadable user folder and a nested same-named folder, and detect
+a protected byte change. No fixed or live pass is claimed before those checks run.
+
+
+The six-case comparison passes. The old code fails where expected. The repair admits only the
+named top-level exclusions, keeps unreadable user folders closed, and detects a protected byte
+change. The first expanded fixture had a mistaken expectation that CLI errors contain a null result;
+they omit that field. I retained the failed test and corrected the assertion.
+
+I then placed the complete machine check's temporary fixtures on LaCie unnecessarily. It completed
+three checks in 212.58 seconds while repeatedly waiting for durable writes. I preserved the exact
+source and incomplete result, stopped only that owned check, and restarted with ordinary internal
+fixture scratch. This changes the test storage route, not model placement or the production repair.
+The complete result and independent fixed-candidate review remain pending.
+
+
+The complete rerun passes all 340 checks in 428.92 seconds, without skips. All fourteen component
+controls and the ordinary accounting check pass. The two-name repair adds no executable line,
+dependency, process, runtime, kernel or model-specific branch.
+
+Opus 5.5 then passes the bounded repair after reading the raw six-case records and the changed paths.
+Its report keeps two limits visible: the probe ran from my working copy, joined by its exact hash,
+and the reviewer relied on my full-file and package comparisons rather than independently diffing
+the whole broker. All 262 frozen packet files and seven Apple policy copies still match afterward.
+The replacement joins all thirty-eight runtime files to the tested source. Publication, installation
+and the fresh physical-drive selection are next; this review does not supply live proof.
+
+Two read-only whole-disk identity queries also timed out. The next prepared profile now derives the
+physical disk ID from its actual APFS store partition and retains the native device chain. This is
+metadata preparation only. No source profile or required model download has started.

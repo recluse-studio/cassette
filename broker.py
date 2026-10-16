@@ -1645,7 +1645,7 @@ class CanonicalBroker:
         while True:
             revalidate_external_apfs_volume(selection)
             result = await asyncio.to_thread(inventory_step, selection.volume.mount_path,
-                excluded=('.Spotlight-V100', '.Trashes', '.fseventsd', folder), checkpoint=checkpoint)
+                excluded=('.Spotlight-V100', '.Trashes', '.fseventsd', '.DocumentRevisions-V100', '.TemporaryItems', folder), checkpoint=checkpoint)
             if result['inventory'] is not None:
                 return result['inventory']
             checkpoint = result['checkpoint']

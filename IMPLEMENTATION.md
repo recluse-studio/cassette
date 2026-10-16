@@ -5,37 +5,58 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 04:47 UTC
+## Current direction — 2026-10-16 05:18 UTC
 
-Continue authorized L05-L10. Candidate23 repairs the supported D6 timing and D7 retained-read
-restart failures. It passes 340 tests in 424.51 seconds, zero skips, all fourteen component
-controls and ordinary ledger. J=(0,0,16951,1,1,9,0,0,8425096). Thirty-two raw CAPTURED records
-reproduce; twelve fresh captures have exact ordered write geometry. The old timing check still
-fails on the original defect, and restoring D7's obsolete condition reproduces the stranded loop.
+Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
+8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
+and the CLI join to its tested/frozen/wheel/commit bytes. Native review05 PASSES Q1/Q2/Q3 only at
+fixture/platform level; all earlier incomplete and rejected attempts remain retained.
 
-Native review05 completed normally on served claude-opus-5-5 and PASSES Q1/Q2/Q3 at fixture and
-platform level. The native summary has no error or permission denial. The separate after-review
-check PASSES: all 2,079 packet files, the 210 embedded source files and 209 original v18 files
-match exactly, with zero missing/extra/link/special/hardlink/byte/digest defects. No owned
-producer, scenario or native reviewer remains running.
-Packet23 has 2,079 files, manifest SHA-256 7c99aa75b9b45b7f9d4d77c9268e9eadedfded49138337c7652db78ca5a6b106.
-Its source-manifest SHA-256 is 7e1ea581503d8e2eb8f7d150e732f62b1997075b61e1dbd53d54983abe6fcab0.
-Wheel18 joins all 38 tested/frozen runtime files, SHA-256
-e788d089ef884a274d80bfafa8281d1ccf82bf8125263297cb5d1a38bd57116f, and remains uninstalled.
-Installed wheel14 is unchanged. Earlier rejected candidates and failed instruments remain retained.
-Receipt: production-source-profile-01/review-05-adjudication.json; exact report:
-source-profile-review-01/review-adjudication-05.md.
+The first fresh installed drive selection op-5b3dc864a787f03ee459095a89694e86049f9922b2d49f980a9fa3673cff0cc8
+FAILED at EPERM on /Volumes/LaCie/.DocumentRevisions-V100. A labelled read-only diagnostic identifies
+.TemporaryItems as the next denied path. No source profile, required header or payload began.
+That terminal selection is not reused. No permissions, ownership, protected contents or settings changed.
 
-Next: commit and push the complete authorized snapshot;
-join and install the accepted wheel with all 38 actual installed hashes; bind the exact Q80
-physical source cards and execute them through the installed CLI. Reconcile current operations
-before launch and preserve the recorded physical reconnect. Put new logs off the external drive
-after fresh protected-inventory selection. No duplicate tiny-model test or reconnect request.
-Required full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain
-NOT_RUN/incomplete. Header-plan retained recovery has static same-branch reasoning only; the old
-large-artifact D4 false pass was inferred, not executed. Keep every acceptance requirement and
-native-only Opus/subscription/no-overage boundaries. Ollama's actual generated identity remains
-unresolved; a parametric geometry is not a source lock.
+Inventory repair candidate25 adds only those two exact top-level names to the existing volatile-path
+tuple. Installed Apple revisiond/application/bird sandbox policies and actual uid0 ownership support
+the existing runbook class. Scope review02 confirms that the absent old Time Machine exclusion file
+was only a suggested evidence route, not a new requirement. The inventory/comparison algorithms are
+unchanged. The existing Q49 CLI fixture is extended; no additional fixture at the same stage is added.
+
+The affected fixture passes in 3.06 seconds. The unchanged reviewer A/A-prime/B/C/D/E challenge
+PASSES all six deciding cases: old-source PermissionError, fixed exact exclusions, ordinary and nested
+unreadable-folder refusal, protected byte-change detection and excluded-change blindness. Root checks
+the raw records and exact broker delta. The owned APFS image is detached and removed. These are
+platform fixture results, not real-drive proof. The first fixture instrument's absent-result KeyError
+is retained; the CLI correctly omits that error field and the assertion now accepts its canonical shape.
+Candidate24's slow external temporary-fixture route was interrupted after 3 passes in 212.58 seconds;
+all 210 exact source files and raw incomplete result are preserved. Both owned processes stopped
+before candidate25 reran with ordinary internal fixture scratch. Real model bytes remain external.
+
+Candidate25 PASSES 340 tests in 428.92 seconds, zero skips, all fourteen component controls and
+ordinary ledger. J=(0,0,16951,1,1,9,0,0,8425096), unchanged executable accounting. Its source-manifest
+SHA-256 is 24b09a7cdab9c2f397bbcdab4fe31b35b13ebbe9a0abb63545fe6c460a660335.
+Native fixed review03 completed normally on served claude-opus-5-5 and PASSES only this contained
+fixture/platform repair. No error or permission denial. Root's after-check verifies all 262 packet
+files and seven primary Apple policies unchanged. The reviewer explicitly relies on Root's complete
+broker delta/runtime join and does not individually inspect the fourteen controls; those actual Root
+results remain retained. The probe used Root cwd, whose broker hash joins to the frozen candidate.
+Packet manifest SHA-256: 8114011e17da484111686bcd88ec073a6afa180e4d5bd2ad20c740b800589525.
+Wheel19 joins all 38 runtime files, SHA-256 da844146973d843c76b75198efdb75b350a5f5c4283ef58b62e849774d2f8a1c,
+and remains UNINSTALLED until accepted publication and actual installed-byte verification complete.
+Receipts: production-source-profile-01/inventory-review03-adjudication.json and inventory-fixed25-after.json.
+No owned producer, fixture probe or native reviewer remains running.
+
+Next: normal commit/push, accepted offline wheel19 installation, actual runtime hash join, then fresh
+installed drive selection under prepared-first-profile-02.json's new key/op-f697c4e7134dc2fa4e19cfcc75927c9b6f7323183f12954c83cf914cf1c863a9.
+Two read-only whole-disk diskutil queries time out after10 seconds; preserve both. The separate
+metadata instrument instead obtains the actual physical ID from the APFS store partition and binds
+the native IOKit chain and hardware host identity. Its exact F4 plan is PREPARED ONLY, not issued,
+qualified or source-locked by a generated placeholder. Materialize exact Q80 START/checkpoint/VERIFY
+bindings before source-profile writes. Keep logs off LaCie after fresh inventory; reconcile operations
+before launch and retain the original completed physical reconnect. No duplicate tiny test or reconnect.
+Full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain incomplete.
+Ollama's actual generated identity remains unresolved; the parametric geometry is not a source lock.
 
 ## Historical worklog — superseded checkpoints
 
