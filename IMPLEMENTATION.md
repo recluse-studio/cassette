@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 05:58 UTC
+## Current direction — 2026-10-16 06:06 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -134,9 +134,50 @@ Real failure-family execution and inherited stage/evidence validation remain NOT
 helper narrowing, exact suffix matching and generated lifecycle keys are not supported defects.
 No live campaign completion is inferred from data checks.
 
-Next: commit/push the accepted repair, then bind/publish actual physical-profile actions and run qualification with first-boundary
-recovery proof. Reconcile the successful physical-02 receipt; no selection remains running. Keep
-model-bearing bytes in the authorized external cartridge. No duplicate tiny model test or reconnect.
+The accepted Q80 repair is committed/pushed as5a26e6a6c3629b292db5533cf1fad4bd14b99404. Both ordinary
+ledger checks actually finish before the normal push; actual remote parity and a clean worktree are
+recorded in q80-publication26.json. The accepted runtime remains wheel19/3cdbf96, all38 files unchanged.
+
+First physical action preparation01 was superseded before graph publication or execution. A finite
+read-only instrument check found the wrong raw operation-envelope shape, an unproved imported-store
+identity and a borrowed-PID signal race. Preparation02 fixes all three: canonical envelope/digest
+readback, exact broker/store module paths, and an owner-mediated request that makes the original
+parent kill its own unreaped Popen child only after the exact ACK. The corrected narrow source check
+finds no directly created stop-path defect. The actual installed read-only envelope/module check
+PASSES. Control-request crash durability remains a private coordination limitation, not a fabricated
+canonical checkpoint proof. The first publication instrument used system Python without blake3 and
+failed during import before writes; the pinned repository interpreter completes publication.
+
+first-profile-02/publication.json records the actual115-node successor, preserving all110 inherited
+nodes, with write-bearing START and recovery cards. Graph digest:
+blake3:337e315e6914bb88f540ce41b315c3fc39de724ee868e17c72b7d538b2e3fc1b.
+Head digest: blake3:c9cf799cdbcbcd439c373dc71d6731c5ede2a66a4806536261a83abd51b1566f.
+No acceptance result changes merely from graph publication. Exact cards bind the installed CLI,
+source/drive selections, controller bytes, host/path/plan and runtime38. The launch claim is0 for
+metadata only; the broker/store computes each positive external transition claim before writing.
+
+The installed qualification command is now running for
+op-ba287e6385654a92d3ba4c5e6b83efccf7a6442cd1138de50967b788b0fd5ac5, key
+required-source-profile-f4-20261015-01. Controller/CLI PID24728/25088, tool session7012. The canonical
+operation is currently PENDING/EMPTY with exactly its durable start and REQUESTED profile-checkpoint
+hold; no ACK, measurement or profile PASS is claimed. first-profile-02/start/initial-launch.json and
+prearmed.json retain ownership and exact inputs. Its separate preflight PID28253, tool session22238,
+waits for the exact first-data ACK and will launch the sealed recovery command once. It must not kill
+any process before that ACK or duplicate an active controller. Both controllers guard system space;
+last observed84GiB system and3.9TiB external free. No actual required header or payload access.
+
+Next: reconcile first-profile-02/start/initial-launch.json, recovery-preflight.json, controller logs and
+canonical operation before any launch. If the preflight has launched recovery, leave its healthy
+held-resume/completion work running. If no ACK yet, continue useful independent work and preserve
+the hold. After actual recovery/full qualification, perform complete independent raw verification
+and the required separate review before marking its VERIFY. No new selection, tiny test or reconnect.
+
+A finite source/contract trace confirms Ollama's unresolved identity cycle: SOURCE-ENTRY-PASS
+requires its exact generated profile before payload access, while the pinned generated manifest/blob
+identity needs verified Qwen3-30B-A3B bytes whose acquisition depends on SOURCE-ENTRY-PASS. Existing
+resolver/catalogue metadata cannot establish those generated digests. The parametric plan remains
+NOT_RESOLVED; do not replace it with a public model, invented hash or waiver. Continue eligible
+physical-profile coordinates while retaining that exact dependency gap.
 Full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain incomplete.
 Ollama's actual generated identity remains unresolved; the parametric geometry is not a source lock.
 

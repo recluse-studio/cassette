@@ -8756,3 +8756,20 @@ or permission denial. All 216 original snapshot files, 258 fixed-packet files an
 files still match. The review retains its exact limits: data evidence, an unrecoverable historical
 pytest invocation identity, and unrun later failure-family and inherited-metadata cases. Optional
 tightening adds no new failure. The accepted repair can now be committed and pushed.
+
+
+The recorder repair is committed and pushed as 5a26e6a. Both accounting reads finished before the
+normal push, and the remote hash matches. The installed runtime is unchanged.
+
+I bound and published the first physical profile's five records, preserving all 110 inherited
+records. A finite check caught defects in the unexecuted control instrument: it read the wrong
+record envelope and did not fully establish its imported module or process identity. I corrected
+those before publishing or starting anything. The real installed envelope check passes. The stop
+now comes from the parent that owns the live child; it cannot signal a borrowed PID. A separate
+publication attempt used the wrong Python and failed on import; that attempt is retained too.
+
+The installed qualification command is now running. Its durable hold is requested before the
+data boundary. A separate waiter will start the exact stop-and-resume action after the real ACK,
+without asking Drew to intervene. The job is still in preflight: no ACK, full measurement, source
+profile pass or required model download is claimed. Both controllers monitor system space. The
+first source profile retains its planned eight-gigabyte geometry on the authorized cartridge.
