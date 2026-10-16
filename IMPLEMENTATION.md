@@ -5,10 +5,137 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-15
+## Current direction — 2026-10-16 04:47 UTC
+
+Continue authorized L05-L10. Candidate23 repairs the supported D6 timing and D7 retained-read
+restart failures. It passes 340 tests in 424.51 seconds, zero skips, all fourteen component
+controls and ordinary ledger. J=(0,0,16951,1,1,9,0,0,8425096). Thirty-two raw CAPTURED records
+reproduce; twelve fresh captures have exact ordered write geometry. The old timing check still
+fails on the original defect, and restoring D7's obsolete condition reproduces the stranded loop.
+
+Native review05 completed normally on served claude-opus-5-5 and PASSES Q1/Q2/Q3 at fixture and
+platform level. The native summary has no error or permission denial. The separate after-review
+check PASSES: all 2,079 packet files, the 210 embedded source files and 209 original v18 files
+match exactly, with zero missing/extra/link/special/hardlink/byte/digest defects. No owned
+producer, scenario or native reviewer remains running.
+Packet23 has 2,079 files, manifest SHA-256 7c99aa75b9b45b7f9d4d77c9268e9eadedfded49138337c7652db78ca5a6b106.
+Its source-manifest SHA-256 is 7e1ea581503d8e2eb8f7d150e732f62b1997075b61e1dbd53d54983abe6fcab0.
+Wheel18 joins all 38 tested/frozen runtime files, SHA-256
+e788d089ef884a274d80bfafa8281d1ccf82bf8125263297cb5d1a38bd57116f, and remains uninstalled.
+Installed wheel14 is unchanged. Earlier rejected candidates and failed instruments remain retained.
+Receipt: production-source-profile-01/review-05-adjudication.json; exact report:
+source-profile-review-01/review-adjudication-05.md.
+
+Next: commit and push the complete authorized snapshot;
+join and install the accepted wheel with all 38 actual installed hashes; bind the exact Q80
+physical source cards and execute them through the installed CLI. Reconcile current operations
+before launch and preserve the recorded physical reconnect. Put new logs off the external drive
+after fresh protected-inventory selection. No duplicate tiny-model test or reconnect request.
+Required full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain
+NOT_RUN/incomplete. Header-plan retained recovery has static same-branch reasoning only; the old
+large-artifact D4 false pass was inferred, not executed. Keep every acceptance requirement and
+native-only Opus/subscription/no-overage boundaries. Ollama's actual generated identity remains
+unresolved; a parametric geometry is not a source lock.
+
+## Historical worklog — superseded checkpoints
+
+The following running and next-action descriptions record their original checkpoint times.
+The Current direction above governs execution.
+
 
 Active work: repair full-acquisition checkpoint and retained-header physical profiles before
 qualifying or acquiring the frozen large inputs. Preserve source-entry and payload gates.
+
+Current repair checkpoint: the exact review04 P8 discriminator observes D7 on candidate22:
+a held retained-read checkpoint becomes MEASURING, then all three same-key retries pause with
+SOURCE_UNAVAILABLE and leave both extents RETAINED. Its uninterrupted control passes and reclaims
+the extents. The one-condition sensitivity mutant passes on retry1 and keeps the old capture in
+recovery history. Production now removes that checkpoint exclusion and reuses the existing
+retained-read fresh-window CAS/history path; profiler version6 distinguishes the changed recovery.
+Focused P8 passes in 15.08 seconds in a disposable copy: the exact MEASURING/checkpoint kill
+is reached, retry1 completes, both extents are RECLAIMED and prior capture records remain in history.
+Complete candidate23 passes 340 tests in 424.51 seconds, zero skips, all fourteen component
+controls and ordinary ledger. J=(0,0,16951,1,1,9,0,0,8425096), unchanged from candidate22;
+source-manifest SHA-256 7e1ea581503d8e2eb8f7d150e732f62b1997075b61e1dbd53d54983abe6fcab0.
+Its generated report is copied intact. Serial unchanged P0-P5/P7 and exact P8/control/sensitivity replays complete under
+successor-exec-04. The six earlier scenario predicates pass; all 24 CAPTURED raw records
+reproduce, twelve fresh captures have exact ordered write geometry, and the original window
+checker finds zero omitted windows. Fixed P8 reaches the exact held MEASURING checkpoint and
+passes on retry1; both extents are reclaimed and the killed checkpoint-bearing record survives
+in history. P8C passes; restoring the obsolete exclusion reproduces all three stranded retries.
+Eight additional raw P8/control captures reproduce. The separately disclosed retained-window
+instrument skips only digest-verified explicitly superseded ancestor traces; it still detects
+D6 on the old P4 raw. Frozen packet23 contains 2,079 exact regular files, manifest SHA-256
+7c99aa75b9b45b7f9d4d77c9268e9eadedfded49138337c7652db78ca5a6b106. Wheel18 joins all
+38 tested/frozen runtime files, SHA-256 e788d089ef884a274d80bfafa8281d1ccf82bf8125263297cb5d1a38bd57116f,
+and remains uninstalled. Native review05 is RUNNING in the same stopped continuation, served
+claude-opus-5-5. Fresh Usage shows Max5x/session9/weekly51, balance0 and auto-reload off;
+native receipts report allowed included use, isUsingOverage=false and rejected paid overage.
+Receipt: production-source-profile-01/review-05-launch.json. The packet's complete before-review
+manifest was actually hashed by preparation; a duplicate mechanical before-read was stopped
+while still waiting for the manifest. After-review preservation remains required. No independent
+successor pass, installation, physical profile or required download is claimed.
+
+Latest independent checkpoint: native review04 completed normally on served claude-opus-5-5
+and FAILED candidate22 on D7, a static retained-read retry loop. D6's fresh-generation repair
+passes; the prior D1-D5 findings remain repaired. A held retained-read checkpoint is marked
+MEASURING after release, but its checkpoint field prevents the existing fresh-read recovery
+branch from running. Re-entry therefore pauses repeatedly without releasing retained extents.
+Wheel17 remains uninstalled and rejected. No owned producer, test, download or reviewer is
+running as of the process reconciliation at 04:20 UTC on 16 October. System free space is
+88 GiB; external free space is 3.9 TiB. Execute the reviewer's exact P8 base/control/mutant on
+candidate22 before changing production; then make the smallest supported recovery repair and
+return a new fully proved candidate. Required physical/source-entry/real-header/payload proof
+remains NOT_RUN. Preserve earlier running paragraphs below as historical checkpoints.
+Receipt: source-profile-review-01/review-adjudication-04.md.
+
+Current review checkpoint: native review04 is RUNNING on exact frozen successor22, using
+stopped session dc28fddd-b428-47d2-808e-99645ce8257f and served claude-opus-5-5. Fresh native
+Usage reports session7 percent, weekly51 percent, zero credit balance and auto-reload off; native
+events report allowed included use and rejected paid overage. All six P0-P4/P7 deciding replays
+pass, P5 remains sensitive, 24 raw captures reproduce, 12 fresh captures have exact write coverage
+and the reviewer window checker finds zero omitted windows. A separate mechanical check verifies
+all 1,186 packet files; prior20 and original v18 remain unchanged. Wheel17 joins all 38 tested and
+frozen runtime files, SHA-256 1f0023734dc11a271f71c11716bd9de22298bd4727bdf02483f3f1616fe17345,
+and remains uninstalled. No independent pass or physical/source-entry result is claimed.
+Receipt: production-source-profile-01/review-04-launch.json. Monitor that owned review; do not
+duplicate completed tests, replays, packages, downloads or historical publication.
+
+Current machine checkpoint: candidate22 passes 340 tests in 444.23 seconds, zero skips,
+fourteen component controls and ordinary ledger. J=(0,0,16951,1,1,9,0,0,8425096): four added
+executable lines over candidate20 and no other growth. Its source-manifest SHA-256 is
+a8d4a54295a6dff9ad342e2ee857c1971a3066bf337041dfd9cf45542560b661; the generated report is
+copied intact. The version-only CLI fixture passes in 46.66 seconds. Serial unchanged reviewer
+scenarios are RUNNING under successor-exec-03, with the previously corrected P4 instrument.
+No new independent verdict, replacement installation or physical qualification is claimed.
+Next: finish and inspect those raw probes, run the exact window checker, prepare successor22
+and review-return-04, then fresh native allowance/no-overage before resuming the stopped reviewer.
+
+Review-03 completed on served claude-opus-5-5 and FAILED candidate20 on one observed Q42 defect,
+D6: P4's resume-then-ENOSPC window is absent from final call/time statistics and counted as downtime.
+Q2 passes within fixture/platform scope; R1-R5's prior defects are repaired. The exact reviewer
+checker reproduces one omitted window on candidate20. No installation or physical profile followed.
+Apply the reviewer's option (b): preserve and abandon incomplete synthetic measurement generations,
+then measure a fresh generation. Durably mark active execution MEASURING before new source I/O so
+an unheld crash cannot reuse an earlier held observation snapshot. Reuse existing ABANDONED evidence
+and scoped reclamation; keep real download checkpoints unchanged. Corrected P4 passes in 15.06 seconds; the exact window checker reports no omitted window in any
+accepted capture. Its failed generation remains INCOMPLETE with durable ABANDONED evidence and
+RECLAIMED extents; the next same-key entry completes a fresh generation. Candidate21 is rejected:
+339 tests pass and one old CLI assertion still pins profiler version4; the intended runtime is
+version5. All 210 failed-source files are retained against the pre-execution hashes. Update only
+that version expectation, run the focused CLI fixture and then complete candidate22. Rerun unchanged
+P0-P3/P5/P7 and return the
+new frozen candidate to the same stopped reviewer. Failed generations remain separate evidence;
+their active time must never be presented as downtime inside an accepted generation.
+
+Native Opus review resumed after the included allowance reset at 03:42 UTC on 16 October 2026 (22:42
+CDT on 15 October). Fresh native Usage shows Max (5x), session 0 percent, weekly 50 percent, zero
+credit balance and auto-reload off. Review-03 resumes only stopped session
+dc28fddd-b428-47d2-808e-99645ce8257f on the exact successor20 target. Native assistant messages
+serve claude-opus-5-5; rate-limit receipts report allowed included use, isUsingOverage=false and
+rejected paid overage because credits are empty. A separate mechanical check verifies all 655
+declared source/proof files and the original 209 v18 files with zero mismatches. That launch later completed with the D6 FAIL recorded above. Installed wheel14 and all physical/source-entry gaps remain unchanged.
+Receipt: production-source-profile-01/review-03-launch.json.
 
 Latest checkpoint: complete candidate 20 passes 340 tests in 500.42 seconds, zero skips, fourteen
 component controls and the ordinary ledger. Final P0-P3/P5/P7 checks reach their deciding boundaries;

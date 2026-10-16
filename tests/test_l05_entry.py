@@ -560,7 +560,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                             if 'artifact' in item['value'] and 'measurement' in item['value']
                             and 'profile_digest' in item['value'] and 'pattern' not in item['value']]
             assert len(plans) == 3
-            assert all(plan['value']['binding']['profiler_version'] == '4-recoverable-source-executor'
+            assert all(plan['value']['binding']['profiler_version'] == '6-retained-read-recovery'
                        for plan in plans)
             assert len(fresh_atoms) == len(resume_atoms) == sum(plan['value']['pattern_count'] for plan in plans)
             assert all(item['previous'] is None for item in (*fresh_atoms, *resume_atoms))

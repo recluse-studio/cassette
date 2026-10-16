@@ -1829,8 +1829,7 @@ class CanonicalBroker:
         fresh_read_window = False
         if capture_head is not None and revalidation:
             saved = capture_head['value']
-            if (isinstance(saved, dict) and saved.get('status') in {'MEASURING', 'INCOMPLETE'}
-                    and not isinstance(saved.get('checkpoint'), dict)):
+            if isinstance(saved, dict) and saved.get('status') in {'MEASURING', 'INCOMPLETE'}:
                 if any(saved.get(key) != value for key, value in context.items()):
                     _reject('ROOT_INVALID', attempt, 'retained read restart differs from its bound source or extent')
                 recovery_history = json.loads(canonical_bytes(saved.get('recovery_history', [])))
@@ -1855,7 +1854,7 @@ class CanonicalBroker:
                 _reject('ROOT_INVALID', attempt, 'profile recovery history must be an ordered list')
             if saved.get('error') is not None:
                 recovery_history.append({'capture_digest': capture_head['digest'], 'error': saved['error']})
-            if saved['status'] in {'MEASURING', 'INCOMPLETE'} and not isinstance(saved.get('checkpoint'), dict):
+            if saved['status'] in {'MEASURING', 'INCOMPLETE'}:
                 _reject('SOURCE_UNAVAILABLE', attempt, 'source profile requires a fresh measured extent generation', retryability='retryable')
             checkpoint = json.loads(canonical_bytes(saved.get('checkpoint')))
             if saved['status'] != 'CAPTURED' and not isinstance(checkpoint, dict):
@@ -1999,6 +1998,8 @@ class CanonicalBroker:
                 held = True
                 await self.hold_boundary(operation_id, 'profile-checkpoint')
                 held = False
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**capture_head['value'], 'status': 'MEASURING'})
                 before = await asyncio.to_thread(drive_path_observation, selection)
                 sample_host()
                 window_host = host_samples['last']
@@ -2049,6 +2050,8 @@ class CanonicalBroker:
                         'device': after, 'host': host_samples['last']})
                 measuring = False
                 await await_extent_io(flush)
+            capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                {**capture_head['value'], 'status': 'MEASURING'})
             before = await asyncio.to_thread(drive_path_observation, selection)
             sample_host()
             window_host = host_samples['last']
@@ -2258,7 +2261,11 @@ class CanonicalBroker:
                             atom_digests.append(atom['digest'])
                             retained.append((extent_key, manifest['digest']))
                         except CassetteError as error:
-                            if error.code != 'SOURCE_UNAVAILABLE' or error.object_id != capture_key or error.retryability != 'retryable':
+                            failed_capture = await asyncio.to_thread(campaign_head, owner.cartridge, capture_key)
+                            incomplete = (failed_capture is not None and isinstance(failed_capture['value'], dict)
+                                          and failed_capture['value'].get('status') == 'INCOMPLETE')
+                            if (error.retryability != 'retryable' or not (incomplete
+                                    or error.code == 'SOURCE_UNAVAILABLE' and error.object_id == capture_key)):
                                 raise
                             restart_error = error
                         finally:

@@ -8573,3 +8573,70 @@ retained verification, including each active window and its interruption. This i
 the separate Opus verdict remains pending. The return packet preserves both failed candidates and the
 corrected instrument. Wheel 16 joins all thirty-eight runtime files to the tested source and remains
 uninstalled. The existing installation and real-download gates stay where their evidence leaves them.
+
+At 22:42 CDT on 15 October, the native account showed that its included session allowance had reset.
+The credit balance remained zero and auto-reload remained off. I resumed the same stopped Opus
+reviewer against the fixed frozen source. Native messages identify Opus 5.5 and report included use
+with paid overage rejected. A separate file check also found every declared review file intact.
+The review is running; its verdict, installation and full physical qualification remain separate.
+
+That review confirmed the five earlier repairs and found another reporting error. After a restart
+and ENOSPC, the final result omitted about 63 milliseconds of active reads and called that interval
+downtime. The source bytes and checkpoint were intact; the measurement was wrong. I reproduced the
+reviewer's exact window check against the retained raw records before changing the code.
+
+I chose the reviewer's simpler repair: preserve and abandon the failed synthetic measurement,
+then measure a fresh generation. Cassette now records MEASURING durably before new I/O, so an unheld
+crash cannot make an old held snapshot look current. Real download checkpoints are unchanged.
+The same corrected capacity challenge passes in 15.06 seconds. Its failure remains INCOMPLETE,
+its owned extents are reclaimed, and the next retry completes a new generation. The reviewer's
+checker finds no unreported window in that accepted result. The complete build check and separate
+review of this successor remain pending; the installed package remains unchanged.
+
+The first complete run of that repair passed 339 checks and failed an assertion that still named
+profiler version 4. I preserved the exact failed source, updated that one expected version and
+reran the actual CLI fixture; it passes in 46.66 seconds. The next complete candidate passes all
+340 checks in 444.23 seconds, all fourteen component controls and the ordinary accounting check.
+The repair adds four executable lines overall. The independent scenarios and verdict remain next.
+
+
+The next Opus review accepted the timing repair and found a restart dead end in retained-data
+verification. I ran its exact new challenge before changing the code. After a held verification
+resumed and was killed, all three retries paused at the same record. The temporary extents stayed
+retained. The uninterrupted control completed, and removing one checkpoint exclusion in a disposable
+copy let the interrupted run finish on its first retry and reclaim both extents. The old capture
+remained in its recovery history.
+
+The production repair now uses that existing fresh-read recovery path even when an interrupted
+record still contains its earlier checkpoint. It removes one condition and reuses the durable
+compare-and-swap and history already present. Profiler version6 names the changed recovery policy.
+The focused challenge passes in 15.08 seconds, including the exact interrupted checkpoint,
+first-retry completion and reclamation. The complete build and separate review remain next. Wheel17 is rejected;
+the installed package and required physical/download gates remain unchanged.
+
+
+The complete successor passes all 340 checks in 424.51 seconds, without skips. All fourteen
+component controls and the ordinary accounting check pass. The restart repair adds no executable
+lines over the preceding candidate and no dependency, process, runtime, kernel or model-specific
+branch. I froze that source, copied the generated accounting report intact and started the
+reviewer's unchanged scenarios plus its new retained-verification challenge. The separate verdict
+and replacement installation remain pending.
+
+
+The reviewer passed all three bounded questions on the new frozen source: capture fidelity,
+recovery and ownership, and honest measurement. Opus 5.5 read the deciding records and accepted
+the window-check correction because it still detects the original timing error. Restoring the
+removed condition in the new source reproduces the retry loop; the fixed copy finishes on its
+first retry. Thirty-two completed raw captures reproduce their statistics.
+
+This verdict covers fixture and platform evidence. It does not qualify the full model plans on
+the physical drive or complete a required download. The separate file-preservation check is now
+running. The replacement package joins all thirty-eight runtime files to the tested source and
+remains uninstalled until that check finishes. I am preparing the local commit and normal push,
+then the accepted installation and the physical source-plan checks.
+
+
+The final preservation check also passes: all 2,079 packet files, the 210 source files and the
+209 original reference files match, with no missing or altered content. The reviewer and every
+owned test process have stopped. The bounded review is complete. Full physical qualification
+and the required source downloads remain separate work.
