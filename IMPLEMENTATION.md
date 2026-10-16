@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 07:59 UTC
+## Current direction — 2026-10-16 08:03 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -236,9 +236,14 @@ retention proof, while the original terminal refusal survives. Retryable log-cap
 selection-time control names and concurrent-hold variants retain their declared NOT_RUN status. The
 initial control-name selection limit and pre-comparison probe ordering are pre-existing, outside this
 contained delta. No extra persistence authority, schema change or new acceptance requirement is added.
-Normal publication is recorded in production-source-profile-01/inventory-publication28.json; reconcile
-its actual Git/remote outcome before any subsequent publication. The installed app remains wheel19
-until a separately verified package install; never retry the terminal operation on either version.
+The accepted repair is committed/pushed as c549bbd0c578c7609c8e465ffe852505edf16149. Actual pre-commit
+and post-commit ledger checks both finish before the normal push; remote parity and a clean worktree
+are verified in production-source-profile-01/inventory-publication28.json. Wheel20 is built internally
+with existing pinned setuptools84.0.0, offline and without dependency resolution. All38 runtime files
+join to tested/frozen/committed/wheel bytes. Its SHA-256 is
+38be01e6984e42e303a71ad18f9c75c15319c447eb4f3cfc28535614379ce480; wheel-20-verification.json records
+WHEEL_VERIFIED_UNINSTALLED. The installed app remains wheel19. No external package/cache/log changes
+are made during the current read-only inventory; never retry the terminal operation on either version.
 
 A finite current-descriptor observation sees two Python writers under drewwiberg-lacie, both started
 after the failed qualification finished. That observation identifies neither historical changed totals
@@ -253,8 +258,9 @@ operation, new selection, provider call, write campaign or permission to retry. 
 names/types match at07:27UTC; aggregate bytes remain pending. Reconcile its existing identity/progress
 before another inventory. Current free space during proof remains above the10percent guard.
 
-Next: publish the accepted repair and prepare its package internally, then reconcile the existing
-read-only observation and unexplained protected-content change before any eligible physical retry.
+Next: reconcile the existing read-only observation and unexplained protected-content change before
+the verified package install and any eligible physical retry. The source repair and package are ready;
+their completion does not settle the lost historical inventory or authorize a new baseline.
 Do not duplicate the diagnostic, repeat provider side effects, change the original inventory contract,
 launch another selection or ask for reconnect. Seven exact owned bytecode-cache metadata observations
 show dates before selection; that narrow check does not establish historical byte identity or exclude

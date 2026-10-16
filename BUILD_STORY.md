@@ -8820,3 +8820,9 @@ original terminal refusal, but cannot save the oversized snapshots. That is miss
 a retention pass. The repair adds eight net executable lines and changes no schema or storage writer.
 Its code acceptance does not complete the failed physical qualification. The original cause remains
 unknown while the separate read-only comparison continues.
+
+The accepted repair is committed and pushed as c549bbd. The remote matches, both accounting checks
+finished before the push, and the worktree is clean. I built its package internally and verified all
+thirty-eight runtime files against the tested, reviewed and committed bytes. The package is ready;
+it is not installed yet. The existing read-only drive comparison continues, and its original
+selection and failed attempt remain intact.
