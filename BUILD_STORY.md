@@ -9205,3 +9205,12 @@ committed parent corrects that label without changing the repair or its results.
 
 The reader is ready to commit and install. The next generation step must obtain the original proof
 from Cassette's saved download record. That owner and the real model downloads remain unfinished.
+
+## 16 October 2026 — install the checked original-proof reader
+
+The repair is committed and pushed as 67eeae78. Its installed copy matches all 40 runtime files,
+and the same twelve checks pass against that installed copy. The separate review confirms the
+reader's boundary. Generating durable model files still needs its own saved ownership and restart
+path. A short source examination is checking which existing writer can supply that path.
+
+The drive inventory keeps running on its original runtime. Large model downloads remain unfinished.

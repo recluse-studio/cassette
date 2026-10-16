@@ -5,26 +5,29 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 15:26 UTC
+## Current direction — 2026-10-16 15:34 UTC
 
-Active code item: fixed38 SourceByteRecipe is accepted, committed/pushed as 77c324db93bdb57605ea9b0d0e447bade74b0783,
-and privately installed23. All 40 actual runtime files join frozen/tested/committed/wheel bytes; the
-installed composer, generated schema and CLI are verified. The post-install instrument's mistaken
-expected error wording is preserved and corrected without rebuilding or reinstalling. Read
-composition-publication38.json and composition-installation38.json before repeating those actions.
+Active code state: original-proof reader39 is accepted, committed/pushed as
+67eeae7883ab915d80d150f29d52710c77dad442 and privately installed24. All 40 actual runtime files join
+frozen/tested/committed/wheel/installed bytes. The real installed CLI/schema/metadata proof and all
+twelve original-proof guard outcomes pass. Read input-proof-publication39.json and
+input-proof-installation39.json before repeating publication, build or installation.
 
-Fixed39 original-acquisition reader is accepted at fixture/integration level after independent native
-Opus Q1/Q2 PASS_READY on served claude-opus-5-5. All 240 frozen packet files remain unchanged. Root
-corrects one comparison-instrument label: the packet called its original37 baseline original38.
-Exact committed38 bytes independently join the accepted38 manifest; empty-path/integer fixes were
-already published38. The real39 target/runtime, full proof and guard-bypass outcomes are unchanged.
-Read source-composition-01/review/fixed39-adjudication.json and baseline-instrument39.json. Commit,
-normal push and private installed24 verification are next; do not redirect inventory04 or paused03.
+Independent Opus Q1/Q2 PASS_READY is fixture/integration only. All 240 frozen review files remain
+unchanged. Root corrects one mislabeled comparison baseline with exact committed38 bytes, preserving
+the original packet/report. Accepted38 remains limited to hashes consistent with its current source
+checkpoint; source39 additionally anchors touched bytes to separately admitted original chunk proof.
+The next broker owner must obtain that proof from the exact committed SOURCE_VERIFIED operation and
+source lock. That owner, durable generation, stable provider identity and live downloads remain open.
 
-The reader takes a separate original chunk-list mapping and checks it on every retained read. The
-future generation owner must still admit that mapping from the exact committed SOURCE_VERIFIED
-checkpoint and source lock. That owner is NOT_IMPLEMENTED and is not passed by this reader repair.
-Accepted38 remains limited to non-publishing hashes consistent with the current checkpoint.
+A finite static Opus reuse/ownership examination is running on unchanged accepted39 source as
+source-generation-route01-runs/01/generation-reuse-route, PID72461, launcher tool22715. Actual assistant
+receipts serve claude-opus-5-5. It examines existing Q51/Store writer reuse and exact broker admission;
+it makes no implementation choice or queue pass. Root chooses and implements the result. The 223-file
+packet source-generation-route01 is frozen. Fresh native allowance is 10 percent session, 56 percent
+weekly, credits OFF; the owned usage reader exits0. Preserve and reconcile this worker before starting
+another analysis or implementing its dependent path. No Copilot route is permitted.
+
 Then continue durable generated-source ownership/transaction, exact frozen layout/identity joins
 and stable provider serving. While the fresh inventory04 runs, prepare only eligible internal work.
 After its actual terminal result, reconcile the wrapper's known digest-field error, verify the fresh
@@ -6808,3 +6811,22 @@ error does not change target39, its source trace, full proof or deciding fixed/b
 The scope of no-write observation is exact: unchanged data/checkpoint bytes and no os.pwrite/os.write
 under the two refused calls; it is not a universal filesystem-effects audit. Broker generation-owner
 admission, source identity publication, durable outputs and every live source result remain open.
+
+### 2026-10-16 15:34 UTC — original-proof reader published and verified in its installed runtime
+
+The accepted source is committed/pushed as67eeae7883ab915d80d150f29d52710c77dad442. Ordinary ledger
+checks pass before/after commit; normal push and actual remote parity are recorded in
+input-proof-publication39.json. Wheel24 SHA256 is
+dc3303c29229d1fd6cd3dc4070576243afb0dc0d28aed5cee093e1eda22c34e5. All 40 runtime files join tested,
+frozen, committed, wheel and actual installed bytes. Installed metadata/CLI/schema checks pass.
+The original-proof challenge runs on the actual installed source/store/broker/errors/validator, with
+only the fixture server taken from the frozen test source. All twelve outcomes pass, including the
+coordinated replacement refusal. No broker generation-owner admission or live model proof is claimed.
+Receipt: input-proof-installation39.json. Inventory04 stays on installed22; paused03 stays on21.
+
+Native source-generation-route01 now examines the exact reusable writer and ownership boundaries on
+accepted39. It is a bounded static recommendation, not delegated implementation or a new acceptance
+claim. Root retains the decision/integration role. Its actual assistant model is claude-opus-5-5;
+subscription10/56percent,creditsOFF, usage reader exited0. Reconcile PID72461/tool22715 and its retained
+summary before repeating any task. Frozen generated geometry remains unresolved and no required
+header, model payload, new physical profile or download has started.
