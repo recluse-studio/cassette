@@ -979,6 +979,154 @@ steps:
     assert {key:value for key,value in legacy['nodes'][first].items() if key != 'depends'} == {
         key:value for key,value in proof_graph['nodes'][first].items() if key != 'depends'}
     observations.append({'fault':'sealed_target_edges','error':sealed.value.payload()})
+
+    # Q80: a failed attempt does not create a second required tuple or erase its history.
+    succession_root = tmp_path/'same-profile-attempts'
+    (succession_root/'research').mkdir(parents=True)
+    (succession_root/'schema/campaign').mkdir(parents=True)
+    succession_contract = copy.deepcopy(proof_contract)
+    succession_contract['materialized_record_contract']['family_evidence_levels']['source_profile_group'] = 'LIVE'
+    succession_contract['expanded_session_families'].append({'family':'source_profile_group',
+        'records':['SOURCE-PROFILES-ALL-PASS'],'owner_stage':'L07',
+        'dependencies':['every-QUALIFY-<consumer-flat-id>-VERIFY']})
+    succession_queue = {**succession_contract,'fixed_steps':[{'id':'L04','depends':[]}],
+        'operation_records':[],'long_operation_contract':proof_queue['long_operation_contract'],
+        'verification_contract':{'fixed_targets':[]}}
+    (succession_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':succession_queue},sort_keys=False)+'```\n')
+    (succession_root/'research/ACCEPTANCE_MATRIX.yaml').write_text(campaign.yaml.safe_dump(
+        {'physical_storage_qualification':{'required_assertions':['exact_drive_operation_plan_profile_recorded']}}))
+    (succession_root/'schema/campaign/contract.json').write_text(json.dumps({**succession_contract,
+        'matrix_axes':{},'assertion_owner_patterns':{
+            'physical_storage_qualification':actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}))
+    attempt_registry = copy.deepcopy(proof_registry)
+    attempt_registry.update(matrix_digest=campaign.file_digest(succession_root/'research/ACCEPTANCE_MATRIX.yaml'),
+        fixed_records=attempt_registry['fixed_records'][:1],required_owners={physical_authority:terminals},approved_cards={})
+    attempt_registry['families']['verification_work']['dimensions']['target-flat-id'].remove('F4-GATE')
+    attempt_registry['families']['verification_work']['records'] = [row for row in
+        attempt_registry['families']['verification_work']['records'] if not row['id'].startswith('VERIFY-WORK-F4-GATE-')]
+    def approve_start(reg, key, plan):
+        start = next(row for row in reg['families']['physical_qualification']['records'] if row['id']==key)
+        request = {'consumer_flat_id':key.removeprefix('QUALIFY-').removesuffix('-START'),
+            'physical_disk_id':['fixture'],'apfs_volume_uuid':'fixture','host_id':campaign.identity('host'),
+            'assembled_path_digest':campaign.identity('path'),'operation':'acquire-qualification-only',
+            'plan_digest':campaign.identity(plan),'expected_read_write_shape':[{'artifact':'fixture','read_bytes':256,'write_bytes':256}]}
+        card = {'record_id':key,'permission':'CAMPAIGN_DIRECTORY_WRITE','command':['fixture',key],
+            'host':'fixture','disk':'scratch','path':str(succession_root),'stop_conditions':['first-boundary'],
+            'bound':{'profile_request':request}}
+        digest = campaign.identity(card);reg['approved_cards'][digest] = card
+        start.update(permission=card['permission'],approved_card_digest=digest)
+    for start, plan in ((start_a,'c1'),(start_b,'c10')): approve_start(attempt_registry,start,plan)
+    prior_registry_bytes = campaign.canonical_bytes(attempt_registry)
+    attempt_parent = campaign.materialize(succession_root,attempt_registry)
+    assert campaign.canonical_bytes(attempt_registry) == prior_registry_bytes
+    local = {start_a,first,cp_a,vs_a,vr_a}
+    def append_attempt(reg, consumer, prior):
+        for family, inputs in reg['families'].items():
+            inputs['records'].extend(json.loads(json.dumps(row).replace('ACQ-F4-c1',consumer))
+                for row in list(inputs['records']) if row['id'] in local)
+        terminal = 'QUALIFY-'+consumer+'-VERIFY'
+        reg['families']['physical_qualification']['dimensions']['consumer-flat-id'].append(consumer)
+        reg['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].append('QUALIFY-'+consumer+'-START')
+        reg['families']['verification_work']['dimensions']['target-flat-id'].append(terminal)
+        next(row for row in reg['families']['physical_qualification']['records']
+             if row['id']==terminal)['prior_qualification'] = prior
+        approve_start(reg,'QUALIFY-'+consumer+'-START','c1')
+        return terminal
+    successor_registry = copy.deepcopy(attempt_registry)
+    current = append_attempt(successor_registry,'ACQ-F4-c2',first)
+    successor_registry['required_owners'][physical_authority] = sorted([second,current])
+    successor_registry['families']['source_profile_group'] = {
+        'records':[node('SOURCE-PROFILES-ALL-PASS',sorted([second,current]))]}
+    successor_registry_bytes = campaign.canonical_bytes(successor_registry)
+    successor = campaign.materialize(succession_root,successor_registry,parent=attempt_parent)
+    assert campaign.canonical_bytes(successor_registry) == successor_registry_bytes
+    assert successor['required_owners'] == {physical_authority:sorted([second,current])}
+    assert all(successor['nodes'][key]==value for key,value in attempt_parent['nodes'].items())
+    assert successor['nodes']['SOURCE-PROFILES-ALL-PASS']['depends'] == sorted([second,current])
+    assert successor['parent_graph_digest'] == attempt_parent['revision_digest']
+    attempt_control = succession_root/'control';attempt_control.mkdir()
+    attempt_owner = CapacityCoordinator(attempt_control)
+    old_head = campaign.publish_graph(attempt_owner,attempt_parent)
+    next_head = campaign.publish_graph(attempt_owner,successor,old_head['digest'])
+    assert next_head['value']['ancestors'] == [attempt_parent['revision_digest']]
+    readonly_start = copy.deepcopy(list(successor['nodes'].values()))
+    next(row for row in readonly_start if row['id']==current.removesuffix('-VERIFY')+'-START')['permission'] = 'READ_ONLY'
+    with pytest.raises(CassetteError,match='approved action card'):
+        campaign.validate_graph(readonly_start,required_owners=successor['required_owners'],parent=attempt_parent,
+            materializer=successor['materializer_record_id'],registry_digest=successor['expansion_registry_digest'])
+    readonly_prior = copy.deepcopy(list(attempt_parent['nodes'].values()))
+    prior_start = next(row for row in readonly_prior if row['id']==start_a)
+    prior_start['permission'] = prior_start['approved_card']['permission'] = 'READ_ONLY'
+    prior_start['approved_card_digest'] = campaign.identity(prior_start['approved_card'])
+    readonly_parent = campaign.validate_graph(readonly_prior,required_owners=attempt_parent['required_owners'])
+    readonly_child = [copy.deepcopy(row) for row in successor['nodes'].values()
+                      if row['id'] not in attempt_parent['nodes']]
+    next_start = next(row for row in readonly_child if row['id']==current.removesuffix('-VERIFY')+'-START')
+    next_start['permission'] = next_start['approved_card']['permission'] = 'READ_ONLY'
+    next_start['approved_card_digest'] = campaign.identity(next_start['approved_card'])
+    campaign.validate_graph([*readonly_prior,*readonly_child],required_owners=successor['required_owners'],
+                            parent=readonly_parent)
+    for fault in ('missing_digest','foreign_record','missing_command'):
+        bad_child = copy.deepcopy(readonly_child)
+        bad_start = next(row for row in bad_child if row['id']==next_start['id'])
+        if fault=='missing_digest': del bad_start['approved_card_digest']
+        else:
+            if fault=='foreign_record': bad_start['approved_card']['record_id'] = start_a
+            else: del bad_start['approved_card']['command']
+            bad_start['approved_card_digest'] = campaign.identity(bad_start['approved_card'])
+        with pytest.raises(CassetteError,match='approved action card'):
+            campaign.validate_graph([*readonly_prior,*bad_child],required_owners=successor['required_owners'],
+                                    parent=readonly_parent)
+    for missing in local - {first}:
+        prior_records = [{**copy.deepcopy(row),'depends':[key for key in row['depends'] if key!=missing]}
+                         for row in attempt_parent['nodes'].values() if row['id']!=missing]
+        incomplete_parent = campaign.validate_graph(prior_records,required_owners=attempt_parent['required_owners'])
+        child_records = [copy.deepcopy(row) for row in successor['nodes'].values()
+                         if row['id'] not in attempt_parent['nodes']]
+        with pytest.raises(CassetteError):
+            campaign.validate_graph([*prior_records,*child_records],required_owners=successor['required_owners'],
+                                    parent=incomplete_parent)
+    for missing in ('CHECKPOINT-'+current.removesuffix('-VERIFY')+'-START-RECOVERABILITY',
+                    'VERIFY-WORK-'+current+'-START','VERIFY-WORK-'+current+'-RESULT'):
+        incomplete = [{**copy.deepcopy(row),'depends':[key for key in row['depends'] if key!=missing]}
+                      for row in successor['nodes'].values() if row['id']!=missing]
+        with pytest.raises(CassetteError,match='proof targets'):
+            campaign.validate_graph(incomplete,required_owners=successor['required_owners'],parent=attempt_parent)
+    for fault in ('missing_link','unknown_prior','self_prior','malformed_prior','branch','wrong_plan','wrong_drive',
+                  'wrong_shape','wrong_host','wrong_disk','wrong_path','wrong_permission','consumer_mismatch',
+                  'malformed_consumer','malformed_request','owner_loss'):
+        bad = copy.deepcopy(successor_registry)
+        target = next(row for row in bad['families']['physical_qualification']['records'] if row['id']==current)
+        start = next(row for row in bad['families']['physical_qualification']['records']
+                     if row['id']==current.removesuffix('-VERIFY')+'-START')
+        card = bad['approved_cards'][start['approved_card_digest']]
+        if fault == 'missing_link': del target['prior_qualification']
+        elif fault == 'unknown_prior': target['prior_qualification'] = 'QUALIFY-absent-VERIFY'
+        elif fault == 'self_prior': target['prior_qualification'] = current
+        elif fault == 'malformed_prior': target['prior_qualification'] = 1
+        elif fault == 'branch':
+            extra = append_attempt(bad,'ACQ-F4-c3',first)
+            bad['required_owners'][physical_authority].append(extra)
+        elif fault == 'owner_loss': target['matrix_assertion_owners'] = []
+        else:
+            request = card['bound']['profile_request']
+            if fault == 'wrong_plan': request['plan_digest'] = campaign.identity('foreign')
+            elif fault == 'wrong_drive': request['apfs_volume_uuid'] = 'foreign'
+            elif fault == 'wrong_shape': request['expected_read_write_shape'][0]['write_bytes'] += 1
+            elif fault == 'consumer_mismatch': request['consumer_flat_id'] = 'foreign'
+            elif fault == 'malformed_consumer': request['consumer_flat_id'] = 1
+            elif fault == 'malformed_request': card['bound']['profile_request'] = []
+            elif fault == 'wrong_permission': card['permission'] = start['permission'] = 'PHYSICAL_FAULT'
+            else: card[fault.removeprefix('wrong_')] = 'foreign'
+            digest = campaign.identity(card);bad['approved_cards'][digest] = card;start['approved_card_digest'] = digest
+        with pytest.raises(CassetteError): campaign.materialize(succession_root,bad,parent=attempt_parent)
+    consumed_registry = copy.deepcopy(attempt_registry)
+    consumed_registry['families']['source_profile_group'] = {
+        'records':[node('SOURCE-PROFILES-ALL-PASS',terminals)]}
+    consumed = campaign.materialize(succession_root,consumed_registry)
+    with pytest.raises(CassetteError,match='consum'):
+        campaign.materialize(succession_root,successor_registry,parent=consumed)
     for name,value in [('registry.json',proof_registry),('parent.json',proof_parent),('graph.json',proof_graph),
                        ('observations.json',observations)]:
         (edge_root/name).write_text(json.dumps(value,sort_keys=True))

@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 import plistlib
 import stat
@@ -120,6 +121,14 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
             (path / 'owned-fixture').write_bytes(bytes(size))
             path.chmod(0)
             locked.append(path)
+            # Keep the disposable excluded name stable during native volume discovery.
+            os.chflags(path, stat.UF_IMMUTABLE)
+            try:
+                path.rename(path.with_name(name + '-bad-1'))
+            except PermissionError:
+                pass
+            else:
+                raise AssertionError('excluded fixture directory could be renamed')
         def launch(*arguments, expected_code=0):
             result = subprocess.run([sys.executable, '-B', '-m', 'cli', '--state',
                 str(tmp_path / 'state'), *arguments], cwd=Path(__file__).resolve().parents[1],
@@ -161,15 +170,20 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
         else:
             raise AssertionError('protected byte change was not detected')
         temporary = mount / '.TemporaryItems'
+        os.chflags(temporary, 0)
         temporary.chmod(0o755)
         (temporary / 'new-owned-fixture').write_bytes(bytes(100))
         temporary.chmod(0)
         assert select('changed-excluded')['result']['protected_inventory'] == after
     finally:
-        for path in locked:
-            path.chmod(0o755)
-        subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
-        image.unlink()
+        try:
+            for path in locked:
+                if path.exists():
+                    os.chflags(path, 0)
+                    path.chmod(0o755)
+        finally:
+            subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
+            image.unlink()
 
 
 def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):

@@ -284,6 +284,58 @@ def collect_path_identity(root):
     return path_identity(root,disk_record=disk,host_record=host)
 
 
+def qualification_successions(nodes, parent=None):
+    """Q80: retain old attempts while selecting one head for an unconsumed exact profile."""
+    inherited = parent['nodes'] if parent else {}
+    prior_ids = set()
+    fields = {'consumer_flat_id','physical_disk_id','apfs_volume_uuid','host_id',
+              'assembled_path_digest','operation','plan_digest','expected_read_write_shape'}
+    for key, record in nodes.items():
+        if 'prior_qualification' not in record:
+            continue
+        prior = record['prior_qualification']
+        if (not isinstance(prior, str) or prior not in inherited or prior in prior_ids or prior == key
+                or not all(re.fullmatch(r'QUALIFY-.+-VERIFY', value) for value in (prior,key))):
+            reject(key, 'qualification prior is absent, non-inherited, branched or not a distinct physical VERIFY')
+        old = nodes.get(prior)
+        assertions = old.get('matrix_assertion_owners') if old else None
+        if (not isinstance(assertions, list) or not assertions
+                or assertions != record.get('matrix_assertion_owners')
+                or old.get('owner_stage') != record.get('owner_stage')
+                or old.get('evidence_level') != record.get('evidence_level')
+                or any(not isinstance(value, str) or not value.startswith('matrix#physical_storage_qualification.')
+                       for value in assertions)):
+            reject(key, 'qualification succession changes its physical assertion or evidence obligation')
+        starts = [value.removesuffix('-VERIFY')+'-START' for value in (prior,key)]
+        cards = [nodes.get(start, {}).get('approved_card') for start in starts]
+        if any(not isinstance(card, dict) or not isinstance(card.get('bound'), dict)
+               or card.get('permission') != nodes[start]['permission']
+               for start, card in zip(starts, cards, strict=True)):
+            reject(key, 'qualification succession lacks its exact START cards and request bindings')
+        requests = [card['bound'].get('profile_request') for card in cards]
+        if any(not isinstance(request, dict) or set(request) != fields or not all(request.values())
+               or not isinstance(request.get('consumer_flat_id'), str)
+               or 'QUALIFY-'+request['consumer_flat_id']+'-VERIFY' != name
+               for request, name in zip(requests, (prior,key), strict=True)):
+            reject(key, 'qualification request fields or literal consumer identity are invalid')
+        if (identity({name:value for name,value in requests[0].items() if name != 'consumer_flat_id'})
+                != identity({name:value for name,value in requests[1].items() if name != 'consumer_flat_id'})
+                or any(not cards[0].get(name) or cards[0].get(name) != cards[1].get(name)
+                       for name in ('permission','host','disk','path'))):
+            reject(key, 'qualification succession changes its exact request tuple or permission scope')
+        local = {prior,starts[0],'CHECKPOINT-'+starts[0]+'-RECOVERABILITY',
+                 'VERIFY-WORK-'+prior+'-START','VERIFY-WORK-'+prior+'-RESULT'}
+        current = {key,starts[1],'CHECKPOINT-'+starts[1]+'-RECOVERABILITY',
+                   'VERIFY-WORK-'+key+'-START','VERIFY-WORK-'+key+'-RESULT'}
+        if not local <= inherited.keys() or not current <= nodes.keys():
+            reject(key, 'qualification succession lacks its inherited prior family or current proof targets')
+        if any(row['id'] not in local and set(row['depends']) & local
+               for row in [*nodes.values(), *inherited.values()]):
+            reject(key, 'qualification prior family already has an external consumer')
+        prior_ids.add(prior)
+    return prior_ids
+
+
 def validate_graph(records, *, required_owners, parent=None, materializer="L04", registry_digest="", deferred_owners=None):
     """Q33/Q80: validate literal predecessors, complete owners and monotone extensions."""
     nodes = {}
@@ -293,22 +345,23 @@ def validate_graph(records, *, required_owners, parent=None, materializer="L04",
             reject("graph", "record fields, literal ID or uniqueness failed")
         if record["permission"] not in PERMISSIONS:
             reject(record["id"], "permission class is undeclared")
-        if record["permission"] != "READ_ONLY":
+        if record["permission"] != "READ_ONLY" or 'approved_card' in record:
             card = record.get('approved_card')
             if (not isinstance(card, dict) or identity(card) != record.get('approved_card_digest')
                     or card.get('permission') != record['permission'] or card.get('record_id') != record['id']
                     or not all(card.get(field) for field in ('command','disk','path','bound','stop_conditions'))):
-                reject(record['id'], 'write-bearing record lacks its exact approved action card')
+                reject(record['id'], 'record lacks its exact approved action card')
         if record["evidence_level"] not in {"UNIT", "INTEGRATION", "PLATFORM", "LIVE"}:
             reject(record["id"], "evidence level is unresolved")
         if len(set(record["depends"])) != len(record["depends"]):
             reject(record["id"], "predecessors contain duplicate IDs")
         nodes[record["id"]] = copy.deepcopy(record)
+    prior_qualifications = qualification_successions(nodes, parent)
     owners = {}
     for key, node in nodes.items():
         if set(node["depends"]) - nodes.keys():
             reject(key, "graph has missing literal predecessors")
-        for assertion in node["matrix_assertion_owners"]:
+        for assertion in node["matrix_assertion_owners"] if key not in prior_qualifications else []:
             owners.setdefault(assertion, []).append(key)
     if set(owners) != set(required_owners):
         reject("graph", "assertion owner set has missing or unknown authorities")
@@ -891,7 +944,16 @@ def materialize(root, registry, *, parent=None):
             if family['owner_stage'].startswith('L') and record['owner_stage'] != family['owner_stage']:
                 reject(record['id'], 'family stage owner differs from its authority')
         records.extend(inputs['records'])
+    records = copy.deepcopy(records)
+    for record in records:
+        if record['permission'] != 'READ_ONLY':
+            card = registry.get('approved_cards', {}).get(record.get('approved_card_digest'))
+            if card is None:
+                reject(record['id'], 'approved card is absent from the frozen registry')
+            record['approved_card'] = copy.deepcopy(card)
     ids = {record['id'] for record in records}
+    prior_qualifications = qualification_successions({row['id']:row for row in records}, parent)
+    current_ids = ids - prior_qualifications
     base_edges, coordinates, original_targets = {}, {}, {}
     for record in registry.get('fixed_records', []):
         expected = fixed_authorities[record['id']].get('depends', [])
@@ -900,7 +962,7 @@ def materialize(root, registry, *, parent=None):
             for dependency in expected:
                 if dependency.startswith(('every-', 'every ')):
                     pattern = re.sub(r'<[^<>]+>', r'.+', re.escape(dependency[6:]))
-                    matches = sorted(key for key in ids if re.fullmatch(pattern, key))
+                    matches = sorted(key for key in current_ids if re.fullmatch(pattern, key))
                     if not matches:
                         reject(record['id'], 'aggregate prerequisite expansion is empty')
                     expanded.extend(matches)
@@ -957,7 +1019,7 @@ def materialize(root, registry, *, parent=None):
                     if dependency.startswith('every-'):
                         pattern = re.escape(dependency.removeprefix('every-'))
                         pattern = re.sub(r'<[^<>]+>',r'.+',pattern)
-                        matches = sorted(key for key in ids if re.fullmatch(pattern,key))
+                        matches = sorted(key for key in current_ids if re.fullmatch(pattern,key))
                         if not matches: reject(record['id'], 'aggregate prerequisite expansion is empty')
                         expected.extend(matches)
                     elif dependency in ids:
@@ -1011,7 +1073,7 @@ def materialize(root, registry, *, parent=None):
             reject(assertion, 'matrix assertion has no generated owner rule')
         owners, missing = [], []
         for pattern in patterns:
-            matching = sorted(record['id'] for record in records if re.fullmatch(pattern,record['id']))
+            matching = sorted(key for key in current_ids if re.fullmatch(pattern,key))
             if not matching:
                 missing.append(pattern)
             owners.extend(matching)
@@ -1025,13 +1087,6 @@ def materialize(root, registry, *, parent=None):
         reject('materialization', 'Q80 requires complete matrix assertion ownership')
     if registry['required_owners'] != required:
         reject('materialization', 'registry owners differ from generated matrix ownership')
-    records = copy.deepcopy(records)
-    for record in records:
-        if record['permission'] != 'READ_ONLY':
-            card = registry.get('approved_cards', {}).get(record.get('approved_card_digest'))
-            if card is None:
-                reject(record['id'], 'approved card is absent from the frozen registry')
-            record['approved_card'] = copy.deepcopy(card)
     return validate_graph(records, required_owners=required, parent=parent,
                           materializer=registry['materializer'], registry_digest=identity(registry),
                           deferred_owners=deferred)

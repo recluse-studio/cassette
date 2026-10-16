@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 08:24 UTC
+## Current direction — 2026-10-16 10:21 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -300,7 +300,217 @@ It is RUNNING, not selected or qualified. No source/provider/profile/header/payl
 the selection; no automatic Go follows it. Reconcile this one owner and terminal result before
 another operation. Both original copied records retain their exact hashes.
 
-Next: bind any write-bearing successor to its own completed selection, card, graph and operation key.
+The08:39 reconciliation confirms that selection03 is still owned and running, with increasing CPU
+time and no terminal result. Internal free space remains84GiB; external free space3.9TiB. No duplicate
+inventory, qualification or download starts. The earlier documentary checkpoint is committed/pushed
+as a37aa87904df3b689259071af34c87c07fb9675e, with both ordinary ledger checks before the normal push,
+actual remote parity and a clean worktree. inventory-successor01-publication.json retains that proof.
+
+Finite source traces identify a routing question before another physical card is issued: appending a
+consumer03 family keeps all five old consumer02 records and adds another physical assertion owner.
+It does not replace the failed attempt. The existing per-record capture-attempt chain and queue-approved
+successor-template clauses may supply the intended new attempt for the same semantic profile record;
+that route must retain exact profile identity and every old graph/card/operation byte. L10 clean replay
+rejects deferred owners and is not an early-L05 shortcut. No graph, owner or acceptance is changed.
+The native STATIC review completes normally at08:48:52UTC, exit0, stopped, served claude-opus-5-5,
+without error or denial. Root verifies all26 frozen files unchanged and accepts QUEUE_ROUTE: the old
+Q80 rules contain an authority gap, not a proved materializer bug. A changed capture template cannot
+silently replace an inherited card, and append03 keeps02 required. The earlier review's permission
+for a separate interval remains valid; graph representation is a separate prerequisite. Fresh native
+usage shows0percent session after reset,52percent weekly,4percent Fable and credits off. No new human
+gate follows from this queue-owned gap. physical-attempt-lineage01/root-adjudication.json records it.
+
+Root declares a narrow same-request attempt succession under the existing autonomous amendment.
+The matrix and all its assertions remain unchanged. A new physical VERIFY may name an inherited prior
+VERIFY only for the identical request tuple and permission/host/disk/path, before any outside consumer
+uses the prior five-record family. All inherited nodes, edges, assertion metadata, cards and terminal
+results stay byte-identical. Only the current attempt owns the tuple's required proof and newly sealed
+aggregate entry; missing proof still blocks it. Different tuples, branching, lost assertions, malformed
+bindings and already-consumed families reject. No sealed consumer or prior operation is retargeted.
+The queue and generator now declare this rule; no generated file is hand-edited. The existing Q33/Q80
+fixture exposes the old recorder's aggregate failure under the amended contract. The contained tool
+change passes its extended fixture in1.06seconds, including unchanged input registries, inherited
+nodes, publication ancestry, aggregate membership and sixteen rejection controls plus the consumed
+family case. Full candidate proof and separate fixed review remain pending. The first focused green
+preceded an input-copy placement correction; its2.18second result is retained, not the final candidate.
+
+The original failed interval now has one exact43-file retained bundle sealed with the existing Q80
+namespace helper: blake3:800463bf38d190ec4b48ad77b0309d0493c063672d5779188a696414f4cb5c7d.
+Its status is CAPTURE_FAILED, with historical-completed-after-inventory explicitly missing. Source
+files and both actual canonical original records are unchanged. No historical cause or acceptance
+pass is reconstructed. failed-first-profile-seal01/receipt.json retains the exact namespace outcome.
+
+Selection03 completed SUCCEEDED/exit0 at08:57:03UTC; wrapper48240 and CLI48242 stopped, tool47140
+returned. Its inventory digest is blake3:d6bdd8d3f5fba5a81ec37e36fb109d33b66feb44cfb1c40804a4714ed3dc8f4d.
+Arup and Writing still match. drewwiberg-lacie is958,798,818,706 bytes,1,327,253,257 bytes above the
+08:11 current observation; this new interval does not explain an earlier one or establish quiescence.
+No additional scan starts. A fresh09:03 read-only native path observation records disk6 and the same
+assembled-path digest as request02; the installed store bytes remain unchanged. It supplies identity
+and telemetry only. No profile, header, required payload, access-write or source-entry pass is inferred.
+
+The actual115-node parent/control/mutant proof PASSES the amended graph-data route: the fixed tool
+accepts120 nodes with all115 inherited nodes unchanged, the old tool rejects, a foreign plan rejects,
+and removing the exact tuple/scope guard admits that same foreign plan. Its cards are explicitly
+GRAPH_DATA_FIXTURE_ONLY_NOT_AUTHORIZED_FOR_LIVE_EXECUTION. profile-succession-proof01/receipt.json
+does not publish a graph or authorize a physical launch.
+
+Candidate29 remains FAILED:339 tests passed and the existing Q49 CLI fixture failed in404.94seconds.
+Both broker exclusions are present in its actual frozen source. The first selection returned a generic
+PermissionError; cleanup then found the original revision-directory name absent. Direct read-only
+inspection of that exact still-mounted owned image finds .DocumentRevisions-V100-bad-1, mode000,
+and inventory_step refuses that unexcluded renamed path. The actor and historical rename time remain
+NOT_PROVED. This is not evidence for expanding production exclusions or changing protected-drive rules.
+candidate29-fixture-diagnosis01 preserves native metadata, exact traceback and image digest. Root
+detaches and removes only this8,392,704-byte owned fixture image; unrelated images/processes remain.
+
+The existing Q49 fixture now uses the stdlib immutable flag on its two disposable unreadable excluded
+directories and checks that renaming each is refused before native discovery. This stabilizes its
+declared input; ordinary/nested unreadable-user refusal and byte-change detection remain exercised.
+Cleanup clears only owned fixture flags and always attempts detach, even after a cleanup error.
+The focused corrected fixture PASSES in3.06seconds. fixed01's unsupported Path.chflags instrument
+failure remains retained; fixed02 uses the actual os.chflags primitive and leaves no mounted image.
+Full candidate proof and independent fixed review remain pending; candidate29 is never relabelled.
+
+Candidate30 now PASSES340 tests in455.10seconds, zero skips, all fourteen component controls and
+ordinary ledger. J=(0,0,17030,1,1,9,0,0,8425096). Its source-manifest SHA-256 is
+db56883cfba5916ad231f6a470ba4c4644877997e20212f216e7db7bd9fc765f. The producer's generated
+complete report is copied unchanged to tools/generated/s27_j_report.json. The completed284-file
+frozen source/evidence packet is succession-fixed30-review01. A separate native Opus reviewer now
+examines the explicit amendment, enforcement/sensitivity and owned APFS fixture; all verdicts remain
+pending. This is a newly declared amended candidate, not a40-line REMEDIATED child of an earlier review.
+
+A second separate19-file STATIC packet, ollama-entry-cycle-review01, asks whether the unresolved
+generated Ollama identity is a genuine queue cycle and which acyclic order can preserve every final
+assertion and operation-bound qualification. It neither changes that order nor executes a source path.
+Both workers use the supported opus alias on actual served claude-opus-5-5, independent internal
+copies and existing subscription authentication. Fresh native usage is4percent session,53percent
+weekly,4percent Fable, credits off; the owned allowance-reading CLI exited0. Pending reviews are not
+passes. No new physical profile, required source header/payload or external write starts.
+
+Candidate30 is now REJECTED despite its machine PASS. The native review exits0/stopped on served
+claude-opus-5-5 but its launcher is BLOCKED: an outside-cwd Glob and three scoped Write calls were
+denied. Its initial read-only ls/head Bash also exceeded the listed sole probe command; retain that
+deviation. Root verifies all284 frozen files unchanged. No grant is widened or denied access retried.
+The independent reviewer supplies its exact graph_challenge.py in the denied-call receipt. Root
+inspects and executes that unchanged script as separate executor on private graph scratch. Its22
+actual cases expose two false passes: a READ_ONLY START accepts an inconsistent inline write card,
+and a direct caller can add the prior START after inheriting only its VERIFY. All raw denials,
+authoring, executor outputs and candidate30 machine result remain distinct and retained.
+
+The prospective31 repair binds START-node permission to its card and requires the inherited prior
+five-record family plus all current proof targets. Existing Q33/Q80 assertions now include direct
+permission relabelling and missing prior/current helpers. Its focused fixture PASSES in0.68seconds.
+The unchanged22-case independent graph executor now matches every expected outcome, including C6/C9
+rejection; Root's actual-parent permission control and guard-removal mutant also discriminate.
+This is bounded graph-data proof, not full candidate acceptance. succession-fixed30-review01/
+root-adjudication.json rejects30. The unexecuted publication/install/physical preparation scripts
+bound to30 remain ineligible and must not be launched. Full31 proof and final fixed review are next.
+
+The same stopped reviewer continues through Read/Glob/Grep only to author the remaining platform
+probe as final text. Root can execute independently designed checks under existing authority; native
+Write access and Drew are not prerequisites for that permitted division of roles. The original
+denials and Q49 behavioral gap stay visible. Fresh native allowance is10percent session,53percent
+weekly,4percent Fable and credits off; the owned reading CLI exits0. Reconcile probe-design-02 before
+another continuation of that exact native session.
+
+The separate STATIC Ollama review completes at09:35:49UTC, exit0/stopped, served claude-opus-5-5,
+no native error or permission denial; an oversized Read is recovered with bounded reads. Root verifies
+all19 frozen files unchanged. It confirms both the infeasible source-bound entry profile and missing
+generated-model materialization/locator ownership. Removing Ollama from entry would change a matrix
+clause and is rejected. The accepted next design direction preserves entry profiling of the exact
+frozen operation geometry, verified HF acquisition, external materialization and an exact geometry
+join, then actual source-lock qualification before Ollama reacquisition. The generic geometry-input
+path, materialization writer/locator and their proof/review remain pending. No guessed source lock,
+source-specific lifecycle fork, remote model publication, spending change or final acceptance follows
+from this static decision. ollama-entry-cycle-review01/root-adjudication.json retains the exact limits.
+
+Candidate31 PASSES340 tests in614.75seconds, zero skips, all fourteen component controls and ordinary
+ledger. J=(0,0,17033,1,1,9,0,0,8425096); source-manifest SHA-256:
+4abad00f13a077f92d7601730ccf056df04e137390135726ef59d239e4449ce8. Its210 source files and222
+frozen source/evidence files join under succession-fixed30-review01/source/reviewer-work/fixed31.
+The generated complete J report is copied unchanged. This new result never relabels rejected30.
+
+The independent native code-authoring continuation completes normally on served claude-opus-5-5,
+with no error or denial. It supplies one1006-line finite private executor probe as final text. Root
+inspects every section and preserves its exact original plus one declared environment correction:
+the execution copy preserves actual HOME instead of repurposing it to scratch. Test predicates,
+mutations and cleanup are unchanged. The Q49 product fixture's read-only mounted-volume enumeration
+is permitted; only the owned image UUID is selected and no foreign volume contents are inventoried.
+One private executor runs against frozen31 as tool88011, with exact module hashes, graph sensitivity,
+schema regeneration, APFS controls and failure cleanup. Its partial results are not a final review.
+Inspect its receipt and owned cleanup before a continuation or another test. Full profiles, required
+headers/payloads and L05-L10 remain incomplete. No publication, install or physical successor starts.
+
+The private31 executor completes with all29 graph baseline expectations,11 actually applied guard
+mutants,29 regenerated schema files identical, seven of nine Q49 cases and the direct APFS rename
+control. F2/F4 remain MUTANT_NOT_APPLIED because the text anchor also occurs elsewhere in the file.
+Root scopes only those two test mutations to the named function AST and executes just their missing
+cases. Both then match: forced body failure leaves no image; busy detach fails loudly and leaves its
+owned image, which the probe validates, detaches and removes. Both runs keep all210 source files
+unchanged and finish with no owned image attached. The original omissions are never relabelled.
+
+The native final31 continuation completes at10:02:22UTC on served claude-opus-5-5, exit0/stopped,
+no native result error or permission denial. It attempts unavailable Bash true, which is refused;
+no execution follows. Its Q1-Q3 report recommends bounded acceptance but explicitly leaves a fully
+READ_ONLY prior pair unproved. Root executes that precise residual: with both inline cards' permissions
+READ_ONLY, frozen31 accepts digestless unregistered cards. The declared succession rule still requires
+each START's own exact approved card. Root therefore REJECTS31; the native report and its exact limits
+remain intact in fixed31-report03.md and fixed31-adjudication.json. No stage or live pass follows.
+
+The next bounded approach reuses the existing canonical card validator whenever an approved_card is
+declared, including READ_ONLY. It adds no second validator and does not force physical STARTs to be
+write-bearing. The same existing fixture now accepts canonical READ_ONLY cards and rejects a missing
+digest, foreign record ID and absent command. Its focused check PASSES in0.70seconds. The actual
+independent graph input with this one permission correction gives original31 ACCEPT, prospective32
+REJECT, canonical READ_ONLY positive32 ACCEPT and restored WRITE-only validator mutant32 ACCEPT.
+readonly-card-binding-observation01 records exact code/input joins. Full32 proof and separate fixed
+review are required. Every failed/incomplete prior attempt remains sealed; this is a diagnosed new
+bounded approach under the autonomous routing policy, not a reset or extension of an exhausted attempt.
+
+Candidate32 PASSES340 tests in563.39seconds, zero skips, all fourteen component controls and ordinary
+ledger. J=(0,0,17033,1,1,9,0,0,8425096); source-manifest SHA-256:
+8a06a9fb0d8341b0a5ca9858abd77ef01f13e1574144373ff60c636e95852266. Its210 source files and243
+source/evidence files are frozen under reviewer-work/fixed32. The producer report is copied unchanged.
+The actual frozen32 negative uses a valid canonical READ_ONLY prior and rejects only new B's missing
+digest at QUALIFY-B-START. Fully canonical READ_ONLY cards are accepted, while the restored WRITE-only
+validator mutant admits the bad child. The first positive instrument retained its old negative label;
+that record survives, and a fresh labelled positive with identical data confirms ACCEPT. No permission
+restriction or new authority is substituted for the existing card validator.
+
+All29 independent graph cases are replayed on frozen32 with zero mismatch; eleven mutants retain
+their actual deciding/nondeciding statuses, and all29 regenerated schema files are byte-identical.
+The helper-card guard is now nondeciding behind canonical validation; the separate WRITE-only mutant
+supplies the required new-card sensitivity. Actual-parent proof02 again preserves all115 inherited
+nodes in120, rejects the old tool and foreign plan, and admits the foreign plan only when its guard
+is removed. These remain inert graph-data checks. Seven exact Q49 deciding source/fixture hashes join
+to the unchanged31 nine-case/R1 platform evidence; no repeated or expanded live claim is inferred.
+The same separate native reviewer now examines frozen32 through Read/Glob/Grep only; tool56491 owns
+fixed32-final-04. Its verdict is pending. Fresh native allowance is15percent session,54percent weekly,
+4percent Fable, credits off; the owned reading CLI exits0. All old packets remain unchanged. No
+successor graph publication, new installation, real qualification, header or required payload starts.
+
+The fixed32 native review completes at10:23:17UTC, exit0/stopped, served claude-opus-5-5, with no
+error or permission denial and Read/Glob/Grep only. It PASSES Q1/Q2/Q3 for this contained amendment,
+canonical card repair and unchanged Q49 platform fixture. Root verifies all243 fixed32,222 fixed31
+and284 original30 files unchanged and accepts the bounded result in fixed32-adjudication.json.
+The review's two factual imprecisions are corrected there: the115-node actual parent has112 READ_ONLY
+and three CAMPAIGN_DIRECTORY_WRITE records, not115 READ_ONLY; the actual mutant copy is readable inside
+the worker tree and matches its executed hash, while the reviewer searched the old directory pattern.
+The reviewer also traced the equivalent frozen31 counterexample, so no missing mutant read is presented
+as an executed observation. Canonical inline READ_ONLY cards remain legitimate; no second registry
+lookup or write-only restriction is adopted. The exact nondeciding/unreviewed areas remain explicit.
+
+A fresh installed20 metadata-only host/path refresh matches the full prepared03 host scope, physical
+disk IDs and assembled-path digest. current-path02.json retains its exact actual store import/hash.
+It performs no inventory, new selection, broker/provider operation or external write. Selection03,
+the failed02 interval and every old graph/card remain unchanged. Next: publish the accepted complete
+snapshot, build/install its exact internal package, then bind/publish the reviewed same-request graph
+successor with its own fresh operation and runtime. No stage or source-entry PASS is inferred.
+
+Next: complete the frozen amended candidate and separate review, then bind a live successor only if
+the actual full request tuple and scope still match. Reuse selection03 under actual writer revalidation;
+do not invent another selection solely because the tool/contract repair needs a fresh package.
+Bind any write-bearing successor to its exact authorized card, active graph and fresh operation key.
 Compare its recorded totals with the completed current observation as an operational check; changed
 totals are a reason to investigate current activity, not a new acceptance rule or request to stop
 user-owned work. The actual qualification still performs its unchanged exact inventory comparison.
@@ -4726,6 +4936,8 @@ phase_live_queue:
     matrix_assertion_owner_rules:
     - selector: every QUALIFY-<consumer-flat-id>-VERIFY
       owns: research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]
+      projection: Same-request attempts use the physical_qualification succession rule below. Every exact
+        request retains one current owner; prior attempts retain their original owners as historical metadata.
     - selector: ACQ-<kimi_k3|qwen3_30b_a3b|qwen3_235b_a22b>-VERIFY
       owns: research/ACCEPTANCE_MATRIX.yaml#source_rows[id=source_huggingface_all_immutable_models].assertions[*]
     - selector: OLLAMA-VERIFY
@@ -4887,10 +5099,24 @@ phase_live_queue:
     principal_action: none for ordinary START and VERIFY from L05 onward; bind each exact profile card to current authority. Ask only for an indispensable hardware action or legally required consent.
     path_change_rule: Any drive, cable, port, host, assembled path, plan, or mechanism change creates a new
       request and blocks resumed I/O until its VERIFY record passes.
+    same_request_attempt_succession: >-
+      Before any record outside a qualification's own START, checkpoint, verification-work and VERIFY
+      family consumes that family, a new VERIFY may name its inherited prior VERIFY in prior_qualification.
+      Both START cards must bind exactly the same request_fields except consumer_flat_id, and the same
+      permission, host, disk and path. Each request's consumer_flat_id must match its own literal record ID.
+      The new START has its own exact approved card, inputs, runtime and fresh operation; it cannot reuse
+      or edit the prior terminal operation. One prior VERIFY may have only one immediate successor.
+      Every inherited node, edge, owner, card and attempt result remains byte-identical. The prior VERIFY
+      becomes historical only in the derived required-owner and newly expanded every-* projections; it
+      never becomes PASS. The current VERIFY must independently satisfy every unchanged assertion,
+      checkpoint and verification requirement. Missing targets, altered request tuples or assertion sets,
+      branching, a non-inherited prior, and a consumed prior family reject succession. No matrix row or
+      assertion is removed. Different request tuples retain path_change_rule and their own obligations.
     group_aggregate_id_format: <request-group>-ALL-PASS
-    group_aggregate_rule: The owning materializer seals every request into SOURCE-PROFILES, F4-COMPILE-PROFILES,
+    group_aggregate_rule: The owning materializer seals every current exact request into SOURCE-PROFILES, F4-COMPILE-PROFILES,
       F5-COMPILE-PROFILES or its exact post-preparation consumer group. Requests cannot borrow another plan
-      digest.
+      digest. Same-request succession preserves every historical attempt and selects only its current
+      owner for a newly sealed aggregate; a sealed consumer is never retargeted.
     status_per_record: TODO
     attempts_per_record: []
     timing_evidence: NOT_RUN

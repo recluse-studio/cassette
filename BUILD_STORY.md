@@ -8854,3 +8854,98 @@ environment. It reused the existing pinned dependencies and left the external in
 The installed command started one separate read-only drive selection at 08:22 UTC. It is recording
 the before-inventory for a possible new interval. It has not qualified the drive or started a model
 transfer. The old failed operation, original selection and missing historical record remain intact.
+
+The new drive selection continues under its original owner. While it reads, I checked how a second
+attempt enters the evidence graph. Adding another profile would leave the old profile required too;
+that does not represent a retry. I am checking the existing attempt-chain rules against the frozen
+graph before binding another physical action. No graph, requirement or earlier result has changed.
+
+Opus found a gap in the queue's retry rules: the first failed attempt could remain a permanent
+requirement, even after a separate successful attempt. I am correcting that rule. Every old record
+and result stays intact. A new attempt must measure the same drive, host, path, plan and byte pattern,
+and keep its own command and receipts. The route is available only before another task has used the
+old profile. It changes no model, storage check or release threshold.
+
+The existing focused check fails on the old recorder and passes with the correction. It also rejects
+changed requests, missing proof, branching and attempts to redirect a profile already used elsewhere.
+Complete build proof and a separate review remain pending. I also sealed all forty-three retained
+files from the first failure, with the missing historical inventory named explicitly; that bundle
+remains incomplete evidence.
+
+The new drive selection finished successfully at 08:57 UTC. Its two other top-level folders still
+match, while drewwiberg-lacie grew by another 1,327,253,257 bytes since the earlier observation.
+The source of that change remains unknown. A fresh read-only identity check confirms the same
+physical disk and connection path. No large download or full storage measurement has started.
+
+The retry rule passes a check against the actual saved graph. It preserves all 115 old records and
+adds five new ones. The old recorder rejects this route. The new recorder rejects a changed plan;
+removing its identity guard makes that changed plan pass. These are graph checks with deliberately
+inert commands. They have not started another physical attempt.
+
+The complete build check then stops on a separate fixture: 339 checks pass, one fails. Its fake
+unreadable revision directory has acquired a different name, so Cassette correctly refuses to read
+that unexcluded directory. The broker already contains both intended exclusions. I retained the
+native error and exact image identity before removing that disposable image. The process that
+renamed it remains unknown.
+
+The fixture now holds its two artificial excluded names fixed and proves that they cannot be
+renamed during discovery. Its original user-folder refusal and changed-byte checks still pass.
+Cleanup now reaches image detach even after another cleanup error. The focused check passes in
+3.06 seconds. One first instrument used the wrong Python API; that failed record remains intact.
+The full corrected candidate and its independent review are still pending.
+
+The corrected complete candidate passes all 340 checks in 455.10 seconds, all fourteen component
+controls and the ordinary accounting check. I froze its exact source and evidence for a separate
+Opus reviewer. That review will test the retry rule, its enforcement and the disposable-drive fix.
+Its verdict is pending.
+
+A separate read-only Opus review is tracing the remaining Ollama dependency problem: the generated
+model needs verified Hugging Face bytes, while the current global source gate requires the Ollama
+profile before those bytes can be acquired. It is checking the smallest valid order that retains
+every final requirement. No order, model or acceptance result changes merely from asking that question.
+
+The independent review could read the candidate but could not write its private test script. I kept
+those denied attempts and changed the division of work: the reviewer supplies the test code, and I
+inspect and run it as executor. No permission setting changes or new human gate are needed.
+
+Those twenty-two graph cases exposed two real gaps despite the green build. A caller could label
+a write-bearing start as read-only, or supply part of an old profile only after calling it inherited.
+I rejected that candidate. The repair now checks the start's declared permission and the complete
+old and new proof families. The focused check passes, and the same twenty-two independent cases
+now return their expected results. Complete proof and the final fixed review remain ahead.
+
+The separate Ollama review confirmed a real ordering problem. The matrix requires the Ollama plan
+to be measured before model acquisition, so dropping that check would change the requirements.
+The valid route measures the frozen byte pattern first, generates the actual model from verified
+external Hugging Face files, checks that the generated geometry matches, and qualifies its real
+source before reacquisition. That route still needs implementation and proof. No source identity,
+download or release result has been invented to bridge the gap.
+
+The repaired candidate passes all 340 checks in 614.75 seconds, all fourteen component controls
+and the ordinary accounting check. The earlier rejected candidate stays rejected. The reviewer
+has now supplied its remaining test code through the permitted read-only route. I inspected that
+code and started the private graph and disposable-drive challenges against the exact frozen repair.
+Their final result and the reviewer's decision remain pending.
+
+The independent graph, schema and drive challenges completed. Two test mutations initially matched
+more than one place; I retained those failed instruments and reran only the two missing cases with
+an exact function boundary. Every expected observation then appeared, and the owned images were removed.
+
+The reviewer recommended acceptance while naming one untested case: both starts marked read-only.
+I ran that case. It exposed a real card-binding gap, so I rejected the candidate. The correction now
+uses the existing card validator for every declared card. Valid read-only cards still work; missing
+checksums, borrowed record IDs and absent commands fail. The focused check and its positive and
+removed-guard controls pass. Complete machine proof and the next fixed review are still required.
+
+The new complete candidate passes all 340 checks in 563.39 seconds and all fourteen component
+controls. Its checksum test now reaches the new start itself, with a valid old start already in
+place. Valid read-only cards pass; the missing new checksum fails; removing the shared validation
+lets that same bad card through. The independent graph checks and generated contracts also match.
+The reviewer is examining this exact corrected candidate. The earlier candidates remain rejected,
+and no live qualification or required large download has been claimed.
+
+Opus accepts the exact corrected candidate after examining the new checksum failure, its valid
+read-only control and the removed-guard case. I checked the actual model receipts and every frozen
+file. The earlier rejected candidates stay rejected. A fresh read-only check also confirms that
+the intended host, disk and connection path still match. I am publishing this accepted correction
+and binding its new package before the next physical attempt. The larger build remains unfinished.

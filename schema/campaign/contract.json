@@ -138,7 +138,7 @@
       "expand_over": "every_exact_consumer_profile_request",
       "family": "physical_qualification",
       "group_aggregate_id_format": "<request-group>-ALL-PASS",
-      "group_aggregate_rule": "The owning materializer seals every request into SOURCE-PROFILES, F4-COMPILE-PROFILES, F5-COMPILE-PROFILES or its exact post-preparation consumer group. Requests cannot borrow another plan digest.",
+      "group_aggregate_rule": "The owning materializer seals every current exact request into SOURCE-PROFILES, F4-COMPILE-PROFILES, F5-COMPILE-PROFILES or its exact post-preparation consumer group. Requests cannot borrow another plan digest. Same-request succession preserves every historical attempt and selects only its current owner for a newly sealed aggregate; a sealed consumer is never retargeted.",
       "id_format": "QUALIFY-<consumer-flat-id>-<record>",
       "invariants": [
         "Q80"
@@ -161,6 +161,7 @@
         "plan_digest",
         "expected_read_write_shape"
       ],
+      "same_request_attempt_succession": "Before any record outside a qualification's own START, checkpoint, verification-work and VERIFY family consumes that family, a new VERIFY may name its inherited prior VERIFY in prior_qualification. Both START cards must bind exactly the same request_fields except consumer_flat_id, and the same permission, host, disk and path. Each request's consumer_flat_id must match its own literal record ID. The new START has its own exact approved card, inputs, runtime and fresh operation; it cannot reuse or edit the prior terminal operation. One prior VERIFY may have only one immediate successor. Every inherited node, edge, owner, card and attempt result remains byte-identical. The prior VERIFY becomes historical only in the derived required-owner and newly expanded every-* projections; it never becomes PASS. The current VERIFY must independently satisfy every unchanged assertion, checkpoint and verification requirement. Missing targets, altered request tuples or assertion sets, branching, a non-inherited prior, and a consumed prior family reject succession. No matrix row or assertion is removed. Different request tuples retain path_change_rule and their own obligations.",
       "start_work": "Launch the exact profile with a durable receipt and first-data-boundary hold; checkpoint_proof verifies its resumability before measurement continues.",
       "status_per_record": "TODO",
       "timing_evidence": "NOT_RUN",
@@ -1265,6 +1266,7 @@
     "matrix_assertion_owner_rules": [
       {
         "owns": "research/ACCEPTANCE_MATRIX.yaml#physical_storage_qualification.required_assertions[*]",
+        "projection": "Same-request attempts use the physical_qualification succession rule below. Every exact request retains one current owner; prior attempts retain their original owners as historical metadata.",
         "selector": "every QUALIFY-<consumer-flat-id>-VERIFY"
       },
       {
