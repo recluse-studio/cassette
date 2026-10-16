@@ -199,6 +199,78 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             assert sources_module._retained_source_range(
                 revision, artifact, retained, CHUNK - 7, 31
             ) == payload[CHUNK - 7:CHUNK + 24]
+            # Q9/Q33/Q51/Q52: byte-only source recipes freeze the exact input record,
+            # preserve literal serializer bytes and read discontiguous verified ranges.
+            prefix = b'{"weight":{"dtype":"BF16","shape":[2],"data_offsets":[0,4]}}   '
+            prefix = len(prefix).to_bytes(8, 'little') + prefix
+            recipe_record = {
+                'source_record_digest': sources_module.digest_bytes(sources_module.canonical_bytes(revision.record())),
+                'artifacts': [
+                    {'path': 'empty', 'segments': [{'literal_hex': ''}]},
+                    {'path': 'literal', 'segments': [{'literal_hex': prefix.hex()}]},
+                    {'path': 'packed', 'segments': [
+                        {'literal_hex': prefix.hex()},
+                        {'path': artifact.path, 'offset': 13, 'length': CHUNK + 5},
+                        {'literal_hex': b'\x00end\xff'.hex()},
+                        {'path': artifact.path, 'offset': 2 * CHUNK - 7, 'length': 24},
+                    ]},
+                ],
+            }
+            recipe = sources_module.SourceByteRecipe(recipe_record, revision)
+            expected = {'empty': b'', 'literal': prefix,
+                        'packed': prefix + payload[13:CHUNK + 18] + b'\x00end\xff' + payload[-24:]}
+            inputs = {artifact.path: retained}
+            before_reads = len(data_observations), len(state_observations)
+            assert recipe.artifact_digests(inputs) == tuple(
+                {'path': path, 'size': len(value), 'digest': 'sha256:' + hashlib.sha256(value).hexdigest()}
+                for path, value in expected.items())
+            for name, value in expected.items():
+                for offset, length in ((0, min(31, len(value))), (len(value), 0)):
+                    assert recipe.read_range(name, offset, length, inputs) == value[offset:offset + length]
+            assert recipe.read_range('packed', CHUNK - 9, 61, inputs) == expected['packed'][CHUNK - 9:CHUNK + 52]
+            assert not any(event['kind'] == 'write' for events, begin in zip(
+                (data_observations, state_observations), before_reads, strict=True) for event in events[begin:])
+            recipe_record['artifacts'][2]['segments'][0]['literal_hex'] = '00'
+            assert recipe.record()['artifacts'][2]['segments'][0]['literal_hex'] == prefix.hex()
+            for change in ('source', 'path', 'literal', 'odd', 'missing', 'end', 'boolean', 'negative', 'order', 'json-integer'):
+                bad = recipe.record()
+                segment = bad['artifacts'][2]['segments'][1]
+                if change == 'source':
+                    bad['source_record_digest'] = 'blake3:' + '0' * 64
+                elif change == 'path':
+                    bad['artifacts'][2]['path'] = '../escape'
+                elif change in {'literal', 'odd'}:
+                    bad['artifacts'][2]['segments'][0]['literal_hex'] = 'gg' if change == 'literal' else '0'
+                elif change == 'missing':
+                    segment['path'] = 'unknown-input'
+                elif change == 'end':
+                    segment['offset'] = artifact.size
+                elif change in {'boolean', 'negative'}:
+                    segment['length'] = True if change == 'boolean' else -1
+                elif change == 'json-integer':
+                    segment['offset'] = 2**53
+                else:
+                    bad['artifacts'].reverse()
+                with pytest.raises(CassetteError) as invalid_recipe:
+                    sources_module.SourceByteRecipe(bad, revision)
+                assert invalid_recipe.value.code == ('SOURCE_REVISION_CHANGED' if change == 'source' else 'INVALID_REQUEST')
+            for name, offset, length, handles in (
+                    ('', 0, 0, inputs),
+                    ('missing', 0, 1, inputs), ('packed', True, 1, inputs), ('packed', 0, CHUNK + 1, inputs),
+                    ('packed', len(expected['packed']), 1, inputs), ('empty', 1, 0, inputs),
+                    ('packed', 0, 1, {}), ('packed', 0, 1, {artifact.path: {'data': data_extent}})):
+                with pytest.raises(CassetteError) as invalid_range:
+                    recipe.read_range(name, offset, length, handles)
+                assert invalid_range.value.code == 'INVALID_REQUEST'
+            large = replace(artifact, size=2**53 - 1)
+            large_source = replace(revision, artifacts=(large,))
+            with pytest.raises(CassetteError) as overflow:
+                sources_module.SourceByteRecipe({
+                    'source_record_digest': sources_module.digest_bytes(sources_module.canonical_bytes(large_source.record())),
+                    'artifacts': [{'path': 'overflow', 'segments': [
+                        {'path': large.path, 'offset': 0, 'length': large.size} for _ in range(1025)]}],
+                }, large_source)
+            assert overflow.value.code == 'INVALID_REQUEST' and 'signed 64-bit' in overflow.value.detail
             original_state = os.pread(state_fd, state_extent.length, 0)
             for corruption in ("envelopes", "record", "payload"):
                 descriptor = data_fd if corruption == "payload" else state_fd
@@ -213,6 +285,8 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                 before_state = os.pread(state_fd, state_extent.length, 0)
                 with pytest.raises(CassetteError):
                     sources_module._retained_source_range(revision, artifact, retained, 0, 31)
+                with pytest.raises(CassetteError):
+                    recipe.artifact_digests(inputs)
                 assert os.pread(data_fd, data_extent.length, 0) == before_data
                 assert os.pread(state_fd, state_extent.length, 0) == before_state
                 os.pwrite(descriptor, original, 0)

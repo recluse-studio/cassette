@@ -2335,6 +2335,22 @@ CONTRACTS: dict[str, dict] = {
         },
         optional=("extensions",),
     )),
+    "source_byte_recipe": record(
+        "Verified source byte composition", "Q9/Q33/Q51/Q52",
+        {"source_record_digest": blake3_digest(),
+         "artifacts": array(record("Composed source object", "Q51/Q52", {
+             "path": bounded_text(),
+             "segments": array({"anyOf": [
+                 record("Literal source bytes", "Q33", {
+                     "literal_hex": text(empty=True, maximum=2 * MAX_PAGE_BYTES, pattern=r"^[0-9a-f]*$"),
+                 }),
+                 record("Verified source range", "Q51", {
+                     "path": bounded_text(), "offset": integer(maximum=2**53 - 1),
+                     "length": integer(maximum=2**53 - 1),
+                 }),
+             ]}, minimum=1, maximum=1048576),
+         }), minimum=1, maximum=1048576)},
+    ),
     "operation_geometry": with_bounded_json(record(
         "Unresolved source operation geometry", "Q42/Q43",
         {"source_lock": {"type": "null"},

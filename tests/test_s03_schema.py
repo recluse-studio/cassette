@@ -46,6 +46,7 @@ EXPECTED_KINDS = {
     "run_request",
     "source_descriptor",
     "source_catalogue",
+    "source_byte_recipe",
     "tensor_map",
     "tensor_span",
 }
@@ -73,6 +74,7 @@ REMOTE_FIELDS = {
     "source_validators",
 }
 EXPECTED_FIELDS = {
+    "source_byte_recipe": {"source_record_digest", "artifacts"},
     "operation_geometry": {"source_lock", "source_kind", "revision_algorithm", "provenance", "artifacts", "source_storage"},
     "source_catalogue": {"candidates", "next_cursor"},
     "native_adapter_factors": {"a", "b", "scale"},
@@ -606,6 +608,12 @@ ROOT_IDENTITY_MATERIAL = {
     "transform_manifest_digest": None,
 }
 GOLDEN = {
+    "source_byte_recipe": {
+        "source_record_digest": "blake3:" + "a" * 64,
+        "artifacts": [{"path": "composed.bin", "segments": [
+            {"literal_hex": "000a"}, {"path": "input.bin", "offset": 3, "length": 7},
+        ]}],
+    },
     "operation_geometry": {
         "source_lock": None, "source_kind": "ollama", "revision_algorithm": "sha256",
         "provenance": {"upstream_commit": "a" * 40},

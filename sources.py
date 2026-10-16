@@ -150,6 +150,96 @@ class PlannedArtifact:
 
 
 @dataclass(frozen=True, slots=True, init=False)
+class SourceByteRecipe:
+    """Q9/Q33/Q51/Q52: compose literal bytes and verified local ranges without writing inputs."""
+
+    encoded: bytes
+    source: ResolvedSource
+
+    def __init__(self, record: dict, source: ResolvedSource):
+        defects = validate('source_byte_recipe', record)
+        if defects or not isinstance(source, ResolvedSource):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', '; '.join(defects) or 'resolved input source is required')
+        encoded = canonical_bytes(record)
+        if len(encoded) > _CONTROL_BYTES:
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'byte recipe exceeds the control metadata bound')
+        if record['source_record_digest'] != digest_bytes(canonical_bytes(source.record())):
+            _transfer_fail('SOURCE_REVISION_CHANGED', 'source-byte-recipe', 'byte recipe names another input source record')
+        inputs = {artifact.path: artifact for artifact in (*source.artifacts, *source.metadata_assets)}
+        if len(inputs) != len(source.artifacts) + len(source.metadata_assets):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input source paths are duplicated')
+        paths = [artifact['path'] for artifact in record['artifacts']]
+        if paths != sorted(set(paths)) or any(
+                any(part in {'', '.', '..'} for part in path.split('/')) or '\\' in path for path in paths):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'output paths must be unique ordered relative paths')
+        for artifact in record['artifacts']:
+            size = 0
+            for segment in artifact['segments']:
+                if 'literal_hex' in segment:
+                    if len(segment['literal_hex']) % 2:
+                        _transfer_fail('INVALID_REQUEST', artifact['path'], 'literal hexadecimal bytes require complete pairs')
+                    size += len(segment['literal_hex']) // 2
+                else:
+                    item = inputs.get(segment['path'])
+                    if item is None or segment['offset'] + segment['length'] > item.size:
+                        _transfer_fail('INVALID_REQUEST', artifact['path'], 'recipe range is outside its named input source object')
+                    size += segment['length']
+                if size > _MAX_FILE_OFFSET:
+                    _transfer_fail('INVALID_REQUEST', artifact['path'], 'composed object exceeds a signed 64-bit file offset')
+        object.__setattr__(self, 'encoded', encoded)
+        object.__setattr__(self, 'source', source)
+
+    def record(self) -> dict:
+        return json.loads(self.encoded)
+
+    def read_range(self, path: str, offset: int, length: int,
+                   inputs: Mapping[str, dict[str, TransferExtent]]) -> bytes:
+        """Read at most one transfer chunk; every touched input chunk must still verify."""
+        artifacts = self.record()['artifacts']
+        required = {segment['path'] for artifact in artifacts for segment in artifact['segments'] if 'path' in segment}
+        if (not isinstance(inputs, Mapping) or set(inputs) != required
+                or any(not isinstance(extents, Mapping) or set(extents) != {'data', 'state'}
+                       or any(not isinstance(extent, TransferExtent) for extent in extents.values())
+                       for extents in inputs.values())):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input handles must exactly name the recipe source extents')
+        artifact = next((item for item in artifacts if item['path'] == path), None)
+        if artifact is None or type(offset) is not int or type(length) is not int or offset < 0 or not 0 <= length <= _TRANSFER_CHUNK_BYTES:
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'composed range requires a named output, integer offset and bounded length')
+        size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                   for segment in artifact['segments'])
+        if offset + length > size:
+            _transfer_fail('INVALID_REQUEST', path, 'composed range exceeds its output object')
+        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        result = bytearray()
+        position = 0
+        for segment in artifact['segments']:
+            count = len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+            start, end = max(offset, position), min(offset + length, position + count)
+            if start < end:
+                begin = start - position
+                if 'literal_hex' in segment:
+                    result.extend(bytes.fromhex(segment['literal_hex'][2 * begin:2 * (end - position)]))
+                else:
+                    item = sources[segment['path']]
+                    result.extend(_retained_source_range(self.source, item, inputs[item.path],
+                        segment['offset'] + begin, end - start))
+            position += count
+        return bytes(result)
+
+    def artifact_digests(self, inputs: Mapping[str, dict[str, TransferExtent]]) -> tuple[dict, ...]:
+        """Hash the exact composed bytes; these descriptors are not a SourceLock or durable output."""
+        result = []
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            hasher = artifact_hasher('sha256:' + '0' * 64, artifact['path'])
+            for offset in range(0, max(size, 1), _TRANSFER_CHUNK_BYTES):
+                hasher.update(self.read_range(artifact['path'], offset, min(_TRANSFER_CHUNK_BYTES, size - offset), inputs))
+            result.append({'path': artifact['path'], 'size': size, 'digest': 'sha256:' + hasher.hexdigest()})
+        return tuple(result)
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class OperationGeometry:
     """Freeze a Q42 plan separately from any resolved source identity or access claim."""
 

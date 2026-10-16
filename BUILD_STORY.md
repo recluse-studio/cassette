@@ -9128,3 +9128,39 @@ The old interrupted drive attempt keeps its original runtime and evidence.
 The next code work prepares the generated source files and their stable download address. The
 required real downloads remain outstanding. The separate Arup move is still using LaCie, so the
 next real drive check must start with a fresh inventory after that move. No action is needed from Drew.
+
+## 16 October 2026 — compose bytes without changing the source
+
+Cassette now has a generic recipe for exact literal bytes and selected ranges from verified local
+source files. The reader checks the source checkpoint and every touched chunk. It can measure the
+actual output hashes without writing a generated file or changing its inputs. The six affected
+checks pass, including a cross-chunk slice, scattered ranges, empty output and corrupt-source
+refusal. An initially missing schema example was added before that replay.
+
+This supplies the read-only part of source preparation. Writing durable generated files, matching
+the pinned model layout and serving a stable download address remain. Independent review is pending.
+
+## 16 October 2026 — review finds two bad refusals
+
+The independent reviewer finds two request boundaries worth testing. An empty output name causes a
+Python error instead of Cassette's normal refusal. An oversized number reaches the serializer and
+is reported as an identity mismatch. A separate local replay confirms both failures, checks933
+positive byte windows and detects seven planted defects. Source bytes remain unchanged.
+
+Both refusals are repaired. The six affected checks pass. The complete replay and final independent
+review are next. The reviewer could not write its challenge script under its tool permissions; that
+denial is preserved, and the replay uses a separately authored permitted executor.
+
+The Arup move has settled with seven repositories moved and two held. Cassette has verified the saved
+map and started a fresh read-only drive inventory. The old interrupted operation remains paused.
+
+## 16 October 2026 — the byte composer passes independent review
+
+Both repairs pass the complete replay:340 checks, with no skips. Opus accepts the bounded byte
+composer and asks for one final source check. The unchanged challenge then runs against the frozen
+files themselves, recording every loaded dependency and the generated input rules. All55 outcomes
+and933 byte windows pass; the planted defects are still detected.
+
+Cassette can now assemble and hash exact literal bytes and verified local source ranges without
+writing those inputs. Durable generated files and their stable download address remain next. The
+fresh drive inventory is still reading file metadata; it has no completed result yet.
