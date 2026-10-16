@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 06:06 UTC
+## Current direction — 2026-10-16 07:59 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -156,21 +156,110 @@ No acceptance result changes merely from graph publication. Exact cards bind the
 source/drive selections, controller bytes, host/path/plan and runtime38. The launch claim is0 for
 metadata only; the broker/store computes each positive external transition claim before writing.
 
-The installed qualification command is now running for
-op-ba287e6385654a92d3ba4c5e6b83efccf7a6442cd1138de50967b788b0fd5ac5, key
-required-source-profile-f4-20261015-01. Controller/CLI PID24728/25088, tool session7012. The canonical
-operation is currently PENDING/EMPTY with exactly its durable start and REQUESTED profile-checkpoint
-hold; no ACK, measurement or profile PASS is claimed. first-profile-02/start/initial-launch.json and
-prearmed.json retain ownership and exact inputs. Its separate preflight PID28253, tool session22238,
-waits for the exact first-data ACK and will launch the sealed recovery command once. It must not kill
-any process before that ACK or duplicate an active controller. Both controllers guard system space;
-last observed84GiB system and3.9TiB external free. No actual required header or payload access.
+The first installed qualification op-ba287e6385654a92d3ba4c5e6b83efccf7a6442cd1138de50967b788b0fd5ac5,
+key required-source-profile-f4-20261015-01, finished FAILED/EMPTY at07:14:42UTC, exit1. Its protected
+inventory comparison found changed top-level names, types or logical-byte totals. The canonical
+PROVENANCE_VIOLATION remains terminal. The waiter stopped at07:14:43UTC before recovery or any kill;
+controller24728, CLI25088 and waiter28253 are absent, and both tool sessions have returned. No first-data
+ACK, source-profile plan, measurement, required header or payload was reached. The exact failed record,
+selected inventory, controller/configuration, graph and raw reader samples are retained internally in
+production-source-profile-01/inventory-failure-01. The verified4096-byte probe remains distinct from a
+completed qualification.
 
-Next: reconcile first-profile-02/start/initial-launch.json, recovery-preflight.json, controller logs and
-canonical operation before any launch. If the preflight has launched recovery, leave its healthy
-held-resume/completion work running. If no ACK yet, continue useful independent work and preserve
-the hold. After actual recovery/full qualification, perform complete independent raw verification
-and the required separate review before marking its VERIFY. No new selection, tiny test or reconnect.
+The completed comparison's observed totals were transient and were not saved by the installed broker.
+The selected inventory survives, but the exact historical delta and its cause cannot be reconstructed
+from these receipts. A new observation would not recover that missing historical snapshot. No selection
+is rebaselined, exclusion widened, protected directory changed, or terminal operation retried.
+
+PHASE_LIVE_RUNBOOK.md's protected-content rule requires both inventories on mismatch. The existing CLI
+fixture already reaches this failure after remount. Extending its assertions exposes the missing event
+on the parent, then passes in49.02 seconds after a contained broker repair. The broker now appends both
+coarse snapshots and their canonical digests before propagating the unchanged typed error. The fixture
+also proves terminal replay adds no event or provider request and that no source profile began. The
+store comparison, inventory scope and sole-writer rules remain unchanged. Candidate27 now PASSES all
+340 tests in470.35 seconds, zero skips, all fourteen component controls and ordinary ledger. Its
+J=(0,0,16996,1,1,9,0,0,8425096), five net executable lines above the accepted parent. Frozen source
+manifest SHA-256:276d61acbe5dbf9490f600d8697502c5ee806b965937b7abac12383815ba227b.
+The generated accounting report is copied from that completed producer. No repeated broad suite is
+needed for later narrative-only updates. The repair is not yet installed or published.
+
+The first separate native review of that frozen completed candidate finished under inventory-native-review-01.
+Fresh native usage at07:22UTC shows22percent session,52percent weekly,4percent Fable, usage credits off;
+normal subscription authentication is confirmed. Claude Code's own update changes its observed version
+from2.1.299 to2.1.301; the actual reviewer serves claude-opus-5-5. Scope is the contained code/fixture
+repair, not a stage close or live acceptance. The first launcher manifest was rejected in validation
+before any worker because its scoped Edit permission lacked the named Edit tool. That failed plan and
+launch remain retained; the corrected fresh review02 declares the tool without widening its existing
+private write scope. The worker finished normally on served claude-opus-5-5, but the launcher correctly
+records BLOCKED/permission_denied because one decorated shell invocation was refused. Preserve that
+raw status and exact denied command. The already-permitted exact probe command then ran; no permission
+was broadened. A read-only ls outside the requested command procedure is also disclosed. Its first
+loopback attempt failed before connect because its provider fixture lacked a catalogue route; the
+incomplete attempt is retained separately from six completed cases. All290 frozen files match after
+review; all six owned APFS images were detached/removed, and copies/scratch were removed.
+
+Root REJECTS unpublished candidate27 for the supported D1 edge. The independent first-Go probe combines
+addition, removal, a file-to-directory change, a nested byte change and a symlink. Ordinary retention,
+replay and the no-change control pass; deleting the repair loses the snapshots. A new top-level tab in
+a filename instead makes the new event fail schema validation, losing its snapshots and replacing
+PROVENANCE_VIOLATION with INVALID_REQUEST. This is a real coupled regression despite the green suite.
+The reviewer report's qualified PASS does not override its observed failure or Root's rejection.
+
+Root's correction stores top-level names as values in entry arrays, which the existing generated
+event schema already admits, and rethrows the original comparison error if a canonical persistence
+error occurs. No generated schema changes. The existing CLI fixture now includes the tab-named
+addition and still checks exact digests, no qualification/payload and inert terminal replay; its
+encoding correction passes in47.57 seconds. The subsequent non-masking catch requires the fresh
+candidate28 proof and separate review. Oversize, capacity and durability variants remain NOT_RUN;
+missing durable snapshots cannot close live evidence. review27-adjudication.json retains the complete
+decision, unchanged-file check, raw invocation failure and available-trace/selection-date corrections.
+
+Candidate28 now PASSES340 tests in546.21 seconds, zero skips, all fourteen component controls and
+ordinary ledger. J=(0,0,16999,1,1,9,0,0,8425096), eight net executable lines above the accepted parent.
+Frozen source manifest SHA-256:f784297cef1f3d425bdc7124d006642b3eae6ea5ea3c91692b4e17014eb62121.
+The generated report is copied from that completed producer. The same stopped reviewer continues
+explicit session fb96754e-d88f-46b6-9f59-c8397aa0029e on this declared successor, preserving the original
+blocked invocation and output. Fresh07:47 native usage shows25percent session,52percent weekly,
+4percent Fable and credits off. The unchanged exact-command permission scope is retained.
+
+Native fixed28-01 completes normally, exit0, stopped, served claude-opus-5-5, no error or permission
+denial. It PASSES the contained repair. Eight fresh owned-image cases cover first-Go multi-change,
+Unicode and post-selection tab/newline names, no-change/replay, retention removal, and a real16,004-entry
+journal-bound refusal with a catch-removal control. Actual imported broker/store/CLI paths and hashes
+join to each disposable copy. Root inspects raw cases, module identities and all561 unchanged frozen
+files, then ACCEPTS the code repair in inventory-native-review-01/fixed28-adjudication.json. All eight
+images, copies and scratch are removed after evidence capture. No new full suite is needed for later
+narrative-only updates. This acceptance closes no live stage or physical result.
+
+The4MiB broker-record limit remains explicit: beyond that bound, snapshots are absent and do not earn
+retention proof, while the original terminal refusal survives. Retryable log-capacity, commit-durability,
+selection-time control names and concurrent-hold variants retain their declared NOT_RUN status. The
+initial control-name selection limit and pre-comparison probe ordering are pre-existing, outside this
+contained delta. No extra persistence authority, schema change or new acceptance requirement is added.
+Normal publication is recorded in production-source-profile-01/inventory-publication28.json; reconcile
+its actual Git/remote outcome before any subsequent publication. The installed app remains wheel19
+until a separately verified package install; never retry the terminal operation on either version.
+
+A finite current-descriptor observation sees two Python writers under drewwiberg-lacie, both started
+after the failed qualification finished. That observation identifies neither historical changed totals
+nor their cause. No process is interrupted. Private evidence and native CLI directories are verified
+on the internal device, with no symlink to LaCie. Current space is85GiB internal and3.9TiB external.
+
+One labelled read-only coarse observation began at07:24:56UTC, installed store PID16696/tool session23095.
+It uses the original selection and exact exclusions, writes evidence internally, and persists no
+descendant list or checkpoint. Its result will compare current totals with the selected snapshot;
+it cannot recover the discarded historical rescan or establish historical cause. It is not a broker
+operation, new selection, provider call, write campaign or permission to retry. Immediate top-level
+names/types match at07:27UTC; aggregate bytes remain pending. Reconcile its existing identity/progress
+before another inventory. Current free space during proof remains above the10percent guard.
+
+Next: publish the accepted repair and prepare its package internally, then reconcile the existing
+read-only observation and unexplained protected-content change before any eligible physical retry.
+Do not duplicate the diagnostic, repeat provider side effects, change the original inventory contract,
+launch another selection or ask for reconnect. Seven exact owned bytecode-cache metadata observations
+show dates before selection; that narrow check does not establish historical byte identity or exclude
+other build-tree changes. A later current write handle belongs to a separate Infini-Wizard operation
+started after this failure. Preserve that user-owned process and do not treat it as the historical cause.
 
 A finite source/contract trace confirms Ollama's unresolved identity cycle: SOURCE-ENTRY-PASS
 requires its exact generated profile before payload access, while the pinned generated manifest/blob

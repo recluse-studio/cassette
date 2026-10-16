@@ -8773,3 +8773,50 @@ data boundary. A separate waiter will start the exact stop-and-resume action aft
 without asking Drew to intervene. The job is still in preflight: no ACK, full measurement, source
 profile pass or required model download is claimed. Both controllers monitor system space. The
 first source profile retains its planned eight-gigabyte geometry on the authorized cartridge.
+
+The first qualification stopped at 07:14 UTC. The second inventory differed from the selected one,
+so Cassette refused to continue. The recovery waiter also stopped before signalling any process.
+No profile measurement or required model download began. I preserved the failed operation and its
+control records; the earlier four-kilobyte write proof remains valid at its own narrow boundary.
+
+The refusal exposed a separate defect. Cassette saved the original inventory and the error, then
+discarded the new totals. The live procedure requires both. The historical difference is therefore
+unknown; a fresh scan cannot recover it. I have not replaced the original baseline or retried the
+terminal operation.
+
+I extended the existing CLI fixture at that exact failure. It failed because the comparison record
+was absent. The contained broker change now saves both coarse inventories and their digests before
+returning the same refusal. The fixture passes in 49.02 seconds and proves that replay makes no new
+provider request or record change. Complete build proof and a separate Opus review remain pending.
+
+The complete candidate now passes all 340 checks in 470.35 seconds, with no skips. All fourteen
+component controls and the ordinary accounting check pass too. The change adds five net executable
+lines. The separate Opus reviewer has that frozen candidate and may challenge it on its own disposable
+fixture. The first launcher draft was rejected before inference because a named tool was absent;
+I corrected the declaration within the same private write scope and retained the failed draft.
+
+One new read-only observation is comparing the current drive totals with the retained selection.
+Its evidence stays internal and records no private descendant list. It is labelled as a new
+observation: the missing historical totals remain missing, and the failed operation remains intact.
+
+The independent review found a real defect in that green candidate. A legal filename containing
+a tab could not be saved as a key in the event record. The save then hid the original refusal.
+I rejected the unpublished candidate. The review's ordinary first-run challenge and its control
+remain useful evidence; its filename failure remains a failure.
+
+The correction saves filenames as values in a list, using a shape the existing schema already
+allows. It also preserves the original refusal if recording the comparison fails. The extended
+CLI fixture passes the filename case. A fresh complete candidate and review are next. The first
+review's blocked launcher status, denied decorated shell command and failed provider fixture are
+retained exactly; the permitted probe did run, and its disposable images were cleaned up.
+
+The corrected candidate passes all 340 checks in 546.21 seconds, all fourteen component controls
+and the ordinary ledger. Opus accepts this exact version after eight independent cases. The tests
+cover first-run changes, unusual filenames, unchanged behaviour, replay and two controls that remove
+the repairs. All 561 frozen files still match, and every disposable image and copy has been removed.
+
+The reviewer also forced the journal past its existing four-megabyte limit. Cassette then keeps the
+original terminal refusal, but cannot save the oversized snapshots. That is missing evidence, never
+a retention pass. The repair adds eight net executable lines and changes no schema or storage writer.
+Its code acceptance does not complete the failed physical qualification. The original cause remains
+unknown while the separate read-only comparison continues.

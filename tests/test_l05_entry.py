@@ -413,6 +413,8 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             probe_path.write_bytes(saved_probe)
             user_path = mount / 'drewwiberg-lacie/user.txt'
             user_path.write_bytes(b'changed outside the cartridge')
+            added_path = mount / 'added\tentry'
+            added_path.write_bytes(b'top-level addition')
             confirmed = launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount')
             assert confirmed['result']['go_operation_id'] == reported['operation_id']
             assert launch('watch-remount', reported['operation_id'], '--reconnected', '--key', 'reported-remount') == confirmed
@@ -426,6 +428,25 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                              drive['operation_id'], '--key', 'go-reported', expected_code=1)
             assert refused['error']['code'] == 'PROVENANCE_VIOLATION'
             assert sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests) == payload_count
+            # Q80 physical_storage_qualification; PHASE_LIVE_RUNBOOK: preserve both coarse inventories on mismatch.
+            refused_bytes = reported_path.read_bytes()
+            refused_record = json.loads(refused_bytes)['record']
+            comparisons = [event['payload']['protected_inventory_comparison'] for event in refused_record['events']
+                           if 'protected_inventory_comparison' in event['payload']]
+            observed = {'added\tentry': {'type': 'file', 'logical_bytes': len(b'top-level addition')},
+                        'drewwiberg-lacie': {'type': 'directory', 'logical_bytes': len(b'changed outside the cartridge')}}
+            assert comparisons == [{'selected': [{'name': 'drewwiberg-lacie', 'type': 'directory', 'logical_bytes': 9}],
+                                    'observed': [{'name': 'added\tentry', 'type': 'file', 'logical_bytes': len(b'top-level addition')},
+                                                 {'name': 'drewwiberg-lacie', 'type': 'directory',
+                                                  'logical_bytes': len(b'changed outside the cartridge')}],
+                                    'selected_digest': drive['result']['inventory_digest'],
+                                    'observed_digest': digest_bytes(canonical_bytes(observed))}]
+            assert not any('source_qualification' in event['payload'] for event in refused_record['events'])
+            requests_before_replay = list(requests)
+            assert launch('go', '--model-selection', selected['operation_id'], '--drive-selection',
+                          drive['operation_id'], '--key', 'go-reported', expected_code=1) == refused
+            assert reported_path.read_bytes() == refused_bytes and requests == requests_before_replay
+            added_path.unlink()
             user_path.write_bytes(b'protected')
             payload_before_qualification = sum(method == 'GET' and path.endswith('/model.safetensors')
                                                for method, path in requests)

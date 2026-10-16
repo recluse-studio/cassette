@@ -1736,7 +1736,19 @@ class CanonicalBroker:
             probe = binding['probe']
             await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
                                    probe['digest'], probe['bytes'])
-            compare_inventory(observed_inventory, await self._protected_inventory(selection, destination['folder']))
+            current_inventory = await self._protected_inventory(selection, destination['folder'])
+            try:
+                compare_inventory(observed_inventory, current_inventory)
+            except CassetteError as comparison_error:
+                try:
+                    self._append(self._load(operation_id), 'output_delta', {'protected_inventory_comparison': {
+                        'selected': [{'name': name, **entry} for name, entry in sorted(observed_inventory.items())],
+                        'observed': [{'name': name, **entry} for name, entry in sorted(current_inventory.items())],
+                        'selected_digest': destination['inventory_digest'],
+                        'observed_digest': digest_bytes(canonical_bytes(current_inventory))}})
+                except CassetteError as persistence_error:
+                    raise comparison_error from persistence_error
+                raise
             record = self._load(operation_id)
             if not any('drive_prepared' in event['payload'] for event in record['events']):
                 self._append(record, 'output_delta', {'drive_prepared': {
