@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 05:18 UTC
+## Current direction — 2026-10-16 05:58 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -42,19 +42,101 @@ files and seven primary Apple policies unchanged. The reviewer explicitly relies
 broker delta/runtime join and does not individually inspect the fourteen controls; those actual Root
 results remain retained. The probe used Root cwd, whose broker hash joins to the frozen candidate.
 Packet manifest SHA-256: 8114011e17da484111686bcd88ec073a6afa180e4d5bd2ad20c740b800589525.
-Wheel19 joins all 38 runtime files, SHA-256 da844146973d843c76b75198efdb75b350a5f5c4283ef58b62e849774d2f8a1c,
-and remains UNINSTALLED until accepted publication and actual installed-byte verification complete.
-Receipts: production-source-profile-01/inventory-review03-adjudication.json and inventory-fixed25-after.json.
-No owned producer, fixture probe or native reviewer remains running.
+Wheel19 joins all 38 runtime files, SHA-256 da844146973d843c76b75198efdb75b350a5f5c4283ef58b62e849774d2f8a1c.
+The accepted repair is committed/pushed as 3cdbf96a66d1b0fe4c6d2d4c22c2371f588f0986, with ordinary ledger
+completed before and after commit, normal push and actual remote parity. Wheel19 is INSTALLED_VERIFIED;
+all 38 actual installed/runtime/tested/frozen/wheel/committed bytes match, including the CLI entrypoint.
+Receipts: inventory-publication25.json, wheel-19-verification.json, inventory-review03-adjudication.json,
+and inventory-fixed25-after.json under production-source-profile-01.
 
-Next: normal commit/push, accepted offline wheel19 installation, actual runtime hash join, then fresh
-installed drive selection under prepared-first-profile-02.json's new key/op-f697c4e7134dc2fa4e19cfcc75927c9b6f7323183f12954c83cf914cf1c863a9.
-Two read-only whole-disk diskutil queries time out after10 seconds; preserve both. The separate
-metadata instrument instead obtains the actual physical ID from the APFS store partition and binds
-the native IOKit chain and hardware host identity. Its exact F4 plan is PREPARED ONLY, not issued,
-qualified or source-locked by a generated placeholder. Materialize exact Q80 START/checkpoint/VERIFY
-bindings before source-profile writes. Keep logs off LaCie after fresh inventory; reconcile operations
-before launch and retain the original completed physical reconnect. No duplicate tiny test or reconnect.
+The fresh installed drive.select op-f697c4e7134dc2fa4e19cfcc75927c9b6f7323183f12954c83cf914cf1c863a9
+completed SUCCEEDED/exit0 at2026-10-16T05:51:48Z; wrapper42512 and CLI42514 stopped. Actual inventory
+digest: blake3:d6746c2bff85bb11aa2f27e3a3c3ee1d72586c93784cbd79af49f87cca835465.
+physical-02/launch.json and drive-selection.json retain exact request, ownership and complete result.
+This is installed live drive-selection proof, not a source-profile, header or payload pass. Reuse this
+successful exact selection. Keep new logs/packets outside the authorized external cartridge internal
+so they do not change its protected inventory. No duplicate drive selection or physical reconnect.
+
+Two read-only whole-disk diskutil queries time out after10 seconds. The separate preparation instrument
+successfully obtains actual physical IDs from the APFS store partitions and binds the native IOKit
+chain and hardware host identity. prepared-first-profile-02.json now has an exact F4 geometry, but
+it remains metadata preparation, not issued or qualified. Its synthetic request has 13 artifacts,
+8,060,926,626 source bytes and 8,062,694,285 retained logical bytes. No headers or payloads were read.
+
+Q80 repair checkpoint: native scope review completed normally on served claude-opus-5-5 and
+confirms both failures are materializer bugs; the existing contract already requires the missing
+augmentation, so no authority changes. All 216 scope snapshot files match afterward. The review's
+case design and explicit unreviewed areas are retained under q80-native-review-01/scope-adjudication-01.md.
+
+Root now collects base edges before composing per-coordinate checkpoint and verification edges,
+retains original predecessors, rejects obsolete global placeholder bindings, and blocks recursive
+proof coordinates and mutation of inherited nodes. Fixed targets are covered under the existing
+verification_contract.fixed_targets rule as well as literal physical START/VERIFY. Underscored
+family suffixes and inherited stage/evidence validation retain the review's explicit unreviewed status.
+No executable, schema, source-entry or acceptance contract is weakened. Only tools/campaign.py,
+its existing Q33/Q80 materialization fixture and narrative records change; wheel19's 38 runtime
+files remain byte-identical and require no reinstall for this tool-only repair.
+
+The extended fixture uses prefix-overlapping c1/c10 consumers, 17 exact reached-error checks,
+physical assertion ownership, fixed F4 target composition and a parent discriminator differing
+only in edges. It passes in the latest focused run. The original code fails before the repair.
+All three reviewer-designed sensitivity mutants discriminate: dropping checkpoint edges or restoring
+the every-* ordering rejects the correct graph; restoring the old global binding accepts the union
+crosswire that the fixed code rejects. Raw fixture/commands/module hashes: q80-sensitivity-02.
+The corrected actual-parent pair materializes115 nodes and preserves all110 inherited nodes, while
+rejecting the incomplete control. Nothing is published or executed live: q80-edge-fixed-02.
+Original frozen tool3cdbf96 reproduces both failures with actual imported module path/hash and a
+control-input registry digest matching its graph: q80-edge-04. Preserve earlier instrument errors:
+the first control registry was saved before an in-memory pop; a renamed fixture retained its old
+dimension labels; the first sensitivity locator used an overly long pytest directory prefix. These
+are corrected retained instruments, not additional product failures. Native I1/I2/I3 corrections are
+explicit. The fixed-candidate review and requested supplement both ACCEPT the bounded graph-data repair.
+Final preservation confirms all216 original,258 fixed-packet and53 supplement files unchanged.
+
+Candidate26 PASSES all340 tests in418.62 seconds, zero skips, all fourteen component controls and
+ordinary ledger. J=(0,0,16991,1,1,9,0,0,8425096); the existing Q80 failures justify40 net authored
+executable lines. Source-manifest SHA-256: e9489cee8e519b298cf211d9c33b3a93745f5a4940ebc866e3f2420a0727ff86.
+Its fixed review packet has258 files, manifest SHA-256
+bcb4d4d37e5b37e760662bed0fa1e0702ebc23feaaacf26baea49127333089d6. All38 runtime files still join
+to installed wheel19. Producer and fixture scratch stay internal; no new external inventory writes.
+
+The Mac locked during the next allowance refresh. A native Claude Code /usage account reading
+succeeds in the existing trusted repository without model inference or settings changes. The live
+refresh shows17 percent session usage,52 percent weekly usage,4 percent Fable usage and Usage credits
+off. The CLI still labels the account Pro, unlike the earlier Max5x UI; that discrepancy is retained.
+This native reading satisfies the existing allowance/no-overage check without a new physical gate.
+The owned account-reading session stopped. Fixed review01 completed normally as an explicit continuation
+of stopped scope session448edf5c-6bdb-4a80-8d95-bb8a657ef35b through the Use Opus launcher;
+production-source-profile-01/q80-native-review-01/runs/fixed-01 retains its native receipts.
+Its served claude-opus-5-5 report PASSES the bounded integration/data scope, with no supported defect.
+All216 original snapshot files and258 fixed packet files match afterward. The reviewer requests
+C1-C4 and identifies missing Q3 packet links; those remain separate from its initial PASS.
+
+A bounded read-only sample of the owned drive reader shows readdir/lstat traversal and increasing
+CPU time; it is observed active work, not inventory completion or a visited-file count. Retained
+physical-02 reader-activity receipts distinguish that activity from an age-based stall assumption.
+
+The seven C1-C4 executor cases now pass their expected observations: fixed-target omission rejects
+at F4-GATE; removing membership guards accepts all three missing-proof controls; removing only the
+stale-binding guard still rejects union checkpoint edges; an extra START verifier is accepted, retained
+as optional scope tightening. No production code changed. q80-review-followups-01 keeps exact inputs,
+commands, outputs and actual module hashes. A fresh complete actual-parent replay retains its executor,
+parent and Git-object join: q80-real-pair-03 reproduces the same115-node graph with all110 inherited
+nodes equal and obsolete bindings absent. Original fixed02 lacked a standalone executor in its packet;
+that limitation is not rewritten. Sensitivity02's specific pytest invocation remains unproved, while
+its actual saved input and discriminating behavior remain valid. Earlier instrument attempts survive.
+
+The same independent reviewer ACCEPTS this53-file supplement through native followups-01, explicit
+stopped fixed01 continuation. Both reviews exit0, stopped, served claude-opus-5-5, no error or denial.
+Root final preservation PASSES all216 originals,258 fixed-packet files and53 supplement files.
+q80-fixed26-adjudication.json and q80-fixed26-after02.json retain the exact decision and checks.
+Real failure-family execution and inherited stage/evidence validation remain NOT_RUN. Optional extra
+helper narrowing, exact suffix matching and generated lifecycle keys are not supported defects.
+No live campaign completion is inferred from data checks.
+
+Next: commit/push the accepted repair, then bind/publish actual physical-profile actions and run qualification with first-boundary
+recovery proof. Reconcile the successful physical-02 receipt; no selection remains running. Keep
+model-bearing bytes in the authorized external cartridge. No duplicate tiny model test or reconnect.
 Full physical profiles, SOURCE_ENTRY_PASS, real headers/payloads and L05-L10 remain incomplete.
 Ollama's actual generated identity remains unresolved; the parametric geometry is not a source lock.
 

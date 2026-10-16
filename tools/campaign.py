@@ -892,6 +892,7 @@ def materialize(root, registry, *, parent=None):
                 reject(record['id'], 'family stage owner differs from its authority')
         records.extend(inputs['records'])
     ids = {record['id'] for record in records}
+    base_edges, coordinates, original_targets = {}, {}, {}
     for record in registry.get('fixed_records', []):
         expected = fixed_authorities[record['id']].get('depends', [])
         if record['id'] in aggregates:
@@ -906,8 +907,7 @@ def materialize(root, registry, *, parent=None):
                 else:
                     expanded.append(dependency)
             expected = sorted(set(expanded))
-        if sorted(record['depends']) != sorted(expected):
-            reject(record['id'], 'fixed record rewrites queue prerequisites')
+        base_edges[record['id']] = expected
     for name, inputs in registry['families'].items():
         family = families[name]
         template = family.get('id_format')
@@ -926,6 +926,7 @@ def materialize(root, registry, *, parent=None):
                 declared_records = next((value for key, value in family.items() if key.startswith('records_per_')), [])
                 if len(declared_records) == 1:
                     suffix = declared_records[0]
+            coordinates[record['id']] = (name, values, suffix)
             if name == 'live_failure':
                 bound_operation = failure_binding(record, values, failure_contract, registry, records, parent)
             dependencies = family.get('dependencies',{})
@@ -946,6 +947,13 @@ def materialize(root, registry, *, parent=None):
                         dependency = template.replace('<record>',target) if target in inputs.get('dimensions',{}).get('record',[]) else target
                     for field,value in values.items():
                         if field != 'record': dependency = dependency.replace('<'+field+'>',value)
+                    if name == 'verification_work' and dependency == 'every-original-target-predecessor':
+                        original_targets[record['id']] = values['target-flat-id']
+                        continue
+                    if name == 'checkpoint_proof' and dependency == 'exact-operation-START':
+                        if dependency in inputs.get('dependency_bindings', {}):
+                            reject(record['id'], 'checkpoint predecessor must come only from its coordinate')
+                        dependency = values['operation-start-flat-id']
                     if dependency.startswith('every-'):
                         pattern = re.escape(dependency.removeprefix('every-'))
                         pattern = re.sub(r'<[^<>]+>',r'.+',pattern)
@@ -959,8 +967,42 @@ def materialize(root, registry, *, parent=None):
                         if not bound or not set(bound) <= ids:
                             reject(record['id'], f'prerequisite requires a frozen materializer binding: {dependency}')
                         expected.extend(bound)
-            if sorted(record['depends']) != sorted(set(expected)):
-                reject(record['id'], 'literal graph edges differ from declared family prerequisites')
+            base_edges[record['id']] = expected
+    checkpoints, verifiers = {}, {}
+    for key, (name, values, suffix) in coordinates.items():
+        if name == 'checkpoint_proof':
+            start = values['operation-start-flat-id']
+            if start not in ids or not start.endswith('START') or coordinates.get(start, ('',))[0] == 'verification_work':
+                reject(key, 'checkpoint coordinate is not a product operation START')
+            checkpoints[start] = key
+        elif name == 'verification_work':
+            target = values['target-flat-id']
+            if target not in ids or coordinates.get(target, ('',))[0] in {'verification_work', 'checkpoint_proof'}:
+                reject(key, 'verification coordinate is absent or recursively verifies proof work')
+            verifiers.setdefault(target, {})[suffix] = key
+    for key, target in original_targets.items():
+        if 'every-original-target-predecessor' in registry['families']['verification_work'].get('dependency_bindings', {}):
+            reject(key, 'verification predecessors must come only from their target')
+        base_edges[key].extend(base_edges[target])
+    inherited = parent['nodes'] if parent else {}
+    for key in ids - inherited.keys():
+        name, _, suffix = coordinates.get(key, ('', {}, ''))
+        if queue.get('long_operation_contract') and key.endswith('START') and name != 'verification_work' and key not in checkpoints:
+            reject(key, 'long-operation START lacks its checkpoint proof coordinate')
+        verification = queue.get('verification_contract', {})
+        if (key in verification.get('fixed_targets', []) or
+                (verification and name != 'verification_work' and str(suffix).endswith('VERIFY')
+                 and 'verification_rule' in families.get(name, {}))) and key not in verifiers:
+            reject(key, 'terminal target lacks its independent verification coordinate')
+    for record in records:
+        key = record['id']
+        expected = set(base_edges[key])
+        if coordinates.get(key, ('',))[0] != 'checkpoint_proof':
+            expected.update(checkpoints[start] for start in list(expected) if start in checkpoints)
+        if key in verifiers:
+            expected.add(verifiers[key]['RESULT'])
+        if sorted(record['depends']) != sorted(expected):
+            reject(key, 'literal graph edges differ from composed contract prerequisites')
     required, deferred = {}, {}
     for assertion in matrix_assertions(matrix):
         section = assertion.removeprefix('matrix#').split('.')[0]

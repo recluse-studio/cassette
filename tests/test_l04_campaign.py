@@ -833,6 +833,156 @@ steps:
         bad = copy.deepcopy(anchored); bad['fixed_records'][-1][field] = value
         with pytest.raises(CassetteError): campaign.materialize(tmp_path, bad)
 
+    # Q80 composes existing recovery and verification rules before one monotone publication.
+    edge_root = tmp_path/'proof-edges'
+    (edge_root/'research').mkdir(parents=True)
+    (edge_root/'schema/campaign').mkdir(parents=True)
+    actual_contract = json.loads((Path(__file__).resolve().parents[1]/'schema/campaign/contract.json').read_text())
+    proof_families = [copy.deepcopy(row) for row in actual_contract['expanded_session_families']
+                      if row['family'] in {'physical_qualification','checkpoint_proof','verification_work'}]
+    proof_contract = {'materialized_record_contract': {'family_evidence_levels': {
+        row['family']: actual_contract['materialized_record_contract']['family_evidence_levels'][row['family']]
+        for row in proof_families}}, 'dependency_graph_revision_contract': {},
+        'expanded_session_families': proof_families}
+    terminals = ['QUALIFY-'+key+'-VERIFY' for key in ('ACQ-F4-c1','ACQ-F4-c10')]
+    proof_queue = {**proof_contract, 'fixed_steps': [{'id':'L04','depends':[]}],
+                   'operation_records':[{'id':'F4-GATE','depends':terminals}],
+                   'long_operation_contract': {'checkpoint_proof':'Every product START requires its exact RECOVERABILITY coordinate'},
+                   'verification_contract': {'fixed_targets':['F4-GATE']}}
+    (edge_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':proof_queue},sort_keys=False)+'```\n')
+    (edge_root/'research/ACCEPTANCE_MATRIX.yaml').write_text(campaign.yaml.safe_dump(
+        {'fixture_gate_rows':[{'id':'f4_gate','pass_condition':'exact independent comparison'}],
+         'physical_storage_qualification':{'required_assertions':['exact_drive_operation_plan_profile_recorded']}}))
+    (edge_root/'schema/campaign/contract.json').write_text(json.dumps({**proof_contract,
+        'matrix_axes':{},'assertion_owner_patterns':{'fixture_gate_rows[id=f4_gate]':['F4-GATE'],
+            'physical_storage_qualification':actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}))
+    physical_authority = 'matrix#physical_storage_qualification.required_assertions[0]'
+    checkpoint_records = [node('CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                               ['QUALIFY-'+key+'-START']) for key in ('ACQ-F4-c1','ACQ-F4-c10')]
+    verification_records = []
+    for target in [*terminals,'F4-GATE']:
+        predecessors = (terminals if target == 'F4-GATE' else [target.removesuffix('-VERIFY')+'-START',
+            'CHECKPOINT-'+target.removesuffix('-VERIFY')+'-START-RECOVERABILITY'])
+        verification_records.extend([node('VERIFY-WORK-'+target+'-START',list(predecessors)),
+            node('VERIFY-WORK-'+target+'-RESULT',['VERIFY-WORK-'+target+'-START'])])
+    physical_records = []
+    for key, terminal in zip(('ACQ-F4-c1','ACQ-F4-c10'),terminals,strict=True):
+        physical_records.extend([node('QUALIFY-'+key+'-START',['L04']),
+            node(terminal,['QUALIFY-'+key+'-START','CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                           'VERIFY-WORK-'+terminal+'-RESULT'],[physical_authority])])
+    proof_registry = {'matrix_digest':campaign.file_digest(edge_root/'research/ACCEPTANCE_MATRIX.yaml'),
+        'materializer':'L04','required_owners':{authority:['F4-GATE'],physical_authority:terminals},
+        'fixed_records':[node('L04',[],level='INTEGRATION'),
+            node('F4-GATE',[*terminals,'VERIFY-WORK-F4-GATE-RESULT'],[authority])],
+        'families':{
+            'physical_qualification':{'dimensions':{'consumer-flat-id':['ACQ-F4-c1','ACQ-F4-c10'],'record':['START','VERIFY']},
+                'dependency_bindings':{'literal_consumer_prerequisites_that_do_not_depend_on_this_profile':['L04']},
+                'records':physical_records},
+            'checkpoint_proof':{'dimensions':{'operation-start-flat-id':['QUALIFY-ACQ-F4-c1-START','QUALIFY-ACQ-F4-c10-START']},
+                'records':checkpoint_records},
+            'verification_work':{'dimensions':{'target-flat-id':[*terminals,'F4-GATE'],'record':['START','RESULT']},
+                'records':verification_records}}}
+    proof_early = {**proof_registry,'fixed_records':proof_registry['fixed_records'][:1],'families':{},
+                   'required_owners':{},'deferred_assertion_owners':{authority:['F4-GATE'],
+                       physical_authority:actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}
+    proof_parent = campaign.materialize(edge_root,proof_early)
+    proof_graph = campaign.materialize(edge_root,proof_registry,parent=proof_parent)
+    assert proof_graph['nodes']['L04'] == proof_parent['nodes']['L04']
+    for key, terminal in zip(('ACQ-F4-c1','ACQ-F4-c10'),terminals,strict=True):
+        start = 'QUALIFY-'+key+'-START'
+        checkpoint = 'CHECKPOINT-'+start+'-RECOVERABILITY'
+        assert proof_graph['nodes'][checkpoint]['depends'] == [start]
+        assert set(proof_graph['nodes'][terminal]['depends']) == {
+            start,checkpoint,'VERIFY-WORK-'+terminal+'-RESULT'}
+        assert set(proof_graph['nodes']['VERIFY-WORK-'+terminal+'-START']['depends']) == {start,checkpoint}
+        assert terminal not in proof_graph['nodes']['VERIFY-WORK-'+terminal+'-START']['depends']
+        assert not any(name.startswith('CHECKPOINT-VERIFY-WORK-') for name in proof_graph['nodes'])
+    assert set(proof_graph['nodes']['F4-GATE']['depends']) == {*terminals,'VERIFY-WORK-F4-GATE-RESULT'}
+    assert proof_graph['nodes']['VERIFY-WORK-F4-GATE-START']['depends'] == terminals
+    assert proof_graph['required_owners'][physical_authority] == terminals
+    for key in ('ACQ-F4-c1','ACQ-F4-c10'):
+        chain = ['QUALIFY-'+key+'-START','CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                 'VERIFY-WORK-QUALIFY-'+key+'-VERIFY-START','VERIFY-WORK-QUALIFY-'+key+'-VERIFY-RESULT',
+                 'QUALIFY-'+key+'-VERIFY']
+        assert [proof_graph['order'].index(name) for name in chain] == sorted(proof_graph['order'].index(name) for name in chain)
+    first, second = terminals
+    start_a, start_b = [target.removesuffix('-VERIFY')+'-START' for target in terminals]
+    cp_a, cp_b = ['CHECKPOINT-'+start+'-RECOVERABILITY' for start in (start_a,start_b)]
+    vs_a, vs_b = ['VERIFY-WORK-'+target+'-START' for target in terminals]
+    vr_a = 'VERIFY-WORK-'+first+'-RESULT'
+    mismatch = 'literal graph edges differ from composed contract prerequisites'
+    observations = []
+    faults = ['omitted_checkpoint','missing_checkpoint_edge','crosswired_checkpoint','union_checkpoint',
+              'foreign_checkpoint_edge','omitted_verification','target_cycle','verifier_missing_checkpoint',
+              'verifier_missing_start','missing_original_edge','recursive_checkpoint','verify_checkpoint',
+              'verify_verifier','stale_checkpoint_binding','stale_verifier_binding','crosswired_result']
+    for fault in faults:
+        bad = copy.deepcopy(proof_registry)
+        indexed = {row['id']:row for family in bad['families'].values() for row in family['records']}
+        expected_key, expected_detail = first, mismatch
+        if fault == 'omitted_checkpoint':
+            bad['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].remove(start_a)
+            bad['families']['checkpoint_proof']['records'].remove(indexed[cp_a])
+            indexed[first]['depends'].remove(cp_a); indexed[vs_a]['depends'].remove(cp_a)
+            expected_key, expected_detail = start_a, 'long-operation START lacks its checkpoint proof coordinate'
+        elif fault == 'missing_checkpoint_edge': indexed[first]['depends'].remove(cp_a)
+        elif fault in {'crosswired_checkpoint','union_checkpoint'}:
+            indexed[cp_a]['depends'] = [start_b] if fault == 'crosswired_checkpoint' else [start_a,start_b]
+            expected_key = cp_a
+        elif fault == 'foreign_checkpoint_edge': indexed[first]['depends'][1] = cp_b
+        elif fault == 'omitted_verification':
+            bad['families']['verification_work']['dimensions']['target-flat-id'].remove(second)
+            bad['families']['verification_work']['records'] = [row for row in bad['families']['verification_work']['records']
+                if row['id'] not in {'VERIFY-WORK-'+second+'-START','VERIFY-WORK-'+second+'-RESULT'}]
+            indexed[second]['depends'].remove('VERIFY-WORK-'+second+'-RESULT')
+            expected_key, expected_detail = second, 'terminal target lacks its independent verification coordinate'
+        elif fault in {'target_cycle','verifier_missing_checkpoint','verifier_missing_start'}:
+            if fault == 'target_cycle': indexed[vs_a]['depends'].append(first)
+            else: indexed[vs_a]['depends'].remove(cp_a if fault == 'verifier_missing_checkpoint' else start_a)
+            expected_key = vs_a
+        elif fault == 'missing_original_edge': indexed[first]['depends'].remove(start_a)
+        elif fault == 'recursive_checkpoint':
+            key = 'CHECKPOINT-'+vs_a+'-RECOVERABILITY'
+            bad['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].append(vs_a)
+            bad['families']['checkpoint_proof']['records'].append(node(key,[vs_a]))
+            expected_key, expected_detail = key, 'checkpoint coordinate is not a product operation START'
+        elif fault in {'verify_checkpoint','verify_verifier'}:
+            target = cp_a if fault == 'verify_checkpoint' else vr_a
+            bad['families']['verification_work']['dimensions']['target-flat-id'].append(target)
+            bad['families']['verification_work']['records'].extend([
+                node('VERIFY-WORK-'+target+'-START',[start_a]),
+                node('VERIFY-WORK-'+target+'-RESULT',['VERIFY-WORK-'+target+'-START'])])
+            expected_key = 'VERIFY-WORK-'+target+'-START'
+            expected_detail = 'verification coordinate is absent or recursively verifies proof work'
+        elif fault == 'stale_checkpoint_binding':
+            bad['families']['checkpoint_proof']['dependency_bindings'] = {'exact-operation-START':[start_a]}
+            expected_key, expected_detail = cp_a, 'checkpoint predecessor must come only from its coordinate'
+        elif fault == 'stale_verifier_binding':
+            bad['families']['verification_work']['dependency_bindings'] = {'every-original-target-predecessor':[start_a]}
+            expected_key, expected_detail = vs_a, 'verification predecessors must come only from their target'
+        else:
+            indexed[vr_a]['depends'] = [vs_b]
+            expected_key = vr_a
+        with pytest.raises(CassetteError) as rejected:
+            campaign.materialize(edge_root,bad,parent=proof_parent)
+        assert (rejected.value.object_id,rejected.value.detail) == (expected_key,expected_detail), fault
+        observations.append({'fault':fault,'error':rejected.value.payload()})
+    legacy_nodes = [*proof_parent['nodes'].values(),
+        node(start_a,['L04']),node(first,[start_a],[physical_authority]),
+        node(start_b,['L04']),node(second,[start_b],[physical_authority])]
+    legacy = campaign.validate_graph(legacy_nodes,required_owners={physical_authority:terminals},parent=proof_parent,
+        materializer='L04',deferred_owners={authority:['F4-GATE']})
+    with pytest.raises(CassetteError) as sealed:
+        campaign.materialize(edge_root,proof_registry,parent=legacy)
+    assert (sealed.value.object_id,sealed.value.detail) == (first,'successor rewrites or removes an inherited record or edge')
+    assert {key:value for key,value in legacy['nodes'][first].items() if key != 'depends'} == {
+        key:value for key,value in proof_graph['nodes'][first].items() if key != 'depends'}
+    observations.append({'fault':'sealed_target_edges','error':sealed.value.payload()})
+    for name,value in [('registry.json',proof_registry),('parent.json',proof_parent),('graph.json',proof_graph),
+                       ('observations.json',observations)]:
+        (edge_root/name).write_text(json.dumps(value,sort_keys=True))
+
     # The actual failure authority expands all 80 coordinates and 432 records before publication.
     source_root = Path(__file__).resolve().parent.parent
     actual = json.loads((source_root/'schema/campaign/contract.json').read_text())

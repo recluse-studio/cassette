@@ -8693,3 +8693,66 @@ and the fresh physical-drive selection are next; this review does not supply liv
 Two read-only whole-disk identity queries also timed out. The next prepared profile now derives the
 physical disk ID from its actual APFS store partition and retains the native device chain. This is
 metadata preparation only. No source profile or required model download has started.
+
+
+I committed and pushed the inventory repair as 3cdbf96 and installed it. All thirty-eight actual
+runtime files match the tested, frozen package and commit. The new LaCie inventory is running
+under a fresh operation; the old terminal failure remains intact.
+
+The next campaign record exposed another build defect before a source write. The recorder accepts
+a graph without the required recovery dependency, then rejects that same dependency when it is
+added. Its verification-work placeholder also falls into an unrelated empty-aggregate check.
+I reproduced both outcomes using only data and retained the registries and exact errors. No graph
+was published and no source profile began. The next repair must implement the existing ordering
+rules, preserving each operation's own recovery and verification lineage.
+
+
+The separate Opus review confirmed that the ordering rules were already correct. The recorder had
+not implemented them. I repaired that one materializer and extended its existing fixture. Two
+operations with nearly identical names now keep their own recovery and verifier records. The test
+checks seventeen exact rejection boundaries and proves that an older graph cannot be rewritten.
+
+Three disposable mutants test the proof itself. Removing the recovery links or restoring the old
+aggregate handling rejects the correct graph. Restoring the old shared binding accepts a crossed
+recovery record that the fixed code rejects. The real parent graph also forms the corrected
+115-node successor with all 110 inherited nodes intact. These remain data checks; nothing was
+published and no source transfer began.
+
+I retained and corrected the proof instruments too: one saved its control input before removing a
+helper family, one retained old dimension labels after renaming its consumers, and one looked for a
+pytest directory name that was too long. The old frozen implementation now reproduces its failures
+with an observed module hash and a control input whose digest matches the graph. The complete build
+check and independent review of this fixed candidate remain next. The drive inventory continues.
+
+
+All 340 checks pass in 418.62 seconds, with no skips. The fourteen component controls and ordinary
+accounting also pass. The repair adds forty net executable lines to the existing campaign authority.
+All thirty-eight installed runtime files remain identical; this recorder repair needs no reinstall.
+The exact source and raw challenges are frozen for the separate Opus review, which is running.
+
+The Mac locked before I could refresh the subscription page. The native command-line usage screen
+provided the same required kind of account reading: allowance remains and usage credits are off.
+No model prompt, billing change, new login or unlock was needed. The command-line plan label differs
+from the earlier account page; I retained that discrepancy. A short sample also shows the owned
+drive reader traversing directories and checking files. That establishes activity, not completion.
+
+
+The installed app finished the LaCie inventory successfully at 05:51 UTC. Its complete result records
+the protected top-level names and byte totals. This clears the earlier inventory permission failure.
+It does not yet supply the full physical source profile or a required download.
+
+Opus passes the repaired recorder at the declared graph-data level and finds no supported defect.
+Its four follow-up challenges now produce the expected results in seven isolated executions. Removing
+the membership guards admits missing proof; the real code rejects it. A fresh actual-parent replay
+retains the previously missing executor and parent and reproduces the exact 115-node graph, keeping
+all 110 inherited records. The original packet omissions and the sensitivity input's unproved pytest
+invocation remain visible. No production change or repeated full suite was needed. The reviewer is
+adjudicating that supplement; publication follows its disposition and the final preservation check.
+
+
+The follow-up Opus review accepts the repair. Its raw-file trace closes the four challenges and the
+actual-parent links. Both native runs served Opus 5.5, exited normally and stopped without an error
+or permission denial. All 216 original snapshot files, 258 fixed-packet files and 53 supplement
+files still match. The review retains its exact limits: data evidence, an unrecoverable historical
+pytest invocation identity, and unrun later failure-family and inherited-metadata cases. Optional
+tightening adds no new failure. The accepted repair can now be committed and pushed.
