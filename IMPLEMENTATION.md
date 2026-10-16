@@ -5,15 +5,16 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 12:59 UTC
+## Current direction — 2026-10-16 13:25 UTC
 
-Active item: accepted Q42 retained-source read/write profiler fixed36. All340 checks, fourteen
-component controls and ordinary ledger pass. Separate Opus review completes Q1-Q3 at fixture/platform
-level. Original35 stays rejected. Publish the accepted source under existing authority; reconcile
-retained-source-publication36.json before repeating any publication. Then prepare the accepted local
-runtime and continue the generic generated-source path. Installed21 and physical03 remain stopped
-for the incomplete Arup relocation; fresh inventory/binding must follow that move. Required large
-downloads and L05-L10 remain open. The chronological record below retains every exact checkpoint.
+Active item: Q42 retained-source profiler fixed36 is accepted, committed/pushed as ed0e128a6f583287b6ed46c3f0e6e969040b1b45,
+and installed internally as runtime22. Its 39 actual runtime files join tested/frozen/committed/wheel
+bytes; the real CLI and installed generated schemas are verified. Next continue the generic retained
+generated-source path: generation ownership/durability, frozen layout/identity joins and stable
+provider locator. Physical03 stays stopped on its original installed21; the unfinished Arup move
+requires fresh inventory and exact graph/card/runtime binding before a new physical operation.
+Required large downloads and L05-L10 remain open. Read retained-source-publication36.json and
+installed-22/verification.json before repeating publication or installation.
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -895,6 +896,27 @@ manifest. Protected original settings, baselines and math research are untouched
 are detached and removed after accepted cartridge/raw evidence is preserved. No browser/app window
 or physical operation is started. Latest canonical physical03 remains PAUSED/EMPTY/error:null and
 migration task is still in progress. Publish accepted36 now; keep installed/source/live proof distinct.
+
+
+Accepted fixed36 is committed/pushed as ed0e128a6f583287b6ed46c3f0e6e969040b1b45. Pre/post ordinary
+ledgers complete before the normal push; actual remote parity and clean worktree are verified in
+retained-source-publication36.json. The isolated offline wheel22 uses existing setuptools84.0.0 and
+uv0.10.10 without dependency resolution/download. Wheel SHA-256:
+95aabafc532c5ec58ad43c62d5874476aae92da8d3f0bafdd9774335de7ab339.
+
+Runtime22 is INSTALLED_VERIFIED internally. All 39 actual runtime files match tested/frozen/committed
+and wheel bytes, with actual CLI/broker/sources/store imports in its own site-packages. The installed
+schema validator/tables also resolve there, and a zero-byte METADATA_ONLY retained geometry is
+admitted without a provider, drive, broker operation or payload. Actual CLI qualify help exposes
+--operation-plan. The separate installed21 runtime and interrupted physical03 are not redirected.
+No external writes or model-bearing bytes occur in packaging; current system free space is 81 GiB.
+The Arup relocation is still executing verification/copy work, so keep physical work held.
+
+Continue the next contained generic generation/serving piece within this accepted direction, using
+fixtures and the frozen byte-only Ollama recipe. Generation after verified HF headers keeps its
+own exact profile. Actual layout/hash/SourceLock joins, stable origin, actual provider auth/range
+proof and all required model/dataset acquisitions remain open; source geometry and the new synthetic
+copy proof cannot replace them. No human action is currently needed.
 
 ## Historical worklog — superseded checkpoints
 

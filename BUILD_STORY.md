@@ -9118,3 +9118,13 @@ Cassette can now measure a retained local source and a separate destination thro
 transfer path, preserve the files during a paused copy, and close a slow reader safely. This is a
 completed code milestone in the unfinished build. Source generation, the real cartridge checks and
 the required model and dataset downloads remain. The accepted source is ready for publication.
+
+## 16 October 2026 — publish and install the accepted version
+
+The accepted profiler is committed and pushed as ed0e128a. Its local installation matches the exact
+reviewed and tested files, including the generated input rules and real command-line entrypoint.
+The old interrupted drive attempt keeps its original runtime and evidence.
+
+The next code work prepares the generated source files and their stable download address. The
+required real downloads remain outstanding. The separate Arup move is still using LaCie, so the
+next real drive check must start with a fresh inventory after that move. No action is needed from Drew.
