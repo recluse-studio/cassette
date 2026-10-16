@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 11:40 UTC
+## Current direction — 2026-10-16 11:52 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -712,6 +712,36 @@ lint and API simplification remain recommendations, not added acceptance gates. 
 rejected. Source-entry, same-cartridge source reads, real generated identity and all required downloads
 remain incomplete. Publish the accepted source now under existing commit/push authority; continue
 A's generic read/write profiling work without redirecting the running installed21 physical03 owner.
+
+The accepted input repair is committed/pushed as016e1a9db1c3474cf46a6c84e388c53ef8d8cc1e. Both
+ordinary ledgers finish before the normal push, with actual remote parity and clean worktree in
+geometry-publication34.json. No prospective39-file runtime is installed or attributed to physical03.
+
+A concurrent migration task reports an intended Arup repository relocation on the same large LaCie.
+Root yields its own physical attempt without changing or terminating user-owned work. At11:48:42UTC
+the freshly identity-checked owned CLI receives one SIGINT, completes asyncio cancellation and its
+original parent's wait/reap, and exits-2. No SIGKILL or fake data ACK. Controller9325, CLI9654 and
+waiter9671 are all stopped. The waiter retains its no-ACK interrupted-owner refusal and launches no
+recovery. After all three stop, the existing installed21 broker applies exactly one canonical pause:
+op3947d9f9 remains PAUSED/EMPTY, result:null, checkpoint:{}, error:null, with the two original events
+and one pause event. Its consumed pause_requested flag is correctly false.
+
+first-profile-03/migration-safe-boundary.json verifies the profile head and first extent head are
+absent; no source-profile data, model header or payload began. The earlier bounded durability probe
+and pointer inside the authorized cartridge are retained, so this is not a zero-external-write claim.
+The first verifier failed after the successful pause because the public envelope omits phase; its
+second read-only verifier incorrectly expected an unconsumed pause flag. Both instrument failures
+survive. The corrected verifier observes the canonical record and performs no second pause. This is
+an operational stop, not a profile PASS, checkpoint/recovery proof or product failure.
+
+Cassette has no active inventory/profile/recovery worker and does not prevent migration from its
+own process boundary. This says nothing about other repositories' readiness. Do not start a new
+physical operation while relocation is pending. Verify actual migration completion, then reconcile
+fresh inventory, exact graph/card lineage and scope before any new physical attempt. Old selection03
+becomes stale if paths change; do not silently resume its scan or treat its interrupted result as
+current proof. Source code/review work can continue internally without a human handoff. The accepted
+Q42 retained-source read/write profile remains the next contained target; continuation-after-geometry34.json
+records its exact scope, existing primitives and unproved read-side needs. L05-L10 remain open.
 
 ## Historical worklog — superseded checkpoints
 

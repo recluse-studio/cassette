@@ -9040,3 +9040,17 @@ Opus accepts this limited code change. The complete suite also passes all340 che
 the exact review copies and their raw results. The next implementation adds real reads from retained
 external source extents to the profiler; the real drive check continues separately. This is a proved
 repair within the unfinished build.
+
+## 16 October 2026 — stop the drive check for the repository move
+
+The reviewed input repair is committed and pushed as016e1a9. A separate task is preparing to move
+Arup repositories onto the same LaCie, which will change the inventory Cassette is checking.
+
+We interrupted only Cassette's own inventory reader, let its parent collect the exit, stopped the
+waiting recovery route and recorded one canonical pause. All three workers are stopped. No source
+profile or model download began, and no physical checkpoint pass is claimed. The small earlier
+durability probe remains inside the approved cartridge. We kept two mistakes in the stop-verification
+instrument and corrected their assumptions against the actual canonical record.
+
+The move can proceed without a Cassette worker competing with it. Afterward Cassette needs a fresh
+inventory and the correct operation binding. Internal implementation can continue meanwhile.
