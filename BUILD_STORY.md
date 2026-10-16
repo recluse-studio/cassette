@@ -8826,3 +8826,31 @@ finished before the push, and the worktree is clean. I built its package interna
 thirty-eight runtime files against the tested, reviewed and committed bytes. The package is ready;
 it is not installed yet. The existing read-only drive comparison continues, and its original
 selection and failed attempt remain intact.
+
+The separate drive scan finished at 08:11 UTC after checking 3,383,277 entries. Arup and Writing
+still have the selected totals. The other top-level folder is now 9,520,170,481 bytes larger.
+That is a current size difference; it does not identify what changed or recover the earlier missing
+snapshot. The diagnostic stopped normally, and I retained its exact result. No second scan is running.
+
+Writes remain stopped. I sent one frozen evidence packet to a separate Opus reviewer to examine the
+existing rules for a new attempt after this incomplete failure. That is a narrow reading of the
+current contract, not another code review or a passing drive check. The reviewed package remains
+ready and uninstalled. No required large model or dataset download has started.
+
+Opus completed that narrow review on the actual served Opus 5.5 model. I checked its receipts and
+all twenty-two unchanged packet files. The existing rules permit a separate new attempt; they do
+not require an unavailable historical explanation before all future work. The failed interval and
+its missing record stay unchanged. A later pass can prove only its own interval.
+
+I am placing the reviewed package in a separate internal environment before a new read-only drive
+selection. This keeps Cassette's runtime, caches and evidence writes outside the drive being checked.
+The old external installation stays intact. Model bytes will still go only to the approved external
+cartridge. The exact inventory comparison and every live acceptance requirement remain in force.
+
+That internal install now passes its identity check: all thirty-eight installed files match the
+tested, reviewed and committed package. The real imports and packaged command point to the new
+environment. It reused the existing pinned dependencies and left the external installation intact.
+
+The installed command started one separate read-only drive selection at 08:22 UTC. It is recording
+the before-inventory for a possible new interval. It has not qualified the drive or started a model
+transfer. The old failed operation, original selection and missing historical record remain intact.

@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 08:03 UTC
+## Current direction — 2026-10-16 08:24 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -258,11 +258,56 @@ operation, new selection, provider call, write campaign or permission to retry. 
 names/types match at07:27UTC; aggregate bytes remain pending. Reconcile its existing identity/progress
 before another inventory. Current free space during proof remains above the10percent guard.
 
-Next: reconcile the existing read-only observation and unexplained protected-content change before
-the verified package install and any eligible physical retry. The source repair and package are ready;
-their completion does not settle the lost historical inventory or authorize a new baseline.
-Do not duplicate the diagnostic, repeat provider side effects, change the original inventory contract,
-launch another selection or ask for reconnect. Seven exact owned bytecode-cache metadata observations
+The read-only observation completed at08:11:57UTC, exit0; PID16696 stopped. Its3,383,277 entries yield
+the same top-level names and types. Arup and Writing equal the selected totals; drewwiberg-lacie is
+957,471,565,449 bytes against947,951,394,968 selected, a current increase of9,520,170,481 bytes.
+Its source module remains unchanged. result.json, not the last RUNNING progress.json, is the final
+observation. Root verifies the result and preserves its SHA-256
+25f48ff95a15247910878f3cf9485fe3b068c31b19e23736b5b9e758c608c4b1 in
+inventory-failure-01/current-observation01/root-reconciliation.json. No second inventory is running.
+This current delta does not reconstruct the failed comparison or establish its cause. The historical
+after-snapshot remains NOT_RETAINED, the terminal qualification remains FAILED and writes remain stopped.
+
+One separate native Opus STATIC review examines the existing mismatch-stop, fresh-attempt and missing-
+capture clauses against this completed observation. It may identify an operational successor or exact
+blocker; its pending status supplies neither permission nor live proof. The frozen22-file packet is
+inventory-successor-disposition01; launcher tool session3353 owns the reviewer. Fresh native usage is
+26percent session,52percent weekly,4percent Fable, credits off, with normal firstParty subscription
+authentication. The owned allowance-reading CLI exits0. No package install, selection, provider call,
+profile or payload starts. A current descriptor sample at08:16UTC finds no open writable descriptors
+under drewwiberg-lacie; this short observation does not establish a quiet interval or historical cause.
+
+The static native review completes normally at08:19:20UTC, exit0, stopped, served claude-opus-5-5,
+with no error or permission denial. Root checks its actual result and all22 unchanged packet files.
+Its two questions are decided statically; its INCOMPLETE baton correctly retains every live gap.
+The runbook's fresh-attempt and missing-capture clauses permit a separate future interval while the
+old interval remains FAILED with missing evidence. They do not require recovering an unavailable
+historical cause. Root removes the earlier routing prohibition on any new selection, without
+changing an acceptance assertion, exclusion, exact comparison, terminal operation or saved baseline.
+
+Wheel20 is now INSTALLED_VERIFIED in production-source-profile-01/installed-20/environment, using
+the existing pinned Python3.13.14 and the same repository dependency path as the earlier install.
+All38 actual files join to tested/frozen/committed/wheel bytes; isolated imports and the packaged CLI
+entrypoint pass. The installer performs no dependency resolution/download or external write. External
+wheel19 and its installed-current receipt remain unchanged. installed-20/verification.json records
+the new exact imports, commands and package identity. No model bytes enter internal storage.
+
+One separate installed drive.select began at08:22:41UTC: op-057fe2d3ef3674ac060908ecb6b9320cbbc8836c3cd94b22c488ca3b158cc71c,
+key required-source-profiles-lacie-20261016-03. Internal wrapper48240 owns CLI48242/tool session47140;
+physical-03/launch.json binds its READ_ONLY card and exact internal package. It uses the same volume,
+cartridge UUID and folder, with disabled bytecode writes and internal operation/evidence paths.
+It is RUNNING, not selected or qualified. No source/provider/profile/header/payload action accompanies
+the selection; no automatic Go follows it. Reconcile this one owner and terminal result before
+another operation. Both original copied records retain their exact hashes.
+
+Next: bind any write-bearing successor to its own completed selection, card, graph and operation key.
+Compare its recorded totals with the completed current observation as an operational check; changed
+totals are a reason to investigate current activity, not a new acceptance rule or request to stop
+user-owned work. The actual qualification still performs its unchanged exact inventory comparison.
+Do not claim a quiet drive from a short descriptor sample, merge intervals or retry the terminal key.
+All ordinary evidence/cache/build output stays internal and bytecode writes remain disabled for the
+owned CLI. The old missing comparison stays missing even if a later interval passes. No new physical
+reconnect or human approval is required. Seven exact owned bytecode-cache metadata observations
 show dates before selection; that narrow check does not establish historical byte identity or exclude
 other build-tree changes. A later current write handle belongs to a separate Infini-Wizard operation
 started after this failure. Preserve that user-owned process and do not treat it as the historical cause.
