@@ -5,7 +5,15 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 11:52 UTC
+## Current direction — 2026-10-16 12:59 UTC
+
+Active item: accepted Q42 retained-source read/write profiler fixed36. All340 checks, fourteen
+component controls and ordinary ledger pass. Separate Opus review completes Q1-Q3 at fixture/platform
+level. Original35 stays rejected. Publish the accepted source under existing authority; reconcile
+retained-source-publication36.json before repeating any publication. Then prepare the accepted local
+runtime and continue the generic generated-source path. Installed21 and physical03 remain stopped
+for the incomplete Arup relocation; fresh inventory/binding must follow that move. Required large
+downloads and L05-L10 remain open. The chronological record below retains every exact checkpoint.
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -742,6 +750,151 @@ becomes stale if paths change; do not silently resume its scan or treat its inte
 current proof. Source code/review work can continue internally without a human handoff. The accepted
 Q42 retained-source read/write profile remains the next contained target; continuation-after-geometry34.json
 records its exact scope, existing primitives and unproved read-side needs. L05-L10 remain open.
+
+
+The next Q42 piece is in progress: optional CARTRIDGE_RETAINED geometry first retains synthetic
+source counterparts, then reads their verified checkpoint/chunks through the existing profile server
+and production source adapter while writing distinct destination extents. Store remains the extent,
+trace and profile authority; sources reuses its checkpoint loader in a nonmutating mode. The new
+raw source roles and source-to-durable intervals bind actual input reads to destination checkpoints.
+Both complete retained working sets stay present until the sealed profile and scoped reclamation.
+No generation, actual provider identity or live source-entry result is claimed. Physical03 stays
+paused while the separate Arup relocation remains incomplete.
+
+Baseline-failure.json under retained-source-profile-01 records accepted5c7d rejecting the proposed
+geometry field at admission. Initial transfer/checkpoint cases pass; the schema fixture initially
+omits the new optional-field expectation. Two CLI instrument errors concern concurrent request order
+and an absent pytest import; all failed logs remain retained. The corrected source reader corruption
+cases refuse damaged checkpoint/record/payload without changing source extents. A new copy-specific
+hold tests interruption/recovery before this candidate is frozen. No complete candidate or independent
+review has passed yet. A finite support check identifies same-window duplicate source starts as a
+possible false pass; the trace now rejects that duplicate while retaining legitimate prefetched
+source reads across separately measured recovery windows. Its independent behavioral check remains
+pending. Existing security, accounts, spending limits and acceptance assertions are unchanged.
+
+
+Complete retained-source candidate35 PASSES all 340 tests in445.81seconds, zero skips, all fourteen
+component controls and ordinary ledger. J=(0,0,17266,1,1,9,0,0,8425096);159 net authored executable
+lines implement the missing Q42 source read/copy pattern. Source-manifest SHA-256:
+0daf319b38b21e020e3eb893f5640c618d08048b55d6e2547b38ac956df80650.
+The existing CLI fixture now proves actual copy hold/kill/restart/release, complete source/copy
+retention, source-to-durable intervals, raw missing-source refusal and final scoped reclamation on
+an owned disposable APFS image. This is fixture/platform proof, not external cartridge qualification.
+The initial copy-hold instrument reversed paths into noncanonical order and correctly failed at
+admission; focused-cli04 corrects that input and passes in59.13seconds. The five coupled source and
+credential cases also pass. All original failed instruments remain separate.
+
+The exact completed211-file source and286-file source/evidence packet are frozen under
+retained-source-review35-01. The native Opus independent reviewer is launched read-only through the
+current opus alias; Root stays separate executor on the same host/account. Its finite questions cover
+verified nonmutating source reads, exact source/copy trace/recovery/reclamation, cancellation joining
+and authority/accounting preservation. Review remains PENDING; no accepted code, installation or
+live stage result is claimed. Native allowance refreshed at12:16:58UTC shows34percent session,
+55percent weekly and4percent Fable usage, credits off, reader exit0 and zero inference. Physical03
+remains safely paused pending the full Arup migration map. Continue independent review, preserve all
+receipts, repair supported findings and rerun only the affected proof before publication.
+
+
+Independent review35 design ends normally at12:41 on served claude-opus-5-5, Read/Glob/Grep only.
+Its actual380-line challenge produces59 rows. The in-process copy hold/release FAILS with ROOT_INVALID
+at the exact same-window source guard; all REQUESTED/ACKNOWLEDGED/RELEASED events are reached.
+Removing only that guard makes the actual failed trace accept. Root REJECTS35 despite340 green
+checks. Three other deviations are the same review-instrument error: the second-arriving source
+range already has offset0, so assigning0 changes nothing. The corrected actual offset contradiction
+is refused on original and both isolated mutants. Both actual mutant imports and sole store.py
+changes are independently hash-checked. All286 frozen files remain unchanged; the owned image is
+detached and its four cartridge trees preserved. H2-H5 adjudication and lifecycle/binding probes
+remain pending; none is silently converted into a pass.
+
+The contained H1 repair now returns a refetch request from the existing checkpoint hook after an
+in-process retained-source window change. The existing transfer loop restarts from the committed
+chunk count and reacquires the pending range. Its same-window trace guard stays intact. The actual
+unchanged reviewer B3 helper on current source now PASSES: two measured windows, exact hold/release
+sequence,4,194,338 input bytes (4MiB+17 original plus17 refetched), and two source-to-durable intervals.
+The existing CLI fixture is extended with that in-process variant. This is a focused repair proof,
+not complete successor or acceptance. A separate native continuation reviews original35's actual
+results and designs the missing source-lifetime/manifest-binding challenges. Full36 waits for those
+supported findings, so it does not repeat an incomplete candidate. Physical operations remain held.
+
+
+Native followup01 preserves the original H1 FAIL and accepts the corrected trace crosswire refusal,
+empty-object applicability, complete forged-object refusal, canonical412 error and authorized
+synthetic extent reclamation. Its Glob accidentally targets the review parent outside its restricted
+cwd and is denied. The native result is BLOCKED/permission_denied despite exit0; useful findings
+are retained and this is not a completed review. No denied path is retried and no permission is
+broadened. Its requested missing checks have a finite written design; Root authors an explicit
+executor from that design, without claiming the code was written unchanged by the reviewer.
+
+missing-probes.py runs actual OS I/O on an owned128MiB APFS image. Its public filesystem boundary
+adds a source-read gate and observes actual closes; it does not mock internal components. With
+original35, the real30-second client timeout is recorded as retryable SOURCE_UNAVAILABLE, then the
+source descriptor closes before the gated server read finishes. Release produces actual EBADF9.
+Early release instead completes all reads before close and the profile PASSES. This proves the
+native lifecycle hypothesis. Root now joins owned profile boundaries before source descriptors
+close on source errors/cancellation. The unchanged missing-probes executor on fixed source proves
+the timeout is still truthful, the descriptor remains open through the gate, the real read completes
+before close and the context ends. Both images detach0 and cartridge evidence remains preserved.
+
+The same finite executor completes C1: a public compare_campaign_head contradiction changes only
+the completed destination's source manifest binding. Re-entry reaches the exact source/destination
+binding refusal. An actual isolated removal of that guard alone accepts the same contradiction;
+the imported broker path/hash and complete stdout remain retained. Source and copy guards were
+not weakened. The extended existing CLI fixture adds the in-process hold and delayed-handler cases;
+the focused run PASSES in73.94seconds. Its test clock uses an owned loopback socket deadline and
+actual gated OS reads, preserving real byte I/O and canonical errors. The deadline is1second for
+the complete successor fixture; the initial focused run used0.15seconds and is labelled separately.
+Earlier coupled transfer/CLI checks pass3 in79.32seconds. These are fixture/platform proofs only.
+
+Complete successor36 is next. After it passes, freeze its exact bytes and return all H1/L1/C1 actual
+records to the separate Opus reviewer through permitted in-cwd paths. Ask only for its affected
+source trace/final independent adjudication, with original35 still rejected and earlier denial
+preserved. No script-withholding retry or permission expansion is required. Installed21 remains
+unchanged and stopped; the unfinished migration still prevents a fresh physical inventory binding.
+
+
+Complete fixed36 PASSES all 340 checks in647.91seconds, zero skips, all fourteen raw component
+controls and ordinary ledger. J=(0,0,17273,1,1,9,0,0,8425096): seven net executable lines over35
+repair H1 and L1;166 net over accepted34 implement this Q42/Q44/Q51 piece. Source-manifest SHA-256:
+45b1d9020894936dfc30b562e0e9c13644dfb41dd3ac4a2129ece50ce614dc3a.
+All211 exact current source files join its producer after the complete J report copy. Frozen36
+and its affected evidence are appended under the same reviewer's permitted cwd; original286 and
+actual35's836 files remain unchanged. The same Opus session explicitly resumes for final affected
+adjudication through current opus alias, Read/Glob/Grep only. Review remains pending.
+
+Affected callback proof observes actual urllib boundary requests: None and truthy integer1 each
+fetch two initial ranges; exactly True discards the uncommitted range and fetches three. Every case
+completes the exact4MiB+17 bytes. A last-chunk hold on31 bytes passes with two windows and no refetch.
+The first callback executor used a wrong absolute file path, then a guessed base_uri field; both
+instrument failures remain, corrected to actual base_url before deciding execution. The C1 identity
+verifier initially included later fixture edits in the runtime comparison; its corrected closure
+shows only broker.py changed in each actual guard mutant and lists every narrative/fixture drift.
+Native allowance refresh13:08:44UTC shows43percent session,56percent weekly,4percent Fable, credits
+off, zero inference and owned reader exit0. Four earlier owned images are detached and removed after
+cartridge/raw evidence preservation. Real model bytes, installed21 and protected math originals are
+untouched. Next freeze/verify final review state, fix any supported remaining finding, then publish.
+
+
+The final native review completes normally on served claude-opus-5-5, exit0/stopped, no permission
+denial in this final run. It grants fixed36 PASS_READY for Q1/Q2/Q3 at fixture/platform level only;
+original35 stays rejected for H1 and L1. Root verifies exact namespaces and bytes of all 286 original,
+836 actual35,265 fixed36 and995 affected files after the review. The report discloses the shared
+host/account, Root executor, copied-source evidence and unreviewed live/kernel-disconnect behavior.
+
+Its only residual B3 hash join is now closed by one exact affected replay: the unchanged independent
+B3 helper/input on frozen36-equivalent broker/source/store hashes again PASSES with4,194,338 source
+bytes, two windows and two source-to-durable intervals. That receipt supplements the already-passing
+exact frozen fixture and last-chunk proof; no product code changes. fixed36-adjudication.json accepts
+only this contained Q42/Q44/Q51 feature. H6 cache work, exception introspection cleanup and HTTP error
+plumbing remain optional and are not admitted without a failing row. No release assertion is removed.
+
+After the full preservation check, Root removes only uninspected private/config/research COPIES from
+its own disposable mutant directories, including nine files in the separately declared affected
+packet. The fixed36 source/evidence packet265, original286, actual35_836 and all deciding evidence stay unchanged.
+The cleanup receipt lists exact removed paths, sizes and hashes and seals the revised986-file affected
+manifest. Protected original settings, baselines and math research are untouched. Owned APFS images
+are detached and removed after accepted cartridge/raw evidence is preserved. No browser/app window
+or physical operation is started. Latest canonical physical03 remains PAUSED/EMPTY/error:null and
+migration task is still in progress. Publish accepted36 now; keep installed/source/live proof distinct.
 
 ## Historical worklog — superseded checkpoints
 

@@ -193,6 +193,30 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             assert all(event["success"] is True and isinstance(event["duration_ns"], int)
                        for event in state_observations)
 
+            # Q51/Q42: serving a retained source verifies complete checkpoints and touched
+            # chunks without repairing or clearing either granted source extent.
+            retained = {"data": data_extent, "state": state_extent}
+            assert sources_module._retained_source_range(
+                revision, artifact, retained, CHUNK - 7, 31
+            ) == payload[CHUNK - 7:CHUNK + 24]
+            original_state = os.pread(state_fd, state_extent.length, 0)
+            for corruption in ("envelopes", "record", "payload"):
+                descriptor = data_fd if corruption == "payload" else state_fd
+                original = payload if corruption == "payload" else original_state
+                damaged = bytearray(original)
+                if corruption == "envelopes":
+                    damaged[:HEADER_BYTES] = bytes(HEADER_BYTES)
+                else:
+                    damaged[0 if corruption == "payload" else HEADER_BYTES + 1] ^= 1
+                os.pwrite(descriptor, damaged, 0)
+                before_data = os.pread(data_fd, data_extent.length, 0)
+                before_state = os.pread(state_fd, state_extent.length, 0)
+                with pytest.raises(CassetteError):
+                    sources_module._retained_source_range(revision, artifact, retained, 0, 31)
+                assert os.pread(data_fd, data_extent.length, 0) == before_data
+                assert os.pread(state_fd, state_extent.length, 0) == before_state
+                os.pwrite(descriptor, original, 0)
+
             baseline_claim_ids = {id(claim) for claim in capacity_coordinator.claims()}
             profile_data_observations = []
             profile_state_observations = []

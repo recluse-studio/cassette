@@ -1169,7 +1169,7 @@ class SourceAdapter:
                 request_headers["Authorization"] = f"Bearer {credential}"
         if license_ref is not None:
             request_headers["X-Cassette-License-Acceptance"] = license_ref
-        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method, signer)
+        return await await_extent_io(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method, signer)
 
     def _ollama_registry_token(self, url: str, challenge: str, signer: Callable[[bytes], str], object_id: str) -> str:
         """Exchange one same-origin pull challenge for an in-memory registry bearer token."""
@@ -1247,8 +1247,11 @@ async def source_profile_boundary(
     artifacts: tuple[Artifact | PlannedArtifact, ...],
     *,
     header_lengths: Mapping[str, int] | None = None,
+    retained_sources: Mapping[str, dict[str, TransferExtent]] | None = None,
 ):
     """Serve deterministic bounded source ranges through the real adapter boundary."""
+    if retained_sources is not None and (not isinstance(retained_sources, Mapping) or header_lengths is not None):
+        _fail('INVALID_REQUEST', 'source-profile', 'Q42: retained sources require whole-object range execution', 'retained source mapping or header mode is invalid')
     if not isinstance(revision, (ResolvedSource, OperationGeometry)):
         _fail("INVALID_REQUEST", "source-profile", "Q42: profile boundary requires a source or frozen geometry", "revision has no source or operation geometry")
     geometry = isinstance(revision, OperationGeometry)
@@ -1465,7 +1468,13 @@ async def source_profile_boundary(
             if offset < 0 or end < offset or end >= artifact.size or length > chunk_bytes:
                 self._respond(416)
                 return
-            if lengths is None:
+            if retained_sources is not None:
+                try:
+                    payload = _retained_source_range(synthetic, artifact, retained_sources[artifact.path], offset, length)
+                except (CassetteError, KeyError):
+                    self._respond(412)
+                    return
+            elif lengths is None:
                 payload = acquisition_slice(artifact, offset, length)
             else:
                 maximum = lengths[artifact.path] + 8
@@ -2281,9 +2290,14 @@ def _decode_state_slot(payload: bytes, slot: int) -> dict | None:
 def _load_state(
     extent: TransferExtent,
     object_id: str,
-    capacity_coordinator: CapacityCoordinator,
+    capacity_coordinator: CapacityCoordinator | None,
     boundary_prefix: str,
+    *,
+    read_only: bool = False,
 ) -> tuple[dict, tuple[str, ...]] | None:
+    def clear(suffix):
+        if not read_only:
+            _clear_state(extent, object_id, capacity_coordinator, f"{boundary_prefix}:{suffix}")
     slots = tuple(
         _pread_exact(extent, slot * _TRANSFER_SLOT_BYTES, _TRANSFER_SLOT_BYTES, object_id)
         for slot in range(2)
@@ -2294,23 +2308,13 @@ def _load_state(
     )
     if not candidates:
         if any(any(payload) for payload in slots):
-            _clear_state(
-                extent,
-                object_id,
-                capacity_coordinator,
-                f"{boundary_prefix}:invalid-header",
-            )
+            clear('invalid-header')
             _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer checkpoint header remains")
         return None
     record = max(candidates, key=lambda candidate: candidate["generation"])
     record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
     if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
-        _clear_state(
-            extent,
-            object_id,
-            capacity_coordinator,
-            f"{boundary_prefix}:records-overflow",
-        )
+        clear('records-overflow')
         _transfer_fail("IDENTITY_MISMATCH", object_id, "transfer chunk records exceed their checkpoint extent")
     encoded_records = _pread_exact(
         extent,
@@ -2323,15 +2327,47 @@ def _load_state(
         start = index * _TRANSFER_RECORD_BYTES
         raw = encoded_records[start:start + _TRANSFER_RECORD_BYTES]
         if raw[0] != 1:
-            _clear_state(
-                extent,
-                object_id,
-                capacity_coordinator,
-                f"{boundary_prefix}:record-{index}",
-            )
+            clear(f'record-{index}')
             _transfer_fail("IDENTITY_MISMATCH", object_id, f"transfer chunk record {index} is incomplete")
         digests.append("blake3:" + raw[1:].hex())
     return record, tuple(digests)
+
+
+def _retained_source_range(revision, artifact, extents, offset, length):
+    """Q42/Q51: read verified source chunks without repairing or writing their checkpoint."""
+    data, state = extents['data'], extents['state']
+    _extent(data, artifact.size, artifact.path, 'retained source data')
+    _extent(state, transfer_state_bytes(artifact.size), artifact.path, 'retained source checkpoint')
+    if data.operation_id != state.operation_id or not 0 <= offset <= offset + length <= artifact.size:
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'retained source range or extent operation differs')
+    loaded = _load_state(state, artifact.path, None, 'retained-source', read_only=True)
+    identity = _transfer_identity(revision, artifact, None)
+    if loaded is None:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source has no complete checkpoint')
+    header, digests = loaded
+    if (any(header[name] != value for name, value in identity.items())
+            or header['completed_count'] != header['chunk_count']
+            or header['contiguous_source_hash_digest'] != artifact.digest):
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source checkpoint is incomplete or has another identity')
+    records = resumable_artifact_hasher('sha256:' + '0' * 64, artifact.path)
+    for digest in digests:
+        records.update(b'\x01' + bytes.fromhex(digest[7:]))
+    hasher = resume_artifact_hasher(header['serialized_hash_state'], artifact.digest, artifact.size,
+        artifact.path, **({'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}))
+    if (_source_hash_state(records, 'sha256:') != header['chunk_records_digest']
+            or _source_hash_state(hasher, artifact.digest) != artifact.digest):
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source hash or chunk records differ')
+    result = bytearray()
+    for index in range(offset // _TRANSFER_CHUNK_BYTES, (offset + length + _TRANSFER_CHUNK_BYTES - 1) // _TRANSFER_CHUNK_BYTES):
+        start = index * _TRANSFER_CHUNK_BYTES
+        chunk = _pread_exact(data, start, min(_TRANSFER_CHUNK_BYTES, artifact.size - start), artifact.path)
+        if digest_bytes(chunk) != digests[index]:
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source chunk changed before serving')
+        if data.observer is not None:
+            data.observer({'kind': 'VERIFIED_PREFIX', 'offset': data.offset + start,
+                           'length': len(chunk), 'time_ns': time.monotonic_ns()})
+        result.extend(chunk[max(offset - start, 0):min(offset + length - start, len(chunk))])
+    return bytes(result)
 
 
 def _write_state(
@@ -2647,7 +2683,10 @@ async def transfer_artifact(
     authoritative_chunk_digests: tuple[str, ...] | None = None,
     checkpoint_committed=None,
 ) -> PartialState:
-    """Resume one Q51 artifact and return only after its durable final proof is complete."""
+    """Resume one Q51 artifact through its durable final proof.
+
+    Checkpoint control may return True to refetch uncommitted prefetched ranges.
+    """
 
     if not isinstance(adapter, SourceAdapter):
         _transfer_fail("INVALID_REQUEST", "transfer:unidentified", "SourceAdapter is required")
@@ -2874,8 +2913,8 @@ async def transfer_artifact(
             completed = next_completed
             chunk_digests += (chunk.blake3_digest,)
             header = next_header
-            if checkpoint_committed is not None:
-                await checkpoint_committed(_partial(header, chunk_digests))
+            if checkpoint_committed is not None and await checkpoint_committed(_partial(header, chunk_digests)) is True:
+                break
 
     if header["contiguous_source_hash_digest"] != artifact.digest:
         reset_checkpoint(header, header["generation"], "whole-digest")

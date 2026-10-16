@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import socket
 import stat
 import subprocess
 import sys
@@ -186,7 +187,7 @@ def test_q49_cli_drive_selection_preserves_inventory_and_scoped_intent(tmp_path)
             image.unlink()
 
 
-def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
+def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, monkeypatch):
     """Q5/Q6/Q9/Q42/Q43/Q44/Q49/Q50/Q51/Q60: exact header plans precede complete acquisition.
 
     The CLI crosses the provider boundary, survives a new process and retains its selection
@@ -638,7 +639,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
                             if 'artifact' in item['value'] and 'measurement' in item['value']
                             and 'profile_digest' in item['value'] and 'pattern' not in item['value']]
             assert len(plans) == 3
-            assert all(plan['value']['binding']['profiler_version'] == '6-retained-read-recovery'
+            assert all(plan['value']['binding']['profiler_version'] == '7-retained-source-transfer'
                        for plan in plans)
             assert len(fresh_atoms) == len(resume_atoms) == sum(plan['value']['pattern_count'] for plan in plans)
             assert all(item['previous'] is None for item in (*fresh_atoms, *resume_atoms))
@@ -887,6 +888,202 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert requests == completed_requests
             assert launch('qualify', '--operation-plan', str(geometry_file),
                 '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-profile', expected_code=2) == measured
+
+            # Q42/Q44/Q51: measure retained source reads and separate destination writes.
+            retained_geometry = json.loads(canonical_bytes(geometry))
+            retained_geometry['source_storage'] = 'CARTRIDGE_RETAINED'
+            retained_geometry['artifacts'][1]['size'] = 4 * 1024 * 1024 + 17
+            retained_geometry['artifacts'].reverse()
+            retained_geometry['artifacts'][1]['path'] = 'z-empty.bin'
+            geometry_file.write_bytes(canonical_bytes(retained_geometry))
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            retained_request = {'protocol_version': '1', 'operation': 'acquire',
+                'idempotency_key': 'geometry-retained-profile', 'target': fresh_drive['operation_id'],
+                'arguments': {'acquisition': {'operation_geometry': retained_geometry,
+                    'drive_selection_id': fresh_drive['operation_id']}}}
+            retained_id = control.issue(retained_request)['operation_id']
+            control.request_hold(retained_id, 'retained-source-checkpoint')
+            control.close()
+            retained_record_path = tmp_path / 'state/operations' / (retained_id + '.json')
+            copy_command = [sys.executable, '-B', '-m', 'cli', '--state', str(tmp_path / 'state'),
+                'qualify', '--operation-plan', str(geometry_file), '--drive-selection', fresh_drive['operation_id'],
+                '--key', 'geometry-retained-profile']
+            copier = subprocess.Popen(copy_command, cwd=Path(__file__).resolve().parents[1],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    retained_events = json.loads(retained_record_path.read_bytes())['record']['events']
+                    holds = [event['payload'] for event in retained_events if 'hold' in event['payload']]
+                    if holds[-1] == {'hold': 'ACKNOWLEDGED', 'boundary': 'retained-source-checkpoint'}:
+                        break
+                    assert copier.poll() is None, copier.communicate()
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('retained source copy did not acknowledge its durable boundary')
+                copier.kill()
+                copier.communicate(timeout=5)
+                copier = subprocess.Popen(copy_command, cwd=Path(__file__).resolve().parents[1],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    retained_events = json.loads(retained_record_path.read_bytes())['record']['events']
+                    if any('source_profile_resume' in event['payload'] for event in retained_events):
+                        break
+                    assert copier.poll() is None, copier.communicate()
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('retained source copy did not restore its measured boundary')
+                copier.kill()
+                copier.communicate(timeout=5)
+            finally:
+                if copier.poll() is None:
+                    copier.kill()
+                    copier.communicate(timeout=5)
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            control.release_hold(retained_id, 'retained-source-checkpoint')
+            control.close()
+            retained_measured = launch('qualify', '--operation-plan', str(geometry_file),
+                '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-retained-profile', expected_code=2)
+            retained_record = json.loads((tmp_path / 'state/operations' /
+                (retained_measured['operation_id'] + '.json')).read_bytes())['record']
+            retained_proof = [event['payload']['source_qualification'] for event in retained_record['events']
+                             if event['payload'].get('source_qualification', {}).get('status') == 'PASS'][-1]
+            cartridge = mount / 'drewwiberg-lacie/Cassette'
+            retained_complete = campaign_head(cartridge, retained_proof['profile_key'])['value']
+            retained_plan = retained_complete['measurements']['binding']['plan']
+            assert retained_plan['source_lock'] is None
+            assert retained_plan['source_storage'] == 'CARTRIDGE_RETAINED'
+            assert retained_plan['working_set_bytes'] == retained_plan['retained_extent_logical_bytes']
+            assert retained_complete['atom_count'] == 6
+            assert len(retained_complete['retained_manifests']) == 4
+            for reference in retained_complete['retained_manifests']:
+                assert campaign_head(cartridge, reference['key'])['value']['status'] == 'RECLAIMED'
+            source_size = retained_geometry['artifacts'][0]['size']
+            assert retained_complete['measurements']['retained_source']['observed_source_read_bytes'] >= source_size
+            profile_key = retained_proof['profile_key'].removesuffix('-complete')
+            copy_atom = campaign_head(cartridge, profile_key + '-0-copy')['value']
+            copy_measurement = copy_atom['measurement']
+            copy_rows = trace_events(copy_measurement)
+            source_rows = [row for row in copy_rows if row.get('role') == 'source_data' and row.get('kind') == 'read']
+            assert {(row['offset'], row['returned_bytes']) for row in source_rows} == {
+                (0, 4 * 1024 * 1024), (4 * 1024 * 1024, 17)}
+            assert copy_measurement['trace_statistics']['interrupted_windows'] == 1
+            assert not any(row.get('kind') == 'write' and row.get('role', '').startswith('source_') for row in copy_rows)
+            assert copy_measurement['trace_statistics']['phases']['FRESH_WRITE_READBACK'][
+                'source_to_durable_chunk_bytes_per_second']['samples'] == 2
+            for role in ('source_data', 'source_state'):
+                payload = b''.join(canonical_bytes(row) + b'\n' for row in copy_rows if row.get('role') != role)
+                name = 'missing-' + role + '.jsonl'
+                write_campaign_artifact(CapacityCoordinator(cartridge), 'retained-source-control', name, payload)
+                reference = {'attempt': 'retained-source-control', 'name': name,
+                             'bytes': len(payload), 'digest': digest_bytes(payload)}
+                try:
+                    source_profile_trace(cartridge, [reference], expected_data_writes=source_size,
+                        expected_data_reads=source_size, revalidation=False,
+                        expected_source_reads=source_size,
+                        source_state_bytes=copy_atom['pattern']['source_state_bytes_per_range'],
+                        record_base=2 * 64 * 1024)
+                except CassetteError as refused:
+                    assert refused.code == 'ROOT_INVALID'
+                else:
+                    raise AssertionError('raw source verifier accepted omitted retained-source reads')
+            assert requests == completed_requests
+            assert launch('qualify', '--operation-plan', str(geometry_file),
+                '--drive-selection', fresh_drive['operation_id'], '--key', 'geometry-retained-profile', expected_code=2) == retained_measured
+            # Q42/Q51: an in-process hold discards pending prefetched source ranges.
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            live_request = {**retained_request, 'idempotency_key': 'retained-inprocess-hold'}
+            live_id = control.issue(live_request)['operation_id']
+            control.request_hold(live_id, 'retained-source-checkpoint')
+
+            async def release_live_copy():
+                task = asyncio.create_task(control.start_download(live_request, qualification_only=True))
+                while not task.done():
+                    holds = [event['payload'] for event in control.events(live_id) if 'hold' in event['payload']]
+                    if holds[-1] == {'hold': 'ACKNOWLEDGED', 'boundary': 'retained-source-checkpoint'}:
+                        control.release_hold(live_id, 'retained-source-checkpoint')
+                        break
+                    await asyncio.sleep(.02)
+                return await task
+
+            try:
+                live_result = asyncio.run(asyncio.wait_for(release_live_copy(), timeout=30))
+                assert live_result['state'] == 'PAUSED'
+                live_proof = [event['payload']['source_qualification'] for event in control.events(live_id)
+                              if event['payload'].get('source_qualification', {}).get('status') == 'PASS'][-1]
+                live_key = live_proof['profile_key'].removesuffix('-complete')
+                live_copy = campaign_head(cartridge, live_key + '-0-copy')['value']['measurement']
+                assert live_copy['observed_source_read_bytes'] == source_size + 17
+                assert live_copy['trace_statistics']['interrupted_windows'] == 1
+            finally:
+                control.close()
+            # Q42/Q44/Q51: a timed-out client cannot close a handler's source descriptor.
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            late_request = {**retained_request, 'idempotency_key': 'retained-source-timeout'}
+            late_id = control.issue(late_request)['operation_id']
+            gate, reading = threading.Event(), threading.Event()
+            target = {}
+            real_read, real_connect = os.pread, socket.socket.connect
+
+            def copy_source_inode():
+                if 'profile' not in target:
+                    for path in (cartridge / 'campaign/heads').iterdir():
+                        head = campaign_head(cartridge, path.name)['value']
+                        if head.get('binding', {}).get('operation') == late_id:
+                            target['profile'] = path.name
+                            break
+                key = target.get('profile')
+                if key and campaign_head(cartridge, key + '-0-copy-extents'):
+                    return campaign_head(cartridge, key + '-0-extents')['value']['identities']['state']['inode']
+
+            def slow_read(fd, count, offset):
+                inode = copy_source_inode()
+                if inode and os.fstat(fd).st_ino == inode and not reading.is_set():
+                    target.update(fd=fd, inode=inode)
+                    reading.set()
+                    if not gate.wait(5):
+                        raise TimeoutError('owned fixture source gate was not released')
+                return real_read(fd, count, offset)
+
+            def short_connect(handle, address):
+                result = real_connect(handle, address)
+                if address[0] == '127.0.0.1' and copy_source_inode():
+                    handle.settimeout(1.0)
+                return result
+
+            async def time_out_source():
+                task = asyncio.create_task(control.start_download(late_request, qualification_only=True))
+                try:
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline and not task.done():
+                        if reading.is_set():
+                            failed = [campaign_head(cartridge, path.name)['value']
+                                      for path in (cartridge / 'campaign/heads').iterdir()
+                                      if path.name.endswith('-capture')]
+                            if any(value.get('operation_id') == late_id and value.get('status') == 'INCOMPLETE'
+                                   and value.get('error', {}).get('code') == 'SOURCE_UNAVAILABLE' for value in failed):
+                                assert os.fstat(target['fd']).st_ino == target['inode']
+                                break
+                        await asyncio.sleep(.02)
+                    else:
+                        raise AssertionError('source timeout did not reach its still-open handler boundary')
+                finally:
+                    gate.set()
+                    result = await task
+                return result
+
+            try:
+                with monkeypatch.context() as io:
+                    io.setattr(os, 'pread', slow_read)
+                    io.setattr(socket.socket, 'connect', short_connect)
+                    late_result = asyncio.run(time_out_source())
+                assert late_result['state'] == 'PAUSED'
+                assert control.events(late_id)[-1]['payload']['error']['code'] == 'SOURCE_UNAVAILABLE'
+            finally:
+                gate.set()
+                control.close()
+            geometry_file.write_bytes(canonical_bytes(geometry))
             control = CanonicalBroker(tmp_path / 'state/operations')
             geometry_request = {'protocol_version': '1', 'operation': 'acquire', 'idempotency_key': 'geometry-no-payload',
                 'target': fresh_drive['operation_id'], 'arguments': {'acquisition': {

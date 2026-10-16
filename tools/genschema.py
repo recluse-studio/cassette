@@ -2340,12 +2340,13 @@ CONTRACTS: dict[str, dict] = {
         {"source_lock": {"type": "null"},
          "source_kind": text(enum=["huggingface", "ollama", "tinker"]),
          "revision_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
+         "source_storage": text(enum=["MEMORY", "CARTRIDGE_RETAINED"]),
          "provenance": bounded_json_object(),
          "artifacts": array(record("Planned source object", "Q42", {
              "path": bounded_text(), "size": integer(maximum=2**63 - 1),
              "digest_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
              "validator_template": bounded_text(),
-         }), minimum=1, maximum=1048576)},
+         }), minimum=1, maximum=1048576)}, optional=("source_storage",),
     )),
     "source_catalogue": record(
         "Bounded source discovery page", "Q9/Q52",

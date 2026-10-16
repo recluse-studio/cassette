@@ -9054,3 +9054,67 @@ instrument and corrected their assumptions against the actual canonical record.
 
 The move can proceed without a Cassette worker competing with it. Afterward Cassette needs a fresh
 inventory and the correct operation binding. Internal implementation can continue meanwhile.
+
+## 16 October 2026 — measure both sides of the local source
+
+The new profiler keeps synthetic source files, then copies from those files into separate destination
+files through Cassette's real transfer path. It records source reads as well as destination writes.
+Each measured interval begins with source verification and ends at the destination's durable
+checkpoint. Source corruption is refused without changing the retained source.
+
+This change is still under test. The first fixture failures exposed mistakes in our checks, which
+we kept and corrected. Interruption, recovery, complete checks and independent review remain open.
+The real drive work stays paused while the Arup repository move is unfinished.
+
+## 16 October 2026 — the local-source profiler passes its complete checks
+
+All340 checks pass, along with all fourteen component controls. The new copy test stops after a
+durable checkpoint, restarts the same operation and finishes after release. Removing source-read
+records makes verification fail. Both source and destination test files are reclaimed after the
+complete measurement is sealed.
+
+The exact version is now frozen for the separate Opus review. It has not been accepted, installed or
+used to qualify the real cartridge. That drive work remains paused for the unfinished Arup move.
+
+## 16 October 2026 — the independent pause test finds a real gap
+
+The new check survived a killed process and restart, but Opus tried a different pause: hold the copy
+and release it in the same process. That failed. Cassette had already read the next chunk, then tried
+to write it after opening a new measurement window. The verifier correctly refused that mismatch.
+
+We rejected this candidate despite its complete green suite. The repair makes the transfer fetch
+uncommitted chunks again after that window change. Its proof and the remaining review are pending.
+The raw failed run stays intact. A separate suspected crosswire defect was a mistake in the review
+instrument: it assigned the value already present. Actually changing that value produces refusal.
+
+## 16 October 2026 — keep the source open until its reader stops
+
+The next independent test delayed a source read past the client's real thirty-second timeout.
+Cassette correctly reported the timeout, but closed the file while its server still needed it.
+Releasing the delayed read then produced a closed-file error. We kept that failure.
+
+The repair stops and joins the owned servers before closing those source files. The same delayed
+read now completes before close, while the client still gets its truthful timeout. A separate
+manifest test confirms that crossing two source bindings is refused; removing that safeguard
+lets the bad binding through. The complete successor checks and final independent review are next.
+
+## 16 October 2026 — the repaired version passes the complete checks
+
+Both repairs now pass their direct challenges. Releasing a held copy fetches the unfinished chunk
+again in its new measurement window. A slow source keeps its file open until its reader stops.
+The callback also distinguishes True from the integer 1 and leaves a finished last chunk alone.
+
+The complete version passes all 340 checks and all fourteen component controls. Its exact files and
+raw results are frozen for Opus's final decision. The rejected version and review-instrument errors
+remain in the record. The real cartridge and required downloads still need their later live proof.
+
+## 16 October 2026 — independent review accepts the repaired profiler
+
+Opus accepts the repaired version after examining both real failures, their repairs and the controls
+that distinguish them. The full suite passes all 340 checks. A final replay also joins the original
+pause challenge to the exact accepted files and passes.
+
+Cassette can now measure a retained local source and a separate destination through its real
+transfer path, preserve the files during a paused copy, and close a slow reader safely. This is a
+completed code milestone in the unfinished build. Source generation, the real cartridge checks and
+the required model and dataset downloads remain. The accepted source is ready for publication.

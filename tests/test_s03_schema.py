@@ -73,7 +73,7 @@ REMOTE_FIELDS = {
     "source_validators",
 }
 EXPECTED_FIELDS = {
-    "operation_geometry": {"source_lock", "source_kind", "revision_algorithm", "provenance", "artifacts"},
+    "operation_geometry": {"source_lock", "source_kind", "revision_algorithm", "provenance", "artifacts", "source_storage"},
     "source_catalogue": {"candidates", "next_cursor"},
     "native_adapter_factors": {"a", "b", "scale"},
     "native_training_manifest": {
@@ -148,6 +148,7 @@ EXPECTED_FIELDS = {
     },
 }
 EXPECTED_OPTIONAL = {
+    "operation_geometry": {"source_storage"},
     "request": {"target"},
     "operation": {"result", "error"},
     "capability_profile": {"extensions"},

@@ -7,7 +7,7 @@ import asyncio
 import base64
 from collections import deque
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 import ctypes
 from dataclasses import asdict, dataclass, replace
 import fcntl
@@ -1839,14 +1839,16 @@ class CanonicalBroker:
 
     async def _capture_source_profile(self, operation_id, owner, selection, baseline, adapter,
                                       revision, artifact, extents, *, header_bytes=None, saved_header=None,
-                                      revalidation=False, capture_key):
+                                      revalidation=False, capture_key, source_extents=None):
         """Q42/Q44/Q51: capture actual source I/O; immutable trace batches bound memory use."""
+        hold_name = 'retained-source-checkpoint' if source_extents is not None else 'profile-checkpoint'
         trace, captures = bytearray(), []
         host_samples = {'count': 0, 'max_gap_ns': 0, 'states': set(), 'first': None, 'last': None}
         capture_lock = threading.Lock()
         timings = {kind: [] for kind in ('read', 'write', 'fsync', 'F_FULLFSYNC', 'PARSER_READ')}
         totals = dict(read_bytes=0, data_read_bytes=0, write_bytes=0, data_write_bytes=0, errors=0, io_calls=0,
-                      process_data_read_bytes=0, data_reads_with_process_io=0, data_reads_without_process_io=0)
+                      process_data_read_bytes=0, data_reads_with_process_io=0, data_reads_without_process_io=0,
+                      source_read_bytes=0, source_state_read_bytes=0, process_source_read_bytes=0)
         attempt = capture_key
         # The localhost listener changes on restart; its port is transport, not source identity.
         source_lock = _source_record(revision)
@@ -1855,6 +1857,7 @@ class CanonicalBroker:
         context = {'operation_id': operation_id, 'source_lock': source_lock,
                    'artifact': {key: value for key, value in artifact.record().items() if key != 'range_uri'},
                    'extent_operation': extents['data'].operation_id,
+                   'source_extent_operation': None if source_extents is None else source_extents['data'].operation_id,
                    'revalidation': revalidation, 'header_json_bytes': header_bytes, 'path': baseline['path']}
         capture_head = await asyncio.to_thread(campaign_head, owner.cartridge, attempt)
         windows, restored_boundary, recovery_history = [], None, []
@@ -1950,7 +1953,7 @@ class CanonicalBroker:
             self._append(self._load(operation_id), 'output_delta', {'source_profile_resume': {
                 'capture_key': attempt, 'checkpoint_digest': capture_head['digest'],
                 'extent_operation': extents['data'].operation_id}})
-            await self.hold_boundary(operation_id, 'profile-checkpoint')
+            await self.hold_boundary(operation_id, hold_name)
         def flush_locked():
             if trace:
                 payload = bytes(trace)
@@ -1980,6 +1983,11 @@ class CanonicalBroker:
                 totals['read_bytes'] += event['returned_bytes']
                 if role == 'data':
                     totals['data_read_bytes'] += event['returned_bytes']
+                elif role == 'source_data':
+                    totals['source_read_bytes'] += event['returned_bytes']
+                    totals['process_source_read_bytes'] += event['process_diskio_read_bytes']
+                elif role == 'source_state':
+                    totals['source_state_read_bytes'] += event['returned_bytes']
             elif event['kind'] == 'write':
                 totals['write_bytes'] += event['returned_bytes']
                 if role == 'data':
@@ -1995,6 +2003,17 @@ class CanonicalBroker:
             observed_extents = {role: replace(extent, observer=lambda event, role=role: observe(role, event),
                                              observe_process_reads=revalidation and role == 'data')
                                 for role, extent in extents.items()}
+            if source_extents is not None:
+                for role, extent in tuple(source_extents.items()):
+                    source_extents[role] = replace(extent,
+                        observer=lambda event, role=role: observe('source_' + role, event),
+                        observe_process_reads=role == 'data')
+                command = getattr(fcntl, 'F_NOCACHE', None)
+                if command is not None:
+                    try:
+                        fcntl.fcntl(source_extents['data'].fd, command, 1)
+                    except OSError as error:
+                        _reject('CAPABILITY_MISMATCH', artifact.path, f'uncached source descriptor request failed: {error}')
             if revalidation:
                 # A descriptor request does not evict existing cache pages. The samples below decide
                 # whether this retained working-set window actually produced process-accounted I/O.
@@ -2017,7 +2036,7 @@ class CanonicalBroker:
                 if restored_boundary is not None:
                     restored_boundary = None
                 holds = [event['payload'] for event in self._load(operation_id)['events'] if 'hold' in event['payload']]
-                if not holds or holds[-1] != {'hold': 'REQUESTED', 'boundary': 'profile-checkpoint'}:
+                if not holds or holds[-1] != {'hold': 'REQUESTED', 'boundary': hold_name}:
                     return
                 measuring = False
                 await close_window()
@@ -2028,7 +2047,7 @@ class CanonicalBroker:
                     {**context, 'status': 'CHECKPOINTED', 'traces': captures,
                      'checkpoint': snapshot, 'recovery_history': recovery_history})
                 held = True
-                await self.hold_boundary(operation_id, 'profile-checkpoint')
+                await self.hold_boundary(operation_id, hold_name)
                 held = False
                 capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
                     {**capture_head['value'], 'status': 'MEASURING'})
@@ -2039,6 +2058,7 @@ class CanonicalBroker:
                 record({'kind': 'WINDOW_OPEN', 'started_ns': started, 'observer_pid': window_host['pid'],
                         'device': before, 'host': window_host})
                 measuring = True
+                return source_extents is not None
             def sample_host():
                 sample = storage_host_observation()
                 if host_samples['last'] is not None:
@@ -2119,11 +2139,16 @@ class CanonicalBroker:
                 expected_data_writes=expected_writes,
                 expected_data_reads=artifact.size if header_bytes is None else header_bytes + 8, revalidation=revalidation,
                 data_offset=extents['data'].offset, has_state='state' in extents,
-                record_base=transfer_state_bytes(0), expected_path=baseline['path'])
+                record_base=transfer_state_bytes(0), expected_path=baseline['path'],
+                expected_source_reads=0 if source_extents is None else artifact.size,
+                source_state_bytes=0 if source_extents is None else source_extents['state'].length)
             if (statistics['data_write_bytes'] != totals['data_write_bytes'] or statistics['io_calls'] != totals['io_calls']
                     or statistics['host_write_bytes'] != totals['write_bytes']
                     or statistics['data_read_bytes'] != totals['data_read_bytes']
-                    or statistics['process_data_read_bytes'] != totals['process_data_read_bytes']):
+                    or statistics['process_data_read_bytes'] != totals['process_data_read_bytes']
+                    or statistics['source_read_bytes'] != totals['source_read_bytes']
+                    or statistics['source_state_read_bytes'] != totals['source_state_read_bytes']
+                    or statistics['process_source_read_bytes'] != totals['process_source_read_bytes']):
                 _reject('SOURCE_UNAVAILABLE', attempt, 'raw source trace differs from its live byte or call count', retryability='retryable')
             elapsed = sum(window['duration_seconds'] for window in windows)
             measurement = {'duration_seconds': elapsed, 'write_seconds': sum(timings['write']) / 1e9,
@@ -2133,6 +2158,10 @@ class CanonicalBroker:
                     'host_write_bytes': totals['write_bytes'], 'observed_read_bytes': totals['read_bytes'],
                     'observed_data_write_bytes': totals['data_write_bytes'],
                     'observed_data_read_bytes': totals['data_read_bytes'],
+                    'observed_source_read_bytes': totals['source_read_bytes'],
+                    'observed_source_state_read_bytes': totals['source_state_read_bytes'],
+                    'process_source_read_bytes': totals['process_source_read_bytes'],
+                    'source_allocated_bytes': 0 if source_extents is None else os.fstat(source_extents['data'].fd).st_blocks * 512,
                     'device_write_bytes': sum(window['device_write_bytes'] for window in windows),
                     'device_read_bytes': (None if any(window['device_read_bytes'] is None for window in windows)
                                           else sum(window['device_read_bytes'] for window in windows)),
@@ -2217,6 +2246,7 @@ class CanonicalBroker:
         observed = await asyncio.to_thread(drive_path_observation, selection)
         host = await asyncio.to_thread(storage_host_observation)
         geometry = isinstance(revision, OperationGeometry)
+        retained_source = geometry and revision.record().get('source_storage', 'MEMORY') == 'CARTRIDGE_RETAINED'
         artifacts = revision.artifacts if geometry or header_lengths is not None else _acquisition_artifacts(revision)
         patterns = [{'artifact': artifact.path,
                      'write_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8,
@@ -2224,15 +2254,21 @@ class CanonicalBroker:
                     for artifact in artifacts]
         lengths = [{'data': artifact.size, **({'state': transfer_state_bytes(artifact.size)}
                                              if header_lengths is None else {})} for artifact in artifacts]
+        preparation_patterns = patterns
+        if retained_source:
+            patterns = [{**pattern, 'source_read_bytes': artifact.size,
+                         'source_state_bytes_per_range': lengths[index]['state']}
+                        for index, (pattern, artifact) in enumerate(zip(patterns, artifacts, strict=True))]
         binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
                    'path': observed['path'], 'operation': operation_id,
                    'profiler_version': STORAGE_PROFILER_VERSION,
                    'plan': {'source_lock': None if geometry else _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
                             'queue_depth': 1, 'network_range_concurrency': 2,
+                            'source_storage': 'CARTRIDGE_RETAINED' if retained_source else 'MEMORY',
                             'cache_state': 'FRESH_READBACK_AND_RETAINED_REVALIDATION',
-                            'working_set_bytes': (sum(sum(item.values()) for item in lengths) if header_lengths is None
+                            'working_set_bytes': (sum(sum(item.values()) for item in lengths) * (2 if retained_source else 1) if header_lengths is None
                                                   else sum(header_lengths[artifact.path] + 8 for artifact in artifacts)),
-                            'retained_extent_logical_bytes': sum(sum(item.values()) for item in lengths),
+                            'retained_extent_logical_bytes': sum(sum(item.values()) for item in lengths) * (2 if retained_source else 1),
                             'host_memory_bytes': host['host_memory_bytes'],
                             'artifact_bytes': sum(artifact.size for artifact in artifacts),
                             'checkpoint_pattern': 'SOURCE_EXECUTOR_ALTERNATING_SLOTS_AND_RECORDS',
@@ -2252,6 +2288,9 @@ class CanonicalBroker:
                 artifact_ranges={artifact.path: [list(pair) for pair in header_ranges(artifact, header_lengths[artifact.path])]
                                  for artifact in artifacts}, checkpoint_pattern='SOURCE_EXECUTOR_HEADER_AND_COMPLETE_PARSER')
         key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
+        stage_suffixes = ('', '-copy') if retained_source else ('',)
+        extent_keys = [key + '-' + str(index) + suffix + '-extents'
+                       for suffix in stage_suffixes for index in range(len(artifacts))]
         plan = {'binding': binding, 'pattern_count': len(patterns)}
         head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         if head is None:
@@ -2263,59 +2302,93 @@ class CanonicalBroker:
             if complete is None:
                 observations, revalidations, atom_digests, retained = [], [], [], []
                 self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
-                async with source_profile_boundary(revision, artifacts, header_lengths=header_lengths) as (adapter, synthetic):
-                    for index, (artifact, pattern, shape) in enumerate(zip(synthetic.artifacts, patterns, lengths, strict=True)):
-                        atom_key = key + '-' + str(index)
-                        extent_key = atom_key + '-extents'
-                        extent_binding = {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
-                        manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key, extent_binding, shape)
-                        capture_key = 'source-' + manifest['digest'].split(':', 1)[1] + '-capture'
-                        restart_error = None
-                        try:
-                            atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
-                            if atom is None:
-                                measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
-                                    adapter, synthetic, artifact, extents,
-                                    header_bytes=None if header_lengths is None else header_lengths[artifact.path],
-                                    capture_key=capture_key)
-                                if measurement['observed_data_write_bytes'] != pattern['write_bytes']:
-                                    _reject('SOURCE_UNAVAILABLE', capture_key, 'profile does not cover its exact data writes', retryability='retryable')
-                                atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
-                                    {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
-                            if (not isinstance(atom['value'], dict)
-                                    or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
-                                    or atom['value'].get('profile_digest') != head['digest']
-                                    or atom['value'].get('pattern') != pattern
-                                    or not isinstance(atom['value'].get('measurement'), dict)):
-                                _reject('ROOT_INVALID', artifact.path, 'saved source profile atom differs from its exact plan')
-                            parsed = atom['value']['measurement'].get('header')
-                            if header_lengths is not None and (not isinstance(parsed, dict)
-                                    or not isinstance(parsed.get('header_digest'), str)
-                                    or _DIGEST.fullmatch(parsed['header_digest']) is None
-                                    or parsed.get('header_bytes') != header_lengths[artifact.path] + 8):
-                                _reject('ROOT_INVALID', artifact.path, 'saved profile header differs from its complete declared bytes')
-                            observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
-                            atom_digests.append(atom['digest'])
-                            retained.append((extent_key, manifest['digest']))
-                        except CassetteError as error:
-                            failed_capture = await asyncio.to_thread(campaign_head, owner.cartridge, capture_key)
-                            incomplete = (failed_capture is not None and isinstance(failed_capture['value'], dict)
-                                          and failed_capture['value'].get('status') == 'INCOMPLETE')
-                            if (error.retryability != 'retryable' or not (incomplete
-                                    or error.code == 'SOURCE_UNAVAILABLE' and error.object_id == capture_key)):
+                async with AsyncExitStack() as boundaries:
+                    adapter, synthetic = await boundaries.enter_async_context(
+                        source_profile_boundary(revision, artifacts, header_lengths=header_lengths))
+                    source_handles = None
+                    for stage, suffix in enumerate(stage_suffixes):
+                        if stage:
+                            source_handles = {}
+                            adapter, synthetic = await boundaries.enter_async_context(
+                                source_profile_boundary(revision, artifacts, retained_sources=source_handles))
+                        observations = []
+                        stage_patterns = preparation_patterns if retained_source and not stage else patterns
+                        for index, (artifact, pattern, shape) in enumerate(zip(synthetic.artifacts, stage_patterns, lengths, strict=True)):
+                            atom_key = key + '-' + str(index) + suffix
+                            extent_key = atom_key + '-extents'
+                            extent_binding = {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
+                            source_manifest, source_extents = None, None
+                            if stage:
+                                source_key, source_digest = retained[index]
+                                source_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, source_key)
+                                if (source_manifest is None or source_manifest['digest'] != source_digest
+                                        or source_manifest['value'].get('status') != 'RETAINED'):
+                                    _reject('ROOT_INVALID', artifact.path, 'source counterpart is not the exact retained preparation')
+                                extent_binding['source_extent_manifest'] = source_digest
+                            manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key, extent_binding, shape)
+                            capture_key = 'source-' + manifest['digest'].split(':', 1)[1] + '-capture'
+                            restart_error = None
+                            try:
+                                if stage:
+                                    reopened, source_extents = await asyncio.to_thread(grant_profile_extents, owner,
+                                        retained[index][0], {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}, shape)
+                                    if reopened['digest'] != source_manifest['digest']:
+                                        _reject('ROOT_INVALID', artifact.path, 'source counterpart changed before its measured reads')
+                                    source_handles[artifact.path] = source_extents
+                                atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
+                                if atom is None:
+                                    measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
+                                        adapter, synthetic, artifact, extents,
+                                        header_bytes=None if header_lengths is None else header_lengths[artifact.path],
+                                        capture_key=capture_key, source_extents=source_extents)
+                                    if measurement['observed_data_write_bytes'] != pattern['write_bytes']:
+                                        _reject('SOURCE_UNAVAILABLE', capture_key, 'profile does not cover its exact data writes', retryability='retryable')
+                                    atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
+                                        {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
+                                if (not isinstance(atom['value'], dict)
+                                        or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
+                                        or atom['value'].get('profile_digest') != head['digest']
+                                        or atom['value'].get('pattern') != pattern
+                                        or not isinstance(atom['value'].get('measurement'), dict)):
+                                    _reject('ROOT_INVALID', artifact.path, 'saved source profile atom differs from its exact plan')
+                                parsed = atom['value']['measurement'].get('header')
+                                if header_lengths is not None and (not isinstance(parsed, dict)
+                                        or not isinstance(parsed.get('header_digest'), str)
+                                        or _DIGEST.fullmatch(parsed['header_digest']) is None
+                                        or parsed.get('header_bytes') != header_lengths[artifact.path] + 8):
+                                    _reject('ROOT_INVALID', artifact.path, 'saved profile header differs from its complete declared bytes')
+                                observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
+                                atom_digests.append(atom['digest'])
+                                retained.append((extent_key, manifest['digest']))
+                            except CassetteError as error:
+                                if source_extents is not None:
+                                    # A timed-out client can leave its server reading source handles.
+                                    await boundaries.aclose()
+                                failed_capture = await asyncio.to_thread(campaign_head, owner.cartridge, capture_key)
+                                incomplete = (failed_capture is not None and isinstance(failed_capture['value'], dict)
+                                              and failed_capture['value'].get('status') == 'INCOMPLETE')
+                                if (error.retryability != 'retryable' or not (incomplete
+                                        or error.code == 'SOURCE_UNAVAILABLE' and error.object_id == capture_key)):
+                                    raise
+                                restart_error = error
+                            except BaseException:
+                                if source_extents is not None:
+                                    await boundaries.aclose()
                                 raise
-                            restart_error = error
-                        finally:
-                            for extent in extents.values():
-                                os.close(extent.fd)
-                        if restart_error is not None:
-                            await self._abandon_profile_extents(operation_id, owner, [extent_key], restart_error, [capture_key])
-                            raise restart_error
+                            finally:
+                                for extent in (*extents.values(), *(source_extents or {}).values()):
+                                    os.close(extent.fd)
+                                if source_handles is not None:
+                                    source_handles.pop(artifact.path, None)
+                            if restart_error is not None:
+                                await self._abandon_profile_extents(operation_id, owner, [extent_key], restart_error, [capture_key])
+                                raise restart_error
                     # Reopen the complete retained working set; the source executor verifies every committed byte.
                     for index, artifact in enumerate(synthetic.artifacts):
-                        extent_key, _ = retained[index]
+                        extent_key, _ = retained[-len(artifacts) + index]
                         manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key,
-                            {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}, lengths[index])
+                            {'profile_digest': head['digest'], 'artifact': artifacts[index].record(),
+                             **({'source_extent_manifest': retained[index][1]} if retained_source else {})}, lengths[index])
                         try:
                             measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
                                 adapter, synthetic, artifact, extents,
@@ -2357,16 +2430,18 @@ class CanonicalBroker:
                            or _DIGEST.fullmatch(item['retained_digest']) is None
                            for item in value['retained_manifests'])
                     or [item.get('key') if isinstance(item, dict) else None for item in value['retained_manifests']]
-                        != [key + '-' + str(index) + '-extents' for index in range(len(artifacts))]):
+                        != extent_keys):
                 _reject('ROOT_INVALID', operation_id, 'completed source profile differs from its bound operation or extents')
             checked, digests = [[], []], []
-            for phase, suffix in enumerate(('', '-resume')):
-                for index, pattern in enumerate(patterns):
+            stages = ([('', preparation_patterns, False, False)] if retained_source else []) + [
+                (stage_suffixes[-1], patterns, False, retained_source), ('-resume', patterns, True, False)]
+            for suffix, stage_patterns, revalidation, uses_source in stages:
+                for index, pattern in enumerate(stage_patterns):
                     atom = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-' + str(index) + suffix)
                     if (atom is None or not isinstance(atom['value'], dict)
                             or atom['value'].get('profile_digest') != head['digest']
                             or not isinstance(atom['value'].get('measurement'), dict)
-                            or (atom['value'].get('pattern') != pattern if phase == 0
+                            or (atom['value'].get('pattern') != pattern if not revalidation
                                 else atom['value'].get('artifact') != artifacts[index].path)):
                         _reject('ROOT_INVALID', operation_id, 'completed profile measurement is missing or differs')
                     measurement = atom['value']['measurement']
@@ -2379,18 +2454,37 @@ class CanonicalBroker:
                                 if name not in {'capture_record_key', 'capture_record_digest'}}
                             or not isinstance(measurement.get('traces'), list) or not measurement['traces']):
                         _reject('ROOT_INVALID', operation_id, 'source I/O capture is missing or differs from its measurement')
+                    expected_source_operation = None
+                    if uses_source:
+                        source_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_keys[index])
+                        destination_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_keys[len(artifacts) + index])
+                        if (source_manifest is None or destination_manifest is None
+                                or source_manifest['value'].get('binding') != {
+                                    'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
+                                or destination_manifest['value'].get('binding') != {
+                                    'profile_digest': head['digest'], 'artifact': artifacts[index].record(),
+                                    'source_extent_manifest': value['retained_manifests'][index]['retained_digest']}):
+                            _reject('ROOT_INVALID', operation_id, 'source-to-destination extent binding differs from its retained preparation')
+                        expected_source_operation = source_manifest['value'].get('operation_id')
+                    if capture['value'].get('source_extent_operation') != expected_source_operation:
+                        _reject('ROOT_INVALID', operation_id, 'source read capture names another retained extent operation')
                     recomputed = await asyncio.to_thread(source_profile_trace, owner.cartridge, measurement['traces'],
-                        expected_data_writes=0 if phase else pattern['write_bytes'], expected_data_reads=pattern['read_bytes'],
-                        revalidation=bool(phase),
+                        expected_data_writes=0 if revalidation else pattern['write_bytes'], expected_data_reads=pattern['read_bytes'],
+                        revalidation=revalidation, expected_source_reads=pattern['source_read_bytes'] if uses_source else 0,
+                        source_state_bytes=lengths[index]['state'] if uses_source else 0,
                         has_state=header_lengths is None, record_base=transfer_state_bytes(0), expected_path=binding['path'])
                     if (recomputed != measurement.get('trace_statistics')
                             or recomputed['data_write_bytes'] != measurement.get('observed_data_write_bytes')
                             or recomputed['host_write_bytes'] != measurement.get('host_write_bytes')
                             or recomputed['data_read_bytes'] != measurement.get('observed_data_read_bytes')
                             or recomputed['process_data_read_bytes'] != measurement.get('process_data_read_bytes')
+                            or recomputed['source_read_bytes'] != measurement.get('observed_source_read_bytes')
+                            or recomputed['source_state_read_bytes'] != measurement.get('observed_source_state_read_bytes')
+                            or recomputed['process_source_read_bytes'] != measurement.get('process_source_read_bytes')
                             or recomputed['io_calls'] != measurement.get('io_calls')):
                         _reject('ROOT_INVALID', operation_id, 'raw source rows differ from their claimed measurement statistics')
-                    checked[phase].append({**measurement, 'binding': binding, 'pattern': pattern})
+                    if suffix == '-resume' or not retained_source or uses_source:
+                        checked[int(revalidation)].append({**measurement, 'binding': binding, 'pattern': pattern})
                     digests.append(atom['digest'])
             if (value.get('atom_count') != len(digests)
                     or value.get('atoms_digest') != digest_bytes(canonical_bytes(digests))
@@ -2421,7 +2515,7 @@ class CanonicalBroker:
             return receipt
         except CassetteError as error:
             if complete is None and error.retryability == 'terminal':
-                keys = [key + '-' + str(index) + '-extents' for index in range(len(artifacts))]
+                keys = extent_keys
                 capture_keys = []
                 for index, extent_key in enumerate(keys):
                     manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)

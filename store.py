@@ -86,7 +86,7 @@ PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 SAFETENSORS_HEADER_BYTES = 100_000_000
 TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
-STORAGE_PROFILER_VERSION = '6-retained-read-recovery'
+STORAGE_PROFILER_VERSION = '7-retained-source-transfer'
 _EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
@@ -6598,7 +6598,8 @@ def reclaim_profile_extents(owner: CapacityCoordinator, key: str, seal_digest: s
 
 
 def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_data_reads, revalidation, data_offset=0,
-                         has_state=True, record_base=0, expected_path=None):
+                         has_state=True, record_base=0, expected_path=None,
+                         expected_source_reads=0, source_state_bytes=0):
     """Q42/Q44/Q51: recompute source coverage, call tails and durable intervals from raw rows."""
     def reject(detail):
         _transaction_reject('source-profile', detail)
@@ -6606,12 +6607,15 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
         return type(value) is int and value >= 0
     if (not isinstance(traces, list) or not traces or not natural(expected_data_writes) or not natural(expected_data_reads)
             or type(revalidation) is not bool or type(has_state) is not bool
-            or not natural(data_offset) or not natural(record_base)):
+            or not natural(data_offset) or not natural(record_base)
+            or not natural(expected_source_reads) or not natural(source_state_bytes)):
         reject('source trace coverage request is malformed')
-    phases = {name: {'calls': {}, 'transitions': [], 'verified_ranges': []} for name in
+    phases = {name: {'calls': {}, 'transitions': [], 'source_transitions': [], 'verified_ranges': []} for name in
               ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')}
     windows, active, pending_write, pending_read = [], None, None, None
     data_writes = host_writes = data_reads = native_reads = parser_reads = io_calls = process_reads = 0
+    source_reads = source_state_reads = source_process_reads = source_ranges = request_state_bytes = 0
+    source_started, pending_source, source_starts, source_offsets = None, None, {}, set()
     def finish_read(ended):
         nonlocal pending_read
         if pending_read is not None:
@@ -6649,7 +6653,7 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
                     reject('source trace closes an invalid process or time window')
                 if pending_write is not None:
                     reject('source window ends before its data reaches a durable checkpoint')
-                if pending_read is not None:
+                if pending_read is not None or pending_source is not None or source_started is not None:
                     reject('source window ends before its range verification boundary')
                 before, after = active['before'], row.get('device')
                 if (not isinstance(before, dict) or not isinstance(after, dict)
@@ -6685,6 +6689,19 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
                 active = None
                 continue
             if kind == 'VERIFIED_PREFIX':
+                if row.get('role') == 'source_data':
+                    if (pending_source is None or row.get('offset') != pending_source['offset']
+                            or row.get('length') != pending_source['bytes']
+                            or row['length'] != min(TRANSFER_CHUNK_BYTES, expected_source_reads - row['offset'])
+                            or not natural(row.get('time_ns')) or row['time_ns'] <= pending_source['started']):
+                        reject('retained source verification does not cover its exact chunk reads')
+                    if source_starts.get(row['offset'], -1) >= active['started_ns']:
+                        reject('retained source chunk is duplicated within one measured window')
+                    source_starts[row['offset']] = source_started
+                    source_offsets.add(row['offset'])
+                    source_ranges += 1
+                    pending_source, source_started, request_state_bytes = None, None, 0
+                    continue
                 if (pending_read is None or row.get('offset') != pending_read['offset']
                         or row.get('length') != pending_read['bytes'] or not natural(row.get('time_ns'))):
                     reject('verified prefix does not cover its observed range reads')
@@ -6701,9 +6718,11 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
                 finish_read(row['time_ns'])
                 continue
             phase, role = row.get('phase'), row.get('role')
-            if (not isinstance(phase, str) or phase not in phases or not isinstance(role, str) or role not in {'data', 'state'}
+            if (not isinstance(phase, str) or phase not in phases or not isinstance(role, str)
+                    or role not in {'data', 'state', 'source_data', 'source_state'}
                     or (role == 'state' and not has_state)
                     or (revalidation and phase != 'RETAINED_REVALIDATION')
+                    or (role.startswith('source_') and (revalidation or kind != 'read'))
                     or kind not in {'read', 'write', 'PARSER_READ', 'fsync', 'F_FULLFSYNC'}
                     or any(not natural(row.get(key)) for key in ('offset', 'requested_bytes', 'returned_bytes', 'started_ns', 'duration_ns'))
                     or row['returned_bytes'] > row['requested_bytes'] or row.get('success') is not True):
@@ -6716,6 +6735,30 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
             if role == 'state' and kind == 'write':
                 label = ('state.record.write' if row['offset'] >= record_base else 'state.header.write')
             phases[phase]['calls'].setdefault(label, []).append(row['duration_ns'])
+            if role == 'source_state':
+                if row['offset'] == 0:
+                    if source_started is not None or pending_source is not None:
+                        reject('retained source checkpoint reads overlap another range')
+                    source_started = row['started_ns']
+                if source_started is None or row['offset'] != request_state_bytes:
+                    reject('retained source checkpoint reads omit or reorder their bytes')
+                request_state_bytes += row['returned_bytes']
+                source_state_reads += row['returned_bytes']
+            if role == 'source_data':
+                if source_started is None or request_state_bytes != source_state_bytes:
+                    reject('retained source read lacks its complete checkpoint observation')
+                if pending_source is None:
+                    if row['offset'] % TRANSFER_CHUNK_BYTES or not 0 <= row['offset'] < expected_source_reads:
+                        reject('retained source read does not begin at a planned chunk')
+                    pending_source = {'offset': row['offset'], 'bytes': 0, 'started': row['started_ns']}
+                if row['offset'] != pending_source['offset'] + pending_source['bytes']:
+                    reject('retained source chunk reads are discontinuous')
+                pending_source['bytes'] += row['returned_bytes']
+                source_reads += row['returned_bytes']
+                count = row.get('process_diskio_read_bytes')
+                if not natural(count):
+                    reject('retained source read lacks its process counter observation')
+                source_process_reads += count
             if kind == 'write':
                 host_writes += row['returned_bytes']
                 if role == 'data':
@@ -6725,6 +6768,11 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
                     if pending_write is None:
                         pending_write = {'started': row['started_ns'], 'bytes': 0, 'phase': phase,
                                          'offset': row['offset'], 'read_bytes': 0}
+                        if expected_source_reads:
+                            source_start = source_starts.pop(row['offset'] - data_offset, None)
+                            if source_start is None or source_start < active['started_ns']:
+                                reject('destination write lacks its verified same-window source chunk')
+                            pending_write['source_started'] = source_start
                     pending_write['bytes'] += row['returned_bytes']
             if role == 'data' and kind in {'read', 'PARSER_READ'}:
                 data_reads += row['returned_bytes']
@@ -6754,10 +6802,19 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
                 if elapsed <= 0 or pending_write['read_bytes'] != pending_write['bytes']:
                     reject('durable source transition has no positive elapsed time')
                 phases[pending_write['phase']]['transitions'].append((pending_write['bytes'], elapsed))
+                if 'source_started' in pending_write:
+                    elapsed = row['started_ns'] + row['duration_ns'] - pending_write['source_started']
+                    if elapsed <= 0:
+                        reject('source-to-durable transition has no positive interval')
+                    phases[pending_write['phase']]['source_transitions'].append((pending_write['bytes'], elapsed))
                 pending_write = None
     if (active is not None or not windows or pending_write is not None or data_writes != expected_data_writes
             or native_reads < expected_data_reads or (not has_state and parser_reads < expected_data_reads)):
         reject('source trace omits its complete windows or exact data writes')
+    if (pending_source is not None or source_started is not None or source_starts
+            or source_offsets != set(range(0, expected_source_reads, TRANSFER_CHUNK_BYTES))
+            or source_state_reads != source_ranges * source_state_bytes):
+        reject('source trace omits its exact retained-source working set or checkpoint reads')
     def tails(values, points, scale=1):
         ordered = sorted(values)
         return {'samples': len(ordered), 'minimum': ordered[0] / scale if ordered else None,
@@ -6771,6 +6828,8 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
             result['scope'] = 'MINIMUM_ONLY_CONSERVATIVE_BOUND; FEWER_THAN_20_INTERVALS'
         return result
     return {'data_write_bytes': data_writes, 'host_write_bytes': host_writes, 'data_read_bytes': data_reads,
+        'source_read_bytes': source_reads, 'source_state_read_bytes': source_state_reads,
+        'source_range_reads': source_ranges, 'process_source_read_bytes': source_process_reads,
         'process_data_read_bytes': process_reads, 'io_calls': io_calls,
         'diagnostic_call_union': tails((value for phase in phases.values() for values in phase['calls'].values()
                                         for value in values), (.5, .95, .99, 1.), 1e9),
@@ -6780,6 +6839,7 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
         'phases': {name: {'calls': {kind: tails(values, (.5, .95, .99, 1.), 1e9)
                                    for kind, values in phase['calls'].items()},
                          'durable_chunk_bytes_per_second': rates(phase['transitions']),
+                         'source_to_durable_chunk_bytes_per_second': rates(phase['source_transitions']),
                          'verified_range_bytes_per_second': rates(phase['verified_ranges'])}
                    for name, phase in phases.items()},
         'windows': windows, 'active_seconds': sum(window['active_seconds'] for window in windows),
@@ -6837,6 +6897,20 @@ def storage_profile(binding, patterns, observations, *, expected_binding, revali
     for pattern, observed in zip(patterns, observations, strict=True):
         if number(observed.get('observed_data_write_bytes'), 'source data writes', integer=True) != pattern['write_bytes']:
             reject('profile', 'source data writes do not cover the exact plan; state writes cannot replace them')
+    retained_source = plan.get('source_storage') == 'CARTRIDGE_RETAINED'
+    if retained_source:
+        for pattern, observed in zip(patterns, observations, strict=True):
+            if (number(pattern.get('source_read_bytes'), 'planned retained-source bytes', integer=True) != pattern['write_bytes']
+                    or number(observed.get('observed_source_read_bytes'), 'retained-source reads', integer=True) < pattern['source_read_bytes']
+                    or number(observed.get('source_allocated_bytes'), 'retained-source allocated bytes', integer=True) < pattern['source_read_bytes']):
+                reject('profile', 'same-cartridge source reads or allocation omit the exact artifact')
+            statistics = observed.get('trace_statistics', {})
+            number(observed.get('observed_source_state_read_bytes'), 'retained-source checkpoint reads', integer=True)
+            intervals = sum(number(phase.get('source_to_durable_chunk_bytes_per_second', {}).get('samples'),
+                                   'source-to-durable intervals', integer=True)
+                            for phase in statistics.get('phases', {}).values())
+            if intervals != (pattern['write_bytes'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES:
+                reject('profile', 'source-to-durable intervals omit the exact destination chunks')
     required = plan['cache_crossing_required']
     if type(required) is not bool:
         reject('cache', 'cache-crossing applicability must be a boolean')
@@ -6878,6 +6952,20 @@ def storage_profile(binding, patterns, observations, *, expected_binding, revali
                      process_accounted_read_bytes=process_reads, shared_device_read_bytes=device_reads,
                      read_samples_with_process_io=samples)
     result['cache'] = cache
+    if retained_source:
+        source_io = sum(number(x.get('process_source_read_bytes'), 'source process-accounted reads', integer=True)
+                        for x in observations)
+        device_io = (None if any(x.get('device_read_bytes') is None for x in observations) else
+                     sum(number(x['device_read_bytes'], 'source shared-device reads', integer=True) for x in observations))
+        minimum = max(0, source_bytes - memory)
+        if minimum and (source_io < minimum or device_io is None or device_io < minimum):
+            reject('cache', 'retained input lacks its own cache-crossing process and shared-device observations')
+        result['retained_source'] = {'source_bytes': source_bytes, 'minimum_bytes_beyond_host_memory': minimum,
+            'observed_source_read_bytes': sum(x['observed_source_read_bytes'] for x in observations),
+            'observed_source_state_read_bytes': sum(x['observed_source_state_read_bytes'] for x in observations),
+            'process_accounted_read_bytes': source_io, 'shared_device_read_bytes': device_io,
+            'classification': 'MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO' if minimum else 'WITHIN_HOST_MEMORY',
+            'counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA', 'per_read_attribution': 'NOT_ESTABLISHED'}
     phase_names = ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')
     phase_patterns = {name: [] for name in phase_names}
     observed_windows, recovery_history = [], []
@@ -6913,8 +7001,8 @@ def storage_profile(binding, patterns, observations, *, expected_binding, revali
     for name, entries in phase_patterns.items():
         rates, latencies, count = [], [], 0
         for entry in entries:
-            rate = entry['durable_chunk_bytes_per_second' if name == 'FRESH_WRITE_READBACK'
-                         else 'verified_range_bytes_per_second']
+            rate = entry[('source_to_durable_chunk_bytes_per_second' if retained_source else 'durable_chunk_bytes_per_second')
+                         if name == 'FRESH_WRITE_READBACK' else 'verified_range_bytes_per_second']
             if not isinstance(rate.get('empirical_percentiles'), dict):
                 reject('statistics', 'source interval percentiles must be an object')
             samples = number(rate.get('samples'), 'interval sample count', integer=True)

@@ -119,6 +119,14 @@
     },
     "source_lock": {
       "type": "null"
+    },
+    "source_storage": {
+      "enum": [
+        "MEMORY",
+        "CARTRIDGE_RETAINED"
+      ],
+      "minLength": 1,
+      "type": "string"
     }
   },
   "required": [
