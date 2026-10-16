@@ -5,17 +5,34 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 14:33 UTC
+## Current direction — 2026-10-16 15:26 UTC
 
-Active code item: fixed38 SourceByteRecipe is accepted at fixture/integration level after the
-separate native Q1/Q2/Q3 review and closure of its actual-loaded-file identity condition. All340
-tests pass in598.84s, zero skips, allfourteen controls and ordinary ledger. The exact unchanged
-challenge replays on frozen38 with55expected outcomes,933 positive windows, seven deciding mutants
-and clean M0; all six requested actual module/schema identities match the frozen/tested candidate.
-Root accepts only read-only byte composition/hash/refusal in source-composition-01/review/
-fixed38-adjudication.json. Candidate37 stays rejected. Publish and install the accepted source next;
-then continue durable generation, exact layout joins and stable serving. Consult publication38 and
-installed23 receipts before repeating those actions; neither a model source nor a live pass is issued.
+Active code item: fixed38 SourceByteRecipe is accepted, committed/pushed as 77c324db93bdb57605ea9b0d0e447bade74b0783,
+and privately installed23. All 40 actual runtime files join frozen/tested/committed/wheel bytes; the
+installed composer, generated schema and CLI are verified. The post-install instrument's mistaken
+expected error wording is preserved and corrected without rebuilding or reinstalling. Read
+composition-publication38.json and composition-installation38.json before repeating those actions.
+
+Fixed39 original-acquisition reader is accepted at fixture/integration level after independent native
+Opus Q1/Q2 PASS_READY on served claude-opus-5-5. All 240 frozen packet files remain unchanged. Root
+corrects one comparison-instrument label: the packet called its original37 baseline original38.
+Exact committed38 bytes independently join the accepted38 manifest; empty-path/integer fixes were
+already published38. The real39 target/runtime, full proof and guard-bypass outcomes are unchanged.
+Read source-composition-01/review/fixed39-adjudication.json and baseline-instrument39.json. Commit,
+normal push and private installed24 verification are next; do not redirect inventory04 or paused03.
+
+The reader takes a separate original chunk-list mapping and checks it on every retained read. The
+future generation owner must still admit that mapping from the exact committed SOURCE_VERIFIED
+checkpoint and source lock. That owner is NOT_IMPLEMENTED and is not passed by this reader repair.
+Accepted38 remains limited to non-publishing hashes consistent with the current checkpoint.
+Then continue durable generated-source ownership/transaction, exact frozen layout/identity joins
+and stable provider serving. While the fresh inventory04 runs, prepare only eligible internal work.
+After its actual terminal result, reconcile the wrapper's known digest-field error, verify the fresh
+selection, recompute actual current path/plan and bind the exact graph/card/controller/runtime/request
+before any qualification. Do not blindly clone03 as same-request succession: current normal profile
+plans declare source_storage=MEMORY and current profiler7, whereas03 used profiler6 without that
+plan field. Compare every actual request field and follow path_change_rule if the tuple differs.
+No alternative tuple, old operation or acceptance requirement may be silently substituted.
 
 The migration has reached a safe partial terminal: seven complete, EIA/v5 held unchanged. Cassette
 verifies the published final map SHA256349dd262be0a018cb4a5581fa1f14a76f527ed5940e59c62cf7b01f72d51c083
@@ -27,6 +44,9 @@ Controller85692 owns CLI85841, tool93853; physical-04/launch.json binds the exac
 map and old paused operation. Do not duplicate that inventory. Its wrapper's final digest lookup
 has a known summary-only key error; preserve it and reconcile the actual top-level result after
 completion, without rerunning the operation. physical-04/controller-instrument-note.json names it.
+The 14:57 post-disconnect check confirms the same worker, parent and installed22 command; CPU advances
+and its owned one-second sample reaches lstat/readdir. This proves activity, not inventory coverage.
+Read physical-04/activity-current02.json; preserve the running worker without further diagnostics.
 
 Q42 retained-source fixed36 remains accepted, committed/pushed as ed0e128a and internally installed22.
 Original physical03 stays PAUSED on its original installed21; no old selection/baseline is resumed.
@@ -6654,7 +6674,7 @@ model serializer or real SourceLock is claimed. Scope is retained in source-comp
 ### 2026-10-16 13:53 UTC — complete candidate37 and bind a fresh post-migration inventory
 
 The six affected composition/transfer/schema fixtures pass in26.10s after the missing golden schema
-example is added. The exact frozen candidate passes all340 tests in488.40s, zero skips, allfourteen
+example is added. The exact frozen candidate passes all 340 tests in488.40s, zero skips, all fourteen
 component controls and ordinary ledger. J=(0,0,17345,1,1,9,0,0,8425096), +72 authored executable lines
 over accepted36. Source-manifest SHA256d5a4f92c5ef93c35d18c54e61280cb0ee25b387b60993787688b655e59f0285e
 binds212 source files. The separate native reviewer serves claude-opus-5-5; its first scoped
@@ -6683,12 +6703,12 @@ by a speculative cache. No source preparation or real source-entry/download resu
 
 ### 2026-10-16 14:33 UTC — contained byte composer accepted after exact frozen replay
 
-Candidate38 passes340 tests in598.84s, zero skips, allfourteen component controls and ordinary ledger.
+Candidate38 passes340 tests in598.84s, zero skips, all fourteen component controls and ordinary ledger.
 Source-manifest SHA256bc7ad6e5410c127b45e1fab1436944f2f3b6ca9680ab9383b0a6c7b6e6966e84 binds212 files;
 J=(0,0,17345,1,1,9,0,0,8425096). Native final38 completes at14:25:54UTC, stopped/exit0, served
 claude-opus-5-5, no new error/permission denial. It PASSES Q1/Q2/Q3 conditionally on closing the loaded
 non-source-module identities. Root runs the unchanged probe on exact frozen38, records every actual
-module hash and the schema-open path, and closes that condition at14:30:09UTC. All55 observations,
+module hash and the schema-open path, and closes that condition at14:30:09UTC. All 55 observations,
 933 windows and seven planted defects plus clean M0 pass again;212 source files remain unchanged.
 The original270, fixed262 and evidence31 recorded files are unchanged. The two original defects,
 blocked native Write and incomplete Root instruments remain preserved. No optional cache or new
@@ -6699,3 +6719,92 @@ stack sample at14:22:08UTC shows90/91 executor observations in os_stat/posix_do_
 CPU advancement prove filesystem metadata activity, not coverage or completion. No cursor/count is
 exposed. A second broker constructor intended for status is correctly refused as OVERLOADED while
 the live owner holds the log; no ownership override or retry. Original03 stays paused.
+
+### 2026-10-16 14:44 UTC — accepted source published and installed without redirecting live work
+
+The complete accepted fixed38 source is committed/pushed as 77c324db93bdb57605ea9b0d0e447bade74b0783.
+Both ordinary ledger checks pass, the normal push completes and actual remote parity/clean worktree
+are recorded in composition-publication38.json. Private installed23 contains40 exact runtime files,
+wheel SHA2569a9d524c6df429962a93e99e8bba6b5be7619e8c1c18702fa10a8f2fe38117fd. All actual installed
+files join frozen/tested/committed/wheel bytes, including generated schema and the real CLI. The
+metadata-only composer also returns exact literal bytes/digest and canonical bad-path/integer errors.
+Its first post-install assertion wrongly expected maximum in an anyOf error message; the actual
+validator correctly reports no allowed shape. Preserve that failure; fix only the assertion and
+rerun that installed metadata proof, with no duplicate build/install or product change.
+
+Fresh inventory04 stays on its accepted installed22 and original03 stays paused on installed21.
+Neither is redirected to23. No provider request, model-bearing header or required payload is read.
+Actual generation, stable source origin and physical/source-entry proof remain incomplete.
+
+### 2026-10-16 15:08 UTC — bind future composition to the original acquisition proof
+
+A new bounded synthetic replay keeps the source identity and original acquisition result unchanged,
+but changes a retained byte and consistently updates the current chunk record/checkpoint. Fixed38
+accepts that locally consistent replacement and returns its changed output hash. The original
+PartialState still carries the first chunk digest. No model bytes, physical drive or final derived
+SourceLock is involved. The result is retained as a hypothesis pending source-backed adjudication,
+not a live result. Existing broker._partial_record already commits the canonical chunk-list digest;
+no new hash authority is needed to anchor future generation to the original proof.
+
+Native Opus input-proof01 is running read-only in the unchanged frozen38 review copy. Fresh native
+/usage shows 7 percent session, 56 percent weekly and usage credits OFF; the usage reader exits0.
+The exact request and counterexample remain in source-composition-01. Inventory04 survives the
+executor disconnect: its original CLI/parent/runtime match, CPU advances and the one-second owned
+sample reaches lstat/readdir. That observation proves current metadata work only. No restart,
+duplicate selection, graph binding, profile or download is launched.
+
+### 2026-10-16 15:10 UTC — original-proof guard passes the affected fixture
+
+Native input-proof01 completes normally on actual claude-opus-5-5, with no error or denied tool.
+Its source trace narrows accepted38 to hashes consistent with the current checkpoint and requires
+a separately admitted original chunk-list commitment before generation. The repair gives
+SourceByteRecipe a required original-manifest mapping, freezes its key/value pairs separately from
+the recipe, and verifies the current checkpoint list against that commitment at every touched read.
+Existing retained-profile callers keep their current path and destination whole-digest guard.
+No generated schema, writer, state machine, dependency, process, numerical kernel or model branch
+is added. The broker generation owner and its committed SOURCE_VERIFIED admission remain next.
+
+The existing Q51 fixture now changes bytes and the checkpoint consistently after construction,
+expects IDENTITY_MISMATCH, checks no reader writes, and restores its owned scratch. Missing/extra
+manifest keys, bad digest shapes and caller-map mutation are also covered. The six affected source/
+schema checks pass in 7.11 seconds. Full candidate proof and independent fixed review remain pending.
+
+### 2026-10-16 15:19 UTC — fixed39 completed proof and exact guard-bypass replay
+
+The frozen reader repair passes 340 tests in 424.50 seconds, zero skips, all fourteen component
+controls and the ordinary ledger. Its source manifest is SHA256
+923c25aaf0ec6e60fefa890a414aaf5c565bc54194c146343c5d5e3292d00e7d.
+J=(0,0,17353,1,1,9,0,0,8425096), eight executable lines above accepted38. The producer's complete
+J report is copied unchanged. The frozen worklog retained a mistyped 15:14 heading for the affected
+fixture entry; Root corrects that heading to the actual 15:10 in the current document. No code differs.
+
+Root executes the independent Opus narrative on exact frozen39: twelve deciding observations match.
+The original compact proof comes from actual broker._partial_record before any change. After
+construction, a consistent byte/checkpoint replacement is refused before payload reads; input
+bytes/checkpoint remain unchanged by both reader calls. Literal-only empty proofs, immutable caller
+map capture and malformed/missing/extra keys are covered. In a disposable source copy, bypassing
+only the expected-manifest comparison makes the same replacement and a wrong commitment succeed.
+Every actual loaded module joins the frozen manifest, except the single declared mutant source.
+No generation-owner admission is run or claimed.
+
+The 240-file independent review packet is frozen; native fixed39-01 now runs read-only. Its fresh
+subscription observation is 8 percent session, 56 percent weekly, credits OFF; the usage reader
+exits0. This review is pending. Inventory04 remains under its original live owner with no result,
+qualification, header, payload or new external writer launched.
+
+### 2026-10-16 15:26 UTC — contained original-proof reader accepted, with exact instrument limits
+
+Native fixed39-01 completes normally/stopped on actual claude-opus-5-5, without error or tool denial.
+Q1 and Q2 PASS_READY at fixture/integration level. Root rehashes all 240 packet files unchanged and
+verifies actual loaded module joins. The optional custom-Mapping hypothesis is unexecuted hardening
+outside the trusted-owner input precondition; no requirement is waived and no owner admission is
+claimed. The next owner must supply the actual original committed digest mapping.
+
+Root finds one review-instrument error: the preparation copied original37 while labeling it38.
+The review's alleged undisclosed empty-path/integer edits were already accepted/published38. Root
+extracts actual77c324 parent bytes, joins both files to the accepted38 manifest and retains the exact
+corrected39 diff in review/correct-baseline38. The original packet/report stay unchanged. This label
+error does not change target39, its source trace, full proof or deciding fixed/bypass results.
+The scope of no-write observation is exact: unchanged data/checkpoint bytes and no os.pwrite/os.write
+under the two refused calls; it is not a universal filesystem-effects audit. Broker generation-owner
+admission, source identity publication, durable outputs and every live source result remain open.

@@ -9144,7 +9144,7 @@ the pinned model layout and serving a stable download address remain. Independen
 
 The independent reviewer finds two request boundaries worth testing. An empty output name causes a
 Python error instead of Cassette's normal refusal. An oversized number reaches the serializer and
-is reported as an identity mismatch. A separate local replay confirms both failures, checks933
+is reported as an identity mismatch. A separate local replay confirms both failures, checks 933
 positive byte windows and detects seven planted defects. Source bytes remain unchanged.
 
 Both refusals are repaired. The six affected checks pass. The complete replay and final independent
@@ -9158,9 +9158,50 @@ map and started a fresh read-only drive inventory. The old interrupted operation
 
 Both repairs pass the complete replay:340 checks, with no skips. Opus accepts the bounded byte
 composer and asks for one final source check. The unchanged challenge then runs against the frozen
-files themselves, recording every loaded dependency and the generated input rules. All55 outcomes
-and933 byte windows pass; the planted defects are still detected.
+files themselves, recording every loaded dependency and the generated input rules. All 55 outcomes
+and 933 byte windows pass; the planted defects are still detected.
 
 Cassette can now assemble and hash exact literal bytes and verified local source ranges without
 writing those inputs. Durable generated files and their stable download address remain next. The
 fresh drive inventory is still reading file metadata; it has no completed result yet.
+
+## 16 October 2026 — publish and install the checked byte composer
+
+The accepted change is committed and pushed as 77c324db. Its installed copy matches all 40 reviewed
+runtime files, including the generated input rules. The installed reader produces the expected
+bytes and digest and refuses both bad requests correctly. A mistaken expectation about an error
+message is corrected in the verification script; no product change or reinstall is needed.
+
+The active drive inventory keeps its original accepted runtime. The old interrupted operation stays
+paused. Writing durable generated model files, serving them and completing real downloads remain.
+
+## 16 October 2026 — check the original proof before generating new files
+
+A further source check finds a boundary that matters before model generation. Changing a retained
+byte and its local checkpoint together lets the current reader produce a different output hash.
+The original download proof still records the first bytes. Cassette already saves that proof; the
+next step is to bind generation to it. A separate Opus examination is deciding the exact guard.
+No generated model identity is published. The drive inventory continues under its original worker.
+
+## 16 October 2026 — retain the first download proof
+
+The separate review confirms the missing link. The byte reader now takes the original download's
+chunk proof separately and checks it whenever it reads source bytes. Changing both the file and its
+local checkpoint no longer substitutes new bytes for that proof. The six affected checks pass.
+The complete replay and fixed review remain next; generation still needs its durable owner.
+
+## 16 October 2026 — the original-proof check survives a deliberate bypass test
+
+All 340 checks pass. A separate replay confirms that the reader rejects a file and checkpoint
+changed together after setup. Removing the new guard in a disposable copy makes that same change
+pass, which shows the check reaches the actual failure. The frozen repair is now with Opus.
+Writing generated model files and completing the real downloads remain open.
+
+## 16 October 2026 — the original-proof reader passes review
+
+Opus accepts the bounded repair. The review copy stays unchanged, and the actual loaded files match
+the tested snapshot. One comparison file was labeled with the wrong earlier version; checking the
+committed parent corrects that label without changing the repair or its results.
+
+The reader is ready to commit and install. The next generation step must obtain the original proof
+from Cassette's saved download record. That owner and the real model downloads remain unfinished.

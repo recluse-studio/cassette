@@ -216,7 +216,12 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                     ]},
                 ],
             }
-            recipe = sources_module.SourceByteRecipe(recipe_record, revision)
+            manifests = {artifact.path: sources_module.digest_bytes(
+                sources_module.canonical_bytes(list(completed.chunk_digests)))}
+            recipe = sources_module.SourceByteRecipe(recipe_record, revision, manifests)
+            manifests[artifact.path] = 'blake3:' + '0' * 64
+            assert dict(recipe.input_manifests)[artifact.path] != manifests[artifact.path]
+            manifests = dict(recipe.input_manifests)
             expected = {'empty': b'', 'literal': prefix,
                         'packed': prefix + payload[13:CHUNK + 18] + b'\x00end\xff' + payload[-24:]}
             inputs = {artifact.path: retained}
@@ -252,8 +257,13 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                 else:
                     bad['artifacts'].reverse()
                 with pytest.raises(CassetteError) as invalid_recipe:
-                    sources_module.SourceByteRecipe(bad, revision)
+                    sources_module.SourceByteRecipe(bad, revision, manifests)
                 assert invalid_recipe.value.code == ('SOURCE_REVISION_CHANGED' if change == 'source' else 'INVALID_REQUEST')
+            for proof in (None, {}, {**manifests, 'extra': manifests[artifact.path]},
+                          {artifact.path: 'sha256:' + '0' * 64}, {artifact.path: 1}):
+                with pytest.raises(CassetteError) as invalid_manifest:
+                    sources_module.SourceByteRecipe(recipe.record(), revision, proof)
+                assert invalid_manifest.value.code == 'INVALID_REQUEST'
             for name, offset, length, handles in (
                     ('', 0, 0, inputs),
                     ('missing', 0, 1, inputs), ('packed', True, 1, inputs), ('packed', 0, CHUNK + 1, inputs),
@@ -269,7 +279,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                     'source_record_digest': sources_module.digest_bytes(sources_module.canonical_bytes(large_source.record())),
                     'artifacts': [{'path': 'overflow', 'segments': [
                         {'path': large.path, 'offset': 0, 'length': large.size} for _ in range(1025)]}],
-                }, large_source)
+                }, large_source, manifests)
             assert overflow.value.code == 'INVALID_REQUEST' and 'signed 64-bit' in overflow.value.detail
             original_state = os.pread(state_fd, state_extent.length, 0)
             for corruption in ("envelopes", "record", "payload"):
@@ -290,6 +300,31 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                 assert os.pread(data_fd, data_extent.length, 0) == before_data
                 assert os.pread(state_fd, state_extent.length, 0) == before_state
                 os.pwrite(descriptor, original, 0)
+
+            # Q51: a consistent replacement of data and its checkpoint must not replace
+            # the original acquisition proof admitted before this read.
+            header, chunks = sources_module._load_state(state_extent, artifact.path, None, 'fixture-proof', read_only=True)
+            forged_payload = bytes([payload[0] ^ 1]) + payload[1:]
+            forged_chunks = _chunk_digests(forged_payload)
+            records = b''.join(b'\x01' + bytes.fromhex(value[7:]) for value in forged_chunks)
+            forged_header = {**header, 'chunk_records_digest': 'sha256:' + hashlib.sha256(records).hexdigest()}
+            os.pwrite(data_fd, forged_payload, 0)
+            os.pwrite(state_fd, records, HEADER_BYTES)
+            os.pwrite(state_fd, sources_module._state_envelope(forged_header, artifact.path),
+                      header['generation'] % 2 * (HEADER_BYTES // 2))
+            forged_state = os.pread(state_fd, state_extent.length, 0)
+            for read in (
+                    lambda: recipe.read_range('packed', 0, len(prefix) + 1, inputs),
+                    lambda: recipe.artifact_digests(inputs)):
+                with pytest.raises(CassetteError) as forged_source:
+                    read()
+                assert forged_source.value.code == 'IDENTITY_MISMATCH'
+                assert 'committed acquisition proof' in forged_source.value.detail
+            assert os.pread(data_fd, data_extent.length, 0) == forged_payload
+            assert os.pread(state_fd, state_extent.length, 0) == forged_state
+            assert chunks == completed.chunk_digests
+            os.pwrite(data_fd, payload, 0)
+            os.pwrite(state_fd, original_state, 0)
 
             baseline_claim_ids = {id(claim) for claim in capacity_coordinator.claims()}
             profile_data_observations = []

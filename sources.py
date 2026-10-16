@@ -151,12 +151,16 @@ class PlannedArtifact:
 
 @dataclass(frozen=True, slots=True, init=False)
 class SourceByteRecipe:
-    """Q9/Q33/Q51/Q52: compose literal bytes and verified local ranges without writing inputs."""
+    """Q9/Q33/Q51/Q52: compose bytes anchored to separately admitted acquisition manifests.
+
+    The owner supplies the original committed chunk-list digests, never current checkpoint digests.
+    """
 
     encoded: bytes
     source: ResolvedSource
+    input_manifests: tuple[tuple[str, str], ...]
 
-    def __init__(self, record: dict, source: ResolvedSource):
+    def __init__(self, record: dict, source: ResolvedSource, input_manifests: Mapping[str, str]):
         defects = validate('source_byte_recipe', record)
         if defects or not isinstance(source, ResolvedSource):
             _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', '; '.join(defects) or 'resolved input source is required')
@@ -186,15 +190,21 @@ class SourceByteRecipe:
                     size += segment['length']
                 if size > _MAX_FILE_OFFSET:
                     _transfer_fail('INVALID_REQUEST', artifact['path'], 'composed object exceeds a signed 64-bit file offset')
+        required = {segment['path'] for artifact in record['artifacts'] for segment in artifact['segments'] if 'path' in segment}
+        if (not isinstance(input_manifests, Mapping) or set(input_manifests) != required
+                or any(not isinstance(value, str) or re.fullmatch(r'blake3:[0-9a-f]{64}', value) is None
+                       for value in input_manifests.values())):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'original acquisition manifests must exactly name the recipe inputs')
         object.__setattr__(self, 'encoded', encoded)
         object.__setattr__(self, 'source', source)
+        object.__setattr__(self, 'input_manifests', tuple(sorted(input_manifests.items())))
 
     def record(self) -> dict:
         return json.loads(self.encoded)
 
     def read_range(self, path: str, offset: int, length: int,
                    inputs: Mapping[str, dict[str, TransferExtent]]) -> bytes:
-        """Read at most one transfer chunk; every touched input chunk must still verify."""
+        """Read at most one transfer chunk; touched bytes must join the admitted acquisition proof."""
         artifacts = self.record()['artifacts']
         required = {segment['path'] for artifact in artifacts for segment in artifact['segments'] if 'path' in segment}
         if (not isinstance(inputs, Mapping) or set(inputs) != required
@@ -210,6 +220,7 @@ class SourceByteRecipe:
         if offset + length > size:
             _transfer_fail('INVALID_REQUEST', path, 'composed range exceeds its output object')
         sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        manifests = dict(self.input_manifests)
         result = bytearray()
         position = 0
         for segment in artifact['segments']:
@@ -222,7 +233,7 @@ class SourceByteRecipe:
                 else:
                     item = sources[segment['path']]
                     result.extend(_retained_source_range(self.source, item, inputs[item.path],
-                        segment['offset'] + begin, end - start))
+                        segment['offset'] + begin, end - start, manifests[item.path]))
             position += count
         return bytes(result)
 
@@ -2423,7 +2434,7 @@ def _load_state(
     return record, tuple(digests)
 
 
-def _retained_source_range(revision, artifact, extents, offset, length):
+def _retained_source_range(revision, artifact, extents, offset, length, expected_manifest=None):
     """Q42/Q51: read verified source chunks without repairing or writing their checkpoint."""
     data, state = extents['data'], extents['state']
     _extent(data, artifact.size, artifact.path, 'retained source data')
@@ -2435,6 +2446,8 @@ def _retained_source_range(revision, artifact, extents, offset, length):
     if loaded is None:
         _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source has no complete checkpoint')
     header, digests = loaded
+    if expected_manifest is not None and digest_bytes(canonical_bytes(list(digests))) != expected_manifest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source chunk records differ from the committed acquisition proof')
     if (any(header[name] != value for name, value in identity.items())
             or header['completed_count'] != header['chunk_count']
             or header['contiguous_source_hash_digest'] != artifact.digest):
