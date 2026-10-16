@@ -8,11 +8,25 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
 from errors import CassetteError
-from store import CapacityCoordinator, campaign_head, compare_campaign_head
+from store import (
+    CapacityCoordinator,
+    CapacityTransition,
+    await_extent_io,
+    campaign_head,
+    compare_campaign_head,
+    complete_capacity_claim,
+    digest_bytes,
+    execute_claimed_write,
+    grant_profile_extents,
+    reclaim_profile_extents,
+    seal_profile_extents,
+    storage_counter_snapshot,
+)
 from broker import CanonicalBroker
 import tools.campaign as campaign
 
@@ -303,8 +317,57 @@ asyncio.run(main())
 
 
 def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
-    """Q6/Q33/Q42/Q44/Q53/Q80: resume exact measured atoms and retain canonical failure boundaries."""
+    """Q5/Q6/Q25/Q33/Q42/Q44/Q53/Q80: resume exact measurements and retain durable boundaries."""
     owner = CapacityCoordinator(tmp_path)
+    with closing(CanonicalBroker(tmp_path / 'profile-holds')) as broker:
+        operation = broker.issue({'protocol_version': '1', 'operation': 'run',
+            'idempotency_key': 'ordered-profile-holds', 'target': 'blake3:' + '0' * 64,
+            'arguments': {}})['operation_id']
+        async def hold_and_release(boundary):
+            broker.request_hold(operation, boundary)
+            with pytest.raises(CassetteError):
+                broker.request_hold(operation, 'competing-boundary')
+            waiter = asyncio.create_task(broker.hold_boundary(operation, boundary))
+            try:
+                await asyncio.sleep(0)
+                assert broker.events(operation)[-1]['payload'] == {'hold': 'ACKNOWLEDGED', 'boundary': boundary}
+                with pytest.raises(CassetteError):
+                    broker.release_hold(operation, 'wrong-boundary')
+                broker.release_hold(operation, boundary)
+                await waiter
+            finally:
+                if not waiter.done():
+                    waiter.cancel()
+                    await asyncio.gather(waiter, return_exceptions=True)
+        asyncio.run(hold_and_release('CARTRIDGE-DURABILITY'))
+        asyncio.run(hold_and_release('profile-checkpoint'))
+        assert [event['payload']['hold'] for event in broker.events(operation)
+                if 'hold' in event['payload']] == ['REQUESTED', 'ACKNOWLEDGED', 'RELEASED'] * 2
+    # Q44/Q53: cancellation cannot release an extent while its owned I/O still runs.
+    started, release = threading.Event(), threading.Event()
+    finished = []
+    descriptor = os.open(tmp_path / 'cancelled-io-proof', os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+    def delayed_write():
+        started.set()
+        assert release.wait(3)
+        os.pwrite(descriptor, b'joined', 0)
+        finished.append(True)
+    async def cancel_during_io():
+        task = asyncio.create_task(await_extent_io(delayed_write))
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            task.cancel()
+            await asyncio.sleep(.02)
+            assert not task.done()
+        finally:
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    try:
+        asyncio.run(cancel_during_io())
+        assert finished == [True] and os.pread(descriptor, 6, 0) == b'joined'
+    finally:
+        os.close(descriptor)
     template = {'command':[sys.executable,'-c','import json,os; b=json.loads(os.environ["CASSETTE_EXECUTION_BINDING"]); print(json.dumps({"binding_digest":b["digest"],"result":b["inputs"]["operand"]*2}))'], 'cwd':str(tmp_path),
                 'permission':'CAMPAIGN_DIRECTORY_WRITE','host':'fixture','disk':'scratch','path':str(tmp_path),
                 'stop_conditions':['timeout'],'next_byte_claim':10000}
@@ -328,7 +391,6 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     with pytest.raises(CassetteError):
         campaign.verify_capture(tmp_path/'captures'/unused['operation_id'],ignored_attempt,lambda bound: 2*bound['inputs']['operand'])
     campaign.verify_namespace(root,attempt['seal'])
-    from store import digest_bytes
     patterns = [{'write_bytes':256,'read_bytes':128,'payload_digest':digest_bytes(bytes(256))},
                 {'write_bytes':512,'read_bytes':256,'payload_digest':digest_bytes(bytes(512))}]
     binding = dict.fromkeys(['drive','host','path','operation','plan'],'fixture')
@@ -341,6 +403,73 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     profile = campaign.storage_profile(binding,patterns,second['value']['observations'],expected_binding=binding)
     assert profile['device_write_bytes'] == 8192
     assert profile['host_write_bytes'] == 768
+    # Q42: recorded hardware observations classify a complete cache-crossing window.
+    # Flags alone never satisfy the predicate; no large/live transfer is implied by this fixture.
+    source_binding = {**binding, 'plan': {'host_memory_bytes': 128, 'cache_crossing_required': True,
+                                        'uncached_read_request_available': True}}
+    source_observations = [{**row, 'binding': source_binding, 'data_allocated_bytes': pattern['write_bytes'],
+                            'observed_data_write_bytes': pattern['write_bytes']}
+        for pattern, row in zip(patterns, second['value']['observations'], strict=True)]
+    resumed = [{'binding': source_binding, 'pattern': pattern, 'host_write_bytes': 0,
+        'observed_data_read_bytes': pattern['read_bytes'], 'process_data_read_bytes': 256,
+        'device_read_bytes': 256, 'data_reads_with_process_io': 1, 'data_reads_without_process_io': 0,
+        'errors': 0, 'readback_ok': True, 'uncached_request': True} for pattern in patterns]
+    # These rows are recorded-hardware classifier fixtures, not live source captures.
+    empty_rate = {'samples': 0, 'minimum': None, 'maximum': None, 'empirical_percentiles': {}}
+    def classifier_statistics(row, phase):
+        seconds = row.get('duration_seconds', .001)
+        call = {'samples': 1, 'minimum': seconds, 'maximum': seconds,
+                'empirical_percentiles': {'0.5': seconds, '0.95': seconds, '0.99': seconds, '1.0': seconds}}
+        return {'phases': {name: {'calls': {'data.read': call} if name == phase else {},
+            'durable_chunk_bytes_per_second': empty_rate, 'verified_range_bytes_per_second': empty_rate}
+            for name in ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')},
+            'windows': [{'active_seconds': seconds, 'downtime_before_seconds': 0}]}
+    source_observations = [{**row, 'trace_statistics': classifier_statistics(row, 'FRESH_WRITE_READBACK')}
+                           for row in source_observations]
+    resumed = [{**row, 'trace_statistics': classifier_statistics(row, 'RETAINED_REVALIDATION')} for row in resumed]
+    crossed = campaign.storage_profile(source_binding, patterns, source_observations,
+                                      expected_binding=source_binding, revalidations=resumed)
+    assert crossed['cache']['classification'] == 'MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO'
+    assert crossed['cache']['per_read_attribution'] == 'NOT_ESTABLISHED'
+    # Q42/Q51: arbitrarily many state writes cannot conceal missing source data writes.
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns,
+            [{**row, 'host_write_bytes': 1 << 40, 'observed_data_write_bytes': pattern['write_bytes'] - 1}
+             for pattern, row in zip(patterns, source_observations, strict=True)],
+            expected_binding=source_binding, revalidations=resumed)
+    overlapping = [{'depth': 2, 'registry_id': 'near-driver', 'registry_class': 'IOBlockStorageDriver',
+                    'read_bytes': 100, 'write_bytes': 200, 'read_operations': 1},
+                   {'depth': 7, 'registry_id': 'ancestor-driver', 'registry_class': 'IOBlockStorageDriver',
+                    'read_bytes': 100, 'write_bytes': 200, 'read_operations': 1}]
+    selected_counter = storage_counter_snapshot(overlapping)
+    assert selected_counter['authority']['registry_id'] == 'near-driver'
+    assert selected_counter['device_read_bytes'] == 100
+    assert selected_counter['device_write_bytes'] == 200
+    assert selected_counter['counter_candidates'] == overlapping
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns, source_observations, expected_binding=source_binding,
+            revalidations=[{**row, 'device_read_bytes': selected_counter['device_read_bytes']} for row in resumed])
+    # The rejected old sum would falsely cross this same recorded minimum.
+    falsely_summed = campaign.storage_profile(source_binding, patterns, source_observations,
+        expected_binding=source_binding, revalidations=[{**row, 'device_read_bytes': 200} for row in resumed])
+    assert falsely_summed['status'] == 'PASS'
+    ambiguous = storage_counter_snapshot([overlapping[0], {**overlapping[1], 'depth': 2}])
+    assert ambiguous['authority'] is None and ambiguous['device_read_bytes'] is None
+    assert storage_counter_snapshot([])['device_write_bytes'] is None
+    for field, bad in [('process_data_read_bytes', 0), ('device_read_bytes', 0),
+                       ('data_reads_with_process_io', 0), ('observed_data_read_bytes', 0),
+                       ('host_write_bytes', 1), ('uncached_request', False)]:
+        changed = [{**row, field: bad} for row in resumed]
+        with pytest.raises(CassetteError):
+            campaign.storage_profile(source_binding, patterns, source_observations,
+                                     expected_binding=source_binding, revalidations=changed)
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns,
+            [{**row, 'data_allocated_bytes': 0} for row in source_observations],
+            expected_binding=source_binding, revalidations=resumed)
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns, source_observations,
+                                 expected_binding=source_binding, revalidations=[])
     assert not list(tmp_path.rglob('profile.bin'))
     assert all(observation['scratch_retention'] == 'TEMPORARY_UNLINKED'
                for observation in second['value']['observations'])
@@ -352,6 +481,149 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
                 'write_bytes':1, 'read_bytes':1, 'payload_digest':digest_bytes(bytes(1)), 'offset_bytes':offset})
         assert unsupported.value.code == 'INVALID_REQUEST'
         assert len(owner.claims()) == claims_before
+
+    # Q42/Q53/Q60: a named synthetic working set survives descriptor close and process restart.
+    profile_key = 'q42-profile-extents'
+    profile_binding = {'drive': 'fixture', 'host': 'fixture-host', 'operation': 'q42', 'plan': 'synthetic'}
+    profile_lengths = {'data': 32, 'state': 24}
+    data_bytes = b'profile-data-' + bytes(range(19))
+    state_bytes = b'profile-state-' + bytes(range(10))
+    prepared, extents = grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    assert prepared['value']['status'] == 'RETAINED'
+    operation = prepared['value']['operation_id']
+    transfer_dir = tmp_path / 'transfers' / operation
+    data_path = transfer_dir / 'data.extent'
+    state_path = transfer_dir / 'state.extent'
+    user_path = transfer_dir / 'user.txt'
+    user_path.write_text('preserve this unrelated file')
+    try:
+        assert os.pwrite(extents['data'].fd, data_bytes, 0) == len(data_bytes)
+        assert os.pwrite(extents['state'].fd, state_bytes, 0) == len(state_bytes)
+        os.fsync(extents['data'].fd)
+        os.fsync(extents['state'].fd)
+        original_inodes = {role: os.fstat(extent.fd).st_ino for role, extent in extents.items()}
+    finally:
+        for extent in extents.values():
+            os.close(extent.fd)
+
+    restart_script = (
+        'import json, os, sys; '
+        'from store import CapacityCoordinator, grant_profile_extents; '
+        'owner = CapacityCoordinator(sys.argv[1]); '
+        'head, extents = grant_profile_extents(owner, sys.argv[2], json.loads(sys.argv[3]), json.loads(sys.argv[4])); '
+        'assert os.pread(extents["data"].fd, len(bytes.fromhex(sys.argv[5])), 0) == bytes.fromhex(sys.argv[5]); '
+        'print(json.dumps({"status": head["value"]["status"], "inodes": {role: os.fstat(extent.fd).st_ino for role, extent in extents.items()}})); '
+        '[os.close(extent.fd) for extent in extents.values()]'
+    )
+    restarted = subprocess.run(
+        [sys.executable, '-c', restart_script, str(tmp_path), profile_key,
+         json.dumps(profile_binding), json.dumps(profile_lengths), data_bytes.hex()],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=True,
+    )
+    restart_result = json.loads(restarted.stdout)
+    assert restart_result['status'] == 'RETAINED'
+    assert restart_result['inodes'] == {role: prepared['value']['identities'][role]['inode']
+                                        for role in profile_lengths}
+    assert restart_result['inodes'] == original_inodes
+
+    with pytest.raises(CassetteError):
+        grant_profile_extents(owner, profile_key, {**profile_binding, 'plan': 'changed'}, profile_lengths)
+    with pytest.raises(CassetteError):
+        grant_profile_extents(owner, profile_key, profile_binding, {**profile_lengths, 'state': 25})
+
+    missing_path = transfer_dir / 'state.missing'
+    state_path.rename(missing_path)
+    try:
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    finally:
+        missing_path.rename(state_path)
+
+    replacement_path = transfer_dir / 'data.replaced'
+    data_path.rename(replacement_path)
+    data_path.write_bytes(data_bytes)
+    try:
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    finally:
+        data_path.unlink()
+        replacement_path.rename(data_path)
+
+    evidence_key = 'q42-profile-evidence'
+    invented_evidence_digest = digest_bytes(b'q42-invented-evidence')
+    with pytest.raises(CassetteError):
+        reclaim_profile_extents(owner, profile_key, invented_evidence_digest)
+
+    retained, locked_extents = grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    with pytest.raises(CassetteError):
+        seal_profile_extents(owner, profile_key, retained['digest'], evidence_key, invented_evidence_digest)
+    wrong_evidence_key = 'q42-profile-evidence-wrong'
+    wrong_evidence = compare_campaign_head(owner, wrong_evidence_key, None, {
+        'retained_manifests': [{'key': 'q42-other-profile', 'retained_digest': retained['digest']}],
+    })
+    with pytest.raises(CassetteError):
+        seal_profile_extents(owner, profile_key, retained['digest'], wrong_evidence_key, wrong_evidence['digest'])
+    evidence = compare_campaign_head(owner, evidence_key, None, {
+        'retained_manifests': [{'key': profile_key, 'retained_digest': retained['digest']}],
+    })
+    sealed = seal_profile_extents(owner, profile_key, retained['digest'], evidence_key, evidence['digest'])
+    assert sealed['value']['status'] == 'SEALED'
+    try:
+        with pytest.raises(CassetteError):
+            reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    finally:
+        for extent in locked_extents.values():
+            os.close(extent.fd)
+
+    active = owner(CapacityTransition('q42-profile-active', 'hold', write_bytes=(0,)))
+    try:
+        with pytest.raises(CassetteError):
+            reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    finally:
+        execute_claimed_write(active, lambda: None)
+        complete_capacity_claim(active)
+
+    reclaimed = reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    assert reclaimed['value']['status'] == 'RECLAIMED'
+    assert not data_path.exists() and not state_path.exists()
+    assert user_path.read_text() == 'preserve this unrelated file'
+    assert reclaim_profile_extents(owner, profile_key, sealed['digest']) == reclaimed
+
+    # Q6/Q60: malformed immutable values fail through Cassette's typed error boundary.
+    malformed_values = {
+        'scalar': 'not-a-manifest',
+        'list': [],
+        'status': {'status': 'UNKNOWN', 'binding': profile_binding, 'lengths': profile_lengths,
+                   'operation_id': 'profile-22222222-2222-2222-2222-222222222222',
+                   'retention': 'TEMPORARY'},
+    }
+    for suffix, value in malformed_values.items():
+        malformed_key = f'q42-profile-malformed-{suffix}'
+        compare_campaign_head(owner, malformed_key, None, value)
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, malformed_key, profile_binding, profile_lengths)
+
+    # Q42/Q53/Q60: an interrupted PREPARED namespace is preserved; a fresh namespace is used.
+    prepared_key = 'q42-profile-prepared-recovery'
+    old_operation = 'profile-11111111-1111-1111-1111-111111111111'
+    old_directory = tmp_path / 'transfers' / old_operation
+    old_directory.mkdir(parents=True)
+    old_data = old_directory / 'data.extent'
+    old_data_bytes = b'unknown-old-inode'.ljust(profile_lengths['data'], b'!')
+    old_data.write_bytes(old_data_bytes)
+    compare_campaign_head(owner, prepared_key, None, {
+        'status': 'PREPARED', 'binding': profile_binding, 'lengths': profile_lengths,
+        'operation_id': old_operation, 'retention': 'TEMPORARY',
+    })
+    recovered, recovered_extents = grant_profile_extents(owner, prepared_key, profile_binding, profile_lengths)
+    try:
+        assert recovered['value']['status'] == 'RETAINED'
+        assert recovered['value']['operation_id'] != old_operation
+        assert old_data.read_bytes() == old_data_bytes
+        assert (tmp_path / 'transfers' / recovered['value']['operation_id'] / 'data.extent').is_file()
+    finally:
+        for extent in recovered_extents.values():
+            os.close(extent.fd)
     assert campaign.expand_coordinates('X-<row>-<record>',{'row':['a','b'],'record':['START','VERIFY']}) == [
         'X-a-START','X-b-START','X-a-VERIFY','X-b-VERIFY']
     with pytest.raises(CassetteError): campaign.expand_coordinates('X-<row>',{'row':['a','a']})

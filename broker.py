@@ -12,12 +12,15 @@ import ctypes
 from dataclasses import asdict, dataclass, replace
 import fcntl
 import inspect
+import math
 import json
 import os
 from pathlib import Path
 import re
 import _ssl
 import sys
+import time
+import threading
 from types import MappingProxyType
 import uuid
 
@@ -39,7 +42,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
+from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -54,9 +57,14 @@ from store import (
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     campaign_head,
-    campaign_profile_io,
+    await_extent_io,
+    grant_profile_extents,
+    seal_profile_extents,
+    reclaim_profile_extents,
     drive_path_observation,
+    storage_host_observation,
     storage_profile,
+    source_profile_trace,
     compare_campaign_head,
     verify_campaign_artifact,
     write_campaign_artifact,
@@ -1463,9 +1471,9 @@ class CanonicalBroker:
     def request_hold(self, operation_id: str, boundary: str) -> dict:
         """Q5/Q25: arm one durable hold before the named operation boundary."""
         record = self._load(operation_id)
-        if record["state"] in _TERMINAL_STATES or not boundary or any(
-                "hold" in event["payload"] for event in record["events"]):
-            _reject("INVALID_REQUEST", operation_id, "hold requires a nonterminal operation with no prior hold")
+        holds = [event['payload'] for event in record['events'] if 'hold' in event['payload']]
+        if record["state"] in _TERMINAL_STATES or not boundary or (holds and holds[-1]['hold'] != 'RELEASED'):
+            _reject("INVALID_REQUEST", operation_id, "hold requires a nonterminal operation with no unreleased hold")
         self._append(record, "output_delta", {"hold": "REQUESTED", "boundary": boundary})
         return self.status(operation_id)
 
@@ -1797,85 +1805,587 @@ class CanonicalBroker:
             return path.stem
         return None
 
+    async def _capture_source_profile(self, operation_id, owner, selection, baseline, adapter,
+                                      revision, artifact, extents, *, header_bytes=None, saved_header=None,
+                                      revalidation=False, capture_key):
+        """Q42/Q44/Q51: capture actual source I/O; immutable trace batches bound memory use."""
+        trace, captures = bytearray(), []
+        host_samples = {'count': 0, 'max_gap_ns': 0, 'states': set(), 'first': None, 'last': None}
+        capture_lock = threading.Lock()
+        timings = {kind: [] for kind in ('read', 'write', 'fsync', 'F_FULLFSYNC', 'PARSER_READ')}
+        totals = dict(read_bytes=0, data_read_bytes=0, write_bytes=0, data_write_bytes=0, errors=0, io_calls=0,
+                      process_data_read_bytes=0, data_reads_with_process_io=0, data_reads_without_process_io=0)
+        attempt = capture_key
+        # The localhost listener changes on restart; its port is transport, not source identity.
+        source_lock = _source_record(revision)
+        source_lock['artifacts'] = [{key: value for key, value in item.items() if key != 'range_uri'}
+                                    for item in source_lock['artifacts']]
+        context = {'operation_id': operation_id, 'source_lock': source_lock,
+                   'artifact': {key: value for key, value in artifact.record().items() if key != 'range_uri'},
+                   'extent_operation': extents['data'].operation_id,
+                   'revalidation': revalidation, 'header_json_bytes': header_bytes, 'path': baseline['path']}
+        capture_head = await asyncio.to_thread(campaign_head, owner.cartridge, attempt)
+        windows, restored_boundary, recovery_history = [], None, []
+        fresh_read_window = False
+        if capture_head is not None and revalidation:
+            saved = capture_head['value']
+            if (isinstance(saved, dict) and saved.get('status') in {'MEASURING', 'INCOMPLETE'}
+                    and not isinstance(saved.get('checkpoint'), dict)):
+                if any(saved.get(key) != value for key, value in context.items()):
+                    _reject('ROOT_INVALID', attempt, 'retained read restart differs from its bound source or extent')
+                recovery_history = json.loads(canonical_bytes(saved.get('recovery_history', [])))
+                if not isinstance(recovery_history, list):
+                    _reject('ROOT_INVALID', attempt, 'retained read recovery history must be an ordered list')
+                recovery_history.append({'capture_digest': capture_head['digest'], 'error': saved.get('error'),
+                                         'status': saved['status']})
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**context, 'status': 'MEASURING', 'superseded_capture': capture_head['digest'],
+                     'recovery_history': recovery_history})
+                fresh_read_window = True
+        if capture_head is None:
+            capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, None,
+                                                   {**context, 'status': 'MEASURING'})
+        elif not fresh_read_window:
+            saved = capture_head['value']
+            if (not isinstance(saved, dict) or any(saved.get(key) != value for key, value in context.items())
+                    or saved.get('status') not in {'MEASURING', 'INCOMPLETE', 'CHECKPOINTED', 'CAPTURED'}):
+                _reject('ROOT_INVALID', attempt, 'source profile capture differs from its exact source and extent')
+            recovery_history = json.loads(canonical_bytes(saved.get('recovery_history', [])))
+            if not isinstance(recovery_history, list):
+                _reject('ROOT_INVALID', attempt, 'profile recovery history must be an ordered list')
+            if saved.get('error') is not None:
+                recovery_history.append({'capture_digest': capture_head['digest'], 'error': saved['error']})
+            if saved['status'] in {'MEASURING', 'INCOMPLETE'} and not isinstance(saved.get('checkpoint'), dict):
+                _reject('SOURCE_UNAVAILABLE', attempt, 'source profile requires a fresh measured extent generation', retryability='retryable')
+            checkpoint = json.loads(canonical_bytes(saved.get('checkpoint')))
+            if saved['status'] != 'CAPTURED' and not isinstance(checkpoint, dict):
+                _reject('ROOT_INVALID', attempt, 'source profile checkpoint must be an observation object')
+            captures = saved.get('traces') if saved['status'] == 'CAPTURED' else checkpoint.get('traces')
+            captures = json.loads(canonical_bytes(captures))
+            if not isinstance(captures, list) or not captures:
+                _reject('ROOT_INVALID', attempt, 'source profile capture has no durable trace coverage')
+            for trace_ref in captures:
+                if not isinstance(trace_ref, dict) or set(trace_ref) != {'attempt', 'name', 'bytes', 'digest'}:
+                    _reject('ROOT_INVALID', attempt, 'source profile trace reference is malformed')
+                await asyncio.to_thread(verify_campaign_artifact, owner.cartridge, trace_ref['attempt'],
+                    trace_ref['name'], trace_ref['digest'], trace_ref['bytes'], maximum_bytes=2097152)
+            if saved['status'] == 'CAPTURED':
+                if not isinstance(saved.get('measurement'), dict) or saved['measurement'].get('traces') != captures:
+                    _reject('ROOT_INVALID', attempt, 'completed capture lost its measured result')
+                return {**saved['measurement'], 'capture_record_key': attempt, 'capture_record_digest': capture_head['digest']}
+            if (not isinstance(checkpoint, dict) or set(checkpoint) != {'totals', 'timings', 'host_samples', 'windows', 'traces', 'source_boundary'}
+                    or not isinstance(checkpoint['totals'], dict) or set(checkpoint['totals']) != set(totals)
+                    or any(type(value) is not int or value < 0 for value in checkpoint['totals'].values())
+                    or not isinstance(checkpoint['timings'], dict) or set(checkpoint['timings']) != set(timings)
+                    or any(not isinstance(values, list) or any(type(value) is not int or value < 0 for value in values)
+                           for values in checkpoint['timings'].values())
+                    or not isinstance(checkpoint['host_samples'], dict)
+                    or set(checkpoint['host_samples']) != set(host_samples)
+                    or not isinstance(checkpoint['host_samples']['states'], list)
+                    or any(type(value) is not int or not 0 <= value <= 3 for value in checkpoint['host_samples']['states'])
+                    or any(type(checkpoint['host_samples'][name]) is not int or checkpoint['host_samples'][name] < 0
+                           for name in ('count', 'max_gap_ns'))
+                    or any(not isinstance(checkpoint['host_samples'][name], dict)
+                           or type(checkpoint['host_samples'][name].get('time_ns')) is not int
+                           for name in ('first', 'last'))
+                    or not isinstance(checkpoint['windows'], list) or not checkpoint['windows']
+                    or any(not isinstance(window, dict)
+                           or type(window.get('duration_seconds')) not in (int, float)
+                           or not math.isfinite(window['duration_seconds']) or window['duration_seconds'] <= 0
+                           or any(type(window.get(name)) is not int or window[name] < 0 for name in
+                                  ('device_write_bytes', 'process_diskio_read_bytes', 'process_diskio_written_bytes'))
+                           or (window.get('device_read_bytes') is not None
+                               and (type(window['device_read_bytes']) is not int or window['device_read_bytes'] < 0))
+                           for window in checkpoint['windows'])):
+                _reject('ROOT_INVALID', attempt, 'source profile observation checkpoint is malformed')
+            restored_boundary = checkpoint['source_boundary']
+            if (not isinstance(restored_boundary, dict)
+                    or (set(restored_boundary) != {'header_digest'} if header_bytes is not None
+                        else set(restored_boundary) != {'offset', 'hash_state_digest', 'generation'})
+                    or _DIGEST.fullmatch(str(restored_boundary.get('header_digest' if header_bytes is not None else 'hash_state_digest'))) is None
+                    or (header_bytes is None and (type(restored_boundary.get('offset')) is not int
+                        or not 0 <= restored_boundary['offset'] <= artifact.size
+                        or type(restored_boundary.get('generation')) is not int or restored_boundary['generation'] < 0))):
+                _reject('ROOT_INVALID', attempt, 'profile checkpoint lost its exact source boundary')
+            if header_bytes is not None:
+                if saved_header is not None and saved_header != restored_boundary['header_digest']:
+                    _reject('ROOT_INVALID', attempt, 'profile header boundary differs from its expected digest')
+                saved_header = restored_boundary['header_digest']
+            totals, timings, host_samples, windows = (checkpoint[key] for key in
+                                                     ('totals', 'timings', 'host_samples', 'windows'))
+            host_samples['states'] = set(host_samples['states'])
+            # The source executor's binary checkpoint remains the recovery authority. This
+            # receipt restores observations only; the held job performs no new source I/O yet.
+            self._append(self._load(operation_id), 'output_delta', {'source_profile_resume': {
+                'capture_key': attempt, 'checkpoint_digest': capture_head['digest'],
+                'extent_operation': extents['data'].operation_id}})
+            await self.hold_boundary(operation_id, 'profile-checkpoint')
+        def flush_locked():
+            if trace:
+                payload = bytes(trace)
+                name = str(len(captures)) + '-' + uuid.uuid4().hex + '.jsonl'
+                write_campaign_artifact(owner, attempt, name, payload)
+                captures.append({'attempt': attempt, 'name': name, 'bytes': len(payload),
+                                 'digest': digest_bytes(payload)})
+                trace.clear()
+        def record(row):
+            with capture_lock:
+                trace.extend(canonical_bytes(row) + b'\n')
+                if len(trace) >= 1048576:
+                    flush_locked()
+        def flush():
+            with capture_lock:
+                flush_locked()
+        def observe(role, event):
+            phase = ('RETAINED_REVALIDATION' if revalidation else
+                     'RESUME_VERIFY' if restored_boundary is not None else 'FRESH_WRITE_READBACK')
+            record({'role': role, 'phase': phase, **event})
+            if event['kind'] == 'VERIFIED_PREFIX':
+                return
+            totals['io_calls'] += 1
+            totals['errors'] += not event['success']
+            timings[event['kind']].append(event['duration_ns'])
+            if event['kind'] in ('read', 'PARSER_READ'):
+                totals['read_bytes'] += event['returned_bytes']
+                if role == 'data':
+                    totals['data_read_bytes'] += event['returned_bytes']
+            elif event['kind'] == 'write':
+                totals['write_bytes'] += event['returned_bytes']
+                if role == 'data':
+                    if event['offset'] != extents['data'].offset + totals['data_write_bytes']:
+                        _reject('SOURCE_UNAVAILABLE', attempt, 'source profile write coverage is discontinuous', retryability='retryable')
+                    totals['data_write_bytes'] += event['returned_bytes']
+            if role == 'data' and event['kind'] in ('read', 'PARSER_READ') and revalidation:
+                disk_bytes = event['process_diskio_read_bytes']
+                totals['process_data_read_bytes'] += disk_bytes
+                totals['data_reads_with_process_io' if disk_bytes else 'data_reads_without_process_io'] += 1
+        measuring, held = True, False
+        try:
+            observed_extents = {role: replace(extent, observer=lambda event, role=role: observe(role, event),
+                                             observe_process_reads=revalidation and role == 'data')
+                                for role, extent in extents.items()}
+            if revalidation:
+                # A descriptor request does not evict existing cache pages. The samples below decide
+                # whether this retained working-set window actually produced process-accounted I/O.
+                command = getattr(fcntl, 'F_NOCACHE', None)
+                if command is not None:
+                    try:
+                        fcntl.fcntl(observed_extents['data'].fd, command, 1)
+                    except OSError as error:
+                        _reject('CAPABILITY_MISMATCH', artifact.path, f'uncached descriptor request failed: {error}')
+            async def checkpoint(partial):
+                nonlocal capture_head, before, started, measuring, window_host, restored_boundary, held
+                boundary = ({'header_digest': partial['header_digest']} if header_bytes is not None else {
+                    'offset': partial.contiguous_source_hash_offset,
+                    'generation': partial.checkpoint_generation,
+                    'hash_state_digest': digest_bytes(partial.serialized_hash_state.encode())})
+                if restored_boundary is not None:
+                    if boundary != restored_boundary:
+                        _reject('SOURCE_UNAVAILABLE', attempt, 'source checkpoint advanced beyond its durable measured boundary', retryability='retryable')
+                record({'kind': 'SOURCE_BOUNDARY', 'time_ns': time.monotonic_ns(), 'source_boundary': boundary})
+                if restored_boundary is not None:
+                    restored_boundary = None
+                holds = [event['payload'] for event in self._load(operation_id)['events'] if 'hold' in event['payload']]
+                if not holds or holds[-1] != {'hold': 'REQUESTED', 'boundary': 'profile-checkpoint'}:
+                    return
+                measuring = False
+                await close_window()
+                snapshot = json.loads(canonical_bytes({'totals': totals, 'timings': timings,
+                    'host_samples': {**host_samples, 'states': sorted(host_samples['states'])}, 'windows': windows,
+                    'traces': captures, 'source_boundary': boundary}))
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**context, 'status': 'CHECKPOINTED', 'traces': captures,
+                     'checkpoint': snapshot, 'recovery_history': recovery_history})
+                held = True
+                await self.hold_boundary(operation_id, 'profile-checkpoint')
+                held = False
+                before = await asyncio.to_thread(drive_path_observation, selection)
+                sample_host()
+                window_host = host_samples['last']
+                started = time.monotonic_ns()
+                record({'kind': 'WINDOW_OPEN', 'started_ns': started, 'observer_pid': window_host['pid'],
+                        'device': before, 'host': window_host})
+                measuring = True
+            def sample_host():
+                sample = storage_host_observation()
+                if host_samples['last'] is not None:
+                    host_samples['max_gap_ns'] = max(host_samples['max_gap_ns'],
+                        sample['time_ns'] - host_samples['last']['time_ns'])
+                else:
+                    host_samples['first'] = sample
+                host_samples['last'] = sample
+                host_samples['count'] += 1
+                host_samples['states'].add(sample['thermal_state'])
+                record({'kind': 'HOST_SAMPLE', **sample})
+            async def sample_interval():
+                while True:
+                    await asyncio.sleep(.5)
+                    if measuring:
+                        sample_host()
+            async def close_window():
+                nonlocal measuring
+                after = await asyncio.to_thread(drive_path_observation, selection)
+                sample_host()
+                finished = time.monotonic_ns()
+                if before['path'] != baseline['path'] or after['path'] != baseline['path']:
+                    _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during source-executor measurement')
+                writes = (before['device_write_bytes'], after['device_write_bytes'])
+                reads = (before.get('device_read_bytes'), after.get('device_read_bytes'))
+                if None in writes or writes[1] < writes[0] or (None not in reads and reads[1] < reads[0]):
+                    _reject('CAPABILITY_MISMATCH', operation_id, 'physical source telemetry is unavailable or regressed')
+                windows.append({'started_ns': started, 'ended_ns': finished,
+                    'duration_seconds': (finished - started) / 1e9,
+                    'device_write_bytes': writes[1] - writes[0],
+                    'device_read_bytes': None if None in reads else reads[1] - reads[0],
+                    'observer_pid': window_host['pid'],
+                    'process_diskio_read_bytes': host_samples['last']['process_diskio_read_bytes'] - window_host['process_diskio_read_bytes'],
+                    'process_diskio_written_bytes': host_samples['last']['process_diskio_written_bytes'] - window_host['process_diskio_written_bytes'],
+                    'counter_candidates': {'before': before.get('counter_candidates'), 'after': after.get('counter_candidates')},
+                    'device_counters': {'before': {name: before.get(name) for name in
+                        ('device_read_bytes', 'device_write_bytes', 'device_read_operations')},
+                        'after': {name: after.get(name) for name in
+                        ('device_read_bytes', 'device_write_bytes', 'device_read_operations')}}})
+                record({'kind': 'WINDOW_CLOSE', 'ended_ns': finished, 'observer_pid': window_host['pid'],
+                        'device': after, 'host': host_samples['last']})
+                measuring = False
+                await await_extent_io(flush)
+            before = await asyncio.to_thread(drive_path_observation, selection)
+            sample_host()
+            window_host = host_samples['last']
+            sampler = asyncio.create_task(sample_interval())
+            started = time.monotonic_ns()
+            record({'kind': 'WINDOW_OPEN', 'started_ns': started, 'observer_pid': window_host['pid'],
+                    'device': before, 'host': window_host})
+            try:
+                if header_bytes is None:
+                    partial = await transfer_artifact(adapter, revision, artifact,
+                        observed_extents['data'], observed_extents['state'], owner,
+                        checkpoint_committed=checkpoint)
+                    if partial.contiguous_source_hash_offset != artifact.size:
+                        _reject('ROOT_INVALID', artifact.path, 'profile source executor did not complete its artifact')
+                    parsed = None
+                else:
+                    parsed = await transfer_header(adapter, revision, artifact, observed_extents['data'], owner,
+                        expected_header_json_bytes=header_bytes, expected_header_digest=saved_header)
+                    await checkpoint(parsed)
+                await close_window()
+            finally:
+                sampler.cancel()
+                try:
+                    await sampler
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    await await_extent_io(flush)
+            expected_writes = 0 if revalidation else artifact.size if header_bytes is None else header_bytes + 8
+            if totals['data_write_bytes'] != expected_writes:
+                _reject('SOURCE_UNAVAILABLE', attempt, 'source profile does not cover its exact data writes', retryability='retryable')
+            statistics = await asyncio.to_thread(source_profile_trace, owner.cartridge, captures,
+                expected_data_writes=expected_writes,
+                expected_data_reads=artifact.size if header_bytes is None else header_bytes + 8, revalidation=revalidation,
+                data_offset=extents['data'].offset, has_state='state' in extents,
+                record_base=transfer_state_bytes(0), expected_path=baseline['path'])
+            if (statistics['data_write_bytes'] != totals['data_write_bytes'] or statistics['io_calls'] != totals['io_calls']
+                    or statistics['host_write_bytes'] != totals['write_bytes']
+                    or statistics['data_read_bytes'] != totals['data_read_bytes']
+                    or statistics['process_data_read_bytes'] != totals['process_data_read_bytes']):
+                _reject('SOURCE_UNAVAILABLE', attempt, 'raw source trace differs from its live byte or call count', retryability='retryable')
+            elapsed = sum(window['duration_seconds'] for window in windows)
+            measurement = {'duration_seconds': elapsed, 'write_seconds': sum(timings['write']) / 1e9,
+                    'read_seconds': (sum(timings['read']) + sum(timings['PARSER_READ'])) / 1e9,
+                    'flush_seconds': (sum(timings['fsync']) + sum(timings['F_FULLFSYNC'])) / 1e9,
+                    'readback_ok': True, 'flush_ok': True, 'errors': totals['errors'],
+                    'host_write_bytes': totals['write_bytes'], 'observed_read_bytes': totals['read_bytes'],
+                    'observed_data_write_bytes': totals['data_write_bytes'],
+                    'observed_data_read_bytes': totals['data_read_bytes'],
+                    'device_write_bytes': sum(window['device_write_bytes'] for window in windows),
+                    'device_read_bytes': (None if any(window['device_read_bytes'] is None for window in windows)
+                                          else sum(window['device_read_bytes'] for window in windows)),
+                    'device_counter_authority': 'nearest IOBlockStorageDriver in bound native path; shared device interval',
+                    'measurement_windows': windows, 'timing_evidence': 'SUM_OF_ACTIVE_WINDOWS; INTERRUPTIONS_EXCLUDED',
+                    'trace_statistics': statistics,
+                    'recovery_history': recovery_history,
+                    'process_data_read_bytes': totals['process_data_read_bytes'],
+                    'data_reads_with_process_io': totals['data_reads_with_process_io'],
+                    'data_reads_without_process_io': totals['data_reads_without_process_io'],
+                    'read_counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA',
+                    'uncached_request': revalidation and getattr(fcntl, 'F_NOCACHE', None) is not None,
+                    'data_allocated_bytes': os.fstat(extents['data'].fd).st_blocks * 512,
+                    'io_calls': totals['io_calls'], 'iops': totals['io_calls'] / elapsed,
+                    'io_latency_seconds': statistics['diagnostic_call_union']['empirical_percentiles'],
+                    'flush_latency_seconds': statistics['diagnostic_flush_union']['empirical_percentiles'],
+                    'legacy_latency_scope': 'DIAGNOSTIC_CALL_UNION_ONLY; QUALIFICATION_USES_SEPARATE_PHASES',
+                    'host_telemetry': {'evidence': 'SAMPLED_STATE', 'samples': host_samples['count'],
+                        'max_gap_seconds': statistics['max_in_window_sampling_gap_seconds'],
+                        'scope': 'ACTIVE_WINDOWS_ONLY; DOWNTIME_REPORTED_SEPARATELY',
+                        'thermal_states': sorted(host_samples['states']),
+                        'process_diskio_read_bytes': sum(window['process_diskio_read_bytes'] for window in windows),
+                        'process_diskio_written_bytes': sum(window['process_diskio_written_bytes'] for window in windows)},
+                    'traces': captures, 'header': parsed, 'scratch_retention': 'NAMED_UNTIL_SEALED'}
+            captured = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                {**context, 'status': 'CAPTURED', 'traces': captures, 'measurement': measurement,
+                 'recovery_history': recovery_history})
+            return {**measurement, 'capture_record_key': attempt, 'capture_record_digest': captured['digest']}
+        except BaseException as error:
+            failure = {'type': type(error).__name__, 'code': error.code if isinstance(error, CassetteError) else None,
+                       'detail': str(error)}
+            try:
+                if measuring:
+                    record({'kind': 'WINDOW_INTERRUPTED', 'ended_ns': time.monotonic_ns(), 'error': failure})
+                await await_extent_io(flush)
+            except BaseException as trace_error:
+                failure['trace_flush_error'] = type(trace_error).__name__ + ': ' + str(trace_error)
+            try:
+                await await_extent_io(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**capture_head['value'], 'status': ('CHECKPOINTED' if capture_head['value'].get('status') == 'CHECKPOINTED'
+                        and held else 'INCOMPLETE'), 'traces': captures, 'recovery_history': recovery_history,
+                     'pending_trace_bytes': len(trace), 'error': failure})
+            except BaseException as receipt_error:
+                raise error from receipt_error
+            raise
+
+    async def _abandon_profile_extents(self, operation_id, owner, keys, error, capture_keys=()):
+        """Q44/Q53/Q60: preserve failed evidence before reclaiming only its pinned synthetic files."""
+        retained, sealed = [], []
+        for key in keys:
+            manifest = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+            if manifest is None or not isinstance(manifest['value'], dict):
+                continue
+            value = manifest['value']
+            if value.get('status') == 'RETAINED':
+                retained.append({'key': key, 'retained_digest': manifest['digest']})
+            elif value.get('status') in {'SEALED', 'RECLAIMING'}:
+                evidence = await asyncio.to_thread(campaign_head, owner.cartridge, value['evidence_key'])
+                if (evidence is None or evidence['digest'] != value['evidence_digest']
+                        or not isinstance(evidence['value'], dict) or evidence['value'].get('disposition') != 'ABANDONED'):
+                    _reject('ROOT_INVALID', key, 'failed profile cleanup reached a completed measurement seal')
+                sealed.append((key, manifest['digest'] if value['status'] == 'SEALED' else value['seal_digest']))
+        if retained:
+            captures = []
+            for key in capture_keys:
+                capture = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+                if capture is not None:
+                    captures.append({'key': key, 'digest': capture['digest']})
+            evidence_key = 'profile-abandoned-' + uuid.uuid4().hex
+            evidence = await asyncio.to_thread(compare_campaign_head, owner, evidence_key, None, {
+                'status': 'INCOMPLETE', 'disposition': 'ABANDONED', 'operation_id': operation_id,
+                'error': error.payload(), 'captures': captures, 'retained_manifests': retained})
+            for item in retained:
+                manifest = await asyncio.to_thread(seal_profile_extents, owner, item['key'], item['retained_digest'],
+                    evidence_key, evidence['digest'])
+                sealed.append((item['key'], manifest['digest']))
+        for key, digest in sealed:
+            await asyncio.to_thread(reclaim_profile_extents, owner, key, digest)
+
     async def _qualify_download(self, operation_id, owner, selection, revision, *, header_lengths=None):
-        """Q42/Q43/Q53: bind measured data and checkpoint extents to the current source/path."""
+        """Q42/Q53/Q60: measure the source executor and retain its whole operation working set."""
         observed = await asyncio.to_thread(drive_path_observation, selection)
+        host = await asyncio.to_thread(storage_host_observation)
         artifacts = revision.artifacts if header_lengths is not None else _acquisition_artifacts(revision)
-        if header_lengths is not None:
-            ranges = [(offset, size) for artifact in artifacts
-                      for offset, size in header_ranges(artifact, header_lengths[artifact.path])]
-        else:
-            ranges = [(0, size) for artifact in artifacts
-                     for size in [transfer_state_bytes(artifact.size),
-                                  *(min(4194304, artifact.size - offset) for offset in range(0, artifact.size, 4194304))]]
-        payload_digests = {size: digest_bytes(bytes(size)) for size in {size for _, size in ranges}}
-        patterns = [{'write_bytes': size, 'read_bytes': size, 'payload_digest': payload_digests[size],
-                     **({'offset_bytes': offset} if header_lengths is not None else {})}
-                    for offset, size in ranges]
+        patterns = [{'artifact': artifact.path,
+                     'write_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8,
+                     'read_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8}
+                    for artifact in artifacts]
+        lengths = [{'data': artifact.size, **({'state': transfer_state_bytes(artifact.size)}
+                                             if header_lengths is None else {})} for artifact in artifacts]
         binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
                    'path': observed['path'], 'operation': operation_id,
                    'profiler_version': STORAGE_PROFILER_VERSION,
                    'plan': {'source_lock': _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
-                            'queue_depth': 1, 'cache_state': 'WARM', 'working_set_bytes': 8388608,
+                            'queue_depth': 1, 'network_range_concurrency': 2,
+                            'cache_state': 'FRESH_READBACK_AND_RETAINED_REVALIDATION',
+                            'working_set_bytes': (sum(sum(item.values()) for item in lengths) if header_lengths is None
+                                                  else sum(header_lengths[artifact.path] + 8 for artifact in artifacts)),
+                            'retained_extent_logical_bytes': sum(sum(item.values()) for item in lengths),
+                            'host_memory_bytes': host['host_memory_bytes'],
                             'artifact_bytes': sum(artifact.size for artifact in artifacts),
-                            'checkpoint_pattern': 'COMPLETE_EXTENT',
+                            'checkpoint_pattern': 'SOURCE_EXECUTOR_ALTERNATING_SLOTS_AND_RECORDS',
+                            'checkpoint_record_base': transfer_state_bytes(0),
                             'service_deadline_seconds': None, 'training_endurance': 'NOT_APPLICABLE',
-                            'unavailable_telemetry': ['cable_capability', 'thermal_state', 'media_health']}}
+                            'unavailable_telemetry': ['cable_capability', 'media_health'],
+                            'thermal_evidence': 'SAMPLED_STATE_WITH_RETAINED_GAPS',
+                            'uncached_read_request_available': getattr(fcntl, 'F_NOCACHE', None) is not None,
+                            'cache_crossing_required': sum(pattern['read_bytes'] for pattern in patterns) > host['host_memory_bytes'],
+                            'cold_read_verification': 'RETAINED_SOURCE_WINDOW; FLAG_ALONE_IS_NOT_PROOF'}}
         if header_lengths is not None:
             binding['plan'].update(header_only=True, header_json_bytes=header_lengths,
                 artifact_ranges={artifact.path: [list(pair) for pair in header_ranges(artifact, header_lengths[artifact.path])]
-                                 for artifact in artifacts}, checkpoint_pattern='EXACT_HEADER_PREFIX_AND_BODY',
-                working_set_bytes=max(8388608, max(header_lengths.values())+8),
-                header_write_shape='prefix once, exact body chunks, each write readback-hashed and synced; warm parser read follows')
+                                 for artifact in artifacts}, checkpoint_pattern='SOURCE_EXECUTOR_HEADER_AND_COMPLETE_PARSER')
         key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
-        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         plan = {'binding': binding, 'pattern_count': len(patterns)}
+        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         if head is None:
             head = await asyncio.to_thread(compare_campaign_head, owner, key, None, plan)
         if head['value'] != plan:
             _reject('ROOT_INVALID', operation_id, 'saved acquisition profile differs from its source or path')
-        observations, atom_digests = [], []
-        self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
-        for index, pattern in enumerate(patterns):
-            atom_key = key + '-' + str(index)
-            atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
-            if atom is not None:
-                if (not isinstance(atom['value'], dict)
-                        or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
-                        or atom['value']['profile_digest'] != head['digest']
-                        or atom['value']['pattern'] != pattern
-                        or not isinstance(atom['value']['measurement'], dict)):
-                    _reject('ROOT_INVALID', operation_id, 'saved profile atom differs from its source or pattern')
-                observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
-                atom_digests.append(atom['digest'])
-                continue
-            before = await asyncio.to_thread(drive_path_observation, selection)
-            measurement = await asyncio.to_thread(campaign_profile_io, owner, str(uuid.uuid4()), pattern)
-            after = await asyncio.to_thread(drive_path_observation, selection)
-            if before['path'] != observed['path'] or after['path'] != observed['path']:
-                _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during acquisition measurement')
-            counters = (before['device_write_bytes'], after['device_write_bytes'])
-            if None in counters or counters[1] < counters[0]:
-                _reject('CAPABILITY_MISMATCH', operation_id, 'physical write telemetry is unavailable or regressed')
-            measurement = {**measurement, 'device_write_bytes': counters[1] - counters[0],
-                           'device_counter_authority': 'IOBlockStorageDriver:Bytes (Write)'}
-            atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
-                                          {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
-            observations.append({**measurement, 'binding': binding, 'pattern': pattern})
-            atom_digests.append(atom['digest'])
-        result = storage_profile(binding, patterns, observations, expected_binding=binding)
-        seal = {'profile_digest': head['digest'], 'atom_count': len(atom_digests),
-                'atoms_digest': digest_bytes(canonical_bytes(atom_digests)), 'measurements': result}
         complete = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-complete')
-        if complete is None:
-            complete = await asyncio.to_thread(compare_campaign_head, owner, key + '-complete', None, seal)
-        if complete['value'] != seal:
-            _reject('ROOT_INVALID', operation_id, 'completed profile differs from its measured atoms')
-        receipt = {
-            'status': result['status'], 'profile_digest': complete['digest'], 'path': str(owner.cartridge),
-            'measurements': result}
-        self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
-        return receipt
+        try:
+            if complete is None:
+                observations, revalidations, atom_digests, retained = [], [], [], []
+                self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
+                async with source_profile_boundary(revision, artifacts, header_lengths=header_lengths) as (adapter, synthetic):
+                    for index, (artifact, pattern, shape) in enumerate(zip(synthetic.artifacts, patterns, lengths, strict=True)):
+                        atom_key = key + '-' + str(index)
+                        extent_key = atom_key + '-extents'
+                        extent_binding = {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
+                        manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key, extent_binding, shape)
+                        capture_key = 'source-' + manifest['digest'].split(':', 1)[1] + '-capture'
+                        restart_error = None
+                        try:
+                            atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
+                            if atom is None:
+                                measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
+                                    adapter, synthetic, artifact, extents,
+                                    header_bytes=None if header_lengths is None else header_lengths[artifact.path],
+                                    capture_key=capture_key)
+                                if measurement['observed_data_write_bytes'] != pattern['write_bytes']:
+                                    _reject('SOURCE_UNAVAILABLE', capture_key, 'profile does not cover its exact data writes', retryability='retryable')
+                                atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
+                                    {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
+                            if (not isinstance(atom['value'], dict)
+                                    or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
+                                    or atom['value'].get('profile_digest') != head['digest']
+                                    or atom['value'].get('pattern') != pattern
+                                    or not isinstance(atom['value'].get('measurement'), dict)):
+                                _reject('ROOT_INVALID', artifact.path, 'saved source profile atom differs from its exact plan')
+                            parsed = atom['value']['measurement'].get('header')
+                            if header_lengths is not None and (not isinstance(parsed, dict)
+                                    or not isinstance(parsed.get('header_digest'), str)
+                                    or _DIGEST.fullmatch(parsed['header_digest']) is None
+                                    or parsed.get('header_bytes') != header_lengths[artifact.path] + 8):
+                                _reject('ROOT_INVALID', artifact.path, 'saved profile header differs from its complete declared bytes')
+                            observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
+                            atom_digests.append(atom['digest'])
+                            retained.append((extent_key, manifest['digest']))
+                        except CassetteError as error:
+                            if error.code != 'SOURCE_UNAVAILABLE' or error.object_id != capture_key or error.retryability != 'retryable':
+                                raise
+                            restart_error = error
+                        finally:
+                            for extent in extents.values():
+                                os.close(extent.fd)
+                        if restart_error is not None:
+                            await self._abandon_profile_extents(operation_id, owner, [extent_key], restart_error, [capture_key])
+                            raise restart_error
+                    # Reopen the complete retained working set; the source executor verifies every committed byte.
+                    for index, artifact in enumerate(synthetic.artifacts):
+                        extent_key, _ = retained[index]
+                        manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key,
+                            {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}, lengths[index])
+                        try:
+                            measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
+                                adapter, synthetic, artifact, extents,
+                                header_bytes=None if header_lengths is None else header_lengths[artifact.path],
+                                saved_header=None if header_lengths is None else observations[index]['header']['header_digest'],
+                                revalidation=True, capture_key='source-' + manifest['digest'].split(':', 1)[1] + '-resume-capture')
+                            if measurement['host_write_bytes'] or measurement['observed_read_bytes'] < patterns[index]['read_bytes']:
+                                _reject('ROOT_INVALID', artifact.path, 'retained profile did not revalidate its complete bytes without writing')
+                            proof_key = key + '-' + str(index) + '-resume'
+                            proof = await asyncio.to_thread(campaign_head, owner.cartridge, proof_key)
+                            if proof is None:
+                                proof = await asyncio.to_thread(compare_campaign_head, owner, proof_key, None,
+                                    {'profile_digest': head['digest'], 'artifact': artifact.path, 'measurement': measurement})
+                            if (not isinstance(proof['value'], dict)
+                                    or set(proof['value']) != {'profile_digest', 'artifact', 'measurement'}
+                                    or proof['value'].get('profile_digest') != head['digest']
+                                    or proof['value'].get('artifact') != artifact.path
+                                    or not isinstance(proof['value'].get('measurement'), dict)):
+                                _reject('ROOT_INVALID', artifact.path, 'saved retained read differs from its source profile')
+                            atom_digests.append(proof['digest'])
+                            revalidations.append({**proof['value']['measurement'], 'binding': binding, 'pattern': patterns[index]})
+                        finally:
+                            for extent in extents.values():
+                                os.close(extent.fd)
+                result = storage_profile(binding, patterns, observations, expected_binding=binding,
+                                         revalidations=revalidations)
+                seal = {'profile_digest': head['digest'], 'atom_count': len(atom_digests),
+                        'atoms_digest': digest_bytes(canonical_bytes(atom_digests)), 'measurements': result,
+                        'retained_manifests': [{'key': extent_key, 'retained_digest': manifest_digest}
+                                               for extent_key, manifest_digest in retained]}
+                complete = await asyncio.to_thread(compare_campaign_head, owner, key + '-complete', None, seal)
+            value = complete['value']
+            if (not isinstance(value, dict) or value.get('profile_digest') != head['digest']
+                    or not isinstance(value.get('measurements'), dict)
+                    or value['measurements'].get('binding') != binding
+                    or not isinstance(value.get('retained_manifests'), list)
+                    or any(not isinstance(item, dict) or set(item) != {'key', 'retained_digest'}
+                           or not isinstance(item['retained_digest'], str)
+                           or _DIGEST.fullmatch(item['retained_digest']) is None
+                           for item in value['retained_manifests'])
+                    or [item.get('key') if isinstance(item, dict) else None for item in value['retained_manifests']]
+                        != [key + '-' + str(index) + '-extents' for index in range(len(artifacts))]):
+                _reject('ROOT_INVALID', operation_id, 'completed source profile differs from its bound operation or extents')
+            checked, digests = [[], []], []
+            for phase, suffix in enumerate(('', '-resume')):
+                for index, pattern in enumerate(patterns):
+                    atom = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-' + str(index) + suffix)
+                    if (atom is None or not isinstance(atom['value'], dict)
+                            or atom['value'].get('profile_digest') != head['digest']
+                            or not isinstance(atom['value'].get('measurement'), dict)
+                            or (atom['value'].get('pattern') != pattern if phase == 0
+                                else atom['value'].get('artifact') != artifacts[index].path)):
+                        _reject('ROOT_INVALID', operation_id, 'completed profile measurement is missing or differs')
+                    measurement = atom['value']['measurement']
+                    capture = await asyncio.to_thread(campaign_head, owner.cartridge, measurement.get('capture_record_key'))
+                    if (capture is None or capture['digest'] != measurement.get('capture_record_digest')
+                            or not isinstance(capture['value'], dict) or capture['value'].get('status') != 'CAPTURED'
+                            or capture['value'].get('operation_id') != operation_id
+                            or capture['value'].get('traces') != measurement.get('traces')
+                            or capture['value'].get('measurement') != {name: value for name, value in measurement.items()
+                                if name not in {'capture_record_key', 'capture_record_digest'}}
+                            or not isinstance(measurement.get('traces'), list) or not measurement['traces']):
+                        _reject('ROOT_INVALID', operation_id, 'source I/O capture is missing or differs from its measurement')
+                    recomputed = await asyncio.to_thread(source_profile_trace, owner.cartridge, measurement['traces'],
+                        expected_data_writes=0 if phase else pattern['write_bytes'], expected_data_reads=pattern['read_bytes'],
+                        revalidation=bool(phase),
+                        has_state=header_lengths is None, record_base=transfer_state_bytes(0), expected_path=binding['path'])
+                    if (recomputed != measurement.get('trace_statistics')
+                            or recomputed['data_write_bytes'] != measurement.get('observed_data_write_bytes')
+                            or recomputed['host_write_bytes'] != measurement.get('host_write_bytes')
+                            or recomputed['data_read_bytes'] != measurement.get('observed_data_read_bytes')
+                            or recomputed['process_data_read_bytes'] != measurement.get('process_data_read_bytes')
+                            or recomputed['io_calls'] != measurement.get('io_calls')):
+                        _reject('ROOT_INVALID', operation_id, 'raw source rows differ from their claimed measurement statistics')
+                    checked[phase].append({**measurement, 'binding': binding, 'pattern': pattern})
+                    digests.append(atom['digest'])
+            if (value.get('atom_count') != len(digests)
+                    or value.get('atoms_digest') != digest_bytes(canonical_bytes(digests))
+                    or storage_profile(binding, patterns, checked[0], expected_binding=binding,
+                                       revalidations=checked[1]) != value['measurements']):
+                _reject('ROOT_INVALID', operation_id, 'completed profile differs from its verified measurement and trace objects')
+            # Reconcile after every entry, including a crash between global seal and individual reclamation.
+            for retained in value['retained_manifests']:
+                extent_key = retained['key']
+                manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)
+                if manifest is None or not isinstance(manifest['value'], dict):
+                    _reject('ROOT_INVALID', extent_key, 'completed profile extent manifest is missing or malformed')
+                if manifest['value'].get('status') == 'RETAINED':
+                    manifest = await asyncio.to_thread(seal_profile_extents, owner, extent_key,
+                        retained['retained_digest'], key + '-complete', complete['digest'])
+                if (manifest['value'].get('evidence_key') != key + '-complete'
+                        or manifest['value'].get('evidence_digest') != complete['digest']):
+                    _reject('ROOT_INVALID', extent_key, 'profile extent seal references another measurement')
+                seal_digest = (manifest['digest'] if manifest['value'].get('status') == 'SEALED'
+                               else manifest['value'].get('seal_digest'))
+                await asyncio.to_thread(reclaim_profile_extents, owner, extent_key, seal_digest)
+            result = complete['value']['measurements']
+            receipt = {'status': result['status'], 'profile_digest': complete['digest'],
+                       'profile_key': key + '-complete', 'path': str(owner.cartridge)}
+            self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
+            if result['status'] != 'PASS':
+                _reject('CAPABILITY_MISMATCH', operation_id, 'source executor storage qualification is incomplete')
+            return receipt
+        except CassetteError as error:
+            if complete is None and error.retryability == 'terminal':
+                keys = [key + '-' + str(index) + '-extents' for index in range(len(artifacts))]
+                capture_keys = []
+                for index, extent_key in enumerate(keys):
+                    manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)
+                    if manifest is not None and isinstance(manifest['value'], dict):
+                        namespace = 'source-' + manifest['digest'].split(':', 1)[1]
+                        capture_keys.extend((namespace + '-capture', namespace + '-resume-capture'))
+                await self._abandon_profile_extents(operation_id, owner, keys, error, capture_keys)
+            raise
 
     async def _inspect_headers(self, operation_id, adapter, owner, revision, profile_digest, header_lengths):
         """Q44/Q50: publish parsed headers separately from full-source and execution proof."""

@@ -1,4 +1,4 @@
-# test_l05_entry.py — L05 product CLI source and drive entry proof (Q5/Q9/Q44/Q49/Q52); depends on broker.py, cli.py, tests/test_l05_drive.py.
+# test_l05_entry.py — L05 product CLI source and drive entry proof (Q5/Q9/Q44/Q49/Q52); depends on broker.py, cli.py, errors.py, store.py, tests/test_l05_drive.py.
 """Exercise the installed-module launch against an external HTTP boundary fixture."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, urlparse
 
 import cli
 from broker import CanonicalBroker
+from errors import CassetteError
+from store import CapacityCoordinator, canonical_bytes, digest_bytes, source_profile_trace, write_campaign_artifact
 from test_l05_drive import _attached_apfs_image
 
 
@@ -384,9 +386,75 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             user_path.write_bytes(b'protected')
             payload_before_qualification = sum(method == 'GET' and path.endswith('/model.safetensors')
                                                for method, path in requests)
-            qualified = launch('qualify', '--model-selection', selected['operation_id'], '--drive-selection',
-                               drive['operation_id'], '--key', 'go-fixture', expected_code=2,
-                               expected_message='Drive check passed. Download remains paused.')
+            # Q25/Q44/Q60/Q80: kill the real CLI at its first committed profile boundary,
+            # then restore the exact measured prefix before permitting another source read.
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            control.resume(ready['operation_id'])
+            control.request_hold(ready['operation_id'], 'profile-checkpoint')
+            control.close()
+            qualify_command = [sys.executable, '-B', '-m', 'cli', '--state', str(tmp_path / 'state'),
+                'qualify', '--model-selection', selected['operation_id'], '--drive-selection',
+                drive['operation_id'], '--key', 'go-fixture']
+            qualifier = subprocess.Popen(qualify_command, cwd=Path(__file__).resolve().parents[1],
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    held = json.loads(record_path.read_bytes())['record']
+                    holds = [event['payload'] for event in held['events'] if 'hold' in event['payload']]
+                    if holds[-1] == {'hold': 'ACKNOWLEDGED', 'boundary': 'profile-checkpoint'}:
+                        break
+                    assert qualifier.poll() is None, qualifier.communicate()
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('source profile did not durably acknowledge its first boundary')
+                object_dir = mount / 'drewwiberg-lacie/Cassette/campaign/objects'
+                checkpoint_path = next(path for path in object_dir.iterdir()
+                    if json.loads(path.read_bytes())['value'].get('status') == 'CHECKPOINTED')
+                checkpoint = json.loads(checkpoint_path.read_bytes())
+                assert checkpoint['value']['checkpoint']['totals']['write_bytes'] >= checkpoint['value']['artifact']['size'] > 0
+                for trace in checkpoint['value']['traces']:
+                    raw = (mount / 'drewwiberg-lacie/Cassette/captures' / trace['attempt'] / trace['name']).read_bytes()
+                    assert len(raw) == trace['bytes'] and digest_bytes(raw) == trace['digest']
+                profile_files = list((mount / 'drewwiberg-lacie/Cassette/transfers' /
+                    checkpoint['value']['extent_operation']).glob('*.extent'))
+                held_files = {path: (path.stat().st_ino, path.read_bytes()) for path in profile_files}
+                assert held_files
+                qualifier.kill()
+                qualifier.communicate(timeout=5)
+                assert qualifier.returncode < 0
+                qualifier = subprocess.Popen(qualify_command, cwd=Path(__file__).resolve().parents[1],
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    resumed_record = json.loads(record_path.read_bytes())['record']
+                    resumes = [event['payload']['source_profile_resume'] for event in resumed_record['events']
+                               if 'source_profile_resume' in event['payload']]
+                    if resumes:
+                        assert resumes[-1]['capture_key'] == checkpoint['key']
+                        assert resumes[-1]['checkpoint_digest'] == 'blake3:' + checkpoint_path.name
+                        break
+                    assert qualifier.poll() is None, qualifier.communicate()
+                    time.sleep(.02)
+                else:
+                    raise AssertionError('source profile did not restore its durable observation boundary')
+                assert all((path.stat().st_ino, path.read_bytes()) == saved for path, saved in held_files.items())
+                # The CLI owns the single broker lock. Stop this still-held recovery process
+                # before the controller records release, then enter the same job again.
+                qualifier.kill()
+                qualifier.communicate(timeout=5)
+                control = CanonicalBroker(tmp_path / 'state/operations')
+                control.release_hold(ready['operation_id'], 'profile-checkpoint')
+                control.close()
+                qualifier = subprocess.Popen(qualify_command, cwd=Path(__file__).resolve().parents[1],
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                output, error = qualifier.communicate(timeout=30)
+                assert qualifier.returncode == 2 and 'Drive check passed. Download remains paused.' in error, error + output
+                qualified = json.loads(output)
+            finally:
+                if qualifier.poll() is None:
+                    qualifier.kill()
+                    qualifier.communicate(timeout=5)
             assert qualified['state'] == 'PAUSED'
             assert qualified['operation_id'] == ready['operation_id']
             assert sum(method == 'GET' and path.endswith('/model.safetensors')
@@ -474,32 +542,169 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path):
             assert len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]]) == payload_requests
             record = json.loads(record_path.read_bytes())['record']
             assert any(event['payload'].get('source_qualification', {}).get('status') == 'PASS' for event in record['events'])
-            # Q42/Q53: immutable measurement controls grow once per atom, not once per history prefix.
-            profile_records = [json.loads(path.read_bytes()) for path in
-                               (mount / 'drewwiberg-lacie/Cassette/campaign/objects').iterdir()]
-            assert all(len(item['value'].get('observations', [])) <= 1 for item in profile_records)
+            # Q42/Q44/Q51/Q53/Q60: qualification executes the retained source path,
+            # records bounded traces, then seals and reclaims only its synthetic extents.
+            object_dir = mount / 'drewwiberg-lacie/Cassette/campaign/objects'
+            profile_records = []
+            for path in object_dir.iterdir():
+                item = json.loads(path.read_bytes())
+                item['_digest'] = 'blake3:' + path.name
+                profile_records.append(item)
+            assert all(len(item['value'].get('observations', [])) <= 1
+                       for item in profile_records if isinstance(item.get('value'), dict))
             profiles = [item for item in profile_records if item['key'].startswith('download-profile-')]
             plans = [item for item in profiles if 'pattern_count' in item['value']]
-            atoms = [item for item in profiles if 'measurement' in item['value']]
+            fresh_atoms = [item for item in profiles
+                           if 'pattern' in item['value'] and 'measurement' in item['value']]
+            resume_atoms = [item for item in profiles
+                            if 'artifact' in item['value'] and 'measurement' in item['value']
+                            and 'profile_digest' in item['value'] and 'pattern' not in item['value']]
             assert len(plans) == 3
-            assert all(plan['value']['binding']['profiler_version'] == '2-exact-offset-sync-before-read'
+            assert all(plan['value']['binding']['profiler_version'] == '4-recoverable-source-executor'
                        for plan in plans)
-            header_plans = [plan['value']['binding']['plan'] for plan in plans
-                            if plan['value']['binding']['plan'].get('header_only')]
-            assert sorted(plan['header_json_bytes']['model.safetensors'] for plan in header_plans) == [
-                len(header_bytes), len(header_bytes)+1]
-            assert sorted((atom['value']['pattern']['offset_bytes'], atom['value']['pattern']['write_bytes'])
-                          for atom in atoms if 'offset_bytes' in atom['value']['pattern']) == [
-                              (0, 8), (0, 8), (8, len(header_bytes)), (8, len(header_bytes)+1)]
-            assert len(atoms) == sum(plan['value']['pattern_count'] for plan in plans)
-            assert all(item['previous'] is None for item in profiles)
-            assert all('binding' not in item['value'] and 'patterns' not in item['value'] for item in atoms)
+            assert len(fresh_atoms) == len(resume_atoms) == sum(plan['value']['pattern_count'] for plan in plans)
+            assert all(item['previous'] is None for item in (*fresh_atoms, *resume_atoms))
+            assert all(item['value']['measurement']['host_write_bytes'] == 0 for item in resume_atoms)
+            assert all('binding' not in item['value'] and 'patterns' not in item['value']
+                       for item in (*fresh_atoms, *resume_atoms))
+
+            plan_by_digest = {item['_digest']: item for item in plans}
+            capture_root = mount / 'drewwiberg-lacie/Cassette/captures'
+
+            def trace_events(measurement):
+                events = []
+                assert measurement['traces']
+                for capture in measurement['traces']:
+                    raw_path = capture_root / capture['attempt'] / capture['name']
+                    raw = raw_path.read_bytes()
+                    assert len(raw) == capture['bytes']
+                    assert digest_bytes(raw) == capture['digest']
+                    events.extend(json.loads(line) for line in raw.splitlines())
+                return events
+
+            def chunks(size):
+                return [min(4 * 1024 * 1024, size - offset)
+                        for offset in range(0, size, 4 * 1024 * 1024)]
+
+            raw_coverage_checked = False
+            for atom in fresh_atoms:
+                measurement = atom['value']['measurement']
+                events = trace_events(measurement)
+                plan = plan_by_digest[atom['value']['profile_digest']]['value']['binding']['plan']
+                pattern = atom['value']['pattern']
+                statistics = measurement['trace_statistics']
+                assert statistics['data_write_bytes'] == pattern['write_bytes']
+                assert statistics['io_calls'] == len([event for event in events if 'success' in event])
+                assert all(window['ended_ns'] > window['started_ns'] for window in statistics['windows'])
+                assert sum(window['active_seconds'] for window in statistics['windows']) == statistics['active_seconds']
+                for phase in statistics['phases'].values():
+                    for rates in (phase['durable_chunk_bytes_per_second'], phase['verified_range_bytes_per_second']):
+                        if rates['samples'] < 20:
+                            assert rates['empirical_percentiles'] == {}
+                if not plan.get('header_only') and not raw_coverage_checked and pattern['write_bytes'] > 4 * 1024 * 1024:
+                    # Q42/Q44/Q51: a valid digest cannot conceal an omitted actual write row.
+                    owner = CapacityCoordinator(mount / 'drewwiberg-lacie/Cassette')
+                    proof_binding = plan_by_digest[atom['value']['profile_digest']]['value']['binding']
+                    rows = list(events)
+                    omitted = next(index for index, event in enumerate(rows)
+                                   if event.get('role') == 'data' and event.get('kind') == 'write')
+                    del rows[omitted]
+                    payload = b''.join(canonical_bytes(event) + b'\n' for event in rows)
+                    assert len(payload) <= 2097152
+                    write_campaign_artifact(owner, 'raw-coverage-control', 'missing-write.jsonl', payload)
+                    reference = {'attempt': 'raw-coverage-control', 'name': 'missing-write.jsonl',
+                                 'bytes': len(payload), 'digest': digest_bytes(payload)}
+                    try:
+                        source_profile_trace(owner.cartridge, [reference], expected_data_writes=pattern['write_bytes'],
+                            expected_data_reads=pattern['read_bytes'], revalidation=False, has_state=True,
+                            record_base=plan['checkpoint_record_base'], expected_path=proof_binding['path'])
+                    except CassetteError as error:
+                        assert error.code == 'ROOT_INVALID'
+                        assert ('unobserved data writes' in str(error) or 'coverage is discontinuous' in str(error))
+                    else:
+                        raise AssertionError('raw source verifier accepted an omitted data write')
+                    raw_coverage_checked = True
+                if plan.get('header_only'):
+                    header_size = pattern['write_bytes'] - 8
+                    data_writes = [event for event in events
+                                   if event.get('role') == 'data' and event.get('kind') == 'write']
+                    data_reads = [event for event in events
+                                  if event.get('role') == 'data' and event.get('kind') == 'read']
+                    assert [event['requested_bytes'] for event in data_writes] == [8, header_size]
+                    assert [event['returned_bytes'] for event in data_writes] == [8, header_size]
+                    assert [event['requested_bytes'] for event in data_reads] == [8, header_size]
+                    assert [event['returned_bytes'] for event in data_reads] == [8, header_size]
+                    parser_reads = [event for event in events if event.get('kind') == 'PARSER_READ']
+                    assert [event['requested_bytes'] for event in parser_reads] == [8, header_size]
+                    assert [event['returned_bytes'] for event in parser_reads] == [8, header_size]
+                    assert measurement['header']['payload_verification'] == 'NOT_RUN'
+                else:
+                    size = pattern['write_bytes']
+                    expected = chunks(size)
+                    data_writes = [event for event in events
+                                   if event.get('role') == 'data' and event.get('kind') == 'write']
+                    data_reads = [event for event in events
+                                  if event.get('role') == 'data' and event.get('kind') == 'read']
+                    assert [event['requested_bytes'] for event in data_writes] == expected
+                    assert [event['returned_bytes'] for event in data_writes] == expected
+                    expected_reads = ([expected[0]] if len(measurement['measurement_windows']) > 1 else []) + expected
+                    assert [event['requested_bytes'] for event in data_reads] == expected_reads
+                    assert [event['returned_bytes'] for event in data_reads] == expected_reads
+                    state_writes = [event for event in events
+                                    if event.get('role') == 'state' and event.get('kind') == 'write']
+                    record_writes = [event for event in state_writes if event['requested_bytes'] == 33]
+                    assert [event['requested_bytes'] for event in record_writes] == [33] * len(expected)
+                    assert [event['offset'] for event in record_writes] == [
+                        131072 + index * 33 for index in range(len(expected))]
+                    envelope_writes = [event for event in state_writes if event['requested_bytes'] != 33]
+                    assert [event['offset'] % 131072 for event in envelope_writes] == [
+                        0 if index % 2 == 0 else 65536 for index in range(len(expected) + 1)]
+                assert all(event['success'] is True for event in events if 'success' in event)
+
+            for atom in resume_atoms:
+                events = trace_events(atom['value']['measurement'])
+                assert not any(event.get('kind') == 'write' for event in events)
+                if atom['value']['measurement']['header'] is not None:
+                    parser_reads = [event for event in events if event.get('kind') == 'PARSER_READ']
+                    header_size = plan_by_digest[atom['value']['profile_digest']]['value']['binding']['plan'][
+                        'header_json_bytes'][atom['value']['artifact']]
+                    assert [event['requested_bytes'] for event in parser_reads] == [8, header_size]
+            assert raw_coverage_checked
+
+            lifecycle_states = {'PREPARED', 'RETAINED', 'SEALED', 'RECLAIMING', 'RECLAIMED'}
+            lifecycle_records = [item for item in profiles
+                                 if item['value'].get('status') in lifecycle_states]
+            by_digest = {item['_digest']: item for item in lifecycle_records}
+            grouped = {}
+            for item in lifecycle_records:
+                grouped.setdefault(item['key'], []).append(item)
+            for records in grouped.values():
+                final = [item for item in records if item['value']['status'] == 'RECLAIMED']
+                assert len(final) == 1
+                current = final[0]
+                statuses = []
+                while current is not None:
+                    statuses.append(current['value']['status'])
+                    predecessor = current['previous']
+                    current = None if predecessor is None else by_digest[predecessor]
+                assert statuses == ['RECLAIMED', 'RECLAIMING', 'SEALED', 'RETAINED', 'PREPARED']
+            assert lifecycle_records and all(item['value']['status'] == 'RECLAIMED'
+                                             for item in lifecycle_records
+                                             if item['previous'] is not None and
+                                             item['value']['status'] == 'RECLAIMED')
             assert not list((mount / 'drewwiberg-lacie/Cassette').rglob('profile.bin'))
             seals = [item for item in profiles if 'atoms_digest' in item['value']]
-            assert len(seals) == 3 and sum(seal['value']['atom_count'] for seal in seals) == len(atoms)
+            assert len(seals) == 3 and sum(seal['value']['atom_count'] for seal in seals) == len(fresh_atoms) + len(resume_atoms)
+            for event in record['events']:
+                proof = event['payload'].get('source_qualification', {})
+                if proof.get('status') == 'PASS':
+                    # Q42/Q53: the bounded operation log references the store's complete profile.
+                    assert set(proof) == {'status', 'profile_digest', 'profile_key', 'path'}
+                    assert any(seal['key'] == proof['profile_key'] and seal['_digest'] == proof['profile_digest']
+                               for seal in seals)
             qualification = next(event['payload']['source_qualification'] for event in record['events']
                                  if event['payload'].get('source_qualification', {}).get('status') == 'PASS')
-            assert qualification['profile_digest'] != atoms[0]['value']['profile_digest']
+            assert qualification['profile_digest'] != fresh_atoms[0]['value']['profile_digest']
             assert any(event['payload'].get('received_bytes') == len(weights) for event in record['events'])
             fresh_drive = launch('select-drive', '--volume', volume['volume_uuid'],
                                  '--folder', 'drewwiberg-lacie/Cassette', '--cartridge-uuid',

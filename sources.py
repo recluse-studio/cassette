@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, replace
 import errno
 import fcntl
 from http.client import IncompleteRead
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from ipaddress import ip_address
 import json
 import os
+import random
 import re
 import stat
 import time
@@ -30,6 +33,7 @@ from store import (
     CapacityTransition,
     artifact_hasher,
     artifact_hash_state,
+    await_extent_io,
     canonical_bytes,
     complete_capacity_claim,
     digest_bytes,
@@ -40,6 +44,7 @@ from store import (
     grant_transfer_extent,
     git_blob_sha256,
     inspect_safetensors,
+    observe_extent_io,
     pause_capacity_claim,
     resumable_artifact_hasher,
     resume_artifact_hasher,
@@ -251,6 +256,7 @@ class PartialState:
     chunk_digests: tuple[str, ...]
     contiguous_source_hash_offset: int
     serialized_hash_state: str
+    checkpoint_generation: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1180,6 +1186,262 @@ class SourceAdapter:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source endpoint must be reachable", type(error).__name__, "retryable")
 
 
+@asynccontextmanager
+async def source_profile_boundary(
+    revision: ResolvedSource,
+    artifacts: tuple[Artifact, ...],
+    *,
+    header_lengths: Mapping[str, int] | None = None,
+):
+    """Serve deterministic bounded source ranges through the real adapter boundary."""
+    if not isinstance(revision, ResolvedSource):
+        _fail("INVALID_REQUEST", "source-profile", "Q42: profile boundary requires a resolved source", "revision is not a ResolvedSource")
+    if revision.source_kind not in _WIRES:
+        _fail("MODEL_UNSUPPORTED", revision.locator, "Q42: profile boundary requires a declared source adapter wire", "source kind has no adapter wire")
+    try:
+        selected = tuple(artifacts)
+    except TypeError:
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile boundary requires ordered artifacts", "artifacts is not iterable")
+    if not selected or any(not isinstance(artifact, Artifact) for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile boundary requires resolved artifacts", "artifact list is empty or contains another type")
+    if len({artifact.path for artifact in selected}) != len(selected):
+        _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q42: profile artifacts require unique paths", "artifact paths are duplicated")
+    resolved_objects = (*revision.artifacts, *revision.metadata_assets)
+    if any(artifact not in resolved_objects for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifacts must belong to the resolved source", "selected artifact is not in the source lock")
+    if any(type(artifact.size) is not int or artifact.size < 0 for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifact sizes must be nonnegative integers", "artifact size is invalid")
+    if any(
+        not isinstance(artifact.digest, str)
+        or (match := _DIGEST.fullmatch(artifact.digest)) is None
+        or len(match.group("hex")) != _DIGEST_LENGTH.get(match.group("algorithm"))
+        for artifact in selected
+    ):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifact digests must have fixed widths", "artifact digest is not canonical")
+    if any(not isinstance(artifact.validator, str) or not artifact.validator or any(char in artifact.validator for char in "\r\n")
+           for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile validators must be safe HTTP values", "artifact validator is invalid")
+
+    lengths = None
+    if header_lengths is not None:
+        if not isinstance(header_lengths, Mapping) or set(header_lengths) != {artifact.path for artifact in selected}:
+            _fail("INVALID_REQUEST", revision.locator, "Q42: header profile lengths must name every selected artifact", "header lengths do not match selected paths")
+        lengths = {}
+        for artifact in selected:
+            value = header_lengths[artifact.path]
+            if type(value) is not int:
+                _fail("INVALID_REQUEST", artifact.path, "Q42: header profile lengths must be integers", "header length is not an integer")
+            header_ranges(artifact, value)
+            lengths[artifact.path] = value
+
+    revision_match = (
+        _DIGEST.fullmatch(revision.immutable_revision)
+        if isinstance(revision.immutable_revision, str) else None
+    )
+    if revision_match is None or len(revision_match.group("hex")) != _DIGEST_LENGTH.get(revision_match.group("algorithm")):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile revision must have a fixed digest width", "source revision is not a canonical digest")
+    revision_digest = digest_bytes(canonical_bytes(revision.record())).split(":", 1)[1]
+    synthetic_revision = f"{revision_match.group('algorithm')}:{revision_digest[:len(revision_match.group('hex'))]}"
+    chunk_bytes = _TRANSFER_CHUNK_BYTES
+    seed_bases = {
+        artifact.path: int(artifact.digest.partition(":")[2][:16], 16)
+        for artifact in selected
+    }
+
+    def acquisition_slice(artifact: Artifact, offset: int, length: int) -> bytes:
+        if not 0 <= offset <= artifact.size or not 0 <= length <= artifact.size - offset:
+            raise ValueError("synthetic range is outside its artifact")
+        if length == 0:
+            return b""
+        first_chunk = offset // chunk_bytes
+        if offset % chunk_bytes == 0 and length == min(chunk_bytes, artifact.size - offset):
+            seed = seed_bases[artifact.path] + first_chunk
+            return random.Random(seed).randbytes(length)
+        output = bytearray()
+        position = offset
+        end = offset + length
+        while position < end:
+            chunk_index = position // chunk_bytes
+            chunk_start = chunk_index * chunk_bytes
+            chunk_length = min(chunk_bytes, artifact.size - chunk_start)
+            seed = seed_bases[artifact.path] + chunk_index
+            chunk = random.Random(seed).randbytes(chunk_length)
+            start = position - chunk_start
+            take = min(end - position, chunk_length - start)
+            output.extend(chunk[start:start + take])
+            position += take
+        return bytes(output)
+
+    def header_slice(artifact: Artifact, offset: int, length: int, json_bytes: int) -> bytes:
+        if offset < 0 or length <= 0 or offset + length > json_bytes + 8:
+            raise ValueError("synthetic header range is outside its qualified prefix")
+        tensor_bytes = artifact.size - json_bytes - 8
+        encoded = json.dumps(
+            {"weight": {"dtype": "U8", "shape": [tensor_bytes], "data_offsets": [0, tensor_bytes]}},
+            separators=(",", ":"),
+        ).encode()
+        if len(encoded) > json_bytes:
+            raise ValueError("synthetic SafeTensors header declaration is too short")
+        prefix = json_bytes.to_bytes(8, "little")
+        output = bytearray(b" " * length)
+        for base, source in ((0, prefix), (8, encoded)):
+            left = max(offset, base)
+            right = min(offset + length, base + len(source))
+            if left < right:
+                output[left - offset:right - offset] = source[left - base:right - base]
+        return bytes(output)
+
+    if lengths is not None:
+        for artifact in selected:
+            header_slice(artifact, 0, min(8, lengths[artifact.path] + 8), lengths[artifact.path])
+
+    async def synthetic_digest(artifact: Artifact) -> str:
+        hasher = artifact_hasher(
+            artifact.digest,
+            artifact.path,
+            **({"object_size": artifact.size} if artifact.digest.startswith("git-sha1:") else {}),
+        )
+        for offset in range(0, artifact.size, chunk_bytes):
+            hasher.update(acquisition_slice(artifact, offset, min(chunk_bytes, artifact.size - offset)))
+            await asyncio.sleep(0)
+        digest = artifact.digest.partition(":")[0] + ":" + hasher.hexdigest()
+        if len(digest) != len(artifact.digest):
+            _fail("SOURCE_UNAVAILABLE", artifact.path, "Q42: synthetic digest must preserve the source algorithm width", "generated digest width differs from the selected artifact")
+        return digest
+
+    synthetic_digests = {}
+    if lengths is None:
+        for artifact in selected:
+            synthetic_digests[artifact.path] = await synthetic_digest(artifact)
+
+    base_items = []
+    for index, artifact in enumerate(selected):
+        base_items.append(replace(
+            artifact,
+            digest=artifact.digest if lengths is not None else synthetic_digests[artifact.path],
+            range_uri=f"/profile/{index}",
+        ))
+    route_paths = {f"/profile/{index}": index for index in range(len(base_items))}
+    class ProfileServer(HTTPServer):
+        allow_reuse_address = True
+
+        def get_request(self):
+            request, client_address = super().get_request()
+            request.settimeout(5.0)
+            return request, client_address
+
+        def handle_error(self, request, client_address):
+            return
+
+    class ProfileHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        server_version = "CassetteProfile"
+        sys_version = ""
+
+        def log_message(self, format, *args):
+            return
+
+        def log_request(self, code="-", size="-"):
+            return
+
+        def log_error(self, format, *args):
+            return
+
+        def _respond(self, status: int, payload: bytes = b"", headers: Mapping[str, str] | None = None):
+            if len(payload) > chunk_bytes:
+                raise ValueError("synthetic response exceeds its bounded range")
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Connection", "close")
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            if payload:
+                self.wfile.write(payload)
+            self.close_connection = True
+
+        def do_GET(self):
+            if self.request_version != "HTTP/1.1":
+                self._respond(400)
+                return
+            try:
+                parsed = urlparse(self.path)
+            except ValueError:
+                self._respond(400)
+                return
+            if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+                self._respond(400)
+                return
+            index = route_paths.get(parsed.path)
+            ranges = self.headers.get_all("Range") or []
+            validators = self.headers.get_all("If-Match") or []
+            if index is None or len(ranges) != 1 or len(validators) != 1:
+                self._respond(400)
+                return
+            range_match = re.fullmatch(r"bytes=(\d+)-(\d+)", ranges[0].strip())
+            if range_match is None:
+                self._respond(416)
+                return
+            try:
+                offset, end = (int(value) for value in range_match.groups())
+            except ValueError:
+                self._respond(416)
+                return
+            artifact = base_items[index]
+            length = end - offset + 1
+            if validators[0].strip() != artifact.validator:
+                self._respond(412)
+                return
+            if offset < 0 or end < offset or end >= artifact.size or length > chunk_bytes:
+                self._respond(416)
+                return
+            if lengths is None:
+                payload = acquisition_slice(artifact, offset, length)
+            else:
+                maximum = lengths[artifact.path] + 8
+                if end >= maximum:
+                    self._respond(416)
+                    return
+                payload = header_slice(artifact, offset, length, lengths[artifact.path])
+            self._respond(206, payload, {
+                "Content-Range": f"bytes {offset}-{end}/{artifact.size}",
+                "ETag": artifact.validator,
+            })
+
+    server = ProfileServer(("127.0.0.1", 0), ProfileHandler)
+    endpoint = f"http://127.0.0.1:{server.server_port}"
+    synthetic_items = tuple(replace(artifact, range_uri=endpoint + artifact.range_uri) for artifact in base_items)
+    synthetic = replace(
+        revision,
+        immutable_revision=synthetic_revision,
+        identity=None,
+        artifacts=synthetic_items,
+        metadata_assets=(),
+        credential_ref=None,
+        license_acceptance_ref=None,
+        artifact_selector=None,
+    )
+    adapter = SourceAdapter(revision.source_kind, endpoint)
+    serve_future = asyncio.get_running_loop().run_in_executor(None, server.serve_forever)
+
+    async def cleanup():
+        try:
+            await await_extent_io(server.shutdown)
+        finally:
+            server.server_close()
+            await serve_future
+
+    try:
+        yield adapter, synthetic
+    finally:
+        cleanup_task = asyncio.create_task(cleanup())
+        try:
+            await asyncio.shield(cleanup_task)
+        except asyncio.CancelledError:
+            await asyncio.shield(cleanup_task)
+            raise
+
+
 def _preflight_fail(object_id: str, detail: str) -> None:
     _fail(
         "INVALID_REQUEST",
@@ -1812,7 +2074,15 @@ def _pread_exact(extent: TransferExtent, offset: int, length: int, object_id: st
     payload = bytearray()
     while len(payload) < length:
         try:
-            part = os.pread(extent.fd, length - len(payload), extent.offset + offset + len(payload))
+            requested = length - len(payload)
+            absolute_offset = extent.offset + offset + len(payload)
+            part = observe_extent_io(
+                extent,
+                "read",
+                absolute_offset,
+                requested,
+                lambda: os.pread(extent.fd, requested, absolute_offset),
+            )
         except OSError as error:
             _transfer_fail("CARTRIDGE_DISCONNECTED", object_id, f"cartridge read failed: {error}", "retryable")
         if not part:
@@ -1835,7 +2105,15 @@ def _pwrite_all(
         written = 0
         while written < len(payload):
             try:
-                count = os.pwrite(extent.fd, payload[written:], extent.offset + offset + written)
+                requested = len(payload) - written
+                absolute_offset = extent.offset + offset + written
+                count = observe_extent_io(
+                    extent,
+                    "write",
+                    absolute_offset,
+                    requested,
+                    lambda: os.pwrite(extent.fd, payload[written:], absolute_offset),
+                )
             except OSError as error:
                 if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
                     raise OSError(errno.ENOSPC, error.strerror) from error
@@ -1860,13 +2138,19 @@ def _pwrite_verified(
         _transfer_fail("DURABILITY_UNSUPPORTED", object_id, f"{description} changed during readback")
 
 
-def _sync_fd(fd: int, object_id: str, claim: CapacityClaim) -> None:
+def _sync_fd(extent: TransferExtent, object_id: str, claim: CapacityClaim) -> None:
     def synchronize() -> None:
         try:
-            os.fsync(fd)
+            observe_extent_io(extent, "fsync", extent.offset, 0, lambda: os.fsync(extent.fd))
             command = getattr(fcntl, "F_FULLFSYNC", None)
             if command is not None:
-                fcntl.fcntl(fd, command)
+                observe_extent_io(
+                    extent,
+                    "F_FULLFSYNC",
+                    extent.offset,
+                    0,
+                    lambda: fcntl.fcntl(extent.fd, command),
+                )
         except OSError as error:
             if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
                 raise OSError(errno.ENOSPC, error.strerror) from error
@@ -1995,7 +2279,7 @@ def _write_state(
         "transfer checkpoint header",
         claim,
     )
-    _sync_fd(extent.fd, object_id, claim)
+    _sync_fd(extent, object_id, claim)
 
 
 def _clear_state(
@@ -2025,7 +2309,7 @@ def _clear_state(
             "discarded transfer checkpoint",
             claim,
         )
-        _sync_fd(extent.fd, object_id, claim)
+        _sync_fd(extent, object_id, claim)
         complete_capacity_claim(claim)
     except Exception:
         _pause_transfer_claim(claim, "discarded checkpoint did not reach a durable boundary")
@@ -2091,6 +2375,7 @@ def _partial(record: dict, chunk_digests: tuple[str, ...]) -> PartialState:
         chunk_digests,
         offset,
         record["serialized_hash_state"],
+        record["generation"],
     )
 
 
@@ -2237,19 +2522,19 @@ async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, arti
 
     async def land(offset, length):
         if expected_header_digest is not None:
-            return await asyncio.to_thread(_pread_exact, extent, offset, length, artifact.path)
+            return await await_extent_io(_pread_exact, extent, offset, length, artifact.path)
         write_bytes = length
         claim = _transfer_claim(owner, _checkpoint_transition(extent.operation_id,
             f'header:{artifact.path}:{offset}', payload_bytes=write_bytes, checkpoint_bytes=0,
             write_bytes=(write_bytes, 0)), artifact.path)
         try:
             payload = await adapter.open_range(revision, artifact, offset, length, artifact.validator)
-            await asyncio.to_thread(_pwrite_verified, extent, offset, payload,
+            await await_extent_io(_pwrite_verified, extent, offset, payload,
                                     artifact.path, 'source header', claim)
-            await asyncio.to_thread(_sync_fd, extent.fd, artifact.path, claim)
+            await await_extent_io(_sync_fd, extent, artifact.path, claim)
             complete_capacity_claim(claim)
             return payload
-        except Exception:
+        except BaseException:
             _pause_transfer_claim(claim, 'header range did not reach its durable readback boundary')
             raise
 
@@ -2270,7 +2555,13 @@ async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, arti
     digest = 'blake3:' + hasher.hexdigest()
     if expected_header_digest is not None and digest != expected_header_digest:
         _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header differs from its immutable receipt')
-    inventory = await asyncio.to_thread(inspect_safetensors, extent.fd, digest)
+    inventory = await await_extent_io(
+        inspect_safetensors,
+        extent.fd,
+        digest,
+        io_observer=extent.observer,
+        observe_process_reads=extent.observe_process_reads,
+    )
     return {'header_digest': digest, 'header_bytes': total, 'inventory': inventory,
             'payload_verification': 'NOT_RUN'}
 
@@ -2404,6 +2695,10 @@ async def transfer_artifact(
             if digest_bytes(payload) != expected:
                 reset_checkpoint(header, header["generation"], f"local-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
+            if data_extent.observer is not None:
+                data_extent.observer({'kind': 'VERIFIED_PREFIX', 'offset': data_extent.offset + offset,
+                                      'length': length, 'time_ns': time.monotonic_ns()})
+            await asyncio.sleep(0)
         if header["completed_count"] == header["chunk_count"]:
             if header["contiguous_source_hash_digest"] != artifact.digest:
                 reset_checkpoint(header, header["generation"], "completed-digest")
@@ -2492,7 +2787,7 @@ async def transfer_artifact(
                 readback = _pread_exact(data_extent, offset, length, artifact.path)
                 if digest_bytes(readback) != network_digest:
                     _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local write changed transfer chunk {index}")
-                _sync_fd(data_extent.fd, artifact.path, claim)
+                _sync_fd(data_extent, artifact.path, claim)
                 _pwrite_verified(
                     state_extent,
                     _TRANSFER_RECORDS_OFFSET + index * _TRANSFER_RECORD_BYTES,

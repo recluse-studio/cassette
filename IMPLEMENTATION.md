@@ -10,6 +10,128 @@ dependency-ordered, machine-checkable, resumable.
 Active work: repair full-acquisition checkpoint and retained-header physical profiles before
 qualifying or acquiring the frozen large inputs. Preserve source-entry and payload gates.
 
+Latest checkpoint: complete candidate 20 passes 340 tests in 500.42 seconds, zero skips, fourteen
+component controls and the ordinary ledger. Final P0-P3/P5/P7 checks reach their deciding boundaries;
+P4's original ballast setup fails before product injection, and its explicitly corrected successor
+reaches ENOSPC, persists INCOMPLETE, then qualifies after space returns. Root independently counts
+exact offsets/bytes for twelve CAPTURED fresh records and replays twenty-four raw captures. All current owned
+extent manifests in the deciding runs finish RECLAIMED; P5 keeps the foreign file and its isolated inode-bypass control
+deletes it. These are builder fixture/platform checks. Native Opus adjudication remains pending.
+The frozen return packet is source-profile-review-01/source/.review-evidence/successor20, manifest
+SHA-256 1f66bdc62143c41a2221eb3b032ccc3943149530341d7f7383dc662159e4f98c.
+Original candidate 18's 209 files still match their old manifest. J=(0,0,16947,1,1,9,0,0,8425096),
+1,019 executable lines above the installed baseline, with no other J growth. The producer report is
+copied intact. Wheel 16's thirty-eight runtime files match this tested frozen successor; its SHA-256
+is 166224b5bee6894dc87e009f5e12327c0cda6e0c6546100c7fb2285047a86ade. It remains uninstalled.
+
+Next: fresh native allowance/no-overage check, then the prepared review-return-03-jobs.json through
+use-opus, run directory source-profile-review-01/runs/review-03 and the existing claude-coordination
+folder. Resume only stopped session dc28fddd-b428-47d2-808e-99645ce8257f. No new Copilot or fallback.
+The native-only review is waiting for included allowance; keep the heartbeat active. Commit/push the
+machine-verified source snapshot with this pending review stated plainly. After review, resolve any
+supported findings, join/install the accepted wheel and run the prepared exact physical source cards.
+Required physical source profiles, SOURCE-ENTRY-PASS, real headers and frozen payloads remain NOT_RUN.
+The future Ollama plan still lacks actual generated blob/manifest identity; its metadata-only geometry
+cannot be presented as a resolved source lock. Continue other eligible exact coordinates while that
+route is resolved, and preserve every source-entry requirement.
+
+Production integration is in progress in the working tree (production-source-profile-01).
+Scoped source I/O, the deterministic loopback boundary and named extent lifecycle pass their focused
+fixtures. The CLI entry fixture passes on its internal 64 MiB image in 38.87 seconds, including exact
+raw traces, retained revalidation and scoped reclamation. Earlier setup failure and the externally
+backed pre-profile Go timeout remain separate retained outcomes. Neither is physical qualification.
+The new large-source branch now measures retained source windows with public process and shared-drive
+read counters, complete allocated files and the source executor's ordered readback. It distinguishes
+mixed-cache windows from within-memory warm paths and does not claim per-path or media attribution.
+Recorded-hardware fixture controls reject missing physical read counts, missing bytes, omitted
+supported descriptor requests, unallocated files and incomplete revalidation. F_NOCACHE remains a
+request, not proof. Full frozen geometry, actual cache-crossing execution and independent review
+remain NOT_RUN. Native thermal observations retain their sampling gaps. Source recovery yields at
+chunk boundaries; cancellation joins owned native I/O before closing descriptors. The cancellation
+and ordered durability/profile hold checks pass in the existing lifecycle fixture.
+
+Drew's 22:19 provider direction supersedes new Copilot assignments and fallback: use the current
+Use Opus skill through Claude Code, retain actual served-model receipts and fresh included-allowance /
+no-overage evidence. Existing historical Copilot reviews remain unchanged. The existing heartbeat
+prompt now preserves that override; cadence, ACTIVE state and target are unchanged after readback.
+The first-boundary restart repair now passes the real CLI fixture in 47.45 seconds (restart-attempt-08).
+Before acknowledging a requested hold, the profiler seals its bounded traces, observation totals and
+active measurement window. A killed CLI restores those observations against the same named source
+extents; the source executor still owns binary recovery. The fixture checks unchanged files while the
+recovered job remains held, then completes the same profile. Interrupted time is excluded from active
+window timing, and per-process counters are summed within their original process windows. The first
+two fixture revisions exposed incorrect test assumptions: the first artifact is small metadata, and
+the controller cannot acquire a second live broker lock. Both failed receipts remain retained.
+Complete candidate18 passes 340 tests in 398.23 seconds, zero skips, fourteen component controls and
+ordinary ledger. J=(0,0,16632,1,1,9,0,0,8425096): 704 added executable lines and no other growth from
+the installed baseline. The producer's generated report has been copied intact. Its frozen source
+and the separate review target differ only in that generated report. The served claude-opus-5-5
+review is running read-only through Claude Code; no verdict is recorded. Portable evidence:
+docs/l05/2026-10-15-production-source-profile.json. Installed wheel 14 and earlier completed receipts
+remain unchanged. Complete the independent challenges and review, then execute and verify
+required physical source profiles on the authorized external cartridge. No required model payload
+or header was read in this implementation work.
+
+Stopped review: external source-profile-review-01/runs/review-01/source-profile-review, returned native
+session dc28fddd-b428-47d2-808e-99645ce8257f; inspect its summary and owned process before any follow-up.
+Wheel15 is built and its thirty-eight runtime hashes join candidate18 and the frozen review target;
+it remains uninstalled. Private production-source-profile-01/prepared-physical-cards-01.json declares
+the next F4 and Qwen30 requests (8,060,926,626 and 61,084,187,391 source bytes). Those cards are prepared
+only: no drive selection, operation issue, synthetic transfer or provider payload followed from them.
+
+The first Opus review stopped normally on served claude-opus-5-5 and identified five provisional
+recovery/reporting defects. Its unchanged P0-P7 probes now have raw results. P0 passes the seven-chunk
+held SIGKILL control and rejects a changed trace. P1 confirms SIGINT becomes a terminal retry failure;
+P2 reaches 3/7 chunks before its second kill and exposes two missing measured writes; P3 confirms an
+unheld crash cannot retry. P4 pauses for capacity, then hits a stale trace filename after space returns.
+Failed/paused cases retain their synthetic extents. P5 preserves a replacement file; the isolated
+inode-guard bypass deletes that fixture file. P7 correctly refuses a cached working set under a fixture
+RAM override. Initial parallel image scenarios failed before injection because their APFS remount
+identities changed; the unchanged serial successors reached the deciding boundaries. Those setup
+failures remain retained. P6's new 256 MiB native control distinguishes cached reads from physical
+reads after an uncached write: process and selected-driver counters corroborate the latter. This is
+bounded platform calibration, not full-source qualification. All probe workers have stopped.
+
+Review-02 completed on the same served Opus model and confirms FAIL for Q1-Q3 on candidate18. The
+large-artifact state-write false pass remains inferred; the smaller lost-window and retry failures
+are observed. The reviewer accepts the counter calibration and cached-window rejection. Its exact
+Q48/Q42 scope applies:
+Q48's post-recovery continuous minima do not impose a generic 120-minute Q42 gate. Interrupted
+windows cannot establish a required continuous interval. Keep the frozen review target unchanged;
+repair only supported source-profile failures in the working tree, rerun affected proof on a new
+candidate and return the fixed successor for review. Wheel15 remains uninstalled and unaccepted.
+
+Version 4 now implements the five supported source-profile repairs. Checkpoints bind the source's
+generation, offset and hash state; data-write coverage is separate from state writes; failed owned
+generations preserve abandoned evidence before reclamation; restored observations are detached; trace
+filenames are unique. Raw JSONL rows now determine coverage, per-phase call tails, durable chunk and
+verified-range rates, active windows, downtime and in-window sampling gaps. Small samples publish
+minimum bounds with their counts; pooled operation bounds are explicitly conservative. The changed
+trace verifier rejects a valid-digest capture with a missing data-write row.
+
+Candidate 19 is rejected: 339 tests passed and one old corruption-repair assertion failed in 470.71
+seconds. That assertion compared the new explicit checkpoint generation as though recovery could not
+advance it. The observed bytes and other seven PartialState fields matched; generations were 11 and 7.
+The corrected cited fixture now requires a strictly newer generation and identical remaining fields;
+it passes in 3.50 seconds. The exact 210-file failed source is retained and joined to its original hashes.
+
+A separate Q42/Q53 bound check used an actual CLI fixture receipt. Repeating its full 24,442-byte report
+164 additional times produces 4,217,384 canonical bytes, above the 4,194,304-byte broker bound. This is
+serialized control evidence, not 164 live resumes. The broker now records a compact immutable-store
+profile key/digest reference and leaves the complete report and raw traces under store authority.
+The new cited CLI control fails on the old full copy in 47.36 seconds and passes on the compact successor
+in 83.70 seconds. Complete candidate 20 and final unchanged reviewer probes are next. Do not install or
+claim independent/physical acceptance from these builder checks.
+
+Native Claude Usage now confirms 100 percent of the included session allowance consumed; the stopped
+Opus session remains dc28fddd-b428-47d2-808e-99645ce8257f. A fresh UI observation estimates the reset
+around 03:40 UTC on 16 October 2026; verify current allowance and no-overage state before returning to it.
+No launch, credit purchase, reset redemption, new Copilot assignment or fallback followed exhaustion.
+Prepare and verify the fixed candidate and return packet meanwhile. Review-02's FAIL remains the prior
+candidate's verdict; the successor review is pending. Installed wheel 14 and physical/source-entry
+acceptance remain unchanged. Original probe image-retention wording remains formally corrected by
+source-profile-review-01/source/.review-evidence/evidence-correction-images.json.
+
 Completed exact-header milestone: successor-02 passes the separate served claude-opus-5-5 review
 (session b4ddfab7-47c9-4bbe-a2e6-78aabc13ae86). Both bounded questions pass at fixture/platform level.
 The unchanged independent probe passes 104/104; the offset case passes six rows and its original

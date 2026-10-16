@@ -8,6 +8,7 @@ import hashlib
 import os
 from pathlib import Path
 import random
+from urllib.parse import urlparse
 
 from blake3 import blake3
 import pytest
@@ -15,7 +16,14 @@ import pytest
 from errors import CassetteError
 from fixture_server import source_fixture_server
 import sources as sources_module
-from sources import SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
+from sources import (
+    SourceAdapter,
+    TransferExtent,
+    source_profile_boundary,
+    transfer_artifact,
+    transfer_header,
+    transfer_state_bytes,
+)
 from store import CapacityCoordinator, artifact_hash_state, grant_transfer_extent, resumable_artifact_hasher, resume_artifact_hasher
 
 CHUNK = 4 * 1024 * 1024
@@ -63,7 +71,7 @@ def _run(adapter, revision, artifact, extents, capacity_coordinator, chunk_diges
     ))
 
 
-def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
+def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypatch):
     """Q51/Q53: each transfer transition uses the cartridge's concrete coordinator."""
 
     # Q51/Q55: grants retain cartridge ownership at every directory and file boundary.
@@ -118,7 +126,12 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
         f"{artifact_name}.state",
         transfer_state_bytes(len(payload)),
     )
+    data_observations = []
+    state_observations = []
+    data_extent = replace(data_extent, observer=data_observations.append)
+    state_extent = replace(state_extent, observer=state_observations.append)
     extents = {artifact_name: (data_extent, state_extent)}
+    profile_data_fd = profile_state_fd = header_fd = None
 
     descriptor = {
         "kind": "huggingface",
@@ -137,15 +150,164 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
             )
             revision = asyncio.run(adapter.resolve(descriptor))
             artifact = revision.artifacts[0]
+            profile_data_fd, profile_data_extent = _extent(
+                cartridge, capacity_coordinator, f"{artifact_name}.profile.data", len(payload)
+            )
+            profile_state_fd, profile_state_extent = _extent(
+                cartridge, capacity_coordinator, f"{artifact_name}.profile.state", transfer_state_bytes(len(payload))
+            )
+            header_fd, header_extent = _extent(
+                cartridge, capacity_coordinator, f"{artifact_name}.header", len(payload)
+            )
             completed = _run(adapter, revision, artifact, extents, capacity_coordinator)
             assert completed.completed_interval_set == ((0, len(payload)),)
             assert completed.chunk_digests == _chunk_digests(payload)
             assert os.pread(data_fd, len(payload), 0) == payload
 
+            data_writes = [event for event in data_observations if event["kind"] == "write"]
+            data_reads = [event for event in data_observations if event["kind"] == "read"]
+            assert [event["requested_bytes"] for event in data_writes] == [CHUNK, CHUNK, 17]
+            assert [event["returned_bytes"] for event in data_writes] == [CHUNK, CHUNK, 17]
+            assert [event["requested_bytes"] for event in data_reads] == [CHUNK, CHUNK, 17]
+            assert [event["returned_bytes"] for event in data_reads] == [CHUNK, CHUNK, 17]
+            assert all(event["success"] is True and isinstance(event["duration_ns"], int)
+                       for event in (*data_writes, *data_reads))
+
+            state_writes = [event for event in state_observations if event["kind"] == "write"]
+            record_writes = [event for event in state_writes if event["requested_bytes"] == RECORD_BYTES]
+            assert [event["offset"] for event in record_writes] == [
+                state_extent.offset + HEADER_BYTES + index * RECORD_BYTES
+                for index in range(3)
+            ]
+            envelope_writes = [event for event in state_writes if event["requested_bytes"] != RECORD_BYTES]
+            assert [event["offset"] for event in envelope_writes] == [
+                state_extent.offset,
+                state_extent.offset + HEADER_BYTES // 2,
+                state_extent.offset,
+                state_extent.offset + HEADER_BYTES // 2,
+            ]
+            flush_kinds = {event["kind"] for event in state_observations}
+            assert "fsync" in flush_kinds
+            if hasattr(sources_module.fcntl, "F_FULLFSYNC"):
+                assert "F_FULLFSYNC" in flush_kinds
+            assert all(event["success"] is True and isinstance(event["duration_ns"], int)
+                       for event in state_observations)
+
+            baseline_claim_ids = {id(claim) for claim in capacity_coordinator.claims()}
+            profile_data_observations = []
+            profile_state_observations = []
+            header_observations = []
+            profile_data_extent = replace(profile_data_extent, observer=profile_data_observations.append)
+            profile_state_extent = replace(profile_state_extent, observer=profile_state_observations.append)
+            header_extent = replace(header_extent, observer=header_observations.append)
+
+            async def exercise_profile_boundary():
+                async with source_profile_boundary(revision, (artifact,)) as (profile_adapter, profile_revision):
+                    profile_artifact = profile_revision.artifacts[0]
+                    first_port = urlparse(profile_artifact.range_uri).port
+                    prefix = await profile_adapter.open_range(
+                        profile_revision, profile_artifact, 0, 32, profile_artifact.validator
+                    )
+                    profile_state = await transfer_artifact(
+                        profile_adapter,
+                        profile_revision,
+                        profile_artifact,
+                        profile_data_extent,
+                        profile_state_extent,
+                        capacity_coordinator,
+                    )
+                    async with source_profile_boundary(revision, (artifact,)) as (
+                        reopened_adapter, reopened_revision
+                    ):
+                        reopened_artifact = reopened_revision.artifacts[0]
+                        second_port = urlparse(reopened_artifact.range_uri).port
+                        assert await reopened_adapter.open_range(
+                            reopened_revision, reopened_artifact, 0, 1, reopened_artifact.validator
+                        )
+                    return profile_revision, profile_artifact, profile_state, prefix, first_port, second_port
+
+            (profile_revision, profile_artifact, profile_state, profile_prefix,
+             first_port, second_port) = asyncio.run(exercise_profile_boundary())
+            assert first_port != second_port
+            assert profile_revision.identity is None
+            assert profile_revision.credential_ref is None
+            assert profile_revision.license_acceptance_ref is None
+            assert profile_revision.artifact_selector is None
+            assert profile_revision.immutable_revision.startswith(revision.immutable_revision.split(":", 1)[0] + ":")
+            assert len(profile_revision.immutable_revision) == len(revision.immutable_revision)
+            assert profile_artifact.path == artifact.path
+            assert profile_artifact.size == artifact.size
+            assert profile_artifact.validator == artifact.validator
+            assert profile_artifact.digest != artifact.digest
+            assert profile_artifact.digest.split(":", 1)[0] == artifact.digest.split(":", 1)[0]
+            assert len(profile_artifact.digest) == len(artifact.digest)
+            expected_prefix = random.Random(int(artifact.digest.partition(":")[2][:16], 16)).randbytes(32)
+            assert profile_prefix == expected_prefix
+            profile_payload = os.pread(profile_data_fd, len(payload), profile_data_extent.offset)
+            assert profile_payload[:32] == expected_prefix
+            assert profile_payload != payload
+            assert profile_state.source_revision == profile_revision.immutable_revision
+            assert profile_state.object_size == artifact.size
+            assert profile_state.validator == artifact.validator
+            assert profile_state.completed_interval_set == ((0, len(payload)),)
+            assert profile_state.chunk_digests == _chunk_digests(profile_payload)
+            assert any(event["kind"] == "write" for event in profile_data_observations)
+
+            async def exercise_header_boundary():
+                async with source_profile_boundary(
+                    revision, (artifact,), header_lengths={artifact.path: 128}
+                ) as (header_adapter, header_revision):
+                    return await transfer_header(
+                        header_adapter,
+                        header_revision,
+                        header_revision.artifacts[0],
+                        header_extent,
+                        capacity_coordinator,
+                        expected_header_json_bytes=128,
+                    )
+
+            header_result = asyncio.run(exercise_header_boundary())
+            assert header_result["header_bytes"] == 136
+            assert header_result["payload_verification"] == "NOT_RUN"
+            assert len(header_result["inventory"]["tensors"]) == 1
+            parser_reads = [event for event in header_observations if event["kind"] == "PARSER_READ"]
+            assert [event["requested_bytes"] for event in parser_reads] == [8, 128]
+            assert [event["offset"] for event in parser_reads] == [0, 8]
+            sync_events = [event for event in header_observations if event["kind"] == "fsync"]
+            assert len(sync_events) == 2
+            if hasattr(sources_module.fcntl, "F_FULLFSYNC"):
+                assert len([event for event in header_observations if event["kind"] == "F_FULLFSYNC"]) == 2
+
+            real_pread = sources_module.os.pread
+            short_observations = []
+            shortened = [False]
+
+            def short_return(fd, length, offset):
+                result = real_pread(fd, length, offset)
+                if fd == data_fd and length > 1 and not shortened[0]:
+                    shortened[0] = True
+                    return result[:1]
+                return result
+
+            resumed_extents = {
+                artifact_name: (
+                    replace(data_extent, observer=short_observations.append),
+                    state_extent,
+                )
+            }
+            with monkeypatch.context() as patcher:
+                patcher.setattr(sources_module.os, "pread", short_return)
+                resumed = _run(adapter, revision, artifact, resumed_extents, capacity_coordinator)
+            assert resumed == completed
+            assert any(event["requested_bytes"] > event["returned_bytes"]
+                       for event in short_observations if event["kind"] == "read")
+
             transfer_claims = tuple(
                 claim for claim in capacity_coordinator.claims()
-                if ("checkpoint-initial" in claim.transition.boundary_id
+                if (id(claim) in baseline_claim_ids
+                    and ("checkpoint-initial" in claim.transition.boundary_id
                     or ":chunk-" in claim.transition.boundary_id)
+                )
             )
             assert [(claim.transition.declared_writes, claim.writes_started) for claim in transfer_claims] == [
                 (2, 2),
@@ -181,8 +343,9 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path):
             assert (clear_claim.transition.declared_writes, clear_claim.writes_started) == (2, 2)
             assert clear_claim.state == "COMPLETED"
     finally:
-        os.close(data_fd)
-        os.close(state_fd)
+        for descriptor in (data_fd, state_fd, profile_data_fd, profile_state_fd, header_fd):
+            if descriptor is not None:
+                os.close(descriptor)
     assert capacity_coordinator.active_claims() == ()
 
 
@@ -363,7 +526,9 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             assert changed_completed_bytes.value.code == "IDENTITY_MISMATCH"
             assert "local transfer chunk 2" in changed_completed_bytes.value.detail
             assert len(server.requests) == requests_before_completed_check
-            assert _run(adapter, revision, first, extents, capacity_coordinator) == first_result
+            repaired = _run(adapter, revision, first, extents, capacity_coordinator)
+            assert repaired.checkpoint_generation > first_result.checkpoint_generation
+            assert replace(repaired, checkpoint_generation=first_result.checkpoint_generation) == first_result
             assert os.pread(first_data.fd, len(first_payload), first_data.offset) == first_payload
 
             first_record_offset = first_state.offset + HEADER_BYTES

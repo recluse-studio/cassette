@@ -11,11 +11,13 @@ while a separate fixed-record index owns physical placement.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import asyncio
 import copy
 import ctypes
 from dataclasses import dataclass, field, replace
 import errno
 import fcntl
+from functools import partial
 import hashlib
 import json
 import math
@@ -29,6 +31,7 @@ import struct
 import sys
 import tempfile
 import threading
+import time
 import uuid
 
 from blake3 import blake3
@@ -83,7 +86,7 @@ PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
 SAFETENSORS_HEADER_BYTES = 100_000_000
 TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
-STORAGE_PROFILER_VERSION = '2-exact-offset-sync-before-read'
+STORAGE_PROFILER_VERSION = '4-recoverable-source-executor'
 _EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
@@ -456,6 +459,64 @@ class TransferExtent:
     offset: int
     length: int
     operation_id: str
+    observer: Callable[[dict], None] | None = field(default=None, repr=False, compare=False)
+    observe_process_reads: bool = field(default=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        if self.observer is not None and not callable(self.observer):
+            _capacity_reject(self.operation_id, "extent observer must be callable", "INVALID_REQUEST")
+        if type(self.observe_process_reads) is not bool or (self.observe_process_reads and self.observer is None):
+            _capacity_reject(self.operation_id, "process read samples require an extent observer", "INVALID_REQUEST")
+
+
+def observe_extent_io(extent: TransferExtent, kind: str, offset: int, requested_bytes: int, action):
+    """Q42: observe this extent's actual I/O without replacing its result or exception."""
+    if extent.observer is None:
+        return action()
+    read_before = (_darwin_process_usage().values[16] if extent.observe_process_reads
+                   and kind in {'read', 'PARSER_READ'} else None)
+    started = time.monotonic_ns()
+    def emit(result, error=None):
+        row = {"kind": kind, "offset": offset, "requested_bytes": requested_bytes,
+               "returned_bytes": len(result) if isinstance(result, bytes) else result if type(result) is int else 0,
+               "started_ns": started, "duration_ns": time.monotonic_ns() - started, "success": error is None}
+        if error is not None:
+            row['error_type'] = type(error).__name__
+        if read_before is not None:
+            delta = _darwin_process_usage().values[16] - read_before
+            if delta < 0:
+                _drive_reject(extent.operation_id, 'process disk-read counter regressed', 'CAPABILITY_MISMATCH')
+            row.update(process_diskio_read_bytes=delta, counter_scope='PROCESS_NOT_PER_PATH')
+            row.update(process_read_counter_before=read_before, process_read_counter_after=read_before + delta,
+                       observer_pid=os.getpid())
+        extent.observer(row)
+    try:
+        result = action()
+    except BaseException as error:
+        try:
+            emit(None, error)
+        except BaseException as observer_error:
+            raise error from observer_error
+        raise
+    emit(result)
+    return result
+
+
+async def await_extent_io(action, *args, **kwargs):
+    """Q44/Q53: join owned blocking I/O before propagating coroutine cancellation."""
+    future = asyncio.get_running_loop().run_in_executor(None, partial(action, *args, **kwargs))
+    cancellation = None
+    while True:
+        try:
+            result = await asyncio.shield(future)
+            break
+        except asyncio.CancelledError as error:
+            if future.cancelled():
+                raise
+            cancellation = error
+    if cancellation is not None:
+        raise cancellation
+    return result
 
 
 @dataclass(frozen=True)
@@ -1161,6 +1222,26 @@ def revalidate_external_apfs_volume(selection: DriveSelection) -> DriveSelection
     return current
 
 
+def storage_counter_snapshot(nodes: list[dict]) -> dict:
+    """Q42/Q43: select the nearest block-driver authority; never add overlapping layers."""
+    if not isinstance(nodes, list) or any(not isinstance(node, dict) or type(node.get('depth')) is not int
+            or node['depth'] < 0 or not isinstance(node.get('registry_id'), str)
+            or not isinstance(node.get('registry_class'), str) for node in nodes):
+        _drive_reject('storage-counters', 'native counter candidates have an invalid identity or depth', 'CAPABILITY_MISMATCH')
+    nearest = min((node['depth'] for node in nodes), default=None)
+    selected = [node for node in nodes if node['depth'] == nearest]
+    chosen = selected[0] if len(selected) == 1 else None
+    result = {'authority': None, 'device_read_bytes': None, 'device_write_bytes': None,
+              'device_read_operations': None, 'counter_candidates': nodes}
+    if chosen is not None:
+        result['authority'] = {name: chosen[name] for name in ('depth', 'registry_id', 'registry_class')}
+        for target, field in (('device_read_bytes', 'read_bytes'), ('device_write_bytes', 'write_bytes'),
+                              ('device_read_operations', 'read_operations')):
+            value = chosen.get(field)
+            result[target] = value if type(value) is int and value >= 0 else None
+    return result
+
+
 def drive_path_observation(selection: DriveSelection) -> dict:
     """Q43/Q49: capture the mounted device's native parent chain and physical write counter."""
     selection = revalidate_external_apfs_volume(selection)
@@ -1172,6 +1253,8 @@ def drive_path_observation(selection: DriveSelection) -> dict:
         'IORegistryEntryCreateCFProperties': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.c_uint], ctypes.c_int),
         'IORegistryEntryGetParentEntry': ([ctypes.c_uint, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint)], ctypes.c_int),
         'IORegistryEntryGetRegistryEntryID': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_uint64)], ctypes.c_int),
+        'IOObjectGetClass': ([ctypes.c_uint, ctypes.c_void_p], ctypes.c_int),
+        'IOObjectConformsTo': ([ctypes.c_uint, ctypes.c_char_p], ctypes.c_uint),
         'IOObjectRelease': ([ctypes.c_uint], ctypes.c_int),
     }
     for name, (arguments, result) in signatures.items():
@@ -1212,10 +1295,17 @@ def drive_path_observation(selection: DriveSelection) -> dict:
                       'IOPlatformUUID')
             descriptors = {key: plistlib.dumps({'value': values[key]}, fmt=plistlib.FMT_BINARY).hex()
                            for key in fields if key in values}
-            chain.append({'registry_id': str(identifier.value), 'descriptors': descriptors})
+            class_name = ctypes.create_string_buffer(128)
+            if io.IOObjectGetClass(entry, class_name):
+                _drive_reject(selection.volume.volume_uuid, 'native registry class capture failed')
+            registry_class = class_name.value.decode('ascii')
+            chain.append({'registry_id': str(identifier.value), 'registry_class': registry_class,
+                          'descriptors': descriptors})
             statistics = values.get('Statistics', {})
-            if type(statistics.get('Bytes (Write)')) is int:
-                counters.append(statistics['Bytes (Write)'])
+            if io.IOObjectConformsTo(entry, b'IOBlockStorageDriver'):
+                counters.append({'depth': len(chain) - 1, 'registry_id': str(identifier.value),
+                    'registry_class': registry_class, 'read_bytes': statistics.get('Bytes (Read)'),
+                    'write_bytes': statistics.get('Bytes (Write)'), 'read_operations': statistics.get('Operations (Read)')})
             parent = ctypes.c_uint()
             status = io.IORegistryEntryGetParentEntry(entry, b'IOService', ctypes.byref(parent))
             io.IOObjectRelease(entry)
@@ -1223,11 +1313,56 @@ def drive_path_observation(selection: DriveSelection) -> dict:
     finally:
         if entry:
             io.IOObjectRelease(entry)
+    snapshot = storage_counter_snapshot(counters)
+    authority = snapshot.pop('authority')
     return {'path': {'volume_uuid': selection.volume.volume_uuid, 'mount_path': selection.volume.mount_path,
                      'mount_source': selection.volume.mount_source, 'device': selection.volume.device,
                      'filesystem': selection.volume.filesystem, 'chain': chain,
-                     'host': {'name': platform.node(), 'os': platform.platform()}},
-            'device_write_bytes': sum(counters) if counters else None}
+                     'host': {'name': platform.node(), 'os': platform.platform()},
+                     'counter_authority': authority}, **snapshot}
+
+
+class _DarwinUsage(ctypes.Structure):
+    """Public sys/resource.h rusage_info_v2 ABI, shared by all process I/O observations."""
+    _fields_ = [('uuid', ctypes.c_uint8 * 16), ('values', ctypes.c_uint64 * 18)]
+
+
+def _darwin_process_usage():
+    try:
+        proc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        proc.proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+        proc.proc_pid_rusage.restype = ctypes.c_int
+        usage = _DarwinUsage()
+        if proc.proc_pid_rusage(os.getpid(), 2, ctypes.byref(usage)):
+            raise OSError(ctypes.get_errno(), 'proc_pid_rusage failed')
+        return usage
+    except (OSError, AttributeError) as error:
+        _drive_reject('storage-process-observation', f'native process I/O telemetry is unavailable: {error}', 'CAPABILITY_MISMATCH')
+
+
+def storage_host_observation() -> dict:
+    """Q42/Q47: sample public macOS process counters, physical memory and thermal state."""
+    usage = _darwin_process_usage()
+    try:
+        foundation = ctypes.CDLL('/System/Library/Frameworks/Foundation.framework/Foundation')
+        objc = ctypes.CDLL('/usr/lib/libobjc.A.dylib')
+        objc.objc_getClass.argtypes, objc.objc_getClass.restype = [ctypes.c_char_p], ctypes.c_void_p
+        objc.sel_registerName.argtypes, objc.sel_registerName.restype = [ctypes.c_char_p], ctypes.c_void_p
+        address = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value
+        send_object = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(address)
+        send_integer = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_void_p)(address)
+        info = send_object(objc.objc_getClass(b'NSProcessInfo'), objc.sel_registerName(b'processInfo'))
+        if not info:
+            raise OSError('NSProcessInfo is unavailable')
+        memory = send_integer(info, objc.sel_registerName(b'physicalMemory'))
+        thermal = send_integer(info, objc.sel_registerName(b'thermalState'))
+        if not memory or thermal not in range(4):
+            raise OSError('native memory or thermal sample is invalid')
+        return {'time_ns': time.monotonic_ns(), 'pid': os.getpid(), 'host_memory_bytes': memory, 'thermal_state': thermal,
+                'rss_bytes': usage.values[6], 'physical_footprint_bytes': usage.values[7],
+                'process_diskio_read_bytes': usage.values[16], 'process_diskio_written_bytes': usage.values[17]}
+    except (OSError, AttributeError) as error:
+        _drive_reject('storage-host-observation', f'native storage telemetry is unavailable: {error}', 'CAPABILITY_MISMATCH')
 
 
 def _inventory_reject(object_id: object, detail: str) -> None:
@@ -1915,10 +2050,12 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     return value
 
 
-def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
+def _read_exact(handle, length: int, object_id: str, description: str, io_extent=None) -> bytes:
     payload = bytearray()
     while len(payload) < length:
-        chunk = handle.read(length - len(payload))
+        count = length - len(payload)
+        chunk = (handle.read(count) if io_extent is None else
+                 observe_extent_io(io_extent, "PARSER_READ", handle.tell(), count, lambda: handle.read(count)))
         if not chunk:
             _q57_reject(object_id, f"{description} ended after {len(payload)} of {length} bytes")
         payload.extend(chunk)
@@ -2065,15 +2202,15 @@ def _validate_artifact_hash_state(
 
 
 def _safetensors_header(
-    handle, object_id: str, artifact_hasher
+    handle, object_id: str, artifact_hasher, io_extent=None
 ) -> tuple[int, int, dict, tuple[tuple, ...]]:
-    prefix = _read_exact(handle, 8, object_id, "SafeTensors header length")
+    prefix = _read_exact(handle, 8, object_id, "SafeTensors header length", io_extent)
     artifact_hasher.update(prefix)
     header_length = int.from_bytes(prefix, "little")
     file_size = os.fstat(handle.fileno()).st_size
     if not 0 < header_length <= SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
         _q57_reject(object_id, "SafeTensors header length is outside its file or 100 MB limit")
-    encoded = _read_exact(handle, header_length, object_id, "SafeTensors header")
+    encoded = _read_exact(handle, header_length, object_id, "SafeTensors header", io_extent)
     artifact_hasher.update(encoded)
     if encoded[:1] != b"{":
         _q57_reject(object_id, "SafeTensors header must be complete UTF-8 JSON beginning with '{'")
@@ -2820,9 +2957,14 @@ def load_root(cartridge: str | Path, root_digest: str) -> dict:
     return root
 
 
-def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
+def inspect_safetensors(source: str | Path | int, expected_digest: str, *, io_observer=None,
+                        observe_process_reads=False) -> dict:
     """Parse one bounded SafeTensors header without loading or executing repository material."""
 
+    if io_observer is not None and not callable(io_observer):
+        _q57_reject("source:observer", "SafeTensors observer must be callable", "INVALID_REQUEST")
+    if type(observe_process_reads) is not bool or (observe_process_reads and io_observer is None):
+        _q57_reject("source:observer", "process read samples require a SafeTensors observer", "INVALID_REQUEST")
     descriptor = None
     original_offset = None
     if type(source) is int:
@@ -2852,7 +2994,9 @@ def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
     try:
         with handle:
             data_start, data_size, metadata, tensors = _safetensors_header(
-                handle, object_id, hasher
+                handle, object_id, hasher,
+                None if io_observer is None else TransferExtent(
+                    handle.fileno(), 0, os.fstat(handle.fileno()).st_size, object_id, io_observer, observe_process_reads)
             )
     except OSError as error:
         _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
@@ -6137,6 +6281,9 @@ def verify_campaign_artifact(
     name: str,
     expected_digest: str,
     expected_bytes: int,
+    *,
+    maximum_bytes: int = 4096,
+    include_rows: bool = False,
 ) -> dict:
     """Q44: read one bounded campaign probe through unlinked descriptors and verify its Cassette digest."""
 
@@ -6148,8 +6295,9 @@ def verify_campaign_artifact(
         ):
             _transaction_reject(str(value), "capture name is not a bounded literal filename", "INVALID_REQUEST")
     expected_digest = _transaction_digest(expected_digest, attempt)
-    if type(expected_bytes) is not int or not 0 <= expected_bytes <= 4096:
-        _transaction_reject(attempt, "integrity probe size must be an unsigned 4096-byte bound", "INVALID_REQUEST")
+    if (type(include_rows) is not bool or type(maximum_bytes) is not int or not 0 <= maximum_bytes <= 2097152
+            or type(expected_bytes) is not int or not 0 <= expected_bytes <= maximum_bytes):
+        _transaction_reject(attempt, "capture byte count exceeds its declared verification bound", "INVALID_REQUEST")
     descriptors = []
     try:
         descriptor = os.open(cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -6179,12 +6327,23 @@ def verify_campaign_artifact(
         observed_digest = digest_bytes(payload)
         if observed_digest != expected_digest:
             _transaction_reject(attempt, "campaign artifact digest differs from the integrity probe")
-        return {
+        proof = {
             "attempt": attempt,
             "name": name,
             "digest": observed_digest,
             "bytes": expected_bytes,
         }
+        if include_rows:
+            try:
+                rows = [json.loads(line) for line in payload.splitlines()]
+                if (not payload.endswith(b'\n') or not rows
+                        or any(not isinstance(row, dict) or canonical_bytes(row) != line
+                               for row, line in zip(rows, payload.splitlines(), strict=True))):
+                    raise ValueError('trace rows are not complete canonical objects')
+            except (ValueError, UnicodeError, TypeError) as error:
+                _transaction_reject(attempt, f'campaign trace cannot be decoded: {error}')
+            proof['rows'] = rows
+        return proof
     except OSError as error:
         _transaction_reject(attempt, f"campaign artifact is absent or unavailable: {error}")
     finally:
@@ -6235,7 +6394,401 @@ def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: 
                                declared_writes=2, write_bytes=(0, write_bytes)), measure)
 
 
-def storage_profile(binding, patterns, observations, *, expected_binding):
+def _profile_extent_manifest(value, key):
+    """Q6/Q60: reject malformed immutable lifecycle records before using their fields."""
+    if not isinstance(value, dict):
+        _transaction_reject(key, "profile extent manifest must be an object")
+    status = value.get('status')
+    if not isinstance(status, str):
+        _transaction_reject(key, "profile extent lifecycle status must be text")
+    fields = {'status', 'binding', 'lengths', 'operation_id', 'retention'}
+    if status in {'RETAINED', 'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        fields.add('identities')
+    if status in {'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        fields.update({'evidence_key', 'evidence_digest'})
+    if status in {'RECLAIMING', 'RECLAIMED'}:
+        fields.add('seal_digest')
+    lengths = value.get('lengths')
+    if (status not in {'PREPARED', 'RETAINED', 'SEALED', 'RECLAIMING', 'RECLAIMED'} or set(value) != fields
+            or not isinstance(value.get('binding'), dict) or not isinstance(lengths, dict) or not lengths
+            or any(role not in {'data', 'state'} or type(length) is not int or not 0 <= length < 2**63
+                   for role, length in lengths.items()) or value.get('retention') != 'TEMPORARY'
+            or not isinstance(value.get('operation_id'), str)
+            or re.fullmatch(r'profile-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value['operation_id']) is None):
+        _transaction_reject(key, "profile extent manifest fields, identity or retention are invalid")
+    if 'identities' in fields:
+        identities = value['identities']
+        if (not isinstance(identities, dict) or set(identities) != set(lengths)
+                or any(not isinstance(identity, dict) or set(identity) != {'inode', 'bytes'}
+                       or type(identity['inode']) is not int or identity['inode'] <= 0
+                       or type(identity['bytes']) is not int or identity['bytes'] != lengths[role]
+                       for role, identity in identities.items())):
+            _transaction_reject(key, "profile extent identities differ from their declared lengths")
+    for field in fields & {'evidence_digest', 'seal_digest'}:
+        _digest(field, value[field], key)
+    if 'evidence_key' in fields and (not isinstance(value['evidence_key'], str)
+            or re.fullmatch(r'[A-Za-z0-9_-]{1,160}', value['evidence_key']) is None):
+        _transaction_reject(key, "profile evidence key is invalid")
+    return value
+
+
+def grant_profile_extents(owner: CapacityCoordinator, key: str, binding: dict, lengths: dict):
+    """Q42/Q53/Q60: retain a declared synthetic working set and reopen its exact files."""
+    if (not isinstance(binding, dict) or not isinstance(lengths, dict) or not lengths
+            or any(role not in {"data", "state"} or type(length) is not int or not 0 <= length < 2**63
+                   for role, length in lengths.items())):
+        _transaction_reject(key, "profile extents require an exact binding and data/state lengths", "INVALID_REQUEST")
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        operation = "profile-" + str(uuid.uuid4())
+        directory = owner.cartridge / "transfers" / operation
+        if directory.exists() or directory.is_symlink():
+            _transaction_reject(key, "new profile namespace already exists", "IDEMPOTENCY_CONFLICT")
+        head = compare_campaign_head(owner, key, None, {
+            "status": "PREPARED", "binding": binding, "lengths": lengths,
+            "operation_id": operation, "retention": "TEMPORARY"})
+    value = _profile_extent_manifest(head['value'], key)
+    if value['binding'] != binding or value['lengths'] != lengths:
+        _transaction_reject(key, "saved profile extent binding or lengths differ")
+    if value['status'] in {'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        evidence = campaign_head(owner.cartridge, value['evidence_key'])
+        if (evidence is None or evidence['digest'] != value['evidence_digest']
+                or not isinstance(evidence['value'], dict) or evidence['value'].get('disposition') != 'ABANDONED'):
+            _transaction_reject(key, "completed profile extents cannot start another measurement generation")
+        if value['status'] != 'RECLAIMED':
+            head = reclaim_profile_extents(owner, key, head['digest'] if value['status'] == 'SEALED' else value['seal_digest'])
+        head = compare_campaign_head(owner, key, head['digest'], {
+            'status': 'PREPARED', 'binding': binding, 'lengths': lengths,
+            'operation_id': 'profile-' + str(uuid.uuid4()), 'retention': 'TEMPORARY'})
+        value = _profile_extent_manifest(head['value'], key)
+    if (value.get("binding") != binding or value.get("lengths") != lengths
+            or value.get("retention") != "TEMPORARY" or value.get("status") not in {"PREPARED", "RETAINED"}
+            or not isinstance(value.get("operation_id"), str)
+            or re.fullmatch(r"profile-[0-9a-f-]{36}", value["operation_id"]) is None):
+        _transaction_reject(key, "saved profile extent binding, retention or lifecycle differs")
+    prepared_directory = owner.cartridge / 'transfers' / value['operation_id']
+    if value['status'] == 'PREPARED' and (prepared_directory.exists() or prepared_directory.is_symlink()):
+        # A crash before RETAINED leaves no inode proof. Preserve that namespace and start a fresh one.
+        value = {**value, 'operation_id': 'profile-' + str(uuid.uuid4())}
+        head = compare_campaign_head(owner, key, head['digest'], value)
+    extents = {}
+    try:
+        for role, length in sorted(lengths.items()):
+            extents[role] = grant_transfer_extent(owner.cartridge, value["operation_id"], role, length,
+                capacity_controller=owner, require_existing=value["status"] == "RETAINED")
+            try:
+                fcntl.flock(extents[role].fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                _capacity_reject(key, "profile extent reclamation currently owns the file", "CAPACITY_EXCEEDED", "retryable")
+        identities = {role: {"inode": os.fstat(extent.fd).st_ino, "bytes": extent.length}
+                      for role, extent in extents.items()}
+        if value["status"] == "PREPARED":
+            head = compare_campaign_head(owner, key, head["digest"],
+                {**value, "status": "RETAINED", "identities": identities})
+        elif value.get("identities") != identities:
+            _transaction_reject(key, "retained profile file identity changed", "IDENTITY_MISMATCH")
+        return head, extents
+    except BaseException:
+        for extent in extents.values():
+            os.close(extent.fd)
+        raise
+
+
+def seal_profile_extents(owner: CapacityCoordinator, key: str, expected: str, evidence_key: str, evidence_digest: str):
+    """Q44/Q60: release temporary working files only after their evidence has a durable identity."""
+    _digest("profile evidence", evidence_digest, key)
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        _transaction_reject(key, "profile extent manifest is missing")
+    value = _profile_extent_manifest(head['value'], key)
+    evidence = campaign_head(owner.cartridge, evidence_key)
+    if evidence is None or evidence['digest'] != evidence_digest:
+        _transaction_reject(key, 'profile evidence is absent or differs from its durable campaign record')
+    references = evidence['value'].get('retained_manifests') if isinstance(evidence['value'], dict) else None
+    if (not isinstance(references, list)
+            or {'key': key, 'retained_digest': expected} not in references):
+        _transaction_reject(key, 'profile evidence does not reference this exact retained manifest')
+    if head["digest"] != expected or value['status'] != "RETAINED":
+        _transaction_reject(key, "profile seal requires its exact retained predecessor", "IDEMPOTENCY_CONFLICT")
+    if any(operation == head["value"]["operation_id"] for operation, _, _ in owner.active_claims()):
+        _capacity_reject(key, "profile has an active next-transition claim", "CAPACITY_EXCEEDED", "retryable")
+    return compare_campaign_head(owner, key, expected,
+        {**value, "status": "SEALED", "evidence_key": evidence_key, "evidence_digest": evidence_digest})
+
+
+def reclaim_profile_extents(owner: CapacityCoordinator, key: str, seal_digest: str):
+    """Q53: remove only sealed synthetic extents whose exact identity remains recorded."""
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        _transaction_reject(key, "profile extent manifest is missing")
+    value = _profile_extent_manifest(head['value'], key)
+    if value.get("status") == "SEALED":
+        if head["digest"] != seal_digest:
+            _transaction_reject(key, "profile seal differs from the expected evidence", "IDEMPOTENCY_CONFLICT")
+    elif value.get("status") in {"RECLAIMING", "RECLAIMED"}:
+        if value.get("seal_digest") != seal_digest:
+            _transaction_reject(key, "profile reclamation has another seal", "IDEMPOTENCY_CONFLICT")
+    else:
+        _transaction_reject(key, "unsealed profile extents remain retained", "INVALID_REQUEST")
+    operation = value.get("operation_id")
+    if (not isinstance(operation, str) or re.fullmatch(r"profile-[0-9a-f-]{36}", operation) is None
+            or value.get("retention") != "TEMPORARY" or set(value.get("lengths", {})) - {"data", "state"}
+            or set(value.get("identities", {})) != set(value.get("lengths", {}))):
+        _transaction_reject(key, "profile reclamation manifest is malformed")
+    if value["status"] == "RECLAIMED":
+        return head
+    # Root, generation and pin schemas name content objects, never transfer paths. Q25 journals
+    # are the remaining durable authority that could retain this exact operation namespace.
+    journals = [_load_transaction(owner.cartridge, path.stem)
+                for path in sorted(_transactions_path(owner.cartridge).glob("*.json"))]
+    referenced = any(operation.encode() in canonical_bytes(record) for record in journals)
+    candidate = ReclaimableObject(operation, True, False, False, False, "TEMPORARY",
+        bool(owner.active_claims()), referenced, referenced)
+    if not is_reclaimable_object(candidate):
+        _capacity_reject(key, "profile extents still have active claims or journal references",
+                         "CAPACITY_EXCEEDED", "retryable")
+    descriptors = []
+    try:
+        descriptors.append(os.open(owner.cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+        for name in ("transfers", operation):
+            descriptors.append(os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptors[-1]))
+        directory_fd = descriptors[-1]
+        for role, identity in value["identities"].items():
+            try:
+                descriptor = os.open(role + ".extent", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+            except FileNotFoundError:
+                if value["status"] == "RECLAIMING":
+                    continue
+                _transaction_reject(key, "sealed profile extent disappeared", "IDENTITY_MISMATCH")
+            descriptors.append(descriptor)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                _capacity_reject(key, "profile extent still has an open reader or executor", "CAPACITY_EXCEEDED", "retryable")
+            metadata = os.fstat(descriptor)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                    or metadata.st_ino != identity["inode"] or metadata.st_size != identity["bytes"]):
+                _transaction_reject(key, "sealed profile extent identity changed", "IDENTITY_MISMATCH")
+        if value["status"] == "SEALED":
+            head = compare_campaign_head(owner, key, head["digest"],
+                {**value, "status": "RECLAIMING", "seal_digest": seal_digest})
+            value = head["value"]
+        def remove(claim):
+            for role in sorted(value["identities"]):
+                def unlink():
+                    try:
+                        metadata = os.stat(role + ".extent", dir_fd=directory_fd, follow_symlinks=False)
+                        identity = value["identities"][role]
+                        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                                or metadata.st_ino != identity["inode"] or metadata.st_size != identity["bytes"]):
+                            _transaction_reject(key, "profile extent changed before unlink", "IDENTITY_MISMATCH")
+                        os.unlink(role + ".extent", dir_fd=directory_fd)
+                    except FileNotFoundError:
+                        pass
+                execute_claimed_write(claim, unlink)
+            execute_claimed_write(claim, lambda: os.fsync(directory_fd))
+        _run_claimed_writes(owner, CapacityTransition(operation, "profile-reclamation",
+            declared_writes=len(value["identities"]) + 1, write_bytes=(0,) * (len(value["identities"]) + 1)), remove)
+        return compare_campaign_head(owner, key, head["digest"], {**value, "status": "RECLAIMED"})
+    except OSError as error:
+        _capacity_reject(key, f"profile extent reclamation failed: {error}", "CARTRIDGE_DISCONNECTED", "retryable")
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_data_reads, revalidation, data_offset=0,
+                         has_state=True, record_base=0, expected_path=None):
+    """Q42/Q44/Q51: recompute source coverage, call tails and durable intervals from raw rows."""
+    def reject(detail):
+        _transaction_reject('source-profile', detail)
+    def natural(value):
+        return type(value) is int and value >= 0
+    if (not isinstance(traces, list) or not traces or not natural(expected_data_writes) or not natural(expected_data_reads)
+            or type(revalidation) is not bool or type(has_state) is not bool
+            or not natural(data_offset) or not natural(record_base)):
+        reject('source trace coverage request is malformed')
+    phases = {name: {'calls': {}, 'transitions': [], 'verified_ranges': []} for name in
+              ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')}
+    windows, active, pending_write, pending_read = [], None, None, None
+    data_writes = host_writes = data_reads = native_reads = parser_reads = io_calls = process_reads = 0
+    def finish_read(ended):
+        nonlocal pending_read
+        if pending_read is not None:
+            if ended <= pending_read['started']:
+                reject('verified source read has no positive interval')
+            phases[pending_read['phase']]['verified_ranges'].append(
+                (pending_read['bytes'], ended - pending_read['started']))
+            pending_read = None
+    for reference in traces:
+        if not isinstance(reference, dict) or set(reference) != {'attempt', 'name', 'bytes', 'digest'}:
+            reject('source trace reference is malformed')
+        rows = verify_campaign_artifact(cartridge, reference['attempt'], reference['name'], reference['digest'],
+            reference['bytes'], maximum_bytes=2097152, include_rows=True)['rows']
+        for row in rows:
+            kind = row.get('kind')
+            if not isinstance(kind, str):
+                reject('source trace record kind must be text')
+            if kind == 'WINDOW_OPEN':
+                if (active is not None or not natural(row.get('started_ns'))
+                        or type(row.get('observer_pid')) is not int or row['observer_pid'] <= 0):
+                    reject('source trace opens an overlapping or malformed window')
+                active = {'started_ns': row['started_ns'], 'observer_pid': row['observer_pid'],
+                          'before': row.get('device'), 'samples': [row.get('host')], 'max_io_end': row['started_ns']}
+                continue
+            if kind == 'HOST_SAMPLE':
+                if active is not None:
+                    active['samples'].append(row)
+                continue
+            if active is None:
+                reject('source I/O or window end occurs outside an active window')
+            if kind == 'WINDOW_CLOSE':
+                ended = row.get('ended_ns')
+                if (not natural(ended) or ended <= active['started_ns'] or ended < active['max_io_end']
+                        or row.get('observer_pid') != active['observer_pid']):
+                    reject('source trace closes an invalid process or time window')
+                if pending_write is not None:
+                    reject('source window ends before its data reaches a durable checkpoint')
+                if pending_read is not None:
+                    reject('source window ends before its range verification boundary')
+                before, after = active['before'], row.get('device')
+                if (not isinstance(before, dict) or not isinstance(after, dict)
+                        or before.get('path') != after.get('path')
+                        or (expected_path is not None and before.get('path') != expected_path)):
+                    reject('raw source window changed its bound physical path')
+                counters = {}
+                for field in ('device_read_bytes', 'device_write_bytes', 'device_read_operations'):
+                    start_value, end_value = before.get(field), after.get(field)
+                    if start_value is None or end_value is None:
+                        counters[field] = None
+                    elif not natural(start_value) or not natural(end_value) or end_value < start_value:
+                        reject('raw source device counter is malformed or regressed')
+                    else:
+                        counters[field] = end_value - start_value
+                samples = [sample for sample in active['samples'] + [row.get('host')] if isinstance(sample, dict)]
+                if not samples or any(not natural(sample.get('time_ns')) or sample.get('pid') != active['observer_pid']
+                                      or type(sample.get('thermal_state')) is not int
+                                      or not 0 <= sample['thermal_state'] <= 3 for sample in samples):
+                    reject('raw source host samples lack their process or time identity')
+                times = sorted({max(active['started_ns'], min(ended, sample['time_ns'])) for sample in samples})
+                gaps = [times[0] - active['started_ns'], ended - times[-1],
+                        *(right - left for left, right in zip(times, times[1:]))]
+                gap_before = 0 if not windows else active['started_ns'] - windows[-1]['ended_ns']
+                if gap_before < 0:
+                    reject('source windows overlap or use different monotonic clocks')
+                windows.append({'started_ns': active['started_ns'], 'ended_ns': ended,
+                    'observer_pid': active['observer_pid'], 'active_seconds': (ended - active['started_ns']) / 1e9,
+                    'downtime_before_seconds': gap_before / 1e9, 'max_sampling_gap_seconds': max(gaps) / 1e9,
+                    'thermal_states': sorted({sample['thermal_state'] for sample in samples}),
+                    'device_counters': {'before': {key: before.get(key) for key in counters},
+                                        'after': {key: after.get(key) for key in counters}}, 'counter_deltas': counters})
+                active = None
+                continue
+            if kind == 'VERIFIED_PREFIX':
+                if (pending_read is None or row.get('offset') != pending_read['offset']
+                        or row.get('length') != pending_read['bytes'] or not natural(row.get('time_ns'))):
+                    reject('verified prefix does not cover its observed range reads')
+                finish_read(row['time_ns'])
+                continue
+            if kind == 'SOURCE_BOUNDARY':
+                boundary = row.get('source_boundary')
+                if not isinstance(boundary, dict) or not natural(row.get('time_ns')):
+                    reject('source checkpoint boundary is malformed')
+                if 'offset' in boundary and not revalidation and boundary['offset'] != data_writes:
+                    reject('source checkpoint includes unobserved data writes')
+                if pending_write is not None:
+                    reject('source checkpoint precedes its data durability fence')
+                finish_read(row['time_ns'])
+                continue
+            phase, role = row.get('phase'), row.get('role')
+            if (not isinstance(phase, str) or phase not in phases or not isinstance(role, str) or role not in {'data', 'state'}
+                    or (role == 'state' and not has_state)
+                    or (revalidation and phase != 'RETAINED_REVALIDATION')
+                    or kind not in {'read', 'write', 'PARSER_READ', 'fsync', 'F_FULLFSYNC'}
+                    or any(not natural(row.get(key)) for key in ('offset', 'requested_bytes', 'returned_bytes', 'started_ns', 'duration_ns'))
+                    or row['returned_bytes'] > row['requested_bytes'] or row.get('success') is not True):
+                reject('source trace contains malformed or failed I/O')
+            io_calls += 1
+            if row['started_ns'] < active['started_ns']:
+                reject('source I/O starts before its measured window')
+            active['max_io_end'] = max(active['max_io_end'], row['started_ns'] + row['duration_ns'])
+            label = role + '.' + kind
+            if role == 'state' and kind == 'write':
+                label = ('state.record.write' if row['offset'] >= record_base else 'state.header.write')
+            phases[phase]['calls'].setdefault(label, []).append(row['duration_ns'])
+            if kind == 'write':
+                host_writes += row['returned_bytes']
+                if role == 'data':
+                    if revalidation or phase != 'FRESH_WRITE_READBACK' or row['offset'] != data_offset + data_writes:
+                        reject('source data write coverage is discontinuous or occurs in a read-only phase')
+                    data_writes += row['returned_bytes']
+                    if pending_write is None:
+                        pending_write = {'started': row['started_ns'], 'bytes': 0, 'phase': phase,
+                                         'offset': row['offset'], 'read_bytes': 0}
+                    pending_write['bytes'] += row['returned_bytes']
+            if role == 'data' and kind in {'read', 'PARSER_READ'}:
+                data_reads += row['returned_bytes']
+                if kind == 'read':
+                    native_reads += row['returned_bytes']
+                    if pending_write is not None:
+                        if row['offset'] != pending_write['offset'] + pending_write['read_bytes']:
+                            reject('source readback does not cover its pending write')
+                        pending_write['read_bytes'] += row['returned_bytes']
+                else:
+                    if has_state:
+                        reject('whole-source transfer contains an unexpected header parser read')
+                    parser_reads += row['returned_bytes']
+                if revalidation:
+                    count = row.get('process_diskio_read_bytes')
+                    if not natural(count):
+                        reject('retained source read lacks its process counter sample')
+                    process_reads += count
+                if kind == 'read' and phase != 'FRESH_WRITE_READBACK':
+                    if pending_read is None:
+                        pending_read = {'started': row['started_ns'], 'offset': row['offset'], 'bytes': 0, 'phase': phase}
+                    if row['offset'] != pending_read['offset'] + pending_read['bytes']:
+                        reject('source verification range reads are discontinuous')
+                    pending_read['bytes'] += row['returned_bytes']
+            if kind == 'F_FULLFSYNC' and pending_write is not None and role == ('state' if has_state else 'data'):
+                elapsed = row['started_ns'] + row['duration_ns'] - pending_write['started']
+                if elapsed <= 0 or pending_write['read_bytes'] != pending_write['bytes']:
+                    reject('durable source transition has no positive elapsed time')
+                phases[pending_write['phase']]['transitions'].append((pending_write['bytes'], elapsed))
+                pending_write = None
+    if (active is not None or not windows or pending_write is not None or data_writes != expected_data_writes
+            or native_reads < expected_data_reads or (not has_state and parser_reads < expected_data_reads)):
+        reject('source trace omits its complete windows or exact data writes')
+    def tails(values, points, scale=1):
+        ordered = sorted(values)
+        return {'samples': len(ordered), 'minimum': ordered[0] / scale if ordered else None,
+                'maximum': ordered[-1] / scale if ordered else None,
+                'empirical_percentiles': {str(q): ordered[max(0, math.ceil(q * len(ordered)) - 1)] / scale
+                    for q in points} if ordered else {}, 'scope': 'EXACT_EMPIRICAL_ORDER_STATISTICS'}
+    def rates(intervals):
+        result = tails([count * 1e9 / duration for count, duration in intervals], (.05, .5, .95))
+        if result['samples'] < 20:
+            result['empirical_percentiles'] = {}
+            result['scope'] = 'MINIMUM_ONLY_CONSERVATIVE_BOUND; FEWER_THAN_20_INTERVALS'
+        return result
+    return {'data_write_bytes': data_writes, 'host_write_bytes': host_writes, 'data_read_bytes': data_reads,
+        'process_data_read_bytes': process_reads, 'io_calls': io_calls,
+        'diagnostic_call_union': tails((value for phase in phases.values() for values in phase['calls'].values()
+                                        for value in values), (.5, .95, .99, 1.), 1e9),
+        'diagnostic_flush_union': tails((value for phase in phases.values() for name, values in phase['calls'].items()
+                                         if name.endswith(('.fsync', '.F_FULLFSYNC')) for value in values),
+                                        (.5, .95, .99, 1.), 1e9),
+        'phases': {name: {'calls': {kind: tails(values, (.5, .95, .99, 1.), 1e9)
+                                   for kind, values in phase['calls'].items()},
+                         'durable_chunk_bytes_per_second': rates(phase['transitions']),
+                         'verified_range_bytes_per_second': rates(phase['verified_ranges'])}
+                   for name, phase in phases.items()},
+        'windows': windows, 'active_seconds': sum(window['active_seconds'] for window in windows),
+        'downtime_seconds': sum(window['downtime_before_seconds'] for window in windows),
+        'continuous': len(windows) == 1, 'interrupted_windows': len(windows) - 1,
+        'max_in_window_sampling_gap_seconds': max(window['max_sampling_gap_seconds'] for window in windows)}
+
+
+def storage_profile(binding, patterns, observations, *, expected_binding, revalidations=None):
     """Q41-Q44: assess independent read/write/flush observations for exact plan patterns."""
     def reject(object_id, detail):
         raise CassetteError('PROVENANCE_VIOLATION', str(object_id), 'Q41-Q44: exact storage profile', 'terminal', detail)
@@ -6273,11 +6826,121 @@ def storage_profile(binding, patterns, observations, *, expected_binding):
                         for p, o in zip(patterns, observations, strict=True))
     for value in throughput:
         number(value, 'derived throughput bytes per second')
-    return {"binding": binding, "status": "PASS", "patterns_digest": digest_bytes(canonical_bytes(patterns)),
+    result = {"binding": binding, "status": "PASS", "patterns_digest": digest_bytes(canonical_bytes(patterns)),
             "throughput_bytes_per_second": {str(q): percentile(throughput, q) for q in (.05, .5, .95)},
             "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
             "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
             "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
+    plan = binding['plan'] if isinstance(binding['plan'], dict) else {}
+    if 'cache_crossing_required' not in plan:
+        return result
+    for pattern, observed in zip(patterns, observations, strict=True):
+        if number(observed.get('observed_data_write_bytes'), 'source data writes', integer=True) != pattern['write_bytes']:
+            reject('profile', 'source data writes do not cover the exact plan; state writes cannot replace them')
+    required = plan['cache_crossing_required']
+    if type(required) is not bool:
+        reject('cache', 'cache-crossing applicability must be a boolean')
+    memory = number(plan.get('host_memory_bytes'), 'host memory bytes', integer=True, positive=True)
+    source_bytes = sum(pattern['read_bytes'] for pattern in patterns)
+    if required != (source_bytes > memory):
+        reject('cache', 'cache-crossing applicability differs from the exact source working set')
+    if not isinstance(revalidations, list) or len(revalidations) != len(patterns):
+        reject('cache', 'retained source revalidation coverage is incomplete')
+    for pattern, observed in zip(patterns, revalidations, strict=True):
+        if observed.get('pattern') != pattern or observed.get('binding') != binding:
+            reject('cache', 'retained read differs from the bound source pattern')
+        for field in ('host_write_bytes', 'observed_data_read_bytes', 'process_data_read_bytes',
+                      'data_reads_with_process_io', 'data_reads_without_process_io', 'errors'):
+            number(observed.get(field), field, integer=True)
+        if (observed['host_write_bytes'] or observed['observed_data_read_bytes'] < pattern['read_bytes']
+                or observed.get('errors') != 0 or observed.get('readback_ok') is not True):
+            reject('cache', 'retained source bytes were not completely verified without writing')
+    cache = {'classification': 'WITHIN_HOST_MEMORY_RETAINED_SOURCE_WINDOW', 'source_bytes': source_bytes,
+             'host_memory_bytes': memory, 'counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA',
+             'per_read_attribution': 'NOT_ESTABLISHED'}
+    if required:
+        if type(plan.get('uncached_read_request_available')) is not bool:
+            reject('cache', 'uncached descriptor capability is missing from the bound plan')
+        if plan['uncached_read_request_available'] and any(observed.get('uncached_request') is not True
+                                                         for observed in revalidations):
+            reject('cache', 'a supported uncached descriptor request was omitted')
+        minimum = source_bytes - memory
+        allocated = sum(number(observed.get('data_allocated_bytes'), 'retained allocated source bytes', integer=True)
+                        for observed in observations)
+        process_reads = sum(observed['process_data_read_bytes'] for observed in revalidations)
+        device_reads = sum(number(observed.get('device_read_bytes'), 'retained device read bytes', integer=True)
+                           for observed in revalidations)
+        samples = sum(observed['data_reads_with_process_io'] for observed in revalidations)
+        if allocated < source_bytes or min(process_reads, device_reads) < minimum or not samples:
+            reject('cache', 'retained working set lacks the required cache-crossing and physical I/O observations')
+        cache.update(classification='MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO',
+                     minimum_bytes_beyond_host_memory=minimum, retained_allocated_source_bytes=allocated,
+                     process_accounted_read_bytes=process_reads, shared_device_read_bytes=device_reads,
+                     read_samples_with_process_io=samples)
+    result['cache'] = cache
+    phase_names = ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')
+    phase_patterns = {name: [] for name in phase_names}
+    observed_windows, recovery_history = [], []
+    for collection in (observations, revalidations):
+        for observed in collection:
+            statistics = observed.get('trace_statistics')
+            if (not isinstance(statistics, dict) or not isinstance(statistics.get('phases'), dict)
+                    or set(statistics['phases']) != set(phase_names) or not isinstance(statistics.get('windows'), list)
+                    or not statistics['windows']
+                    or not isinstance(observed.get('recovery_history', []), list)):
+                reject('statistics', 'source profile lacks recomputed phase and window statistics')
+            for window in statistics['windows']:
+                if not isinstance(window, dict):
+                    reject('statistics', 'source measurement window must be an object')
+                number(window.get('active_seconds'), 'active source seconds', positive=True)
+                number(window.get('downtime_before_seconds'), 'source downtime seconds')
+                observed_windows.append({'artifact': observed['pattern'].get('artifact'), **window})
+            recovery_history.extend(observed.get('recovery_history', []))
+            captured_calls = 0
+            for name, values in statistics['phases'].items():
+                if (not isinstance(values, dict) or not isinstance(values.get('calls'), dict)
+                        or any(not isinstance(values.get(field), dict) for field in
+                               ('durable_chunk_bytes_per_second', 'verified_range_bytes_per_second'))):
+                    reject('statistics', 'source phase statistics are malformed')
+                for call in values['calls'].values():
+                    if not isinstance(call, dict):
+                        reject('statistics', 'source call statistics must be objects')
+                    captured_calls += number(call.get('samples'), 'captured I/O call count', integer=True)
+                phase_patterns[name].append({'artifact': observed['pattern'].get('artifact'), **values})
+            if captured_calls <= 0:
+                reject('statistics', 'source phase statistics omit all observed I/O calls')
+    phase_reports = {}
+    for name, entries in phase_patterns.items():
+        rates, latencies, count = [], [], 0
+        for entry in entries:
+            rate = entry['durable_chunk_bytes_per_second' if name == 'FRESH_WRITE_READBACK'
+                         else 'verified_range_bytes_per_second']
+            if not isinstance(rate.get('empirical_percentiles'), dict):
+                reject('statistics', 'source interval percentiles must be an object')
+            samples = number(rate.get('samples'), 'interval sample count', integer=True)
+            if samples:
+                rates.append(number(rate.get('empirical_percentiles', {}).get('0.05', rate.get('minimum')),
+                                    'observed interval throughput lower bound'))
+            for call in entry['calls'].values():
+                if not isinstance(call, dict):
+                    reject('statistics', 'source call statistics must be objects')
+                if not isinstance(call.get('empirical_percentiles'), dict):
+                    reject('statistics', 'source call percentiles must be an object')
+                count += number(call.get('samples'), 'I/O call sample count', integer=True)
+                latencies.append(number(call.get('empirical_percentiles', {}).get('0.99', call.get('maximum')),
+                                        'observed call latency upper bound'))
+        phase_reports[name] = {'patterns': entries, 'io_calls': count,
+            'operation_bounds': {'scope': 'CONSERVATIVE_ACROSS_PATTERNS; NOT_GLOBAL_PERCENTILES',
+                'throughput_p05_lower_bound_bytes_per_second': min(rates) if rates else None,
+                'io_latency_p99_upper_bound_seconds': max(latencies) if latencies else None}}
+    result.pop('throughput_bytes_per_second')
+    result.pop('latency_seconds')
+    result.update(source_phases=phase_reports, measurement_windows=observed_windows,
+        active_seconds=sum(window['active_seconds'] for window in observed_windows),
+        downtime_seconds=sum(window['downtime_before_seconds'] for window in observed_windows),
+        continuous=len(observed_windows) == 1, recovery_history=recovery_history,
+        statistic_scope='RECORDED_CALLS_AND_EXECUTOR_TRANSITIONS; NO_ARTIFACT_AVERAGE_PERCENTILES')
+    return result
 
 
 def _journal_path(cartridge: Path, transaction_id: str) -> Path:

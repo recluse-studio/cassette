@@ -215,6 +215,12 @@ and malformed, duplicate, prospective, unknown-target, or already-answered repai
   IMPLEMENTATION.md's autonomous execution and live participation policy to L05-L10. Codex invokes
   use-opus and run-independent-build-review without asking Drew to supply a reviewer. Keep the
   implementer and reviewer separate and retain every acceptance and evidence requirement.
+- Provider direction at 2026-10-15 22:19 UTC requires Use Opus through Claude Code for new
+  reviewer work. Select the current supported opus alias, inspect actual served-model receipts,
+  and prove included subscription allowance and no paid overage. Do not assign or fall back to
+  Copilot CLI. Preserve completed historical Copilot findings; continue independent eligible work
+  while native allowance is unavailable. Existing accounts, security and billing limits remain.
+
 - Human handoffs are limited to indispensable physical actions and legally required acceptance or
   consent. Existing authorization covers routine execution, contained repairs, review, evidence,
   build story, commits and normal pushes. Preserve protected content, security and spending limits.
