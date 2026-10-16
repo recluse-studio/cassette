@@ -8949,3 +8949,13 @@ read-only control and the removed-guard case. I checked the actual model receipt
 file. The earlier rejected candidates stay rejected. A fresh read-only check also confirms that
 the intended host, disk and connection path still match. I am publishing this accepted correction
 and binding its new package before the next physical attempt. The larger build remains unfinished.
+
+The accepted correction is committed and pushed. I built its exact internal package and checked
+all38 installed files and the command people will actually run. The new campaign keeps all115 old
+records intact and adds the five records for this fresh attempt. The failed attempt stays failed.
+
+The real drive qualification started at10:36UTC. Its own controller holds the recovery test until
+the first saved-data acknowledgement appears, then performs the recorded interruption and restart.
+It is running, not passed. No required model download has completed, and no action is needed from Drew.
+While it runs, I am implementing the remaining generic plan route needed to break Ollama's ordering
+cycle without removing its entry checks or inventing a model identity.

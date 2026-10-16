@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 10:21 UTC
+## Current direction — 2026-10-16 10:38 UTC
 
 Continue authorized L05-L10. Accepted source-profile recovery candidate23 is committed/pushed as
 8b6bafb1de8a97e57a2a2f25d10b0b423698fb59 and installed as wheel18. All 38 actual installed files
@@ -507,8 +507,29 @@ the failed02 interval and every old graph/card remain unchanged. Next: publish t
 snapshot, build/install its exact internal package, then bind/publish the reviewed same-request graph
 successor with its own fresh operation and runtime. No stage or source-entry PASS is inferred.
 
-Next: complete the frozen amended candidate and separate review, then bind a live successor only if
-the actual full request tuple and scope still match. Reuse selection03 under actual writer revalidation;
+The accepted complete candidate32 is committed/pushed as3895034d0f5d8da1f1cdd4f6ebc8bf03a7a9c31b.
+Both ordinary ledger checks completed before the normal push; actual remote parity and a clean tree
+are retained in succession-publication32.json. The new internal wheel21 is INSTALLED_VERIFIED: all38
+actual runtime files, CLI/import identities, frozen/tested/committed source and wheel bytes match.
+No dependency download, provider call or external model write accompanies installation.
+
+The reviewed same-request graph successor is published at10:34UTC with120 nodes and all115 inherited
+nodes unchanged. Its digest is blake3:c2e1d8c22486f47929aead89a8e418be09359585c6eee349bf6d0dff3c647da8;
+canonical head is blake3:ff5830518275ec8ac126a59572790b655c971b131f5eb082ea91ae77e11c3753.
+first-profile-03/publication.json retains its exact parent, runtime and new bindings. The old failed
+attempt remains failed with its missing historical after-snapshot; graph publication proves no profile.
+
+The exact installed21 physical qualification starts at10:36:56UTC as
+op-3947d9f9cfe08e47ec0c05155087b8965c217911fd224d0604aa75724af7e315,
+key required-source-profile-f4-20261016-03. Controller9325 owns CLI9654, tool40824. Its initial launch
+record is RUNNING; the canonical operation initially records PENDING and the requested first-data
+profile-checkpoint hold. Waiter9671/tool55051 is waiting for that exact ACK before launching the sealed
+recovery command. No process death is injected before it. This is running qualification, not PASS,
+source-entry completion or a required model download. Inspect these owners and receipts before any
+further physical operation; do not duplicate the scan. Keep progressing on the pending generic
+operation-geometry and generated-model authority work while this one attempt runs.
+
+Next: reconcile this physical attempt and its exact ACK/recovery records. Reuse selection03 under actual writer revalidation;
 do not invent another selection solely because the tool/contract repair needs a fresh package.
 Bind any write-bearing successor to its exact authorized card, active graph and fresh operation key.
 Compare its recorded totals with the completed current observation as an operational check; changed
