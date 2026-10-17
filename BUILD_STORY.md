@@ -9711,3 +9711,32 @@ measurement failed without starting more work. Repeated selection wrote nothing.
 its earlier download, reconnect, dataset and raw-profile checks. A coupled old seal count was the
 last fixture correction; all failed runs remain. Exact evidence is being copied and verified before
 the independent review. This proves the owned synthetic test; larger downloads and live proof remain.
+
+### 2026-10-17 02:33 UTC — The prepared-source link passes independent review
+
+Opus independently joined the prepared files to the actual provider metadata, then tried changed
+metadata, extra files, wrong request keys and incomplete measurements through the real CLI. The
+link accepted complete matching proof and rejected those contradictions without changing earlier
+operations or cartridge files. A removed guard made the same missing-proof case publish a profile,
+showing that the real guard decided the result. A real test-volume reconnect also rejected stale proof.
+Both review questions passed at the owned synthetic test level. Three unexecuted variants remain
+labelled. The review's denied duplicate command never ran; its authorized primary completed.
+
+The reviewer raised one specification ambiguity. Storage geometry records an immutable description;
+the actual recipe and input history come from the separate composition record and its own measurement.
+Both must verify. The contract now states those existing roles explicitly, with no product change.
+All frozen review files and both copies of the500-file builder evidence verify. The complete check
+for the combined development candidate is next. Larger downloads and every live stage remain open.
+
+### 2026-10-17 02:57 UTC — The combined implementation passes the full machine check
+
+All340 existing tests passed, followed by all14 component-removal and bypass controls. The generated
+accounting report has no violations. The212 archived files match the tested source and its manifest.
+The prepared-source consumer adds56 executable lines to the previously proved candidate; no new
+runtime, dependency, process or numerical kernel was introduced. Earlier failed runs remain retained.
+
+The combined implementation is now committed and pushed to `codex/prepared-source-consumer` as
+`a03b300`. I checked the actual remote hash and the committed bytes. Its bounded Opus reviews remain
+attached to their exact claims. The original source-integrity acceptance is still blocked by the
+earlier automatic review rejection; no review is running to clear it. All live stages remain open.
+This development checkpoint leaves the installed runtime and larger downloads unchanged.

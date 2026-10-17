@@ -5,7 +5,121 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-17 02:04 UTC
+## Current direction — 2026-10-17 02:59 UTC
+
+Continue authorized L05-L10. Consolidated63 is PASS, stopped02:53:45.752230 UTC, exit0.
+All340 existing fixtures passed in1125.02 seconds, zero skips; all14 Q78 deletion/bypass controls
+passed. The ordinary ledger has no violations. J is18336 executable lines, with no new kernel,
+process, runtime, dependency, model branch, duplicate authority or shipped binary. The complete
+212-file archive, canonical manifest and actual source verify exactly. The generated complete-J
+report is copied only to that exact managed generation-consumer worktree; its ordinary ledger also
+passes. Read generation-consolidated63-complete.json and autonomy-candidate-63/result.json.
+System Data free space stayed at least15.62406%; no test/review/download is active.
+
+The combined development implementation is committed and normally pushed on
+codex/prepared-source-consumer as a03b300bf7378f491ca3280d15410f7fd6ff8811. Fresh existing-account
+verification, fetch, dry-run, normal push and actual ls-remote parity pass. Its worktree is clean;
+post-commit ordinary ledger has no violations. All212 committed source objects match the tested
+archive except the subsequent Story/Implementation narrative. Exactly17 scoped paths were committed;
+no protected mathematics path changed. Read generation-checkpoint63-publication.json.
+Main's pre-existing four implementation/accounting edits and installed runtime remain unchanged.
+The published branch records development implementation and machine proof, not Source40/owner41/
+plan42 independent acceptance, installation, physical04 binding, real qualification or stage closure.
+Original source-integrity acceptance remains blocked by the earlier automatic review rejection and
+its absolute excluded-action boundary. No reviewer or process is running to finish that prerequisite.
+Do not infer it from full63 or narrower component passes. Continue only eligible work outside that
+excluded action; do not retry, rephrase or replace it, install an unaccepted route or begin dependent
+real profiles/downloads. Preserve the exact current code and evidence for a usable handoff.
+
+Native62 remains COMPLETE_PASS for G1/G2 at FIXTURE/INTEGRATION level, solely claude-opus-5-5.
+Root resolves U1 from existing authority: the complete geometry request including descriptive
+provenance is immutable; actual recipe/input identity comes from the canonical composition request,
+committed ownership and its separate passing profile. Real provider output closure must match.
+No acceptance predicate is removed. The full candidate has no aggregate independent verdict.
+Complete-but-unreclaimed geometry, a complete FAIL profile and different-cartridge preparation
+remain NOT_RUN behaviorally. All frozen target61/target62/packet62 files and both copies of the500-file
+builder export verify. Reviewer copies/image are removed. Preserve native62's initial missing-script
+probe, denied extra-argument duplicate and Root's failed observers separately from product results.
+The denied duplicate never ran or retried; its authorized primary completed. Read the complete62 audit.
+
+Real operations remain25SUCCEEDED/3FAILED/1PAUSED, none active. Physical04 stays NOT_BOUND/unissued.
+AllL05-L10, required larger model/dataset bytes, actual generated payload, semantic identity and live
+qualification remain open. Source40/owner41/plan42 exact acceptance stays excluded/open. Never run,
+inspect, rephrase, retry or replace the excluded prepared review/shared-writer challenge or coordinated
+payload/checkpoint replacement. The denied wc and denied duplicate variant remain abandoned.
+No real profile, provider Go or required payload begins before the unchanged prerequisites.
+
+Existing authorization covers routine execution, contained repairs, evidence, reviews, story entries,
+commits and normal pushes. No human action is needed for this checkpoint. Use only existing account
+routes and scoped permissions. Fresh post62 UI wasMax5x,current21%,weekly66%,Fable4%,creditsenabled,
+$0balance/$0spent,autoReloadOff; owned tab15closed, no setting changed. Recheck before another native
+launch. No Copilot or API billing. Preserve security, billing limits, user-owned processes, protected
+content and independent mathematics. Continue eligible work without substituting a component pass
+for a missing acceptance requirement.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
+Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+## Historical worklog — superseded checkpoints
+
+### Archived direction — 2026-10-17 02:33 UTC
+
+Continue authorized L05-L10. Independent native consumer62 is now COMPLETE_PASS for G1 actual
+source/layout join and G2 existing-only proof replay at FIXTURE/INTEGRATION level. It stopped
+02:23:46.855936 UTC, exit0, solely claude-opus-5-5, no fallback/subworker/safety stop. Its real CLI
+attacks covered changed metadata, added artifacts, changed/guessed/swapped requests, incomplete or
+missing captures/profiles, held/killed geometry and actual same-volume detach/reattach. The deciding
+missing-profile mutation published exactly one profile; product rejection wrote none. The remaining
+entry fixture passed in114.12 seconds. Complete-but-unreclaimed geometry, a failed complete geometry
+profile and different-cartridge composition/geometry remain static-only, NOT_RUN behaviorally.
+
+Root resolves U1 without a product change: the entire geometry request, including descriptive
+provenance, stays immutable through request/geometry digests. Q42 measures physical I/O geometry.
+Q60 independently requires the exact actual composition recipe/input ownership and its passing
+profile, plus the provider-resolved full output closure. Free-form provenance has no canonical
+recipe field and supplies no second recipe authority. Child Q42 now states that distinction.
+C2's separately measured geometry succeeds for the same exact layout; changed bodies under the
+original key still reject. No acceptance predicate, source identity or live requirement is removed.
+
+Root recomputed all actual target61/target62/packet62 maps:212/212/515 files exactly match both
+review snapshots. Reviewer-owned copies and image are removed. Raw events retain an allowed
+missing-script probe (exit2) and a denied duplicate with an unassigned extra argument. The denied
+call never ran or retried; the already authorized primary challenge completed. The launcher summary's
+empty permission_denials is not a full raw-event inventory. No permission boundary changed.
+Root's first read-only raw-event parser failed on a string message; corrected type checks preserve
+that instrument error and the actual events in generation-consumer62-review-complete.json.
+
+All500 builder export files also verify on the external evidence copy; no export/reviewer is active.
+Consolidated63 is RUNNING from the exact212-file consumer snapshot, started02:33:49.625438 UTC,
+worker81921/wrapper81592/tool48903. Read generation-consolidated63-running.json before acting; do
+not duplicate it or edit its source worktree. It collected all340 existing fixtures. Its complete
+results/J/removal controls remain pending, not a pass. Full61 remains340PASS, zero skips,14 Q78
+controls and clean J18280. Consumer62 adds56 lines,
+so its complete-J report remains stale and full62 is unproved. Prepare one consolidated snapshot
+proof for a reviewable development checkpoint; this grants no installed/runtime/live acceptance.
+Source/Store product bytes remain unchanged from61; the new consumer is isolated in the managed
+generation-consumer worktree. Main executable40 remains unchanged. Preserve all frozen targets,
+packets, earlier failures and the original proof worktree.
+
+Real operations remain25SUCCEEDED/3FAILED/1PAUSED, none active. Physical04 remains NOT_BOUND and
+unissued. Source40/owner41/plan42 exact acceptance stays excluded/open; never run, inspect, rephrase,
+retry or replace the excluded review/shared-writer challenge or coordinated payload/checkpoint
+replacement. Denied wc and the denied duplicate variant stay abandoned. No real profile, provider
+Go, required model/dataset bytes or semantic/payload proof follows from these component checks.
+AllL05-L10 and required larger inputs remain open. No human action is needed.
+
+Post62 fresh UI:Max5x,current21%,weekly66%,Fable4%; usage credits enabled,$0balance/$0spent,
+autoReloadOff. No settings changed; temporary tab15 closed. No Copilot or API billing. Preserve
+existing security, spending limits, protected originals, user processes and independent mathematics.
+System Data free space remained at least15.75569% during review. Recheck live disk before execution.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active consumer source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
+Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-17 02:04 UTC
 
 Continue authorized L05-L10. Frozen component61 now passes all340 existing fixtures, zero skips,
 in1237.80 seconds, all14 Q78 deletion/bypass controls and ordinary ledger with no violations.
@@ -85,7 +199,6 @@ Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-s
 Active consumer source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
 Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
 
-## Historical worklog — superseded checkpoints
 
 ### Archived direction — 2026-10-17 01:39 UTC
 
