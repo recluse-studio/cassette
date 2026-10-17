@@ -5,9 +5,1102 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-16 15:34 UTC
+## Current direction — 2026-10-17 01:05 UTC
 
-Active code state: original-proof reader39 is accepted, committed/pushed as
+Continue authorized L05-L10. Independent review59 is COMPLETE_PASS for the affected D58-1 repair.
+Actual SIGKILL after canonical success but before capture seal, followed by real same-UUID reconnect,
+now returns terminal fresh-request guidance without changing the operation, Store or capture heads.
+A continuation that already rotated its capture attempt behaves the same way. Seven wrong-binding
+controls still reject; the context and cartridge-folder guard mutations decide the diagnosis.
+Complete captures still reject a changed path. Interrupted nonterminal preparation continues the
+same operation while qualification correctly fails because it resumed. A fresh request passes.
+These are owned-image PLATFORM/INTEGRATION results; contradictory capture controls are FIXTURE.
+A genuinely changed mount location remains unproved natively. No stage or live pass follows.
+
+Native59 stopped at 00:56:55.722723 UTC, exit 0, solely claude-opus-5-5. No permission denial, safety
+stop, model subworker or instrument failure. The independent harness retains 42 actual CLI receipts
+and 13 distinct successful post-success-window kills. The report prose says11; raw13 unique head
+digests and SIGKILL/SUCCEEDED records decide. Root retains that count correction in the companion audit.
+Root verified target59/target58/packet59, all 212/212/1146
+files unchanged. Owned server, CLI children and image are stopped, detached and removed. Raw minimum
+system free space was 16.047331564 percent. Read generation-terminal59-review-complete.json and its
+actual report. Historical56/57/58 FAIL verdicts remain; their repairs have separate later passes.
+Foundation52/55, 56-Q1, 57-R1 and58-P1 remain distinct. Source40/owner41/plan42 is still excluded/open.
+
+Child59 Broker hash f2d406fd22d4d763c33dd24cc0b539098fd21971be1f369cc5bdfa8a88f92a6b is independently
+reviewed only within that affected scope. Root final entry proof passes in 82.63 seconds; its 1127-file
+exact dual export and labelled terminal controls remain. Root59 completed fixtures were content/link
+verified, archived and reclaimed: 34852056 logical bytes, 2115420 archive bytes. Root58 reclamation
+and all earlier failures remain separate. Main executable40/J report is unchanged. Implementation remains isolated; the installed runtime
+retains its earlier version. Full/J remains unproved after50; the complete-J report is stale.
+
+Consolidated60 is RUNNING through existing tools/ledger --prove-candidate, started at01:00:19.894162
+UTC, worker18366/wrapper18364/tool67044. Private output autonomy-candidate-60 and isolated TMPDIR
+generation-consolidated60-tmp retain the exact snapshot and live suite log. Read
+generation-consolidated60-running.json before acting; do not duplicate it. It must prove the full
+accepted fixture population with zero skips, every Q78 removal control, exact source archive and
+clean generated complete-J/ordinary ledger. Product/test/schema bytes remain frozen throughout;
+this progress narrative is outside the report's executable/evidence digest. The proof uses ordinary
+repository fixtures, never the excluded private40 challenge. Its wrapper monitors system free space
+and only its owned process group. No full/J pass exists until actual receipts are reconciled. No
+reviewer is active. An authorized documentation checkpoint records the independently passed repair
+and the outstanding source/runtime/live boundaries; it promotes no implementation.
+
+After that gate, continue the missing generated-source consumer: exact committed composition outputs,
+qualified OperationGeometry/profile and independently resolved actual SourceLock must join. Read
+consumer inventories03/04/05 and design-inventory06; no consumer API or endpoint is implemented.
+Inventory06 records the next candidate and current check-only reuse/semantic-proof constraints; it
+does not choose a final API or certify a model. Existing metadata/profile operations stay separate. Full durable
+SourceLock is Broker-owned; the smaller ResolvedSource.record is not interchangeable. Geometry's
+source_lock remains literal null, its synthetic profiling route proves no real source identity, and
+raw SOURCE_VERIFIED acquisition does not itself supply full compiled semantic identity.
+
+Physical04 remains NOT_BOUND and unissued. Historical installed24/publication39 proves only its
+contained reader. It cannot substitute for the unresolved exact source40 acceptance/runtime join;
+the older known-defective transfer route is not a fallback. No real profile, model headers, provider
+Go or model/dataset payload starts before those exact prerequisites. The frozen Ollama geometry and
+recipe remain unmaterialized; actual manifest/blob/semantic identity is unknown. All L05-L10/live
+rows and required larger downloads remain open. Real ops: 25 SUCCEEDED, 3 FAILED, 1 PAUSED; none active.
+Old03 is PAUSED/EMPTY and inventory04 terminal. No human action is needed.
+
+Fresh post59 UI: Max5x, current13%, weekly65%, Fable4%; usage credits enabled with $0 balance,
+$0 spent and auto-reload Off. Settings unchanged, temporary tab13 closed. Recheck before another
+native launch. No Copilot. Existing accounts, security, billing limits, protected originals and
+independent mathematics remain intact. Keep the old40 boundary absolute: do not run, inspect,
+rephrase, retry or replace its excluded review/shared-writer challenge or coordinated checkpoint
+replacement. The denied wc remains abandoned. Continue other eligible work without relaxing a gate.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+## Historical worklog — superseded checkpoints
+
+The following running and next-action descriptions record their original checkpoint times.
+The compact Current direction above governs execution. Applicable standing constraints also remain
+in AGENTS.md and the execution/live participation policies below. Historical status or next-action
+prose does not override a later completed receipt or the current checkpoint.
+
+### Archived direction — 2026-10-16 23:52 UTC
+
+Continue authorized L05-L10. Independent55 is COMPLETE_PASS for D53-1 repair and all affected52/53
+predicates; native stopped23:33:40/exit0 solely claude-opus-5-5, no denial/safety stop/model subworker.
+Root verifies all212/212/462/440 files unchanged,103 exact replays and31 accepted raw cases preserve
+all non-rate fields/decisions. Positive-work tails stay; empty-only has no numeric throughput and
+retains six state calls. v1 stays immutable and v2 publishes/reuses independently. Original53 FAIL
+is retained, now its D53-1 is repaired/independently passed. Foundation52 PASS stays separate.
+Read generation-repair55-review-complete.json and actual report. One Root snapshot-key audit error
+and native strict int/float comparison artifact remain documented. Optional no-work-held test/count
+fields and U53-1/U53-2 are declined without an unmet row. No full/J/stage/live result follows.
+
+Child56 now implements the missing source-module CLI qualification trigger. qualify-composition
+builds the existing closed source.compose request; the broker keeps exact successful acquisition/
+SOURCE_VERIFIED/original-partial admission. Its canonical drive_prepared event joins the successful
+selected drive/root. Store lifecycle/UUID, durability head/probe and protected inventory revalidate
+before measurement; current native context gates capture/profile reuse. It runs the actual owner,
+retains raw capture, calls the existing qualifier and returns separate operation and qualification
+receipts. The profile key is reference metadata only; immutable measurement bytes and profiler v2
+are unchanged. Paused/failed/cancelled operations gain no pass. A later profile failure leaves an
+already successful byte-preparation record byte-identical. No new state, writer, runtime, dependency,
+provider branch, numerical code, SourceLock, source publication or callable model is introduced.
+
+The actual existing product-entry fixture first fails on missing command (39.07s). Intermediate56
+passes117.21s. Final focused02 passes both the supported source-module CLI journey and the coupled
+composition fixture in149.90s. Seven retained CLI receipts show success, exact duplicate, changed-
+recipe conflict, invalid acquisition, missing-root PAUSED/FAIL, unchanged paused NOT_RUN, and a later
+wrong-profile FAIL with the completed canonical record unchanged. Original acquisition bytes stay
+unchanged and no provider payload is requested by composition. Root verifies the154-file exact
+campaign/capture/operation/request/CLI export, its request digest, raw artifact hashes and exact
+published profile/capture digests. The owned entry image was detached/deleted by its fixture; this
+is owned-APFS platform/integration evidence, not installed/live qualification. First Root export
+used system Python without blake3 and failed before copying; the pinned interpreter succeeds.
+Read generation-entry56-{plan,red01,focused01,focused02,fixture-export}.json.
+
+Next freeze the completed56 component and run one independent Use Opus review of its actual entry,
+destination/identity/profile joins, idempotency and separate outcomes. Keep implementer/reviewer
+separate, retain55 foundation and explicit gaps. Ordinary56 ledger has only the three stale complete-
+J fields. Full56/J consolidated gates remain pending; report50 is historical/stale. Do not fabricate
+or refresh complete reporting from focused proof. Current code hashes: Brokerf3292645...,CLIcfa7756b...,
+Storeb69eaeed...,Source47925eb9...,entry-testfb64e3f0...,acquire-test41ce034e.... No Root test or reviewer
+is active after final proof. Completed56 temporaries await verified archival;154-file export remains.
+
+Keep actual-source composition admission. Ordered Ollama START already depends on verified original
+HF acquisition; no synthetic successful acquisition or extra unresolved composition gate is needed.
+The generated-source consumer must still join exact prepared outputs and operation-plan profile.
+No physical04 controller/graph/runtime is bound; its draft remains unissued. No actual drive profile,
+headers, provider/Go, model/dataset bytes, installation, primary integration, commit or push began.
+All L05-L10/live rows and required downloads remain open. Main code40/report is unchanged; child is
+isolated active implementation. Last real ops25SUCCEEDED/3FAILED/1PAUSED, no active operation.
+Old03 staysPAUSED/EMPTY andinventory04terminal. Systemfree above15percent,LaCie above84percent.
+No human action is required. Existing billing/security/account settings remain unchanged; fresh
+23:37 UI showed Max5x,68percentcurrent/64weekly/4Fable,creditsenabled,$0balance,auto-reloadOff,$0spent.
+Recheck fresh allowance/no-overage proof for the next native launch. No Copilot.
+
+Keep the old40 boundary absolute: do not run, inspect, rephrase, retry or replace its excluded review,
+shared-writer challenge or coordinated checkpoint-replacement route. It never ran. Source40/owner41/
+plan42 original proof remains excluded/open; component results never substitute. Original denied
+wc is abandoned and never retried/rerouted. Protected originals and independent maths stay intact.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 23:39 UTC
+
+Continue authorized L05-L10. Independent55 is COMPLETE_PASS for the empty-interval rate repair and
+all affected52/53 predicates. Native stopped23:33:40/exit0, solely claude-opus-5-5, no denial,
+safety stop or model subworker. Root verifies target55/target53/packet55/packet212/212/462/440 exact
+hashes before/after. Reviewer103 exact raw replays preserve every verdict and non-rate field;
+31 accepted captures keep all calls/counters/claims/holds and scopes. Actual mixed samples drop4->3
+and original53 lower0->5506.872183136541B/s. Actual empty-only range retains six checkpoint calls
+and no numeric throughput. Positive tails remain. Disposable filter/tail/version mutants decide;
+v1 remains immutable, v2 publishes separately and reuses exactly. Read generation-repair55-review-complete.json
+and actual reviewer-work55/report.md/logs. Earlier53 COMPLETE_FAIL remains historical; its D53-1 is
+now repaired and independently passed. Independent52 COMPLETE_PASS remains separate.
+
+Retain gaps: zero-byte intervals wholly consumed by holds have source-only ordering proof; no
+actual fixture. Optional extra test/count fields are declined without an unmet requirement.
+U53-1/U53-2 remain scoped optional observations. Native strict int/float comparison after canonical
+JSON is an instrument artifact, not changed hold data. Root initially assumed the wrong snapshot
+key frozen53; actual target53 comparison succeeds. No product/evidence changed by that audit error.
+Fresh23:37 existing account UI: Max5x,current68percent/weekly64/Fable4,creditsenabled,$0balance,
+auto-reloadOff,$0spent. No settings changed; native estimates are not charges. Original denied wc
+and excluded40 routes stay abandoned, never rerouted. No Copilot.
+
+The next eligible contained implementation56 connects the actual-source-proof composition and
+profile through a thin CLI/broker measurement trigger. Q42/Q43/Q60 and acquisition_entry_contract
+supply its owner; there is currently no supported product call to the private qualifier. Keep
+source.compose's exact successful acquire/SOURCE_VERIFIED and original partial commitments. The
+ordered Ollama START already requires original HF acquisition first; no synthetic successful
+acquisition or unresolved composition admission is needed. Existing canonical drive_prepared event
+and Store lifecycle/durability/inventory helpers supply the selected root and current path. A
+bytes-prepared canonical success stays distinct from a later qualification PASS/error; do not
+rewrite completed operations or add ad-hoc states. Retain exact recipe/output/profile binding and
+Q43 path revalidation. Start with an actual product-entry fixture red, reuse the current helpers,
+and prove only directly affected trigger/reuse/failure paths. Read generation-wiring-next-preparation02.json.
+No real generation, source publication, provider/Go or download begins from this implementation.
+
+Product55 is frozen in generation-profile53-review/target55 (212 files, listing3a6e9820...5b55),
+Source47925eb9...,Storeb69eaeed...,Broker3a611314...,test41ce034e.... Its final affected fixture passes
+35.95s; Root51 exact replay and actual-empty contrast pass. The439-file export and both exact
+profiles remain. All three completed55 fixtures were archived/content-link verified/reclaimed,
+407155589 logical bytes/10605632 archive bytes;54 similarly preserved. No Root test/reviewer is active
+now. Full55 NOT_RUN; generated complete report50 remains stale. Ordinary55 ledger has only its three
+stale complete-J fields. Full/J consolidated gates retain their owners; do not refresh from focused
+proof. No stage or original40/41/42 acceptance, install, integration, commit or push is claimed.
+
+Keep the old40 boundary absolute: do not run, inspect, rephrase, retry or replace its excluded review,
+shared-writer challenge or coordinated checkpoint-replacement route. It never ran. Source40/owner41/
+plan42 original acquisition proof stays excluded/open, with no later component substitution.
+Main code40/report remains unchanged; child is the active isolated implementation. Physical04 stays
+DRAFT_CURRENT_METADATA_NOT_GRAPH_BOUND_NOT_ISSUED with runtime/controller NOT_BOUND and no operation
+issued. Actual real ops25SUCCEEDED/3FAILED/1PAUSED, zero active; old03PAUSED/EMPTY,inventory04terminal.
+Every L05-L10/live row, remaining physical/cache qualification and required model/dataset payload
+remains open. Systemfree15.69percent,LaCie84.87percent at23:36. No human action is required.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 23:27 UTC
+
+Continue authorized L05-L10. Independent52 is COMPLETE_PASS for its three D50 repairs and the
+source-data descriptor request. Independent53 is COMPLETE_FAIL on one supported conservative defect:
+D53-1 counts an empty PREPASS range as zero-byte throughput, forcing the published lower bound to0.
+Q1 exact binding/freshness/reuse and Q2 distinct working set/descriptor/global-counter predicates pass.
+Root verifies53 native stopped/exit0, solely claude-opus-5-5, no continuation denial, safety stop or
+subworker; target212/baseline212/packet440 exact hashes unchanged. All51 exported heads were exercised,
+six deciding mutants discriminate, original53 failed instruments remain retained. Its original run01
+premature missing-file harness and denied unassigned wc remain separate procedural failures; wc is
+abandoned permanently, never retried or rerouted. No billing/security/account setting changed.
+Fresh23:22 account UI shows Max5x,current66percent/weekly64/Fable4,credit switch enabled,$0balance,
+auto-reload Off,$0spent. No observed credit spend; native list-price estimates are not account charges.
+Read generation-profile53-review-complete.json and actual report/logs. No Copilot fallback.
+
+Root55 repairs D53-1 with one filter inside the existing composition active-rate reduction. Zero-byte
+ranges retain raw range counts, calls, latencies and durability; byte-rate samples exclude them.
+An actual empty-only producer capture reports no numeric throughput, while its checkpoint I/O remains.
+The composition-specific profiler suffix advances v1->v2 because immutable measurement semantics
+change; old v1 heads remain and v2 binds a new profile key. No source/checkpoint format or grammar
+changes. The deciding existing-fixture red fails at4 versus3 rate samples (12.26s); intermediate
+focused01 passes36.18s, final focused02 passes35.95s after the version change. Test54 improvements
+remain. Source46 stays47925eb9...,Store55 b69eaeed...,Broker55 3a611314...,test55 41ce034e....
+
+Root replays all51 exact native53 captures against frozen53 and current55: every raw verdict,
+non-rate field, rejection and profile acceptance decision is identical. Only the expected byte-rate
+statistics change. The actual uncached PREPASS lower moves0->5506.872183136541 B/s; its original v1
+head is unchanged and exactly one v2 head is added. The actual empty-only capture compares baseline0
+to currentNone, with one range and all state I/O preserved. Read generation-repair55-plan.json,
+generation-repair55-focused02.json and generation-repair55-replay/{comparison,empty-deciding-comparison}.json.
+The439-file55 export verifies every exact original capture head/request and both profile digests.
+Independent affected review55 launched23:28:15 through Use Opus on the same stopped session998d7dee-a999-478e-83ea-1c30da83e71a, frozen212-file target55 and separate reviewer-work55. Tool31387,worker71131. At23:32 it is active with103 events, actual claude-opus-5-5, no error/report. Do not duplicate; reconcile native-repair55-run01/repair55 and generation-repair55-running02.json. Original53 target/report remain unchanged.
+
+Keep scope limits and optional observations: U53-1 checks a changed descriptor flag rather than a
+specific platform bit; U53-2 sums whole-input allocation. Neither was shown to violate the stated
+predicate. Do not invent a requirement to change Source planning now. A within-memory fixture is
+not cold traffic/cache exhaustion; counters stay process/shared-device, never per-path/per-read.
+Profile55 remains private, without real generator/Go dispatch or exact generated-layout join.
+Existing OperationGeometry permits unresolved synthetic geometry preparation only; it cannot claim
+real SourceLock/authentication/headers/payload or advance acquisition. Never invent a successful
+acquisition to fit composition. The next static preparation02 traces existing drive_prepared events as destination joins. The ordered
+Ollama START already depends on verified original HF acquisition. Keep the actual-source-proof
+composition guard; no extra unresolved composition admission is required by that ordering. Choose
+the thin trigger and separate bytes-prepared/qualification receipt, then bind only an exact consumer
+after the affected independent verdict. This is a contained implementation choice, not new proof. Physical04 stays
+DRAFT_CURRENT_METADATA_NOT_GRAPH_BOUND_NOT_ISSUED, runtime/controller NOT_BOUND, no operation issued.
+
+Keep the old40 boundary absolute: do not run, inspect, rephrase, retry or replace its excluded review,
+shared-writer challenge or coordinated checkpoint-replacement route. It never ran. Source40/owner41/
+plan42 original acquisition proof remains excluded/open; later component results never substitute.
+Full suite/J gates keep their consolidated owners. Historical full50 is340/634.54s/zero skips/
+14controls/J18096; generated complete report50 is stale. Full55 NOT_RUN. Do not fabricate a refreshed
+report, integration, source acceptance or stage pass. Main code40/report remains unchanged; child55
+holds implementation/test/narrative changes. No install, integration, commit or push began.
+
+Real canonical ops last25SUCCEEDED/3FAILED/1PAUSED, zero active. Old03 remains PAUSED/EMPTY and
+inventory04 terminal. Required model/dataset payloads and every L05-L10/live acceptance remain open.
+Completed54 fixture is archived/content-link verified/reclaimed (181215724 logical bytes,
+4921315 archive bytes); its422-file exact export remains. All three completed55 fixtures are archived/content-link verified/reclaimed (407155589 logical
+bytes,10605632 archive bytes); the439-file55 export and both exact profiles remain. System free stays above15percent, LaCie above84percent. Only native55 review is active; Root tests/exports/replays and archival have stopped. Ordinary55
+ledger confirms only the three declared stale complete-J fields. Read generation-repair55-ledger.json. No human action is required.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 23:17 UTC
+
+Continue authorized L05-L10. Independent52 is COMPLETE PASS for all three bounded questions:
+D50-1 probe-only zero retained boundary, D50-2 invented interruption endpoints, D50-3 actual
+post-close incomplete seals, and the explicit source-data descriptor request. Root verified native
+exit0/stopped23:06:21, solely claude-opus-5-5, no permission denial, safety stop, model subworker or
+fallback. Native36 own cases, seven raw-guard mutants and two actual descriptor mutants discriminate
+all supported mechanisms. Both original14/18 and18/18 seals match exact identities/accounting and
+remain incomplete. Source-state/output descriptors stay unchanged and all owned fds close on success
+and injected failure. This proves the request only, never cold traffic or qualification. Root hashes
+match target212/baseline212/packet727 before/after; all three image archives verified/detached and
+owned processes stopped. Read generation-repair52-review-complete.json and actual report/evidence.
+
+Keep declared gaps: independent52's85 saved native50 variants lacked matching requests/owners and
+stopped at broker admission; no product inference. Its own36 cases decide the same mechanisms.
+Root's exact128 replay remains separate. Report minimum-space prose16.35percent is inaccurate;
+actual retained minimum16.2445percent remains above10percent. Native echo placeholder and premature
+missing-file harness call, plus two Root snapshot-shape audit mistakes, remain retained. No stage,
+real source/acquisition or full53 acceptance follows this component pass. Source40/owner41/plan42
+and the flagged40 route remain excluded/open; never run, inspect, rephrase, retry or replace that route.
+
+Root adopted two test-only improvements from52. The probe control now removes same-window tail
+initialization before forging its zero boundary; baseline50 actually ACCEPTS and current53 REJECTS
+at the intended guard. The descriptor assertion now checks stable added native flag bits and rejects
+cache fields on every non-source_data extent. Actual52 m-nocache-all rows passed the old assertion
+but fail the strengthened one; normal rows pass. Affected54 fixture passes23.95s. Product code stays
+byte-identical to53 (Store ec18564c...,Broker66cb44cb...,Source47925eb9...). Read
+generation-proof54-focused01.json and generation-proof54-deciding/receipt.json. The422-file54
+export verifies exact original heads/requests and reconstructed profile digest. The optional redundant
+conjunct cleanup is declined; no unmet behavior justifies changing the accepted grammar now.
+
+The new private53 qualifier remains under independent review, with full53 NOT_RUN and report50 stale.
+It reuses Store.storage_profile, actual PREPASS/COMPOSE_WRITE statistics, Source's distinct data
+working set and decoded original/native/descriptor facts, then retains exact measurements through
+Store campaign heads. Raw captures still say QUALIFICATION_NOT_RUN; incomplete/RESUME cannot qualify
+as fresh. Counters stay process/shared-device with no per-path attribution. Within-memory data and
+separate checkpoint bytes prove no larger cache crossing. Root53 affected21.80s/12controls, legacy
+pair0.99s and two deciding metadata sensitivities pass; controlled hardware/counter cases remain
+explicit simulations. Original red/wrong-field/instrument failures are retained. No payload or
+checkpoint format changed. This private path has no real generator/Go or generated-layout wiring yet.
+
+Review53 native-run01 was stopped at23:07 after an unassigned wc utility was denied. Its exact allowed
+harness had previously failed only because the file did not exist. No review experiment ran; the
+interruption is retained, not a product failure or subscription limit. The denied line-count action is
+abandoned permanently, with no equivalent helper or permission expansion. Root clarified the overly
+broad own stop-all rule: independent originally authorized checks may continue through the unchanged
+exact harness grant; denied actions are never retried/rephrased. No human gate or provider fallback.
+The same stopped session998d7dee-a999-478e-83ea-1c30da83e71a resumed23:11:56 through the skill.
+Active tool99870,worker12700,native-run02/profile53. Actual continuation messages serve
+claude-opus-5-5; at23:15 active, no report or new error. Use the actual summaries/events before acting;
+original tools85260 and78993 are closed. No duplicate review or scope widening. Completed52 is copied
+as a new declared packet fact, not substitute evidence for53's two independent questions.
+Fresh23:11 UI:Max5x,63percent current/64weekly/4Fable,creditsenabled,$0balance,autoreloadOff,$0spent.
+No account/security/billing setting changed. The previous review incurred no observed credit spend;
+list-price estimates are not account charges. No Copilot.
+
+Next: reconcile exact53 continuation and repair supported findings; preserve52 acceptance and test54
+proof separately. Read the existing CLI/start_download/_qualify_download and OperationGeometry routes
+before connecting any generation profile. Missing links are product dispatch/source_qualification
+receipt, exact generated-layout binding and an admitted non-source-proof preparation path. Do not
+invent a successful acquisition/source identity to make geometry fit. Current physical04 remains
+DRAFT_CURRENT_METADATA_NOT_GRAPH_BOUND_NOT_ISSUED with runtime/controller NOT_BOUND. No actualprofile,
+headers, provider/Go or model/dataset download starts from this component evidence. Full suite/J gates
+retain their consolidated owners; full50 remains historical340/634.54s/zero skips/14controls/J18096.
+Generated complete report remains50 and stale; do not fabricate a refreshed report or stage pass.
+
+Main code40/report unchanged; child has product53 plus test54/narrative changes. Last real ops remain
+25SUCCEEDED/3FAILED/1PAUSED, zero active; old03 PAUSED/EMPTY,inventory04 terminal. Every L05-L10,
+physical/cache, source identity and required-input acceptance remains open. No integration, install,
+commit or push began. Completed51/52/53 fixtures were archived/content-link verified/reclaimed;
+422-file53/54 and418-file52 exports and exact source/proof remain. Only the53 native reviewer is
+active;54 Root fixture is detached completed evidence awaiting archival. System free space stays
+above16percent. No user action is required for contained work.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 23:04 UTC
+
+Continue authorized L05-L10. One native Opus review52 runs on frozen212-file52, not the changing
+child53. Tool78993, worker51283, session7c013a00-6d29-4ad5-9b2c-a5e5853d1e80, launched22:45:54.
+At23:03 it remains active with825 events, solely claude-opus-5-5, no report/verdict. Its last native rate event is
+allowed, isUsingOverage=false, credit overage rejected/out_of_credits. Fresh launch UI showed Max5x,
+53percent current/63percent weekly, credits enabled with$0balance/autoreload Off. Root changed no
+account setting. No Copilot fallback. Native made one unnecessary echo placeholder command, accepted
+by existing configuration, and one premature allowed harness call before the file existed, exit2.
+Both are retained procedural/instrument deviations, not permission denial or subscription exhaustion.
+Do not retry or duplicate the review. Inspect actual native receipts and state preservation on return.
+
+Frozen52 repairs three supported native50 residuals: probe-only zero retained boundary on nonempty
+output; invented interrupted-row endpoints; real post-WINDOW_CLOSE incomplete seals. Its affected
+fixture passes22.39s; Root128exact replay changes precisely five expected decisions and all other
+accepted values remain identical except claim_accounting. Both actual seals assess incomplete with
+14/18 partial and18/18 complete claim accounting. Native50's earlier five D48 repairs, legal orders,
+two-prefix sensitivity and actual early-cancellation/head-ownership Q3 passed independently, but50
+is COMPLETE FAIL overall. Read generation-trace50-review-complete.json and generation-repair52-*.
+The optional captured F_NOCACHE request also has local red/green/native-flag sensitivity proof.
+Review52 covers these three repairs and the descriptor request only; Source40/owner41/plan42 remain
+excluded/open and the flagged40 route stays untouched.
+
+Root advanced the eligible Q42 prerequisite in child53 while52 stays frozen. One explicit composition
+case now reuses Store.storage_profile, actual PREPASS/COMPOSE_WRITE statistics, Source's distinct
+working set and decoded original/native/descriptor facts. Broker._composition_profile retains the
+exact bound measurement through Store campaign records and verifies reuse. Raw captures keep their
+QUALIFICATION_NOT_RUN scope; incomplete/RESUME cannot qualify as fresh. Descriptor request alone is
+not cold traffic. Mixed process/shared-device counters retain no per-path/per-read attribution.
+Within-memory source windows prove no larger cache crossing; checkpoint bytes stay separate.
+Source46 remains byte-identical. No payload/checkpoint format changed or second trace parser added.
+
+Affected53 passes21.80s with12profile controls; the directly coupled legacy pair passes0.99s.
+Root metadata-only sensitivity detects removal of the physical-I/O/allocation bound and substitution
+of repeated logical volume for distinct touched bytes. Controlled hardware/counter cases are labeled
+simulations, not actual cache-crossing observations. Read generation-profile53-focused03.json,
+generation-profile53-legacy01.json and generation-profile53-sensitivity/receipt.json. The missing-method
+red21.47s and first implementation's wrong Source plan field failure23.82s are retained. Intermediate
+focused02 passed125.10s before final validation/controls. A sensitivity helper's incorrect assumption
+also remains retained; the existing extent guard rejected the wrong-volume mutation earlier.
+The422-file profile53 fixture export verifies every original capture/request and reconstructed profile
+digest. Full53 is NOT_RUN; independent53 is now running as recorded below. Do not call its local synthetic profile real qualification.
+
+The exact212-file53 source is retained in generation-profile53-candidate, manifest
+9d53d4369bf9b8179450668ce5ac2514c729201854aab357f01f277fb6db1994. Ordinary child ledger
+passes structural checks with exactly three expected stale complete-J-report fields. Full53 NOT_RUN.
+A second separate Opus reviewer now examines only the new qualifier/profile_inputs on frozen53,
+using baseline52 and the422-file export. Tool85260,worker97737,session998d7dee-a999-478e-83ea-1c30da83e71a,
+started23:03:01; actual served model claude-opus-5-5. No report/verdict. The two finite scopes and
+write paths are independent, so reviewer execution proceeds in parallel;53 acceptance remains
+explicitly conditional on52, and any supported foundation repair invalidates affected53 proof until
+reconciled. This supersedes waiting to start53 review. No shared mutation or duplicated assignment.
+Fresh23:02 usage UI shows59percent current/63weekly/4Fable,Max5x,creditsenabled,$0balance,autoreloadOff,
+$0spent; no account changes/fallback. Read generation-reviews52-53-running01.json before continuing.
+
+Next: reconcile both exact owned reviews without duplication, decide52 foundation before any
+53-dependent acceptance, repair supported findings and rerun affected proof. Keep the new private
+profile path separate from unimplemented real generator/Go wiring and generated-layout qualification.
+Full suite/J gates retain their consolidated owners. Full50 stays historical340/634.54s/zero skips/
+14controls/J18096; generated report remains50 and stale. Do not fabricate a refreshed report.
+
+Main code40/report unchanged. At22:53 all29 real ops are25SUCCEEDED/3FAILED/1PAUSED, zero active;
+no process names external build root. Old03 stays PAUSED/EMPTY,inventory04 terminal. No integration,
+installation, real profile/download, provider/Go, commit or push began. Every L05-L10, physical/cache,
+source identity and required-input acceptance remains open. Four completed51/52 fixtures were
+archived/content-link verified/reclaimed:657831188logical bytes/17167255archive bytes;422-file53
+and418-file52 exports remain. Current53 fixtures are now archived/content-link verified/reclaimed too:725195702logical bytes/
+20157315archive bytes. Both exports and exact53 source/proof remain. Only the two native reviewers
+are active; Root test/image environments have ended. System free space remains above16percent. No user action is required for contained work.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 22:44 UTC
+
+Continue authorized L05-L10. Native50 is COMPLETE FAIL with three supported residuals, retained in
+generation-trace50-review-complete.json. Its five D48 repairs, legal orders, two-prefix sensitivity
+and Q3 actual early-cancellation/head-ownership checks pass independently. Worker53777/sessiondf5dc8c7
+stopped22:29:45 exit0, solely claude-opus-5-5; no fallback, denial, tool error or subworker. No stage pass.
+
+Child52 now repairs D50-1 probe-only zero retained boundaries on nonempty outputs, D50-2 invented
+endpoints in interrupted raw rows and D50-3 actual post-WINDOW_CLOSE incomplete seals. A genuine
+close preserves its observed counters; missing or partial claim tails keep separate declared,
+recorded and completeness fields. Incomplete stays incomplete, even with canonical success and a
+full tail. Source46 remains unchanged. Broker51's optional captured F_NOCACHE request records native
+F_GETFL before/after on owned original-source data descriptors; the default stays unchanged. It is
+raw request evidence, never cold traffic or qualification. No optional stricter time/slot rule or
+unrelated I4-I8 change was adopted. Passed early-cancellation/ownership branches remain unchanged.
+
+Affected52 proof passes22.39s, including cache51 and prior coupled controls. Read
+generation-repair52-focused01.json. Root replays all43 original heads plus85 exact native50 variants:
+exactly five expected decisions change; every other accepted statistics value is identical apart
+from newly explicit claim_accounting. Read generation-repair52-native50-replay/semantic-comparison.json.
+Both actual native50 post-close seals also pass offline recomputation with verified original head,
+raw and request identities:14/18 stays partial with unknown exact count,18/18 is complete accounting;
+both remain RECOMPUTED_INCOMPLETE_RAW. Read generation-repair52-actual-post-close/receipt.json.
+This is Root affected proof, not independent52 acceptance. Prepare one bounded separate native Opus
+review of the three repairs and descriptor request. Do not duplicate stopped50 or prepared49.
+
+Fresh22:43 native usage UI shows Max5x,53percent current,63percent weekly,4percent Fable. Credits are
+now enabled, balance$0.00 and auto-reload Off, spent$0.00. Root changed no setting. The observed zero
+prepaid balance/autoreload safeguard permits included work under Use Opus. Preserve actual receipts;
+no API billing, new account/credential or Copilot fallback. Recheck if observation exceeds15minutes.
+
+Full50 remains exact historical proof:340tests/634.54s/zero skips/14controls/J18096/212files,
+manifest070f1d5ec76d195f11faf1fa6593d3c70b6f6b56990dababc2076a632a164f39.
+It is not full proof for changed52. Generated report remains50 and is stale for current accounting;
+full/J gates retain their consolidated owners. Use affected proof for localized repairs. The next
+Q42 composition qualifier still requires binding/phase/cache work through existing Store authority;
+see generation-qualification-next-preparation.json. Repeated logical reads over8MiB distinct bytes
+cannot establish cache crossing. Advance eligible qualification work after freezing the review.
+
+Main code40/report unchanged. Last reconciled22:02:29 real ops25SUCCEEDED/3FAILED/1PAUSED,zero active;
+no process names external build root. Old03 stays PAUSED/EMPTY,inventory04 terminal. No integration,
+installation, real profile/download, provider/Go, commit or push began. Every L05-L10, physical/cache,
+source identity and required-input acceptance remains open. Source40/owner41/plan42 and flagged40
+route untouched/unaccepted. Retain failed instruments, exact captures and incomplete attempts.51/52
+fixtures are owned detached evidence awaiting export/archive. System free space remains above15percent.
+No user action is required for contained repair or review.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 22:36 UTC
+
+Continue authorized L05-L10. Native50 is COMPLETE FAIL: Q1 fails D50-1, Q2 fails D50-2/D50-3,
+Q3 actual early cancellation and never-acquired head ownership passes independently. All five D48
+repairs, legal orders and the two-retained-chunk sensitivity also pass. Three supported residuals
+remain: a probe-only zero retained boundary on a nonempty output; invented endpoints inside an
+interrupted row producing counters; and real incomplete seals after WINDOW_CLOSE being rejected.
+The last reproduces on the actual producer with partial14/18 and full18/18 claim tails. Read
+ generation-trace50-review-complete.json and the actual report. Repair these through the same Store
+grammar. Preserve unknown interrupted endpoints when no close was observed, actual endpoints when
+WINDOW_CLOSE was observed, and separate declared/recorded/complete claim accounting. Never promote
+an incomplete observation to complete or qualification. Adopt no optional stricter time/slot rule,
+or unrelated I4-I8 change. The producer's passed early-cancellation/ownership branches remain.
+
+Native worker53777/sessiondf5dc8c7-e42d-42fd-aba4-2aba90361ff6 has stopped, exit0 at22:29:45;
+tool14737 closed. Actual served models are solely claude-opus-5-5. No fallback, subworker, permission
+denial, safety stop or tool error. Exactly two scoped harness calls ran; the first timing sweep
+missed the post-close window and the retained second run found it. Target212, both baselines212
+and packet401 files are hash-identical on Root readback. Six owned images were detached/archived.
+The real drive API enumerated /Volumes metadata only; no protected files opened. Source-acquisition
+forgery remains static-only and outside this component's executed challenges. No stage/live pass.
+
+Root independently advanced the next Q42 prerequisite in child51: an explicit captured source-data
+F_NOCACHE request now binds its policy in capture context and records native F_GETFL before/after
+flags on the Store-granted original-source descriptors. Default capture and Source execution remain
+unchanged. A deciding red fails on the missing path; the affected fixture now passes19.20s. Removing
+only the request call in a disposable source leaves reported True but unchanged native flags, and
+the same fixture fails at that witness (21.57s). Read generation-cache51-red01.json,
+generation-cache51-focused01.json and generation-cache51-sensitivity/receipt.json. This path is
+unreviewed and remains raw observations, not cold traffic or qualification. The actual composition
+qualifier still needs binding/phase/cache work through the existing Store storage_profile authority;
+see generation-qualification-next-preparation.json. Repeated2.16GB logical reads over8MiB distinct
+source bytes cannot establish cache crossing. No new Source checkpoint format or bytes changed.
+
+Full50 is retained:340 tests in634.54s, zero skips,14 controls, ordinary ledger;212 files; J18096;
+manifest070f1d5ec76d195f11faf1fa6593d3c70b6f6b56990dababc2076a632a164f39.
+That exact snapshot preceded51 and is not current-child full proof. The generated report remains50;
+record new accounting honestly. Apply affected proof and coupled controls to localized repair; full
+suite/J gates retain their consolidated owners. Do not fabricate a refreshed report or add stage gates.
+
+Main code40/report remain unchanged. At22:02 all29 real operations are25SUCCEEDED/3FAILED/1PAUSED,
+zero active; no process names the external build root. Old03 stays PAUSED/EMPTY and inventory04
+terminal. No integration, installation, real profile/download, provider/Go, commit or push began.
+Every L05-L10, physical/cache, source identity and required-input acceptance stays open. Source40,
+owner41, plan42 and the flagged40 route remain untouched and unaccepted. Prepared49 never launched.
+Failed attempts, native deviations, real seals and exact evidence levels remain retained. Four50
+fixtures were archived/content-link verified/reclaimed;51 fixtures remain owned evidence. System
+free space stays above15percent. No user action is required for these contained repairs.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 22:19 UTC
+
+Continue authorized L05-L10. Frozen50 passes340 tests in634.54s, zero skips,14 component controls
+and ordinary ledger. J=(0,0,18096,1,1,9,0,0,8425096);212 files; manifest SHA256:
+070f1d5ec76d195f11faf1fa6593d3c70b6f6b56990dababc2076a632a164f39.
+The complete generated report is copied to the child only. Every212 source file matches the proved
+snapshot and ordinary child ledger passes before this narrative update. Source46 and broker49
+remain byte-identical. Read generation-trace50-proof.json and autonomy-candidate-50/result.json.
+
+One separate native Opus reviewer now examines frozen50 against baseline49 and48. Actual native
+messages serve claude-opus-5-5. Worker53777/sessiondf5dc8c7-e42d-42fd-aba4-2aba90361ff6, tool14737;
+started21:49:54, running, no verdict. Three finite questions cover the supported48 grammar repairs,
+49 incomplete semantics/work separation, and actual early cancellation/head ownership. Fresh native
+allowance at21:40 shows32percent current,61percent weekly and usage credits OFF. No account,
+credential or billing change/fallback. Preserve target/baselines/packet; do not duplicate the review.
+At22:01 the same worker remains active with592 native events, all served assistant models Opus5.5,
+no tool error or native shell call yet, and no report. Continue monitoring exact tool14737/worker53777
+before starting dependent work; do not duplicate it. Prepared49 never launched.
+Two premature Root plan calls before task.md existed are separately
+retained instrument failures; no native worker/auth/permission/limit event occurred in either.
+
+Child50's cited affected fixture passes22.52s:20 fresh and8 resumed contradictions, legal short
+calls, earlier incomplete/cancellation checks and actual two-chunk suffix restart. The exact saved
+native48 replay accepts8 legal forms and rejects7 supported invalid forms. Root's two-prefix
+sensitivity accepts normally, then rejects exact recipe traversal when only the retained-range skip
+is removed from a disposable copy. Exported354-file evidence verifies every original captured and
+reconstructed request digest. Three failed test and two failed export instruments remain retained.
+Those checks are local evidence; independent50 and physical qualification remain unaccepted.
+Four completed Root-owned50 scratch fixtures are archived, every content/link entry verified, then
+reclaimed:555338731 logical bytes into14934662 archive bytes. Exported evidence and failed attempts
+remain retained. Read generation-trace50-fixture-reclamation.json; no active image was removed.
+
+Independent preparation identifies the next Q42 gap without modifying product code. The existing
+Store storage_profile owns qualification, but its binding/phase/cache fields do not yet accept the
+composition observations. The small fixture plans2160066560 source read bytes per phase while its
+distinct touched source union is8388608 bytes; actual process/device reads are0. Repeated logical
+reads are not a cache-crossing or cold-traffic proof. Read generation-qualification-next-preparation.json.
+A tiny Root-owned system-APFS descriptor probe successfully sets, reads and clears F_NOCACHE through
+public fcntl APIs; its43-byte file and descriptor are removed. This is primitive capability evidence,
+not an external-drive request or qualification. The composition qualifier remains unimplemented.
+Follow the consolidated proof scope: affected checks prove localized repairs; full gates remain at
+the queue's declared owners. Retain exact complete50 evidence and never refresh J by invention.
+
+Native48 remains COMPLETE FAIL on D48-1..5, with its raw inputs, deviations and exact evidence level
+preserved. Current50 replaces the redundant final-window state fence with per-output durable close;
+all original durability requirements remain. Same-window initialization is not old evidence, retained
+checkpoint records precede retained data, and each PHASE time stays in-window. U48-1/U48-2 and
+optional refactors remain unadopted. No new Source checkpoint format or execution path was added.
+
+At21:35 all29 real operations remain25SUCCEEDED/3FAILED/1PAUSED, zero active; no process names the
+external build root. Old03 stays PAUSED/EMPTY and inventory04 terminal. Full50 and focused50 have
+stopped; their own images are detached. Free system space remains above15percent. Main code40/report
+remain unchanged. No integration, installation, real profile/download, provider/Go, commit or push
+has begun. Every L05-L10, physical/cache, source identity and required-input acceptance stays open.
+Source40, owner41, plan42 and the flagged40 route remain untouched and unaccepted. Continue eligible
+work without treating a local full proof or pending review as acceptance.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 21:36 UTC
+
+Continue authorized L05-L10. Child50 repairs the five supported COMPLETE FAIL findings from native48
+through the existing Store grammar: first-only contiguous header initialization, post-data record
+and header proof, per-output durable close, all PHASE times inside the window, checkpoint records
+read before retained data, and no same-window initialization counted as old evidence. Closing each
+output replaces the old redundant final-window state-fence guard; no durability requirement is
+removed. Source execution and broker49 remain byte-identical. U48-1/U48-2 and optional refactors
+remain unadopted findings. The exact saved native48 inputs now accept8 legal variants and reject7
+supported invalid variants on final50. Read generation-trace50-native48-replay/green50-final-receipt.json.
+
+The cited affected fixture passes22.52s with the prior incomplete49/early-cancellation paths,20 fresh
+and8 resumed contradictions, legal short calls and an actual two-retained-chunk suffix restart.
+The two4MiB retained chunks leave3 new ranges and4194327 new output bytes. Removing only the retained
+range skip in a disposable source makes that same real fixture reject at exact recipe traversal;
+normal source accepts. U48-3's previously insensitive proof now discriminates. Read focused04,
+generation-trace50-two-prefix-sensitivity/receipt.json and generation-trace50-fixture-export.json.
+The exported354-file fixture verifies every original sealed capture digest and reconstructed request
+digest. Three failed test instruments and two failed export instruments remain explicit and retained.
+They did not demonstrate additional product defects.
+
+Full50 and separate review50 are next; neither has run. Run the required full candidate proof, freeze
+its exact source, then use one separate native Opus reviewer for supported48 repair plus49 incomplete
+semantics, actual early cancellation and the two-prefix proof. Prepared49 was never launched. Native48
+COMPLETE FAIL and all its deviations remain retained. Full49 passes340 tests/zero skips/14 controls,
+J18083; that machine pass cannot accept inherited48 failures. Main code40/report remain unchanged.
+
+At21:35 all29 real operations remain25SUCCEEDED/3FAILED/1PAUSED, zero active; no process names the
+external build root. Old03 stays PAUSED/EMPTY and inventory04 terminal. The focused50 test has stopped
+and detached its own image; its evidence remains retained. Free system space is above16percent.
+No integration, installation, real profile/download, provider/Go, commit or push has begun. Every
+L05-L10, physical/cache, source identity and required-input acceptance stays open. Source40, owner41,
+plan42 and the flagged40 route remain untouched and unaccepted. Do not treat a local proof or a pending
+review as acceptance. Preserve failed attempts and exact evidence levels.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 21:24 UTC
+
+Continue authorized L05-L10. Independent48 is COMPLETE FAIL on served claude-opus-5-5: Q1/Q2 fail,
+Q3 shared grammar/preservation passes. Five supported defects remain: D48-1 early commit header
+accepted as repeated initialization; D48-2 post-completion empty-output rewrite; D48-3 completion
+PHASE time outside the native window; D48-4 retained data verified before its checkpoint record;
+D48-5 same-window initialization/probes counted as retained evidence. The real captures recompute
+exactly; the failures use malformed raw traces. Read generation-recovery48-review-complete.json
+and the actual report. Worker92542/sessionb7e6daa4-1b90-4555-8f7d-eddb988b8a32 has stopped, exit0,
+no native denial/fallback. Every frozen212-file target/baseline and author fixture remains unchanged.
+Two premature missing-file calls and an unintended second full replay are retained; both actual
+runs yield the same outcomes. U48-1/U48-2 and report-label/formula refactors are not adopted failures.
+
+Full49 separately passes340 tests in672.35s, zero skips,14 controls and ordinary ledger. J=(0,0,
+18083,1,1,9,0,0,8425096);212 files; manifest SHA256:
+d5a6923df6cd82759f5deb81cf30a538817eb83c492ac4383c79bbe6434070d6.
+Its generated complete report is copied to the child only and exact equality/ordinary ledger pass
+before this narrative update. That proof does not accept inherited48 defects. Its incomplete/raw
+and early-cancellation repair remains locally proved16.68s, independently unreviewed. The prepared49
+review has not started; combine supported48 repairs with the directly coupled49 work before the
+next frozen review. Preserve actual ownerless red, syntax error and failed instrument separately.
+
+Root now replays the exact native48 inputs on frozen49: all8 legal variants accept, and all7 raw
+variants exposing D48-1..5 falsely accept. Read generation-trace50-native48-replay/red49-receipt.json.
+This is the deciding red for50. Repair those five mechanisms through the same grammar and the
+existing Source-dispatched checkpoint boundary. Preserve legal short calls and refenced header
+rewrites. Do not introduce another checkpoint format or alter Source execution. Rerun exact affected
+rows and the existing cited fixture. Close U48-3's proof gap with a meaningful two-retained-chunk
+suffix case; do not accept an insensitive mutation as proof. No50 code has been written yet.
+
+Five completed49 scratch fixtures are archived, content/link verified and reclaimed; the actual
+ownerless red image is retained in focused03.tar.gz and the prepared packet. Exported49 contains283
+hash-verified files and exact original sealed-head digests. No test or reviewer is active now.
+Main code40/report remain unchanged. The last real-log reconciliation at20:48 remains29 operations,
+25SUCCEEDED/3FAILED/1PAUSED, zero active; old03 PAUSED/EMPTY and inventory04 terminal. Reconcile
+before any real operation. No integration, installation, real profile/download, provider/Go, commit
+or push has begun. Every L05-L10, physical/cache, source identity and required-input acceptance stays
+open. Source40, owner41, plan42 and the flagged40 route remain untouched and unaccepted. Free system
+space stays above16percent. Do not treat local full proof or a failed review as acceptance.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+### Archived direction — 2026-10-16 21:05 UTC
+
+Continue authorized L05-L10. Child49 now assesses actual paused, cancelled, final-published and
+pre-owner incomplete captures through the same Store grammar. The cited affected fixture passes
+16.68s. Paused evidence stays incomplete after a successful restart; an observed final record is
+separate from canonical success. Interrupted native/host endpoints and absent issued claims stay
+null. Successful and failed calls/ranges, prefetched but unwritten ranges, pending bytes and observed
+durable frontiers stay separate. An unfinished hold leaves active duration and rates unknown.
+Read generation-incomplete49-focused04.json and generation-incomplete49-fixture-export.json.
+
+The actual early-cancellation check proves another Q60 defect before repair: after MEASURING becomes
+visible and before an owner exists, cancellation leaves MEASURING without a sealed incomplete
+receipt. The producer matches frozen48 at that point. Its repair retains the actual committed head
+inside the joined Store action and covers initialization with cleanup. The affected check now seals
+and assesses that ownerless interruption. Read generation-incomplete49-early-red01.json. Preserve the
+failed first red, syntax edit and incorrect empty-range/source-call instrument pairing separately.
+
+Root's directly coupled replay on current49 accepts all5 exact retained native47 legal orders and
+rejects all10 invalid orders. This is affected regression evidence, not independent review. Ordinary
+child ledger has only its three expected stale48 report fields; authored total is18083. Source
+executable remains unchanged. Full49 is next, then its fresh separate review; no49 acceptance yet.
+
+Frozen48 passes340 tests in856.96s, zero skips,14 controls and ordinary ledger;212 files, manifest
+SHA256:a377b7d5a504f37d4d8f90b24286b5f5ded1eb626a32966e5477330bb2aa9d28. Its separate native Opus
+reviewer remains running against47 on claude-opus-5-5, with no verdict. Two missing-harness instrument
+calls are retained; no permission denial or extra shell command has occurred. Worker92542,
+sessionb7e6daa4-1b90-4555-8f7d-eddb988b8a32, tool4803. Do not duplicate it or change its frozen
+review target/baseline/packet. Source40, owner41 and plan42 remain unaccepted. The flagged40 route
+stays untouched. Independent47 remains FAIL with its separate native permission block preserved.
+
+All failed attempts and exact raw captures remain. Eight completed48 scratch directories were
+archived, content/link verified and reclaimed. New49 scratch evidence is retained. At20:48 all29
+real operations remain25SUCCEEDED/3FAILED/1PAUSED, zero active; no process names the external build
+root. Old03 is PAUSED/EMPTY and inventory04 terminal. Main code40/report remain unchanged. No
+integration, installation, real profile/download, provider/Go, commit or push has begun. Every
+L05-L10, physical/cache, source identity and required-input acceptance remains open. Free system
+space is above16percent. A local proof or pending component review is not acceptance.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 20:50 UTC
+
+Continue authorized L05-L10. Frozen48 passes340 tests in856.96 seconds, zero skips,14 component
+controls and ordinary ledger. Its regenerated complete report is copied to the child only; all212
+source files match the proved snapshot before subsequent narrative updates. J=(0,0,18030,1,1,9,0,0,
+8425096). Manifest SHA256:a377b7d5a504f37d4d8f90b24286b5f5ded1eb626a32966e5477330bb2aa9d28.
+Read generation-recovery48-proof.json and autonomy-candidate-48/result.json.
+
+One new separate native Opus reviewer is running on frozen48 against failed47. Actual receipts serve
+claude-opus-5-5; no verdict yet. Its finite questions cover checkpoint lifecycle/window containment,
+complete RESUME retained/new accounting, and one shared grammar with preserved FRESH behavior.
+Fresh included allowance is observed with usage credits off. Read generation-recovery48-review/
+scope-preparation.json; worker92542, sessionb7e6daa4-1b90-4555-8f7d-eddb988b8a32, tool4803.
+Do not duplicate it. The review target/baseline/packet stay frozen while Root continues in the child.
+
+Independent47 remains COMPLETE FAIL on D47-1 in Q1/Q2; Q3 geometry passes. Its native route separately
+blocked an unnecessary out-of-scope mkdir, and an extra Bash true ran. Every deviation, failed first
+instrument and second deciding harness remains retained. No denied command is retried or permission
+broadened. Root's exact retained affected replay on48 accepts5 legal and rejects10 invalid cases;
+it is not a new independent review. The flagged40 route remains untouched.
+
+Complete48 separates old verified output bytes from new suffix writes and never invents new durable
+intervals for wholly retained outputs. Its local affected check passes21.81s, with16 fresh and5
+resumed contradictions rejecting. Incomplete assessment remains required and unimplemented. Continue
+that finite next component through the same Store grammar; preserve absent interrupted endpoints,
+open/prefetched frontiers and captured status even after the canonical operation later succeeds.
+Read generation-incomplete49-preparation.json before changing code. Early interruption during the
+MEASURING publication is an unexecuted hypothesis, not a proved producer defect.
+
+Eight completed Root-owned48 scratch fixture directories are archived, content/link verified and
+reclaimed; exact exported captures and failed attempts remain. Active proof48 has stopped. At20:48
+all29 real operations remain25SUCCEEDED/3FAILED/1PAUSED, zero active; no process names the external
+build root. Old03 is PAUSED/EMPTY and inventory04 is terminal. Main code40/report remain unchanged.
+No integration, installation, real profile/download, provider/Go, commit or push has begun. Every
+L05-L10, physical/cache, source identity and required-input acceptance remains open. Free system
+space stays above14percent. A local full proof or pending review is not acceptance.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 20:33 UTC
+
+Continue authorized L05-L10. Isolated48 implements complete RESUME raw assessment through the one
+Store grammar, plus the supported D47-1 checkpoint lifecycle and a further native-window endpoint
+repair. The affected fixture passes21.81s:16 fresh and5 resumed contradictions reject; legal short
+calls, partial-suffix recovery and wholly retained restart pass. Exact retained independent47 rows
+also replay on48:5 legal cases accept,10 invalid cases reject. This is Root's affected replay, not a
+new independent review. Read generation-recovery48-final-affected.json and
+ generation-recovery48-d47-replay01/receipt.json. Full48 is next, then a fresh frozen-candidate review.
+
+Checkpoint records require a synchronized pending data range; initial headers use the existing
+Source checkpoint geometry dispatched through broker. New data invalidates old checkpoint-write
+proof; bare later fences cannot revive it. All checkpoint writes, including empty initialization,
+need a later full sync. Output-boundary times stay inside the native window. Complete resumed
+statistics separate old verified bytes from new suffix writes; a fully retained replay reports zero
+new ranges/writes/durability intervals. Incomplete assessment remains required and unimplemented.
+
+Independent47 is COMPLETE FAIL on D47-1 in Q1/Q2; Q3 distinct source geometry passes. The native
+launcher separately reports BLOCKED/permission_denied for an unnecessary out-of-scope mkdir; an extra
+Bash true also ran. Preserve all deviations, the first harness failure and the second deciding
+harness. Both frozen212-file trees remain unchanged and the worker stopped. No denied command is
+retried or permission broadened. Read generation-trace47-review-complete.json. Native47's pass subset
+cannot accept48,40,41 or42. The flagged40 route remains untouched.
+
+Root's additional window contradiction and corrected D47 variants accepted5 false records before
+repair. The first refence fixture selected the initialization fence; corrected red02 precedes every
+lifecycle repair. The initial generic-reader missing API and assertion import error also remain.
+Accepted and rejected fixture heads/raw rows are exported before any cleanup. The current child
+complete report is still frozen47; only its three expected stale-report fields fail ordinary ledger.
+The full candidate will regenerate accounting. Main source40/report remain unchanged.
+
+At20:31 UTC no process names the external build root and its shallow receipt inventory shows no new
+operation. The real canonical log remains25SUCCEEDED/3FAILED/1PAUSED, zero active. Old03 is PAUSED/EMPTY;
+inventory04 is terminal. No real profile/download, provider/Go, integration, installation, commit or
+push has begun. Source40, owner41 and plan42 remain unaccepted; every L05-L10, actual drive/cache,
+source identity and required input acceptance remains open. System free space remains above14percent.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### 16 October 2026 — retained earlier component checkpoints
+
+### Archived direction — 2026-10-16 20:27 UTC
+
+Continue authorized L05-L10. Independent47 completes its bounded questions on served claude-opus-5-5:
+Q1/Q2FAIL on residual D47-1; Q3PASS on distinct source working-set geometry. Both frozen212-file trees
+remain unchanged. A checkpoint written outside the pending data range, a bare later re-fence and a
+checkpoint rewrite after the output boundary escape the reader. Retain the actual native report and
+all mutation/neutral receipts. Read generation-trace47-review-complete.json. The worker has stopped.
+
+The native launcher separately reports BLOCKED/permission_denied: the reviewer attempted an extra
+Bash mkdir outside its allowed command, which was denied. It also executed an unauthorized Bash true.
+Both deviations are disclosed. The actual second Python harness ran the deciding challenges; the
+first harness failed an incorrect predecessor assumption before reaching them. Preserve every effect
+and finding. No permission change or retry of that denied command is needed for remediation.
+
+Current child48 generalizes the one complete raw grammar to actual RESUME captures. Retained output
+checkpoint reads and verified prefixes stay separate from new suffix writes/rates; a wholly retained
+replay has zero new ranges, writes or durability intervals. Original source sizes and the existing
+Source checkpoint-shape primitive reach Store through broker. The affected fixture passes14.68s,
+including a later unstarted literal output, all-retained restart and five prefix contradictions.
+The missing API red and the first assertion's missing import are retained. Read
+ generation-recovery48-affected.json. Full48 and independent48 have not run.
+
+While checking that component, Root proves a further Q42/Q60 endpoint defect: an output boundary
+one second after the native window is accepted. A new author D47 variant also confirms checkpoint-
+first, post-boundary rewrite and unfenced initialization false accepts. The first bare-refence fixture
+selected the initialization fence and is corrected before product repair; red02 is running. Fix the
+supported lifecycle and window-end defects, rerun affected proof and the actual independent legal
+neutrals, then freeze the completed48 candidate. Keep incomplete assessment as required next work.
+
+Full47 remains a local340/597.02s/zero-skip/14-control proof, not acceptance; its independent verdict
+is FAIL. Current child48 has only the three expected stale47 complete-report violations. Source40,
+owner41 and plan42 remain unaccepted. Main source40/report remain unchanged. Do not retry the flagged40
+route. Every physical/cache, provider/Go, real input and L05-L10 requirement remains. No integration,
+installation, commit, push or new real profile/download has started. All29 real operations remain
+25SUCCEEDED/3FAILED/1PAUSED, zero active; old03 PAUSED/EMPTY and inventory04 terminal.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 20:02 UTC
+
+Continue the authorized L05-L10 queue. Frozen47 passes340 tests in597.02 seconds, zero skips,
+14 component controls, ordinary ledger and exact212-file comparison after its complete Jreport is
+copied to the child only. J=(0,0,17966,1,1,9,0,0,8425096). Manifest SHA256:
+030d8f7bacbdfcd18f41f2ab73e623f4198055cd7c46a06ec0c7c601b40dcaae.
+Read generation-trace47-proof.json. The frozen source is distinct from subsequent narrative updates.
+
+One independent Opus reviewer is now running on that exact47 source against failed45. Its finite
+questions are D45-1 durability invalidation/readback, D45-2 range-start containment and46 distinct
+working-set geometry. Actual receipts serve claude-opus-5-5; no verdict yet. Fresh native included
+allowance is observed with usage credits off. Read generation-trace47-review/scope-preparation.json;
+worker60334, sessiona8260674-942f-45a3-aec5-cfc7be196df5, tool94812. Do not duplicate or replace it.
+
+Independent45 remains COMPLETE FAIL on D45-1/D45-2; Q3 passes the real result-hold repair and scope.
+Root's corrected red47 reproduces five related defect mechanisms and an additional output-start
+contradiction, not byte-identical native45 geometry or its exact rate inflation. All six false accepts
+reject after repair. Legal short calls and the three affected checks pass22.58s; eleven contradictions
+reach named guards. Preserve the first red fixture-export error. Read generation-trace47-affected.json
+and generation-trace47-control-disposition.json. Actual forged rows/heads are retained. Completed47
+disposable fixture trees are archived and reclaimed after content/link verification; live proof47 has
+stopped. The earlier archive-count instrument failure is preserved; no deletion preceded correction.
+
+Source working-set46 is descriptive: repeated2GiB reads touch8MiB of payload plus131171 checkpoint
+bytes in the fixture. No cache, admission or physical claim follows. Continue required recovery/
+incomplete recomputation through the existing Store grammar, preserving observed retained-output
+verification separately from new writes and never synthesizing missing interrupted end counters.
+Read generation-trace46-recovery-plan.json and the current retained47 packet inventory first.
+
+Source40, owner41 and plan42 remain unaccepted. Main source40/report remain unchanged. Do not retry
+the flagged40 route. No real profile/download, provider/Go, integration, installation, commit or push
+has started. At19:50 UTC all29 real canonical operations are unchanged:25SUCCEEDED,3FAILED,1PAUSED,
+zeroRUNNING/PENDING. Old03 remains PAUSED/EMPTY; inventory04 is terminal. Every L05-L10 acceptance
+remains required. A local full proof or pending component review cannot close them.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 19:49 UTC
+
+Continue the authorized L05-L10 queue. Independent45 is COMPLETE FAIL on served claude-opus-5-5.
+D45-1 accepts stale synchronization flags and readback before a later write. D45-2 accepts source
+I/O before its own range start, inflating derived rates. Q3 passes the actual result-hold repair and
+scope labels. Both frozen212-file trees remain unchanged; the reviewer and all owned images have
+stopped. Read generation-trace45-review-complete.json and the native report. Retain its failed verdict.
+
+Root reproduces all six affected false accepts in47, then repairs the reader's deciding branches.
+Each later data write clears the old data/state sync flags; readback cannot exceed prior writes.
+Actual source/output I/O must start within its owning range. The legitimate short-call control still
+passes. All eleven contradictions reject at their named guard; three affected checks pass22.58s.
+The first red attempt had a fixture-export path error; its corrected red precedes every product
+repair. Both attempts and actual forged raw rows are retained. Read generation-trace47-affected.json.
+Full47 and its fresh independent review are next; no overall pass yet.
+
+The46 planning component separately counts distinct touched source chunks and checkpoint bytes
+through the existing recipe traversal. Its two affected checks pass15.93s. The amplified native-image
+fixture reads2160066560 source bytes per pass but touches only8388608 distinct data bytes and131171
+checkpoint bytes. These fields describe geometry, not admission, cache state or physical I/O.
+Read generation-working-set46-affected.json. Recovery/incomplete recomputation and actual drive/cache
+qualification remain required. Source40, owner41 and plan42 remain unaccepted prerequisites.
+
+Full45 passed340 tests/519.37s, zero skips,14 controls and ordinary ledger before its independent
+FAIL. Capture43 also failed its separate review for the unmarked result hold; full44 is self-rejected
+for its temporal contradiction. Keep every receipt. Main source40 and its complete report remain
+unchanged. Do not retry the flagged40 route. No real profile/download, provider/Go, integration,
+installation, commit or push starts from these local component passes. Old03 remains PAUSED/EMPTY;
+inventory04 is terminal. Reconcile operations before new live work. Every L05-L10 acceptance remains.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Archived direction — 2026-10-16 19:12 UTC
+
+Continue the authorized L05-L10 queue. Isolated fresh45 passes340 tests in519.37 seconds, zero skips,
+14 component controls, ordinary ledger and exact212-file comparison after its complete report is
+copied to the child only. J=(0,0,17948,1,1,9,0,0,8425096). Manifest SHA256:
+ea2c1f183366ffe5de67429db27c351760f6e26cc31feda1f6fe11550f8129f5. Read generation-trace45-proof.json.
+Its single independent Opus review is now running on the frozen45 source against43; no verdict yet.
+The reviewer has its own scoped source/output and freshly observed included allowance/credits off.
+Read generation-trace45-review/scope-preparation.json before duplicating or resuming anything.
+
+Capture43's independent review completed on served claude-opus-5-5:Q1/Q2PASS, Q3FAIL for the unmarked
+canonical result hold. The parent confirmed and repaired D1 by observing the sole hold boundary.
+Full44 also passes340/14controls but is SELF_REJECTED for a later author temporal contradiction:
+its checkpoint time could precede actual I/O completion. That red check fails14.65s;45 fixes the
+endpoint joins and passes17.59s before its full proof. All failures and the original native Write
+denial remain. The documented exact Edit path correction preserved the same authorized scope and
+let the stopped43 reviewer finish; no managed/global/account/security settings changed.
+
+While45 is reviewed, continue the distinct source working-set planning component required by Q42.
+The verified fixture reads2160066560 payload bytes per pass but touches only8388608 distinct source
+bytes. Whole input extent sizes and repeated logical reads cannot establish cache crossing. Derive
+that geometry through the existing SourceByteRecipe traversal and keep it descriptive, not storage
+admission or physical proof. Then continue actual recovery/incomplete recomputation and generation
+classification. Read generation-trace46-recovery-plan.json and generation-working-set-baseline01.json.
+Source40, owner41 and plan42 remain unaccepted prerequisites. Review45 cannot silently close them.
+
+Main source40 and its report remain unchanged. No real profile, required payload, provider/Go,
+integration, commit/push or installation starts from these component passes. The real inventory04 is
+terminal, old03 remains PAUSED/EMPTY, and no canonical real transfer/profile is active. Preserve the
+prior flagged40 route without retry. Full45 and both43 reviewer attempts have stopped; monitor only
+the new45 reviewer and subsequent owned component checks. Every L05-L10 acceptance remains open.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+### Prior direction at 18:57 UTC
+
+### Archived direction — 2026-10-16 18:57 UTC
+
+Independent capture43 review is complete on served claude-opus-5-5:Q1 binding/I/O PASS, Q2 replay/
+outcomes PASS, Q3 FAIL on the unmarked canonical-result hold. The reviewer ran its own source-span,
+replay/tamper, concurrent-capture, pause/cancel, SIGKILL/resume, hold, foreign-writer and bounded-trace
+challenges and controls. All212 frozen target files remain unchanged. The original Write denial is
+preserved; correcting the exact intended path rule let the same reviewer finish. Both native workers
+have stopped. Read generation-capture43-review-complete02.json and its actual report; no overall pass.
+
+The D1 repair is included in isolated44/45. A later author contradiction finds another real gap in
+fresh44 statistics: a checkpoint timestamp before its actual I/O end is accepted. Counts and sync
+markers stay unchanged, yet the derived interval is false. The red fixture fails in14.65 seconds;
+the45 repair passes in17.59 seconds. It binds checkpoint/range/window endpoints to actual observed
+completion and renames the byte accumulator truthfully. Read generation-trace45-affected.json.
+Full44 completes340 tests in720.09 seconds, zero skips,14 component controls and ordinary ledger,
+but remains SELF_REJECTED for the later timing contradiction. Its manifest is recorded in
+generation-trace44-proof.json; its report is not copied over newer child source. Full45 starts now.
+Freeze that completed latest candidate and independently review the
+fresh reducer plus the D1/temporal repairs. Recovery/incomplete recomputation remains next (the
+provisional generation-trace45-recovery-plan.json predates naming45 for the temporal repair).
+
+The primary source40 remains unchanged. Complete43 and all failed/incomplete controls stay retained.
+No review40 retry, new source transfer/profile, required payload, integration, commit/push or install
+has started. Review43 does not accept40/41/42; actual physical/cache qualification, provider/Go and
+large inputs remain required. Owned full44 has stopped; monitor the one new full45 proof and avoid duplicate native runs.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+
+The isolated44 component now recomputes FRESH version2 raw captures through Store, with exact
+SourceByteRecipe range/span contracts, checkpoint/chunk verification, output readback/full-sync
+boundaries, separate empirical call tails and observed-hold segmentation. It reuses the existing
+Store statistics implementation and one broker admission helper. The first draft dropped a local
+input-name set during extraction; that affected proof failed and the omission is corrected. The
+existing copy-profile coupled check passed in the same attempt. The repaired new fixture passes in
+9.09 seconds; a final affected replay precedes full44 proof. Ordinary ledger has only three expected
+stale-report fields; accounting is17942 executable lines,293 above43. Read generation-trace44-affected.json.
+Recovery/incomplete recomputation and physical/cache qualification remain required, not passed.
+
+The separate served claude-opus-5-5 source examination identified an unmarked canonical result hold.
+Root's author regression reaches that real hold and fails because its raw marker list is empty.
+Moving observation into the sole hold_boundary authority now records both checkpoint and result
+holds; the affected proof passes. Capture v2 also names this-coordinator claims, owner-record reuse
+mode and capture-control/shared-device counter scope. Source review43 was initially INCOMPLETE:
+the parent's launcher encoded the intended absolute path incorrectly and native Write was denied.
+The original denial/report is preserved. Official Claude documentation confirms // absolute Edit
+rules. One explicit same-session continuation now encodes the identical already-authorized private
+reviewer-work folder correctly; no global/security/account setting or managed rule changed. No
+permission bypass, alternate executor or provider fallback is used. Any further native denial stops
+that attempt. Read generation-capture43-permission-diagnosis.json and the run02 native receipts.
+The frozen target43 remains unchanged and has no behavioral verdict yet; source40 is not retried.
+
+The main checkout still contains source40, unchanged. All new44 code stays in the isolated worktree.
+The next eligible work is the final affected check and full44 fixture/component candidate, followed
+by independent review of the new fresh reducer/hold repair and recovery/incomplete recomputation.
+No real transfer/profile, provider identity, required download, integration, commit/push or install
+is admitted by these component proofs. All L05-L10 acceptance remains open.
+
+At the earlier43 checkpoint:
+
+The isolated capture43 passes the complete local candidate:340 tests in489.10 seconds, zero skips,
+14 component controls and ordinary ledger. All212 child files match the frozen manifest after the
+complete report is copied. J=(0,0,17649,1,1,9,0,0,8425096),187 executable lines above41. Read
+generation-capture43-proof.json and autonomy-candidate-43; source-manifest SHA256
+9e973f64a3151b9a7e7ff70aaab0e7fadf91d6b103f26a00d96843060598adc3. A single separate Opus reviewer
+now examines only the new raw capture43 delta from42 on the original Claude Code route, with fresh
+native included-allowance/credits-off evidence. Its review has no verdict yet. The frozen packet,
+target and scope are in generation-capture43-review. It neither retries nor accepts40,41 or42.
+
+Root continues only independent eligible component work while that review runs. Generation trace
+recomputation remains missing; existing copy-profile grammar cannot classify concurrent source
+ranges, literal/empty outputs or the separate prepass. Reuse the one Store statistics authority and
+SourceByteRecipe span traversal. Do not infer real qualification from summed logical reads or add
+per-call process deltas that can overlap. Main source40 remains unchanged. No real source/profile,
+required payload download, integration, commit/push or installation follows from these local passes.
+
+The isolated raw generation capture43 passes its affected proofs: two checks in 11.06 seconds,
+then the owner/capture fixture in 9.30 seconds, then 8.61 seconds after the native window is closed
+before claim-accounting export. Read generation-capture43-affected.json and generation-capture43-fixture.
+The actual fresh packet retains 5267 rows in two bounded artifacts. Each pass reads 2160066560 source
+bytes and 67421894 checkpoint bytes, matching plan42; output writes are 4194839 bytes. Source ranges
+carry output/span coordinates. The owner binding, input/output extent identities, native host/device
+windows, holds, durability calls and issued claims are retained. Complete replay verifies the saved
+packet without repeating execution. Paused and externally cancelled attempts stay INCOMPLETE;
+a fresh resume packet reports RESUME and leaves the earlier incomplete record unchanged.
+
+This is raw fixture/native-image evidence. It grants no physical qualification, cold-read proof,
+statistics, provider identity or live-model result. Cache is uncontrolled, per-call process counters
+can overlap, and wall windows require hold segmentation. The next required component is independent
+raw-trace recomputation and classification, then actual synthetic generation qualification and Go/
+provider integration. The full43 machine candidate starts next; ordinary accounting has only the
+three stale complete-report fields, with 17649 executable lines, 158 above plan42 and 187 above41.
+Preserve complete41 and plan42. Source40 in the primary checkout remains unchanged and unaccepted;
+no prepared flagged review40/challenge or alternate review route has run. No real profile, required
+model/dataset payload, commit/push, integration or installation starts from this component proof.
+
+The isolated owner now saves an exact fresh recipe I/O plan beside its ownership record and binds
+that plan's digest. The same span iterator drives actual reads and planning. Hashing and writing
+retain separate concurrency/range counts, repeated whole-chunk checks and complete source-state
+reads. Two affected checks pass in 4.34 seconds on the final async code; a prior external-scratch
+replay passed in 311.03 seconds. Planning also yields between bounded ranges and cancels without
+source I/O. A 64-byte fixture actually reads 268435456 source bytes during its hashing pass; the plan
+matches those data/state observations and the writer's bounded prefetch reads.
+
+Read generation-profile-plan42-affected.json, focused02.json/log and the preserved isolated tree.
+This adds 29 executable lines over frozen41. Ordinary accounting reports only the three stale
+complete-report fields expected after new development; the complete41 report is preserved unchanged.
+No full42 candidate, independent review, integration, commit/push or installation is claimed. The
+next eligible work is actual generation-aware capture and qualification of this prepass/write route,
+including recovery, control/checkpoint writes and host/device/thermal windows. Profiler7 copy results
+and planned byte counts cannot establish that measurement. Frozen40/41 and the unexecuted flagged
+review40 route remain preserved; no alternate review/challenge has started.
+
+Isolated owner checkpoint: the managed source-composition-owner worktree implements the Q60 broker
+byte-preparation owner and its closed request. Candidate41 passes340 tests in520.01 seconds, zero
+skips,14 component controls and ordinary ledger. J=(0,0,17462,1,1,9,0,0,8425096),81 executable lines
+above candidate40. Source-manifest SHA2563819840703fec2abd3e2a7c4d2cc1f1a1d64b9250054f81ded42c8c3f6062a9f.
+All212 files match the frozen candidate after its generated report is copied; later narrative updates
+are recorded separately. Read generation-owner-proof41.json, generation-owner-delta41.json and the
+attached worktree before repeating implementation or checks. No worker remains from the completed
+proof. The primary checkout's source40 executable/test bytes are unchanged. The owner is not integrated,
+independently reviewed, committed, pushed or installed; source40 acceptance also remains pending.
+The prior platform flag and prepared challenge40 are preserved without retry or alternate review.
+
+The new component admits only a successful acquire/SOURCE_VERIFIED original record and obtains its
+proof map from that canonical checkpoint. It owns the recipe/hash record, per-output completion
+records and one final result through store CAS. Ordinary pause/restart and cancellation at bounded
+I/O close the actual descriptors. The component returns no SourceLock, provider locator or callable
+model. Its real generation profile, stable provider and Go/CLI integration remain required. Further
+eligible internal work is the operation-bound generation profile for this actual prepass/write route;
+current profiler7 and the metadata-only draft do not qualify it. No real profile or download starts
+before the exact reviewed/installed runtime and graph/card/path/request prerequisites pass.
+
+Latest checkpoint: inventory04 completed SUCCEEDED/exit0 at16:17:43 UTC. The actual canonical
+record and stdout agree on inventory blake3:ffa0e0b6194f902188896d17b4267ee05b6674383077da36439882669c93d1d4.
+The wrapper's predeclared wrong-key summary error is preserved. Installed22 verifies the terminal
+record after both owned processes have stopped, with all39 runtime files checked and old03 unchanged.
+Read physical-04/terminal-reconciliation.json. No scan is replayed and no profile/download has started.
+
+Read physical-04/successor-binding-draft01.json for the actual new metadata. The mounted native path,
+host and13-artifact shape match03; the plan digest differs because current plans include
+source_storage=MEMORY. Current profiler is7-retained-source-transfer. This is a DIFFERENT_REQUEST
+under path_change_rule, not same-request succession. The draft operation is not issued, its graph,
+card and controller are not bound, and no execution runtime is admitted. Actual preparation evaluates
+only the current product's read-only plan prefix before its first durable call; no qualification or
+source access is claimed. Revalidate all bindings at the eventual accepted-runtime launch.
+
+Candidate40 complete proof is PASS:340 tests in456.51 seconds, zero skips,14 component controls and
+ordinary ledger. Source-manifest SHA2564851cad58f6234e18e21afe7a2291ace38f943d09349b9dbde63f454d02591c6;
+J=(0,0,17381,1,1,9,0,0,8425096). The generated report is copied unchanged. Executable files still
+match that frozen candidate. Independent challenge/review, commit/push and installation remain pending.
+Read shared-writer-proof40-reconciliation.json; do not repeat the completed full proof as recovery.
+
+Prior build turn01a14564-0d56-7d80-9300-f170fd48517d failed with the platform message
+“This content was flagged for possible cybersecurity risk.” Supported thread history confirms that
+failure and the completed proof commands. No specific denied tool action is identified. Preserve
+platform-interruption40.json and all completed effects; do not infer a tool permission or subscription
+limit, rephrase/retry flagged content, or launch another review/challenge through a different route.
+The prepared challenge40 and native review40 have not run. This turn completes unaffected terminal
+reconciliation and metadata preparation only. The platform interruption and the Q51 product defect
+are separate facts. No new human gate or acceptance waiver is introduced.
+
+Last published/installed code state: original-proof reader39 is accepted, committed/pushed as
 67eeae7883ab915d80d150f29d52710c77dad442 and privately installed24. All 40 actual runtime files join
 frozen/tested/committed/wheel/installed bytes. The real installed CLI/schema/metadata proof and all
 twelve original-proof guard outcomes pass. Read input-proof-publication39.json and
@@ -20,19 +1113,37 @@ checkpoint; source39 additionally anchors touched bytes to separately admitted o
 The next broker owner must obtain that proof from the exact committed SOURCE_VERIFIED operation and
 source lock. That owner, durable generation, stable provider identity and live downloads remain open.
 
-A finite static Opus reuse/ownership examination is running on unchanged accepted39 source as
-source-generation-route01-runs/01/generation-reuse-route, PID72461, launcher tool22715. Actual assistant
-receipts serve claude-opus-5-5. It examines existing Q51/Store writer reuse and exact broker admission;
-it makes no implementation choice or queue pass. Root chooses and implements the result. The 223-file
-packet source-generation-route01 is frozen. Fresh native allowance is 10 percent session, 56 percent
-weekly, credits OFF; the owned usage reader exits0. Preserve and reconcile this worker before starting
-another analysis or implementing its dependent path. No Copilot route is permitted.
+Priority Q51 repair is implemented and has complete candidate40 proof; independent review remains pending: an owned synthetic replay on actual installed24
+proves that a complete transfer resumes successfully after both its payload and checkpoint chunk
+records are consistently replaced while the original whole-hash state remains copied. The returned
+partial then describes changed bytes under the old expected source SHA. Read
+shared-resume-hypothesis01/result.json. This is a concrete resume-integrity defect, not a live model
+result. Recompute the prefix hash while performing the already-required local prefix reread, compare
+it to the stored state, and reject/reset any mismatch before accepting resume. This adds no full
+reread after completion and no digest authority. Extend the existing Q51 fixture, then rerun affected
+proof and independent review. Do not start real profiles/downloads on the known affected runtime.
+Inventory04 remains read-only on22; its valid inventory is not a source-transfer integrity claim.
+
+The finite static Opus reuse/ownership examination completes normally on served claude-opus-5-5;
+all 223 packet files are unchanged. Root adopts the existing Q51 checkpointed writer for generated
+byte recipes, with an explicit full-input hashing prepass and a second write pass. The current
+profiler7 has not measured this real route. First extract that writer and add the concrete composition
+entrypoint, naming composed outputs/checkpoints in the sole-writer table. Prove synthetic bytes,
+interrupted resume, source/output corruption and unchanged remote transfer. This writes only owned
+fixture scratch until broker admission and actual generation qualification exist. Read
+source-generation-route01-choice.json before implementation. No new source descriptor, state,
+provider identity or live pass is authorized by the static recommendation itself.
+
+Broker admission of the exact original SOURCE_VERIFIED proof, the named source.compose request and
+its durable ownership/final publication remain required after the contained writer primitive. The
+required row admits that preparation kind as deterministic byte conversion under Q60; record its
+closed fields before adding a product trigger. Root retains the implementation choice. No acceptance
+assertion, external-write prerequisite, math boundary, account or permission is changed.
 
 Then continue durable generated-source ownership/transaction, exact frozen layout/identity joins
-and stable provider serving. While the fresh inventory04 runs, prepare only eligible internal work.
-After its actual terminal result, reconcile the wrapper's known digest-field error, verify the fresh
-selection, recompute actual current path/plan and bind the exact graph/card/controller/runtime/request
-before any qualification. Do not blindly clone03 as same-request succession: current normal profile
+and stable provider serving. Inventory04 is terminal and its summary error is reconciled.
+Its current path/plan are prepared, with a changed request. Bind the exact new graph/card/controller/
+runtime/request before any qualification. Do not blindly clone03 as same-request succession: current normal profile
 plans declare source_storage=MEMORY and current profiler7, whereas03 used profiler6 without that
 plan field. Compare every actual request field and follow path_change_rule if the tuple differs.
 No alternative tuple, old operation or acceptance requirement may be silently substituted.
@@ -41,9 +1152,9 @@ The migration has reached a safe partial terminal: seven complete, EIA/v5 held u
 verifies the published final map SHA256349dd262be0a018cb4a5581fa1f14a76f527ed5940e59c62cf7b01f72d51c083
 and the declared audit/export receipt joins in migration-map-01/binding-preparation.json. This is
 receipt verification, not a new audit of moved repository contents. The existing autonomous direction
-covers the fresh read-only inventory/selection now running on accepted installed22 as
+covered the fresh read-only inventory/selection, now completed on accepted installed22 as
 op-da5f6e476855c66d1dab9e953e2c1388277b02bb5bc779c91e5ca382616da9dd.
-Controller85692 owns CLI85841, tool93853; physical-04/launch.json binds the exact request, runtime,
+Controller85692 and CLI85841 have stopped; tool93853 returned0. physical-04/launch.json binds the request, runtime,
 map and old paused operation. Do not duplicate that inventory. Its wrapper's final digest lookup
 has a known summary-only key error; preserve it and reconcile the actual top-level result after
 completion, without rerunning the operation. physical-04/controller-instrument-note.json names it.
@@ -960,10 +2071,6 @@ own exact profile. Actual layout/hash/SourceLock joins, stable origin, actual pr
 proof and all required model/dataset acquisitions remain open; source geometry and the new synthetic
 copy proof cannot replace them. No human action is currently needed.
 
-## Historical worklog — superseded checkpoints
-
-The following running and next-action descriptions record their original checkpoint times.
-The Current direction above governs execution.
 
 
 Active work: repair full-acquisition checkpoint and retained-header physical profiles before
@@ -6830,3 +7937,158 @@ claim. Root retains the decision/integration role. Its actual assistant model is
 subscription10/56percent,creditsOFF, usage reader exited0. Reconcile PID72461/tool22715 and its retained
 summary before repeating any task. Frozen generated geometry remains unresolved and no required
 header, model payload, new physical profile or download has started.
+
+### 2026-10-16 15:39 UTC — reuse the existing byte writer; actual generation remains unqualified
+
+Native static route01 completes normally on actual claude-opus-5-5, no error/denial; all 223 frozen
+files remain unchanged. Root chooses the existing Q51 verified chunk writer/checkpoint with a true
+output-hash prepass. Store conversion requires one prefix/1GiB content segment; exports require an
+existing committed root and discard failed pending bytes, so neither supplies this source-preparation
+resume path directly. The first code item is the shared writer and concrete recipe entrypoint, plus
+the exact sole-writer row. The later broker kind/admission, ownership heads and actual profile remain
+unimplemented. The prepass/write amplification must be included in that actual profile; old7 is not
+borrowed. No source metadata is invented and no incomplete output is published.
+
+At 15:36:35 UTC, the original inventory04 CLI85841/controller85692/installed22 command still match.
+CPU is 3:04.26, 95.14 seconds above 14:57 and0.40 seconds above this finite observation's start; the
+one-second owned native sample reaches readdir. Canonical record SHA69985653... is unchanged,
+RUNNING/EMPTY with two events, no result/error and stdout0. No cursor/count is exposed, so coverage
+or completion cannot be inferred. Receipt physical-04/activity-current03.json preserves exact
+commands, samples and raw CPU values. No signal, restart, duplicate scan, new broker owner, elevation
+or changed permission occurs. Old03 remains paused.
+
+### 2026-10-16 15:46 UTC — coordinated replacement also defeats the old complete-transfer resume
+
+Root tests the prerequisite writer on actual installed24, before trusting it for generation. A
+1,048,593-byte owned synthetic source is acquired correctly. The replay changes byte0 plus its chunk
+record, chunk-record hash and envelope, keeping the original expected SHA and resumable whole-hash
+state. transfer_artifact accepts resume, reports completion and returns the forged chunk digest,
+with no new server request. Actual changed SHA differs from the expected source SHA. No real source,
+model, drive, broker publication or user file is involved. shared-resume-hypothesis01/result.json
+retains the concrete counterexample and actual1291c42e installed source hash.
+
+This defeats Q51's final source-object integrity for that resume path. The shared writer extraction
+is already in the worktree but unproved/unpublished. The repair must rebuild the whole prefix hash
+during the existing local reread and compare its state before resuming or returning a completed
+proof. No extra full file read is required. The previously accepted reader39 remains conditional on
+a genuine original acquisition commitment; it does not cure a forged pre-commit transfer proof.
+Source transfer/recovery proof and dependent generated-source admission remain pending the repair,
+affected fixture, full candidate and independent review. No new real download/profile begins.
+
+### 2026-10-16 15:54 UTC — shared writer and prefix-integrity repair pass affected proof
+
+The remote transfer wrapper retains its concrete SourceAdapter/revision/artifact checks and delegates
+to one private checkpointed writer. compose_artifact feeds exact recipe ranges off the event loop,
+requires the real prepass SHA, binds its checkpoint to the recipe digest and returns only PartialState.
+It publishes no provider descriptor or SourceLock. The sole-writer table explicitly assigns composed
+source bytes/checkpoints to sources.py. Device/inode/range checks refuse destination overlap with
+either original source extent before any writer checkpoint. No new state, runtime, dependency, kernel,
+model branch, hash engine or broker operation is introduced. The broker owner remains unimplemented.
+
+During the existing resume reread, a fresh hasher rebuilds the prefix and its exact serialized state
+must equal the saved state before progress is trusted. The original restored hasher is used only after
+that equality, avoiding a redundant assignment. No second read is added. The existing Q51 fixture now
+rejects the coordinated source/checkpoint replacement and proves a reset before any network request.
+It also composes exact bytes, cancels at one durable chunk, refuses a changed remaining input, resumes,
+proves a complete replay writes no bytes, resets a damaged output, refuses wrong expected SHA and
+refuses both data/state aliases while preserving original inputs.
+
+The first affected run passed material behavior but its old claim-count observer also counted the new
+composition operation; shared-writer-focused01.log retains that instrument failure. The observer now
+selects the original operation ID as well as its original claim identities, retaining the exact four
+source-write assertions. Focused02 passes3 in6.38s; after removing the redundant hasher assignment,
+focused03 passes3 in6.26s. These are source/CLI integration fixtures, not a full candidate or live pass.
+Complete candidate40 and independent review are next. Inventory04 remains unchanged under its owner.
+
+### 2026-10-16 16:24 UTC — inventory completes; preserve the proof and exact pending boundaries
+
+The original read-only selection04 completes SUCCEEDED/exit0 at16:17:43.568769UTC. Its stdout and
+canonical result agree; the installed22 broker verifies three contiguous events, progress1 and no
+error after the sole worker and controller stop. All39 installed runtime files still match. The
+wrapper's INCOMPLETE_OUTPUT/KeyError is the predeclared summary lookup defect, not a failed selection.
+The separate terminal-reconciliation.json records the real top-level inventory digest and preserves
+that summary. Old03 remains PAUSED and byte-identical. No rescan or new broker operation occurs.
+
+Actual native path and host are read again without a scanner or provider request. A metadata-only
+calculation executes the current product plan prefix, stopping before its first durable call. The
+new draft has the same path/host and13-artifact shape, but plan1bff986a... includes source_storage=MEMORY
+and differs from old03's e3ed1f38... plan. Profiler is7-retained-source-transfer. The request therefore
+uses path_change_rule. Draft op-cc0bffa4... is not issued, and no graph/card/controller or accepted
+execution runtime is bound. The repaired Q51 runtime and generation-owner prerequisites remain open.
+
+Candidate40 had already completed340 tests in456.51s, zero skips,14 controls and ordinary ledger;
+this turn verifies its212-file manifest and copies the exact generated report, without rerunning it.
+The first report-copy assertion compared two different representations and stopped before copying;
+matching declared labels to values corrects that instrument. No product or proof bytes change.
+
+Supported thread history confirms the prior turn's platform cybersecurity-risk flag after those
+completed proof commands. The failed turn and error remain in platform-interruption40.json; no
+specific denied tool call is identifiable. The new challenge/review are still unexecuted. No flagged
+content is retried or rephrased and no substitute route is launched. Terminal reconciliation and
+current binding-gap preparation are unaffected work. No acceptance row, physical requirement,
+permission, billing setting, math root or required download is removed or declared complete.
+
+### 2026-10-16 16:56 UTC — isolate ordinary broker ownership implementation
+
+The frozen candidate40, its completed proof and the flagged prior turn remain unchanged. No new
+challenge or native review is launched. Root creates the managed source-composition-owner worktree
+at the published81cea609 base, overlays and verifies all212 candidate40 source files, and preserves
+the primary checkout. This is separate implementation of the remaining Q60 deterministic byte owner,
+not recovery or rerouting of flagged content. generation-owner-worktree01.json records the boundary.
+
+The Q60 ledger now specifies the closed source.compose request and original SOURCE_VERIFIED proof
+admission. The isolated broker implementation derives the original proof map from its own canonical
+checkpoint, opens existing source extents through store, persists one recipe/hash ownership record,
+reuses the shared writer, records each verified output and commits one final completion digest. It
+returns no SourceLock, provider identity or callable model. Retryable storage failures use the existing
+broker PAUSED state. The prepass now yields per bounded range, so cancellation joins one active I/O
+range rather than waiting for the complete model. No product CLI or real generation launch is added.
+
+The existing acquisition fixture is extended for source-owner admission, capacity pause, durable
+composition pause/restart, exact bytes, duplicate completion, preserved input and non-callability.
+Only schema generation has run so far. Affected proof is next; these changes are not accepted,
+committed, pushed, installed, physically qualified or a substitute for candidate40 review.
+
+### 2026-10-16 17:02 UTC — isolated owner passes affected proof; full candidate next
+
+The first new-owner run exposes a real identifier bug: the combined operation/output key fits the
+campaign key limit but exceeds the storage transition's128-character identifier. Both limits remain.
+The output key now hashes the operation and path together under one short domain. The original
+failed operation/error and focused01 log remain in generation-owner-failure01. Focused02 passes3
+checks in6.56s. It is not candidate40 replay or independent review.
+
+Root also registers each newly granted descriptor inside its executor before returning it, so an
+I/O cancellation cannot discard an untracked open descriptor. The source prepass is asynchronous
+per bounded range, while the exact old hash algorithm and original-proof reader remain in use.
+Focused03 passes3 in6.96s: capacity refusal pauses with no output allocation; composition stops at a
+durable chunk and resumes after broker restart; exact empty/range/literal outputs, original-record
+preservation, one final publication and duplicate completion hold. Ordinary cancellation at the
+prepass read and at a new descriptor grant joins that I/O and closes the actual descriptors. Restart
+after the final store record but before canonical success reuses that record and produces one
+completed event. Non-callability and rejection of an unfinished input are retained.
+
+The first ordinary ledger run reports only the expected stale complete-J accounting, evidence and
+tuple, because the new owner has no complete candidate report yet. No import, schema, citation,
+commit-law or protected-root violation appears. The isolated full candidate is needed for generated
+request-schema regression and the shared execute error-policy change; it will generate its exact
+report. The primary candidate40, original failed turn, real operations and review boundary remain
+unchanged. Neither40 nor this new owner is independently accepted, committed, installed or live.
+
+### 2026-10-16 17:15 UTC — complete isolated owner proof; preserve independent-review and live gaps
+
+Candidate41 passes340 tests in520.01s, zero skips,14 removal controls and ordinary ledger. The
+subsequent ordinary ledger also exits0 with no violations after the exact generated report is copied.
+J is17462 executable lines,81 above40; other J dimensions are unchanged. Its212-file final manifest
+is3819840703fec2abd3e2a7c4d2cc1f1a1d64b9250054f81ded42c8c3f6062a9f. Actual isolated broker, sources
+and store imports join that manifest. generation-owner-proof41.json retains the archive/hash/runtime
+join and exact evidence level. generation-owner-delta41.patch records only the eight owner changes
+against the exact frozen40 source, for later integration after prerequisites pass.
+
+The complete candidate includes original-proof admission, asynchronous bounded-range prepass,
+capacity pause, durable output continuation, exact bytes, descriptor cleanup on ordinary cancellation,
+last-record restart and duplicate-completion proof. It has no independent verdict. Source40 and its
+prepared challenge remain unchanged and unaccepted; the earlier platform flag is not bypassed. No
+new native review, flagged challenge, real profile, header, model/dataset payload, provider publication,
+primary integration, commit, push or installation occurs. The next eligible implementation is actual
+generation-route qualification; physical execution and stable provider/Go acceptance remain open.
+No user action is required by this checkpoint and L05-L10 remain incomplete.
