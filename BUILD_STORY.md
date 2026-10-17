@@ -9677,3 +9677,37 @@ with synthetic source bytes on an owned image. The larger downloads and live sta
 
 The full check is now running across the changes since the last complete run: all existing fixtures
 and the accounting tool's removal checks. It will not turn the separate source-review or live gaps into passes.
+
+### 2026-10-17 01:32 UTC — A long test path hid the intended check
+
+The full run finished with339 passes and one failure. The failure came from the test's own marker
+path: its length pushed embedded metadata beyond the existing storage limit. Cassette rejected
+those bytes before it reached the template-containment check. The storage limit stays intact.
+The same test now carries its marker path in a scoped environment variable. Its metadata stays
+bounded, and its original containment and no-execution assertions pass under a longer path with
+spaces. An earlier retry failed during test setup; that failed instrument is retained separately.
+The complete run and removal checks will run again. No real download or live stage is complete.
+
+### 2026-10-17 01:58 UTC — The full recovery checks pass; the generated-source link is in test
+
+All340 existing tests passed, followed by all14 component-removal checks and the ordinary accounting
+check. The frozen archive and generated report agree with the tested files. Opus separately proved
+that the repaired template fixture reaches its intended guard under long paths and still detects
+execution at the exact marker location. It changed no product code. Earlier failures remain recorded.
+
+The next piece now connects three existing facts: the files Cassette prepared, the storage work it
+measured, and the source the provider actually resolves. Selection checks every model and metadata
+file and reuses existing proof without starting more preparation or measurement. Its first fixture
+runs exposed two test bookkeeping errors; both are corrected and retained. The full entry test is
+running again. This link still needs its independent review. Larger downloads and live stages remain
+unfinished; no source or model identity is invented from a plan.
+
+### 2026-10-17 02:04 UTC — Prepared files now join the provider's actual metadata
+
+The complete CLI fixture passed with the new link. Cassette matched all three prepared files to the
+provider-resolved model and metadata descriptors, preserved the earlier operation records and every
+cartridge file, and read no provider blobs. A changed provider digest, a changed request and a missing
+measurement failed without starting more work. Repeated selection wrote nothing. The test also kept
+its earlier download, reconnect, dataset and raw-profile checks. A coupled old seal count was the
+last fixture correction; all failed runs remain. Exact evidence is being copied and verified before
+the independent review. This proves the owned synthetic test; larger downloads and live proof remain.

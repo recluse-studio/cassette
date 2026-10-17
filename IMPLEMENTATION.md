@@ -5,7 +5,89 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-17 01:05 UTC
+## Current direction — 2026-10-17 02:04 UTC
+
+Continue authorized L05-L10. Frozen component61 now passes all340 existing fixtures, zero skips,
+in1237.80 seconds, all14 Q78 deletion/bypass controls and ordinary ledger with no violations.
+The212-file source archive and exact generated complete-J report verify; J is18280 executable lines.
+The report is copied only to its exact source-composition-owner worktree, whose ordinary ledger also
+exits0. Main executable40/J remains unchanged. Consumer62 has additional code and a stale report;
+component61's pass does not cover that later candidate. No original Source40 review or live pass follows.
+
+Independent native fixture61 is COMPLETE_PASS for both Q55 reach and the no-execution observer.
+It stopped01:42:24 UTC, exit0, solely claude-opus-5-5, no denied action, safety stop or subworker.
+The reviewer reached the exact template guard at short and880-character paths, proved the unchanged
+4096/4097 metadata boundary, distinguished another same-code guard and checked scoped environment
+restoration. Its benign owned-marker sensitivity control remained separate from product rejection.
+Root verifies target59/target61/packet61:212/212/14 files unchanged. Raw controls and failed instruments
+remain. Optional free-text detail assertions do not add a new acceptance requirement or justify more
+fixture work. Native59's contained interruption/reconnect PASS and52/55/56-Q1/57-R1/58-P1 remain distinct;
+older FAIL verdicts and Source40/owner41/plan42 excluded/open scope remain intact.
+
+Consolidated60's339PASS/1FAIL remains retained: the old absolute marker made metadata4123 characters,
+so Q57 correctly rejected before Q55. Fixture61 externalizes only the marker path through a scoped,
+quoted variable; metadata stays3966 characters. Short-root red01 was a passing control, red02 a pytest
+setup failure, red03 the genuine long-root failure. Green01's marker-path receipt field is corrected
+in its Root audit. No Store limit or expected containment error changed. Read
+ generation-fixture61-review-complete.json and autonomy-candidate-61/result.json.
+
+Root implements consumer62 in /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette, a separate
+managed worktree overlaid from all212 frozen61 files. The original proof worktree stays preserved.
+Current code adds optional --preparation to select-model/source.select. It checks exact canonical
+composition/geometry request digests, existing completed preparation and capture/profile, current
+drive/lifecycle/durability/inventory, existing geometry raw profile and complete artifact closure.
+The independently resolved provider supplies the SourceLock; the consumer compares its full model
+and metadata paths, sizes, SHA-256 commitments, algorithms and validator shapes to the committed
+outputs and geometry. It returns immutable reference digests while downloaded_bytes stays0 and
+execution_compatibility staysNOT_VERIFIED. Geometry and composition never invent provider or model
+semantic identity. No runtime/dependency/kernel/writer or source-specific lifecycle fork is added.
+
+The existing entry fixture now adds a tiny actual loopback Ollama manifest, three prepared outputs,
+real prior acquisition/composition/geometry measurement, successful layout join, duplicate no-write,
+changed provider digest, wrong request and missing-profile controls. Prior canonical records and the
+entire cartridge file map stay unchanged across selection and rejection; no provider blob is read.
+Focused01 failed because the test read phase from the public result rather than its canonical record.
+Focused02 passed the new join/controls, then failed its old expected profile population3 after the
+named fourth profile was added. Focused03 found the coupled old seal count3. Both population checks
+now retain all raw assertions and require one seal per validated plan. These failed fixture instruments
+remain; no production bytes changed across01-04. Focused04 passes the complete entry fixture in136.68
+seconds, zero skips. Eight actual CLI receipts and all500 exported campaign/capture/operation/source-reference
+files are hash-verified locally and in frozen packet62. Source target62 is212 files, listing
+3862f38546ddc7bd16150c2351ab511ac628e4545fddec5d7539ab3f4b38e413.
+Separate external readback is still running in owned worker34217/tool38745; it opens only the completed
+export and must not be duplicated. Read generation-consumer62-local-proof02.json and its separate
+external status; no dual-export pass is inferred. No test is active. Ordinary62 ledger has only the
+three stale complete-J fields. Independent native consumer62 is RUNNING, worker38784/tool38651,
+started2026-10-17T02:07:30.213111+00:00, explicit Opus alias, with fresh post61 included-allowance/no-overage proof.
+It reviews only G1 actual source/layout join and G2 existing-only validation/no prior writes, against
+the frozen61 source. No verdict exists yet. Read native-consumer62-run01/consumer62/summary.json
+before acting; do not duplicate it. Keep target61/target62/packet62 and consumer product bytes fixed.
+Source40/owner41/plan42 and all full62/live/stage acceptance stay open. Read
+ generation-consumer-plan07.json and generation-consumer62-worktree01.json. Full gates run at their
+named queue checkpoints; no gratuitous repetition after a bounded change.
+
+Physical04 remains NOT_BOUND and unissued. Historical installed24/publication39 proves only its
+contained reader; it cannot replace the unresolved exact source40 acceptance/runtime join. No real
+profile, headers, provider Go or required model/dataset bytes start before those prerequisites.
+The real tiny acquisition remains separate from required larger inputs. Frozen Ollama geometry is
+not a resolved/materialized source; installed0.40.5 cannot substitute for frozen0.40.4. AllL05-L10
+and their live requirements remain open. Existing real ops25SUCCEEDED/3FAILED/1PAUSED, none active;
+old03PAUSED/EMPTY and inventory04terminal. No human action is needed.
+
+Post61 fresh UI:Max5x,current15%,weekly65%,Fable4%; creditsenabled,$0balance/$0spent,autoReloadOff.
+No settings changed; temporary tab14 closed. Recheck fresh proof before another native launch.
+No Copilot/fallback, API billing or account/security changes. Keep the excluded40 boundary absolute:
+do not run, inspect, rephrase, retry or replace its prepared review/shared-writer challenge or
+coordinated payload/checkpoint replacement. Denied wc stays abandoned. Preserve protected originals,
+independent mathematics and every failed/incomplete attempt. Continue eligible work autonomously.
+
+Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
+Active consumer source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
+Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+
+## Historical worklog — superseded checkpoints
+
+### Archived direction — 2026-10-17 01:39 UTC
 
 Continue authorized L05-L10. Independent review59 is COMPLETE_PASS for the affected D58-1 repair.
 Actual SIGKILL after canonical success but before capture seal, followed by real same-UUID reconnect,
@@ -34,19 +116,41 @@ verified, archived and reclaimed: 34852056 logical bytes, 2115420 archive bytes.
 and all earlier failures remain separate. Main executable40/J report is unchanged. Implementation remains isolated; the installed runtime
 retains its earlier version. Full/J remains unproved after50; the complete-J report is stale.
 
-Consolidated60 is RUNNING through existing tools/ledger --prove-candidate, started at01:00:19.894162
-UTC, worker18366/wrapper18364/tool67044. Private output autonomy-candidate-60 and isolated TMPDIR
-generation-consolidated60-tmp retain the exact snapshot and live suite log. Read
-generation-consolidated60-running.json before acting; do not duplicate it. It must prove the full
-accepted fixture population with zero skips, every Q78 removal control, exact source archive and
-clean generated complete-J/ordinary ledger. Product/test/schema bytes remain frozen throughout;
-this progress narrative is outside the report's executable/evidence digest. The proof uses ordinary
-repository fixtures, never the excluded private40 challenge. Its wrapper monitors system free space
-and only its owned process group. No full/J pass exists until actual receipts are reconciled. No
-reviewer is active. An authorized documentation checkpoint records the independently passed repair
-and the outstanding source/runtime/live boundaries; it promotes no implementation.
+Consolidated60 stopped01:17:07 UTC:339 passed,1 failed,zero skips in1002.66 seconds. No removal
+controls or complete-J report ran. Its only failure was fixture reach: embedding an absolute scratch
+marker made the hostile-template compiler metadata4123 characters, above Q57's4096-character bound.
+Store correctly rejected ROOT_INVALID before the intended Q55 containment branch. No production
+defect, execution or publication is established. Failed60 and its exact logs/source manifest remain.
 
-After that gate, continue the missing generated-source consumer: exact committed composition outputs,
+Fixture61 replaces only that path interpolation with a fixed quoted environment reference set by
+pytest's scoped monkeypatch. The same existing invariant, expected CONTAINMENT_REJECTED and actual
+scratch marker observation remain. Metadata is now3966 characters, independent of scratch depth;
+production guards and product bytes are unchanged. Deep-path red03 reproduces the original error;
+green01 passes in0.89 seconds under a deeper path containing spaces. Short-root red01 was actually a
+passing control; red02 failed at pytest setup because its basetemp parent was absent, without reaching
+the invariant. Their names and failed instruments remain; the actual receipts decide. Read
+ generation-fixture61-{plan,red03,green01}.json and generation-consolidated60-result.json.
+
+Rerun the existing consolidated gate once on the corrected fixture as autonomy-candidate-61, using
+owned generation-consolidated61-tmp and its running receipt. It must prove the complete fixture
+population, zero skips, all14 Q78 controls, exact source archive and clean generated complete-J and
+ordinary ledger. A pending attempt is no pass; report50 remains stale. No test/reviewer/download is
+active before this launch. The proof uses ordinary repository fixtures, never the excluded40 challenge.
+An authorized documentation checkpoint promotes no implementation or live result.
+
+Consolidated61 runs from the unchanged source-composition-owner snapshot, worker71586/wrapper71259/
+tool75660, started01:32:01 UTC. Native fixture61 is independently reviewing only the bounded S19
+fixture repair; tool87506 owns it. The original worktree and frozen212-file target61 remain untouched.
+Root now implements the missing generated-source consumer in a separate managed worktree,
+/Users/drewwiberg/.codex/worktrees/generation-consumer/cassette, overlaid and hash-verified from those
+same212 files. This preserves the active proof/review while allowing eligible L05 work. Read
+ generation-consumer-plan07.json and generation-consumer62-worktree01.json. The optional reference
+will carry the exact canonical composition and geometry requests, checked against their stored
+request digests; original keys are never guessed from operation IDs. Existing-only qualification
+must retain all raw validation and fail before measurement, allocation, cleanup or event writes.
+Neither the consumer nor its proofs exist yet. Full gates remain at their named queue checkpoints.
+
+Continue the missing generated-source consumer: exact committed composition outputs,
 qualified OperationGeometry/profile and independently resolved actual SourceLock must join. Read
 consumer inventories03/04/05 and design-inventory06; no consumer API or endpoint is implemented.
 Inventory06 records the next candidate and current check-only reuse/semantic-proof constraints; it
@@ -71,9 +175,9 @@ rephrase, retry or replace its excluded review/shared-writer challenge or coordi
 replacement. The denied wc remains abandoned. Continue other eligible work without relaxing a gate.
 
 Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
-Active isolated source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+Active consumer source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
+Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
 
-## Historical worklog — superseded checkpoints
 
 The following running and next-action descriptions record their original checkpoint times.
 The compact Current direction above governs execution. Applicable standing constraints also remain
