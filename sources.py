@@ -202,16 +202,9 @@ class SourceByteRecipe:
     def record(self) -> dict:
         return json.loads(self.encoded)
 
-    def read_range(self, path: str, offset: int, length: int,
-                   inputs: Mapping[str, dict[str, TransferExtent]]) -> bytes:
-        """Read at most one transfer chunk; touched bytes must join the admitted acquisition proof."""
+    def _range_segments(self, path: str, offset: int, length: int):
+        """Yield the exact literal and input spans used by both execution and its Q42 plan."""
         artifacts = self.record()['artifacts']
-        required = {segment['path'] for artifact in artifacts for segment in artifact['segments'] if 'path' in segment}
-        if (not isinstance(inputs, Mapping) or set(inputs) != required
-                or any(not isinstance(extents, Mapping) or set(extents) != {'data', 'state'}
-                       or any(not isinstance(extent, TransferExtent) for extent in extents.values())
-                       for extents in inputs.values())):
-            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input handles must exactly name the recipe source extents')
         artifact = next((item for item in artifacts if item['path'] == path), None)
         if artifact is None or type(offset) is not int or type(length) is not int or offset < 0 or not 0 <= length <= _TRANSFER_CHUNK_BYTES:
             _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'composed range requires a named output, integer offset and bounded length')
@@ -219,9 +212,6 @@ class SourceByteRecipe:
                    for segment in artifact['segments'])
         if offset + length > size:
             _transfer_fail('INVALID_REQUEST', path, 'composed range exceeds its output object')
-        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
-        manifests = dict(self.input_manifests)
-        result = bytearray()
         position = 0
         for segment in artifact['segments']:
             count = len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
@@ -229,23 +219,127 @@ class SourceByteRecipe:
             if start < end:
                 begin = start - position
                 if 'literal_hex' in segment:
-                    result.extend(bytes.fromhex(segment['literal_hex'][2 * begin:2 * (end - position)]))
+                    yield {'literal_hex': segment['literal_hex'][2 * begin:2 * (end - position)]}
                 else:
-                    item = sources[segment['path']]
-                    result.extend(_retained_source_range(self.source, item, inputs[item.path],
-                        segment['offset'] + begin, end - start, manifests[item.path]))
+                    yield {'path': segment['path'], 'offset': segment['offset'] + begin, 'length': end - start}
             position += count
+
+    def read_range(self, path: str, offset: int, length: int,
+                   inputs: Mapping[str, dict[str, TransferExtent]], *, observer=None) -> bytes:
+        """Read at most one transfer chunk; touched bytes must join the admitted acquisition proof."""
+        required = dict(self.input_manifests)
+        if (not isinstance(inputs, Mapping) or set(inputs) != set(required)
+                or any(not isinstance(extents, Mapping) or set(extents) != {'data', 'state'}
+                       or any(not isinstance(extent, TransferExtent) for extent in extents.values())
+                       for extents in inputs.values())):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input handles must exactly name the recipe source extents')
+        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        context = {'output': path, 'range_offset': offset, 'range_length': length,
+                   'range_started_ns': time.monotonic_ns()}
+        if observer is not None:
+            if not callable(observer):
+                _transfer_fail('INVALID_REQUEST', path, 'recipe range observer must be callable')
+            observer({'kind': 'RANGE_OPEN', **context})
+        result = bytearray()
+        try:
+            for index, segment in enumerate(self._range_segments(path, offset, length)):
+                if 'literal_hex' in segment:
+                    result.extend(bytes.fromhex(segment['literal_hex']))
+                else:
+                    item, extents = sources[segment['path']], inputs[segment['path']]
+                    if observer is not None:
+                        def observe(role, event, segment=segment, index=index):
+                            previous = inputs[segment['path']][role].observer
+                            if previous is not None:
+                                previous(event)
+                            observer({**context, 'input': segment['path'], 'span': index,
+                                'source_offset': segment['offset'], 'source_length': segment['length'],
+                                'role': 'source_' + role, **event})
+                        extents = {role: replace(extent,
+                            observer=lambda event, role=role, observe=observe: observe(role, event),
+                            observe_process_reads=role == 'data') for role, extent in extents.items()}
+                    result.extend(_retained_source_range(self.source, item, extents,
+                        segment['offset'], segment['length'], required[item.path]))
+        except BaseException as error:
+            if observer is not None:
+                try:
+                    observer({'kind': 'RANGE_CLOSE', **context, 'ended_ns': time.monotonic_ns(),
+                              'success': False, 'error_type': type(error).__name__})
+                except BaseException as observer_error:
+                    raise error from observer_error
+            raise
+        if observer is not None:
+            observer({'kind': 'RANGE_CLOSE', **context, 'ended_ns': time.monotonic_ns(),
+                      'success': True, 'returned_bytes': len(result)})
         return bytes(result)
 
-    def artifact_digests(self, inputs: Mapping[str, dict[str, TransferExtent]]) -> tuple[dict, ...]:
-        """Hash the exact composed bytes; these descriptors are not a SourceLock or durable output."""
+    def profile_ranges(self, *, include_empty: bool):
+        """Q42: stream bounded expected range records from the execution span traversal."""
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            for offset in range(0, max(size, int(include_empty)), _TRANSFER_CHUNK_BYTES):
+                length = min(_TRANSFER_CHUNK_BYTES, size - offset)
+                yield {'output': artifact['path'], 'range_offset': offset, 'range_length': length,
+                       'segments': list(self._range_segments(artifact['path'], offset, length))}
+
+    async def fresh_io_plan(self) -> dict:
+        """Q42: freeze fresh prepass/write geometry; metadata and recovery require actual capture."""
+        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        outputs, source_read_intervals = [], {}
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            counts = dict(source_ranges=0, logical_source_bytes=0, source_data_read_bytes=0,
+                          source_state_read_bytes=0, source_verified_chunks=0)
+            for offset in range(0, size, _TRANSFER_CHUNK_BYTES):
+                for segment in self._range_segments(artifact['path'], offset, min(_TRANSFER_CHUNK_BYTES, size - offset)):
+                    if 'path' not in segment:
+                        continue
+                    source = sources[segment['path']]
+                    first = segment['offset'] // _TRANSFER_CHUNK_BYTES
+                    last = (segment['offset'] + segment['length'] - 1) // _TRANSFER_CHUNK_BYTES
+                    counts['source_ranges'] += 1
+                    counts['logical_source_bytes'] += segment['length']
+                    counts['source_verified_chunks'] += last - first + 1
+                    start, end = first * _TRANSFER_CHUNK_BYTES, min(source.size, (last + 1) * _TRANSFER_CHUNK_BYTES)
+                    counts['source_data_read_bytes'] += end - start
+                    source_read_intervals.setdefault(source.path, []).append((start, end))
+                    counts['source_state_read_bytes'] += transfer_state_bytes(source.size)
+                await asyncio.sleep(0)
+            outputs.append({'path': artifact['path'], 'size': size, 'chunks': transfer_chunk_count(size), **counts})
+        reads = {name: sum(item[name] for item in outputs) for name in counts}
+        distinct_source_bytes = 0
+        for intervals in source_read_intervals.values():
+            end = 0
+            for start, stop in sorted(intervals):
+                distinct_source_bytes += max(0, stop - max(start, end))
+                end = max(end, stop)
+        total = sum(item['size'] for item in outputs)
+        return {'scope': 'FRESH_ONLY; RECOVERY_AND_CONTROL_IO_REQUIRE_ACTUAL_CAPTURE',
+                'recipe_digest': digest_bytes(self.encoded), 'chunk_bytes': _TRANSFER_CHUNK_BYTES,
+                'source_working_set': {'scope': 'DISTINCT_TOUCHED_SOURCE_BYTES; CACHE_AND_PHYSICAL_IO_NOT_PROVED',
+                    'data_bytes': distinct_source_bytes,
+                    'state_bytes': sum(transfer_state_bytes(sources[path].size) for path in source_read_intervals)},
+                'input_extent_logical_bytes': sum(sources[path].size + transfer_state_bytes(sources[path].size)
+                                                   for path, _ in self.input_manifests),
+                'output_extent_logical_bytes': sum(item['size'] + transfer_state_bytes(item['size']) for item in outputs),
+                'outputs': outputs,
+                'prepass': {'range_concurrency': 1, 'range_calls': sum(max(1, item['chunks']) for item in outputs), **reads},
+                'write': {'range_concurrency': _TRANSFER_PARALLEL_RANGES,
+                          'range_calls': sum(item['chunks'] for item in outputs), **reads,
+                          'output_data_write_bytes': total, 'output_data_readback_bytes': total}}
+
+    async def artifact_digests(self, inputs: Mapping[str, dict[str, TransferExtent]], *, observer=None) -> tuple[dict, ...]:
+        """Hash bounded composed ranges with cancellation; these descriptors are not a SourceLock."""
         result = []
         for artifact in self.record()['artifacts']:
             size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
                        for segment in artifact['segments'])
             hasher = artifact_hasher('sha256:' + '0' * 64, artifact['path'])
             for offset in range(0, max(size, 1), _TRANSFER_CHUNK_BYTES):
-                hasher.update(self.read_range(artifact['path'], offset, min(_TRANSFER_CHUNK_BYTES, size - offset), inputs))
+                hasher.update(await await_extent_io(self.read_range, artifact['path'], offset,
+                    min(_TRANSFER_CHUNK_BYTES, size - offset), inputs, observer=observer))
             result.append({'path': artifact['path'], 'size': size, 'digest': 'sha256:' + hasher.hexdigest()})
         return tuple(result)
 
@@ -2442,7 +2536,7 @@ def _retained_source_range(revision, artifact, extents, offset, length, expected
     if data.operation_id != state.operation_id or not 0 <= offset <= offset + length <= artifact.size:
         _transfer_fail('INVALID_REQUEST', artifact.path, 'retained source range or extent operation differs')
     loaded = _load_state(state, artifact.path, None, 'retained-source', read_only=True)
-    identity = _transfer_identity(revision, artifact, None)
+    identity = _transfer_identity(revision.immutable_revision, artifact, None)
     if loaded is None:
         _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source has no complete checkpoint')
     header, digests = loaded
@@ -2589,7 +2683,7 @@ def _partial(record: dict, chunk_digests: tuple[str, ...]) -> PartialState:
 
 
 def _transfer_identity(
-    revision: ResolvedSource,
+    source_revision: str,
     artifact: Artifact,
     authoritative_chunk_digests: tuple[str, ...] | None,
 ) -> dict:
@@ -2613,7 +2707,7 @@ def _transfer_identity(
             or not isinstance(artifact.validator, str) or not artifact.validator):
         _transfer_fail("SOURCE_UNAVAILABLE", artifact.path, "SHA-256 or one bounded Git blob tail and a stable validator are required")
     artifact_id = digest_bytes(canonical_bytes({
-        "source_revision": revision.immutable_revision,
+        "source_revision": source_revision,
         "path": artifact.path,
         "size": artifact.size,
         "digest": artifact.digest,
@@ -2622,7 +2716,7 @@ def _transfer_identity(
     return {
         "version": 1,
         "artifact_id": artifact_id,
-        "source_revision": revision.immutable_revision,
+        "source_revision": source_revision,
         "object_size": artifact.size,
         "validator": artifact.validator,
         "expected_digest": artifact.digest,
@@ -2798,6 +2892,44 @@ async def transfer_artifact(
     adapter._revision(revision)
     if not isinstance(artifact, Artifact) or artifact not in (*revision.artifacts, *revision.metadata_assets):
         _transfer_fail("INVALID_REQUEST", revision.locator, "artifact must belong to the resolved source revision")
+    return await _checkpointed_transfer(revision.immutable_revision, artifact,
+        lambda offset, length: adapter.open_range(revision, artifact, offset, length, artifact.validator),
+        data_extent, state_extent, capacity_coordinator,
+        authoritative_chunk_digests=authoritative_chunk_digests, checkpoint_committed=checkpoint_committed)
+
+
+async def compose_artifact(recipe: SourceByteRecipe, inputs: Mapping[str, dict[str, TransferExtent]],
+                           path: str, expected_digest: str, data_extent: TransferExtent,
+                           state_extent: TransferExtent, capacity_coordinator: CapacityCoordinator,
+                           *, checkpoint_committed=None, observer=None) -> PartialState:
+    """Q44/Q51/Q53/Q60: checkpoint exact recipe bytes against their explicit prepass SHA-256.
+
+    The owner admits original input proofs and profiles the prepass plus this write pass separately.
+    This returns a completed transfer proof, never a provider descriptor or SourceLock.
+    """
+    if not isinstance(recipe, SourceByteRecipe):
+        _transfer_fail('INVALID_REQUEST', 'source-composition', 'a source byte recipe is required')
+    item = next((item for item in recipe.record()['artifacts'] if item['path'] == path), None)
+    if item is None or not isinstance(expected_digest, str) or re.fullmatch(r'sha256:[0-9a-f]{64}', expected_digest) is None:
+        _transfer_fail('INVALID_REQUEST', 'source-composition', 'composition requires a named output and its prepass SHA-256')
+    if checkpoint_committed is not None and not callable(checkpoint_committed):
+        _transfer_fail('INVALID_REQUEST', path, 'checkpoint control must be callable')
+    recipe.read_range(path, 0, 0, inputs)
+    size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+               for segment in item['segments'])
+    # These private checkpoint fields name no provider URI and are never published as a source.
+    artifact = Artifact(path, size, expected_digest, '', expected_digest)
+    async def read_range(offset, length):
+        return await await_extent_io(recipe.read_range, path, offset, length, inputs, observer=observer)
+    return await _checkpointed_transfer(digest_bytes(recipe.encoded), artifact, read_range,
+        data_extent, state_extent, capacity_coordinator, checkpoint_committed=checkpoint_committed,
+        protected_extents=tuple(extent for extents in inputs.values() for extent in extents.values()))
+
+
+async def _checkpointed_transfer(source_revision, artifact, read_range, data_extent, state_extent,
+                                 capacity_coordinator, *, authoritative_chunk_digests=None,
+                                 checkpoint_committed=None, protected_extents=()):
+    """Own the single verified chunk writer for remote acquisition and concrete recipe output."""
     if not isinstance(capacity_coordinator, CapacityCoordinator):
         _transfer_fail(
             "INVALID_REQUEST",
@@ -2813,7 +2945,7 @@ async def transfer_artifact(
             artifact.path,
             "transfer extents must belong to the coordinator's cartridge filesystem",
         )
-    identity = _transfer_identity(revision, artifact, authoritative_chunk_digests)
+    identity = _transfer_identity(source_revision, artifact, authoritative_chunk_digests)
     hash_bounds = {'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}
     state_required = transfer_state_bytes(artifact.size)
     data_metadata = _extent(data_extent, artifact.size, artifact.path, "data extent")
@@ -2824,6 +2956,14 @@ async def transfer_artifact(
         _transfer_fail("INVALID_REQUEST", artifact.path, "data and checkpoint extents overlap")
     if data_extent.operation_id != state_extent.operation_id:
         _transfer_fail("INVALID_REQUEST", artifact.path, "transfer extents must share one operation ID")
+    for retained in protected_extents:
+        metadata = _extent(retained, 0, artifact.path, 'retained composition input')
+        for extent, required, output in ((data_extent, artifact.size, data_metadata),
+                                         (state_extent, state_required, state_metadata)):
+            if ((metadata.st_dev, metadata.st_ino) == (output.st_dev, output.st_ino)
+                    and max(retained.offset, extent.offset)
+                    < min(retained.offset + retained.length, extent.offset + required)):
+                _transfer_fail('INVALID_REQUEST', artifact.path, 'composition output overlaps a retained input extent')
 
     def reset_checkpoint(material: dict, generation: int, reason: str) -> dict:
         artifact_id = material.get("artifact_id", identity["artifact_id"])
@@ -2900,6 +3040,7 @@ async def transfer_artifact(
         if _source_hash_state(hasher, artifact.digest) != header["contiguous_source_hash_digest"]:
             reset_checkpoint(header, header["generation"], "hash-digest")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "serialized source hash state changed after checkpoint")
+        verified_hasher = resumable_artifact_hasher(artifact.digest, artifact.path, **hash_bounds)
         for index, expected in enumerate(chunk_digests):
             offset = index * _TRANSFER_CHUNK_BYTES
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
@@ -2907,10 +3048,14 @@ async def transfer_artifact(
             if digest_bytes(payload) != expected:
                 reset_checkpoint(header, header["generation"], f"local-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
+            verified_hasher.update(payload)
             if data_extent.observer is not None:
                 data_extent.observer({'kind': 'VERIFIED_PREFIX', 'offset': data_extent.offset + offset,
                                       'length': length, 'time_ns': time.monotonic_ns()})
             await asyncio.sleep(0)
+        if artifact_hash_state(verified_hasher, artifact.digest, header['contiguous_source_hash_offset'], artifact.path) != header['serialized_hash_state']:
+            reset_checkpoint(header, header['generation'], 'prefix-hash')
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'local transfer prefix differs from its stored source hash state')
         if header["completed_count"] == header["chunk_count"]:
             if header["contiguous_source_hash_digest"] != artifact.digest:
                 reset_checkpoint(header, header["generation"], "completed-digest")
@@ -2926,13 +3071,8 @@ async def transfer_artifact(
     while completed < header["chunk_count"]:
         indices = tuple(range(completed, min(completed + _TRANSFER_PARALLEL_RANGES, header["chunk_count"])))
         results = await asyncio.gather(*(
-            adapter.open_range(
-                revision,
-                artifact,
-                index * _TRANSFER_CHUNK_BYTES,
-                min(_TRANSFER_CHUNK_BYTES, artifact.size - index * _TRANSFER_CHUNK_BYTES),
-                artifact.validator,
-            )
+            read_range(index * _TRANSFER_CHUNK_BYTES,
+                       min(_TRANSFER_CHUNK_BYTES, artifact.size - index * _TRANSFER_CHUNK_BYTES))
             for index in indices
         ), return_exceptions=True)
         revision_failure = next((
@@ -2953,13 +3093,15 @@ async def transfer_artifact(
         for index, payload in zip(indices, results, strict=True):
             offset = index * _TRANSFER_CHUNK_BYTES
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
-            network_digest = digest_bytes(payload)
+            if not isinstance(payload, bytes) or len(payload) != length:
+                _transfer_fail('SOURCE_UNAVAILABLE', artifact.path, 'range reader returned another byte type or length')
+            chunk_digest = digest_bytes(payload)
             if (authoritative_chunk_digests is not None
-                    and network_digest != authoritative_chunk_digests[index]):
+                    and chunk_digest != authoritative_chunk_digests[index]):
                 reset_checkpoint(header, header["generation"], f"source-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"source chunk {index} differs from its authoritative digest")
             hasher.update(payload)
-            chunk = TransferChunk(identity["artifact_id"], offset, length, network_digest)
+            chunk = TransferChunk(identity["artifact_id"], offset, length, chunk_digest)
             chunk_record = b"\x01" + bytes.fromhex(chunk.blake3_digest[7:])
             records_hasher.update(chunk_record)
             next_completed = completed + 1
@@ -2997,7 +3139,7 @@ async def transfer_artifact(
             try:
                 _pwrite_all(data_extent, offset, payload, artifact.path, claim)
                 readback = _pread_exact(data_extent, offset, length, artifact.path)
-                if digest_bytes(readback) != network_digest:
+                if digest_bytes(readback) != chunk_digest:
                     _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local write changed transfer chunk {index}")
                 _sync_fd(data_extent, artifact.path, claim)
                 _pwrite_verified(

@@ -42,7 +42,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, OperationGeometry, PartialState, ResolvedSource, SourceAdapter, TransferExtent, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
+from sources import Artifact, OperationGeometry, PartialState, ResolvedSource, SourceAdapter, SourceByteRecipe, TransferExtent, compose_artifact, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -65,6 +65,7 @@ from store import (
     storage_host_observation,
     storage_profile,
     source_profile_trace,
+    composition_trace,
     compare_campaign_head,
     verify_campaign_artifact,
     write_campaign_artifact,
@@ -1498,21 +1499,29 @@ class CanonicalBroker:
         self._append(record, "output_delta", {"hold": "RELEASED", "boundary": boundary})
         return self.status(operation_id)
 
-    async def hold_boundary(self, operation_id: str, boundary: str) -> None:
+    async def hold_boundary(self, operation_id: str, boundary: str, *, observer=None) -> None:
         """Remain at a committed boundary until its durable release is observed."""
-        while True:
-            record = self._load(operation_id)
-            holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
-            if not holds or holds[-1]["hold"] == "RELEASED":
-                return
-            hold = holds[-1]
-            if hold["boundary"] != boundary:
-                if hold["hold"] == "ACKNOWLEDGED":
-                    _reject("ROOT_INVALID", operation_id, "operation moved beyond its unreleased hold")
-                return
-            if hold["hold"] == "REQUESTED":
-                self._append(record, "output_delta", {"hold": "ACKNOWLEDGED", "boundary": boundary})
-            await asyncio.sleep(0.02)
+        opened = False
+        try:
+            while True:
+                record = self._load(operation_id)
+                holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
+                if not holds or holds[-1]["hold"] == "RELEASED":
+                    return
+                hold = holds[-1]
+                if hold["boundary"] != boundary:
+                    if hold["hold"] == "ACKNOWLEDGED":
+                        _reject("ROOT_INVALID", operation_id, "operation moved beyond its unreleased hold")
+                    return
+                if observer is not None and not opened:
+                    await await_extent_io(observer, {'kind': 'HOLD_OPEN', 'boundary': boundary, 'time_ns': time.monotonic_ns()})
+                    opened = True
+                if hold["hold"] == "REQUESTED":
+                    self._append(record, "output_delta", {"hold": "ACKNOWLEDGED", "boundary": boundary})
+                await asyncio.sleep(0.02)
+        finally:
+            if opened:
+                await await_extent_io(observer, {'kind': 'HOLD_CLOSE', 'boundary': boundary, 'time_ns': time.monotonic_ns()})
 
     async def execute(
         self,
@@ -1520,6 +1529,8 @@ class CanonicalBroker:
         worker: Callable[[], object],
         *,
         cancellable: bool = True,
+        pause_on_retryable_error: bool = False,
+        hold_observer=None,
     ) -> dict:
         """Run one non-preparation Q6 operation through the canonical operation log.
 
@@ -1545,14 +1556,479 @@ class CanonicalBroker:
                 if not isinstance(result, dict):
                     _reject("INVALID_REQUEST", operation_id, "operation worker must return one result object")
                 _json_digest(result, operation_id, "operation result")
-                await self.hold_boundary(operation_id, "result")
+                await self.hold_boundary(operation_id, "result", observer=hold_observer)
                 return self._operation(self._success(self._load(operation_id), result))
             except _ControlStop as stopped:
                 return self._operation(self._stop(self._load(operation_id), stopped.action))
             except asyncio.CancelledError:
                 raise
             except CassetteError as error:
+                if pause_on_retryable_error and error.retryability == "retryable":
+                    return self._operation(self._paused(self._load(operation_id), error))
                 return self._operation(self._failed(self._load(operation_id), error))
+
+    def _composition_recipe(self, args, operation_id):
+        original = self._load(args['acquisition_operation_id'])
+        if (original['kind'], original['state'], original['phase']) != ('acquire', 'SUCCEEDED', 'SOURCE_VERIFIED'):
+            _reject('INVALID_REQUEST', operation_id, 'composition requires a completed acquisition source proof')
+        checkpoint = original['checkpoint']
+        revision = _source_from(checkpoint['source_lock'], operation_id)
+        partials = {item['path']: item for item in checkpoint['partials']}
+        required = {segment['path'] for item in args['recipe']['artifacts']
+                    for segment in item['segments'] if 'path' in segment}
+        if not required <= partials.keys():
+            _reject('INVALID_REQUEST', operation_id, 'recipe inputs are absent from the original acquisition')
+        manifests = {}
+        for path in required:
+            proof = partials[path]['chunk_digests']
+            manifests[path] = proof['digest'] if isinstance(proof, dict) else digest_bytes(canonical_bytes(proof))
+        recipe = SourceByteRecipe(args['recipe'], revision, manifests)
+        return original, revision, recipe
+
+    def _composition_binding(self, original, recipe, io_plan, operation_id):
+        checkpoint = original['checkpoint']
+        return {'transform': 'source-byte-recipe-v1', 'operation_id': operation_id,
+                'acquisition_operation_id': original['operation_id'],
+                'source_lock_digest': digest_bytes(canonical_bytes(checkpoint['source_lock'])),
+                'source_proof_digest': digest_bytes(canonical_bytes(checkpoint['partials'])),
+                'recipe_digest': digest_bytes(recipe.encoded), 'io_plan_digest': digest_bytes(canonical_bytes(io_plan))}
+
+    async def compose_source(self, request: dict, owner: CapacityCoordinator, *, _capture=None, _uncached_source=False) -> dict:
+        """Q6/Q60: own verified deterministic byte preparation, without publishing a source or model."""
+        operation_id = self.operation_id(request)
+        if request['operation'] != 'source.compose' or set(request['arguments']) != {'composition'}:
+            _reject('INVALID_REQUEST', 'source.compose', 'composition requires its named closed argument record')
+        args = request['arguments']['composition']
+        if request.get('target') != args['acquisition_operation_id'] or not isinstance(owner, CapacityCoordinator):
+            _reject('INVALID_REQUEST', 'source.compose', 'composition requires its exact acquisition target and store owner')
+        if _capture is not None and not callable(_capture):
+            _reject('INVALID_REQUEST', operation_id, 'composition capture must be callable')
+        if type(_uncached_source) is not bool or _uncached_source and _capture is None:
+            _reject('INVALID_REQUEST', operation_id, 'uncached source measurement requires a boolean policy and capture')
+        phase = 'ADMISSION'
+        async def emit(kind, **fields):
+            if _capture is not None:
+                await await_extent_io(_capture, {'kind': kind, 'phase': phase, 'time_ns': time.monotonic_ns(), **fields})
+        async def enter(name, **fields):
+            nonlocal phase
+            phase = name
+            await emit('PHASE', **fields)
+        def observe(row):
+            _capture({'phase': phase, **row})
+        async def compose():
+            await enter('ADMISSION')
+            original, revision, recipe = self._composition_recipe(args, operation_id)
+            required = dict(recipe.input_manifests)
+            await enter('PLANNING')
+            io_plan = await recipe.fresh_io_plan()
+            binding = self._composition_binding(original, recipe, io_plan, operation_id)
+            await emit('COMPOSITION_BINDING', binding=binding)
+            key = 'source-compose-' + operation_id.removeprefix('op-')
+            inputs, opened = {}, []
+            def grant(source_operation, path, role, length, descriptors, *, require_existing=False):
+                extent = grant_transfer_extent(owner.cartridge, source_operation,
+                    _transfer_extent_id(source_operation, path, role), length,
+                    capacity_controller=owner, require_existing=require_existing)
+                descriptors.append(extent.fd)
+                if _capture is not None:
+                    cache = {}
+                    if require_existing and role == 'data' and _uncached_source:
+                        command = getattr(fcntl, 'F_NOCACHE', None)
+                        if command is None:
+                            _reject('CAPABILITY_MISMATCH', path, 'uncached source descriptor requests are unavailable')
+                        try:
+                            before = fcntl.fcntl(extent.fd, fcntl.F_GETFL)
+                            fcntl.fcntl(extent.fd, command, 1)
+                            cache = {'uncached_request': True, 'cache_flags_before': before,
+                                     'cache_flags_after': fcntl.fcntl(extent.fd, fcntl.F_GETFL)}
+                        except OSError as error:
+                            _reject('CAPABILITY_MISMATCH', path, f'uncached source descriptor request failed: {error}')
+                    metadata = os.fstat(extent.fd)
+                    observe({'kind': 'EXTENT_BOUND', 'time_ns': time.monotonic_ns(), 'path': path,
+                        'role': ('source_' if require_existing else 'output_') + role,
+                        'operation_id': source_operation, 'offset': extent.offset, 'length': extent.length,
+                        'device': metadata.st_dev, 'inode': metadata.st_ino, 'allocated_bytes': metadata.st_blocks * 512, **cache})
+                    if not require_existing:
+                        extent = replace(extent, observer=lambda event: observe({'path': path, 'role': 'output_' + role, **event}))
+                return extent
+            try:
+                await enter('INPUT_REOPEN')
+                for artifact in _acquisition_artifacts(revision):
+                    if artifact.path not in required:
+                        continue
+                    inputs[artifact.path] = {}
+                    for role, length in (('data', artifact.size), ('state', transfer_state_bytes(artifact.size))):
+                        extent = await await_extent_io(grant, original['operation_id'], artifact.path, role,
+                            length, opened, require_existing=True)
+                        inputs[artifact.path][role] = extent
+                head = await await_extent_io(campaign_head, owner.cartridge, key)
+                if head is None:
+                    await enter('PREPASS')
+                    outputs = list(await recipe.artifact_digests(inputs, observer=observe if _capture is not None else None))
+                    await enter('OWNERSHIP_COMMIT')
+                    head = await await_extent_io(compare_campaign_head, owner, key, None,
+                        {'binding': binding, 'recipe': recipe.record(), 'io_plan': io_plan, 'outputs': outputs})
+                    await emit('OWNERSHIP', digest=head['digest'], mode='FRESH')
+                else:
+                    await emit('OWNERSHIP', digest=head['digest'], mode='RESUME')
+                value = head['value']
+                if (not isinstance(value, dict) or set(value) != {'binding', 'recipe', 'io_plan', 'outputs'} or value['binding'] != binding
+                        or value['recipe'] != recipe.record() or value['io_plan'] != io_plan or not isinstance(value['outputs'], list)):
+                    _reject('ROOT_INVALID', operation_id, 'saved composition ownership differs from its admitted inputs')
+                shapes = [(item['path'], sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment
+                           else segment['length'] for segment in item['segments'])) for item in recipe.record()['artifacts']]
+                outputs = value['outputs']
+                if len(outputs) != len(shapes) or any(
+                        not isinstance(item, dict) or set(item) != {'path', 'size', 'digest'}
+                        or (item['path'], item['size']) != shape or type(item['size']) is not int
+                        or not isinstance(item['digest'], str) or re.fullmatch(r'sha256:[0-9a-f]{64}', item['digest']) is None
+                        for item, shape in zip(outputs, shapes, strict=True)):
+                    _reject('ROOT_INVALID', operation_id, 'saved composition outputs differ from the exact recipe shape')
+                completed = []
+                for item in outputs:
+                    pair, output_fds = {}, []
+                    try:
+                        await enter('COMPOSE_WRITE', output=item['path'])
+                        for role, length in (('data', item['size']), ('state', transfer_state_bytes(item['size']))):
+                            pair[role] = await await_extent_io(grant, operation_id, item['path'], role, length, output_fds)
+                        async def checkpoint_committed(partial):
+                            if _capture is not None:
+                                await emit('OUTPUT_BOUNDARY', output=item['path'],
+                                    offset=partial.contiguous_source_hash_offset, generation=partial.checkpoint_generation,
+                                    hash_state_digest=digest_bytes(partial.serialized_hash_state.encode()))
+                            await self.hold_boundary(operation_id, 'composition-checkpoint', observer=None if _capture is None else
+                                lambda row: observe({'output': item['path'], **row}))
+                        partial = await compose_artifact(recipe, inputs, item['path'], item['digest'],
+                            pair['data'], pair['state'], owner, checkpoint_committed=checkpoint_committed,
+                            observer=observe if _capture is not None else None)
+                        await enter('OUTPUT_COMMIT', output=item['path'])
+                        result = {'ownership_digest': head['digest'], 'output': item,
+                                  'partial': _partial_record(item['path'], partial)}
+                        output_key = 'source-compose-output-' + digest_bytes(canonical_bytes({
+                            'operation_id': operation_id, 'path': item['path']})).removeprefix('blake3:')
+                        saved = await await_extent_io(campaign_head, owner.cartridge, output_key)
+                        if saved is None:
+                            saved = await await_extent_io(compare_campaign_head, owner, output_key, None, result)
+                        if saved['value'] != result:
+                            _reject('ROOT_INVALID', operation_id, 'saved output completion differs from its verified bytes')
+                        completed.append(saved['digest'])
+                    finally:
+                        for descriptor in output_fds:
+                            os.close(descriptor)
+                await enter('FINAL_COMMIT')
+                result = {'acquisition_operation_id': original['operation_id'], 'recipe_digest': binding['recipe_digest'],
+                          'ownership_digest': head['digest'], 'output_count': len(outputs),
+                          'outputs_digest': digest_bytes(canonical_bytes(outputs)),
+                          'completion_records_digest': digest_bytes(canonical_bytes(completed))}
+                final = await await_extent_io(campaign_head, owner.cartridge, key + '-complete')
+                if final is None:
+                    final = await await_extent_io(compare_campaign_head, owner, key + '-complete', None, result)
+                if final['value'] != result:
+                    _reject('ROOT_INVALID', operation_id, 'final composition record differs from its verified outputs')
+                await enter('COMPLETE', composition_head=final['digest'])
+                return {**result, 'composition_head': final['digest']}
+            finally:
+                for descriptor in opened:
+                    os.close(descriptor)
+
+        return await self.execute(request, compose, pause_on_retryable_error=True,
+                                  hold_observer=observe if _capture is not None else None)
+
+    async def _composition_statistics(self, request, owner, *, capture_key):
+        """Q42/Q60: assess sealed raw observations without promoting incomplete execution."""
+        operation_id = self.operation_id(request)
+        operation = self._load(operation_id)
+        capture = await await_extent_io(campaign_head, owner.cartridge, capture_key)
+        if (request['operation'] != 'source.compose'
+                or capture is None or capture['value'].get('context', {}).get('operation_id') != operation_id
+                or capture['value']['context'].get('request_digest') != digest_bytes(canonical_bytes(request))
+                or (capture['value'].get('status') == 'CAPTURED' and operation['state'] != 'SUCCEEDED')):
+            _reject('INVALID_REQUEST', capture_key, 'generation statistics require their exact canonical capture and complete-result state')
+        original, _, recipe = self._composition_recipe(request['arguments']['composition'], operation_id)
+        plan = await recipe.fresh_io_plan()
+        input_names = dict(recipe.input_manifests)
+        statistics = await await_extent_io(composition_trace, owner.cartridge, capture_key,
+            expected_context=capture['value']['context'], expected_result=operation['result'],
+            expected_contract={'binding': self._composition_binding(original, recipe, plan, operation_id),
+                               'recipe': recipe.record(), 'io_plan': plan},
+            source_sizes={item.path: item.size for item in (*recipe.source.artifacts, *recipe.source.metadata_assets)
+                          if item.path in input_names},
+            checkpoint_shape={'header_bytes': transfer_state_bytes(0),
+                              'record_bytes': transfer_state_bytes(1) - transfer_state_bytes(0)},
+            range_plans={'PREPASS': recipe.profile_ranges(include_empty=True),
+                         'COMPOSE_WRITE': recipe.profile_ranges(include_empty=False)})
+        return {**statistics, 'canonical_operation_state': operation['state']}
+
+    async def _composition_profile(self, request, owner, *, capture_key, require_existing=False):
+        """Q42/Q43: qualify one exact complete composition through the existing Store authority."""
+        statistics = await self._composition_statistics(request, owner, capture_key=capture_key)
+        inputs = statistics['profile_inputs']
+        path = inputs['context']['path']
+        binding = {'drive': path['volume_uuid'], 'host': path['host'], 'path': path,
+            'operation': self.operation_id(request), 'profiler_version': STORAGE_PROFILER_VERSION + '/source-byte-composition-v2',
+            'plan': {'executor': 'SOURCE_BYTE_COMPOSITION', 'composition': inputs['composition'],
+                     'io_plan': inputs['io_plan'], 'host_memory_bytes': inputs['host_memory_bytes']}}
+        measurement = await await_extent_io(storage_profile, binding, [inputs['io_plan']], [statistics],
+                                            expected_binding=binding)
+        key = 'composition-profile-' + digest_bytes(canonical_bytes(binding))[7:]
+        head = await await_extent_io(campaign_head, owner.cartridge, key)
+        if head is None:
+            if require_existing:
+                _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already published composition profile')
+            head = await await_extent_io(compare_campaign_head, owner, key, None, measurement)
+        if head['value'] != measurement:
+            _reject('ROOT_INVALID', key, 'saved composition profile differs from its exact recomputed observation')
+        return {**measurement, 'profile_digest': head['digest'], 'profile_key': key}
+
+    async def qualify_composition(self, request: dict, *, require_existing=False) -> dict:
+        """Q42/Q43/Q60: measure preparation on its verified acquisition's selected cartridge.
+
+        Canonical byte preparation and the later qualification receipt remain separate outcomes.
+        """
+        operation_id = self.operation_id(request)
+        if (request['operation'] != 'source.compose' or set(request['arguments']) != {'composition'}
+                or request.get('target') != request['arguments']['composition']['acquisition_operation_id']):
+            _reject('INVALID_REQUEST', operation_id, 'composition qualification requires its exact acquisition target and recipe')
+        original, _, _ = self._composition_recipe(request['arguments']['composition'], operation_id)
+        if require_existing:
+            saved = self._load(operation_id)
+            if (saved['kind'] != 'source.compose' or saved['state'] != 'SUCCEEDED'
+                    or saved['request_digest'] != digest_bytes(canonical_bytes(request))):
+                _reject('INVALID_REQUEST', operation_id, 'prepared source requires its exact completed composition request')
+        operation = self.issue(request)
+        if (operation['state'] == 'PAUSED'
+                and self.events(operation_id)[-1]['payload'].get('error', {}).get('retryability') == 'retryable'):
+            operation = self.resume(operation_id)
+        qualification = {'status': 'NOT_RUN'}
+        if operation['state'] not in {'PAUSED', 'FAILED', 'CANCELLED'}:
+            try:
+                prepared = [event['payload']['drive_prepared'] for event in original['events']
+                            if 'drive_prepared' in event['payload']]
+                if len(prepared) != 1 or not isinstance(prepared[0], dict):
+                    _reject('INVALID_REQUEST', operation_id, 'composition measurement requires the product acquisition drive record')
+                proof = prepared[0]
+                binding = proof.get('binding', {})
+                if (not isinstance(binding, dict) or binding.get('operation_id') != original['operation_id']
+                        or not isinstance(binding.get('drive_selection_id'), str)
+                        or not isinstance(proof.get('protected_inventory'), dict)):
+                    _reject('ROOT_INVALID', operation_id, 'acquisition drive record lost its binding or protected inventory')
+                destination = self._entry_result(binding['drive_selection_id'], 'drive.select')
+                expected = {'volume_uuid': destination['selection']['volume']['volume_uuid'],
+                    'cartridge_uuid': destination['cartridge_uuid'], 'folder': destination['folder'],
+                    'inventory_digest': destination['inventory_digest']}
+                if (any(binding.get(field) != value for field, value in expected.items())
+                        or digest_bytes(canonical_bytes(proof['protected_inventory'])) != expected['inventory_digest']):
+                    _reject('ROOT_INVALID', operation_id, 'acquisition drive binding differs from its recorded selection')
+                selection = await await_extent_io(select_external_apfs_volume, expected['volume_uuid'])
+                cartridge = Path(selection.volume.mount_path) / expected['folder']
+                lifecycle = CartridgeLifecycle(expected['cartridge_uuid'])
+                await await_extent_io(lifecycle.mount, cartridge, expected['volume_uuid'])
+                head = await await_extent_io(campaign_head, cartridge, proof['campaign_key'])
+                if head is None or head['digest'] != proof['campaign_digest'] or head['value'] != binding:
+                    _reject('ROOT_INVALID', operation_id, 'acquisition durability record no longer verifies on the selected cartridge')
+                probe = binding['probe']
+                await await_extent_io(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                      probe['digest'], probe['bytes'])
+                inventory = await self._protected_inventory(selection, expected['folder'])
+                compare_inventory(proof['protected_inventory'], inventory)
+                owner = CapacityCoordinator(cartridge)
+                base_key = 'composition-capture-' + operation_id.removeprefix('op-')
+                attempts = [event['payload']['composition_capture'] for event in self.events(operation_id)
+                            if 'composition_capture' in event['payload']]
+                capture_key = attempts[-1] if attempts else base_key
+                prior = await await_extent_io(campaign_head, cartridge, capture_key)
+                if require_existing and (prior is None or not isinstance(prior['value'], dict)
+                                         or prior['value'].get('status') != 'CAPTURED'):
+                    _reject('SOURCE_UNAVAILABLE', capture_key, 'prepared source requires its already complete composition capture')
+                try:
+                    capture = await self._capture_composition_profile(request, owner, selection,
+                        capture_key=capture_key, uncached_source=True)
+                except CassetteError as error:
+                    record = self._load(operation_id)
+                    if (prior is None or not isinstance(prior['value'], dict)
+                            or prior['value'].get('status') not in {'MEASURING', 'INCOMPLETE'}
+                            or error.code not in {'SOURCE_UNAVAILABLE', 'CARTRIDGE_DISCONNECTED'}
+                            or error.object_id != capture_key
+                            or record['state'] not in {'PENDING', 'RUNNING'}):
+                        raise
+                    capture_key = base_key + '-' + uuid.uuid4().hex
+                    self._append(record, 'output_delta', {'composition_capture': capture_key})
+                    capture = await self._capture_composition_profile(request, owner, selection,
+                        capture_key=capture_key, uncached_source=True)
+                if capture['status'] == 'CAPTURED':
+                    profile = await self._composition_profile(request, owner, capture_key=capture_key,
+                                                              require_existing=require_existing)
+                    qualification = {'status': profile['status'], 'profile_key': profile['profile_key'],
+                        'profile_digest': profile['profile_digest'], 'capture_key': capture_key}
+            except CassetteError as error:
+                record = self._load(operation_id)
+                if record['state'] in {'PENDING', 'RUNNING'}:
+                    if error.retryability == 'retryable':
+                        self._paused(record, error)
+                    else:
+                        self._failed(record, error)
+                qualification = {'status': 'FAIL', 'error': error.payload()}
+        return {'operation': self.status(operation_id), 'source_qualification': qualification}
+
+    async def _capture_composition_profile(self, request, owner, selection, *, capture_key, uncached_source=False):
+        """Q42/Q43/Q60: retain raw owner execution, without granting physical qualification."""
+        operation_id = self.operation_id(request)
+        if request.get('operation') != 'source.compose' or not isinstance(owner, CapacityCoordinator):
+            _reject('INVALID_REQUEST', operation_id, 'generation capture requires its concrete composition and store owner')
+        if type(uncached_source) is not bool:
+            _reject('INVALID_REQUEST', capture_key, 'uncached source measurement policy must be a boolean')
+        if not isinstance(selection, DriveSelection) or not owner.owns(selection.volume.mount_path):
+            _reject('INVALID_REQUEST', operation_id, 'generation capture drive and cartridge filesystem differ')
+        before = await await_extent_io(drive_path_observation, selection)
+        context = {'operation_id': operation_id, 'request_digest': digest_bytes(canonical_bytes(request)),
+                   'cartridge': str(owner.cartridge), 'path': before['path'], 'capture_version': '2-source-composition',
+                   'scope': 'RAW_COMPONENT_CAPTURE; QUALIFICATION_NOT_RUN'}
+        if uncached_source:
+            context['source_data_cache_policy'] = 'UNCACHED_REQUESTED'
+        head = await await_extent_io(campaign_head, owner.cartridge, capture_key)
+        operation = self.issue(request)
+        if head is not None:
+            value = head['value']
+            if not isinstance(value, dict) or value.get('context') != context:
+                old_context = value.get('context') if isinstance(value, dict) else None
+                old_path = old_context.get('path') if isinstance(old_context, dict) else None
+                if not (isinstance(old_path, dict) and set(old_context) == set(context)
+                        and value.get('status') in {'MEASURING', 'INCOMPLETE'}
+                        and operation['state'] in (_TERMINAL_STATES | {'PENDING', 'RUNNING'})
+                        and old_path.get('volume_uuid') == before['path']['volume_uuid']
+                        and isinstance(old_path.get('mount_path'), str)
+                        and {**old_context, 'path': context['path'], 'cartridge': context['cartridge']} == context
+                        and owner.cartridge.is_relative_to(selection.volume.mount_path)
+                        and old_context['cartridge'] == str(Path(old_path['mount_path'])
+                            / owner.cartridge.relative_to(selection.volume.mount_path))):
+                    _reject('ROOT_INVALID', capture_key, 'generation capture differs from its exact request or path')
+                if operation['state'] in {'PENDING', 'RUNNING'}:
+                    _reject('CARTRIDGE_DISCONNECTED', capture_key,
+                        'incomplete generation capture belongs to a prior native path; use a fresh capture attempt',
+                        retryability='retryable')
+            if value.get('status') != 'CAPTURED':
+                if operation['state'] in _TERMINAL_STATES:
+                    _reject('SOURCE_UNAVAILABLE', capture_key,
+                        'terminal preparation has no complete capture; use a fresh composition request key')
+                _reject('SOURCE_UNAVAILABLE', capture_key, 'incomplete generation capture requires a fresh attempt key', retryability='retryable')
+            if operation['state'] != 'SUCCEEDED' or value.get('operation_result_digest') != digest_bytes(canonical_bytes(operation['result'])):
+                _reject('ROOT_INVALID', capture_key, 'completed generation capture differs from its canonical operation result')
+            if (not isinstance(value.get('traces'), list) or not value['traces']
+                    or any(not isinstance(item, dict) or set(item) != {'attempt', 'name', 'digest', 'bytes'}
+                           or item['attempt'] != capture_key for item in value['traces'])
+                    or value.get('ownership_digest') != operation['result']['ownership_digest']
+                    or value.get('composition_head') != operation['result']['composition_head']):
+                _reject('ROOT_INVALID', capture_key, 'completed generation capture lost its exact trace or owner references')
+            for reference in value['traces']:
+                await await_extent_io(verify_campaign_artifact, owner.cartridge, reference['attempt'], reference['name'],
+                    reference['digest'], reference['bytes'], maximum_bytes=2097152)
+            return {**value, 'capture_key': capture_key, 'capture_digest': head['digest']}
+        if operation['state'] in _TERMINAL_STATES:
+            _reject('INVALID_REQUEST', capture_key, 'a new capture cannot measure an already terminal composition')
+        first_host = await await_extent_io(storage_host_observation)
+        claim_start = len(owner.claims())
+        trace, references, lock, markers = bytearray(), [], threading.Lock(), {}
+        def begin():
+            nonlocal head
+            head = compare_campaign_head(owner, capture_key, None, {'context': context, 'status': 'MEASURING'})
+        def flush_locked():
+            if trace:
+                payload, name = bytes(trace), str(len(references)) + '-' + uuid.uuid4().hex + '.jsonl'
+                write_campaign_artifact(owner, capture_key, name, payload)
+                references.append({'attempt': capture_key, 'name': name, 'bytes': len(payload), 'digest': digest_bytes(payload)})
+                trace.clear()
+        def record(row):
+            payload = canonical_bytes(row) + b'\n'
+            if len(payload) > 1048576:
+                _reject('CAPABILITY_MISMATCH', capture_key, 'generation trace row exceeds its bounded capture size')
+            with lock:
+                marker = ('binding' if row.get('kind') == 'COMPOSITION_BINDING' else
+                          'ownership' if row.get('kind') == 'OWNERSHIP' else
+                          'complete' if row.get('kind') == 'PHASE' and row.get('phase') == 'COMPLETE' else None)
+                if marker is not None:
+                    if marker in markers:
+                        _reject('ROOT_INVALID', capture_key, 'generation capture repeats an owner identity boundary')
+                    markers[marker] = row
+                trace.extend(payload)
+                if len(trace) >= 1048576:
+                    flush_locked()
+        def flush():
+            with lock:
+                flush_locked()
+        async def sample_interval():
+            while True:
+                await asyncio.sleep(.5)
+                sample = await await_extent_io(storage_host_observation)
+                await await_extent_io(record, {'kind': 'HOST_SAMPLE', **sample})
+        started = time.monotonic_ns()
+        sampler = None
+        try:
+            await await_extent_io(record, {'kind': 'WINDOW_OPEN', 'started_ns': started, 'device': before,
+                                          'host': first_host, 'active_claims': list(owner.active_claims())})
+            await await_extent_io(begin)
+            sampler = asyncio.create_task(sample_interval())
+            operation = await self.compose_source(request, owner, _capture=record, _uncached_source=uncached_source)
+            if operation['state'] == 'SUCCEEDED' and (set(markers) != {'binding', 'ownership', 'complete'}
+                    or markers['binding']['binding']['operation_id'] != operation_id
+                    or markers['ownership']['digest'] != operation['result']['ownership_digest']
+                    or markers['complete']['composition_head'] != operation['result']['composition_head']):
+                _reject('SOURCE_UNAVAILABLE', capture_key, 'composition completed without its complete captured owner route', retryability='retryable')
+            if sampler.done():
+                sampler.result()
+            sampler.cancel()
+            await asyncio.gather(sampler, return_exceptions=True)
+            after = await await_extent_io(drive_path_observation, selection)
+            last_host = await await_extent_io(storage_host_observation)
+            if before['path'] != after['path']:
+                _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during generation capture')
+            ended = time.monotonic_ns()
+            await await_extent_io(record, {'kind': 'WINDOW_CLOSE', 'ended_ns': ended, 'device': after,
+                                          'host': last_host, 'active_claims': list(owner.active_claims())})
+            claims = owner.claims()[claim_start:]
+            await await_extent_io(record, {'kind': 'CLAIM_ACCOUNTING_BOUNDARY', 'time_ns': time.monotonic_ns(), 'claim_count': len(claims)})
+            for claim in claims:
+                await await_extent_io(record, {'kind': 'CAPACITY_CLAIM', 'time_ns': time.monotonic_ns(),
+                    'transition': asdict(claim.transition), 'state': claim.state, 'history': list(claim.history),
+                    'observations': list(claim.observations), 'writes_started': claim.writes_started,
+                    'recovery_parent': None if claim.recovery_parent is None else asdict(claim.recovery_parent),
+                    'recovery_parent_callable': claim.recovery_parent_callable})
+            await await_extent_io(flush)
+            value = {'context': context, 'status': 'CAPTURED' if operation['state'] == 'SUCCEEDED' else 'INCOMPLETE',
+                'operation_state': operation['state'], 'operation_error': operation.get('error'),
+                'operation_result_digest': digest_bytes(canonical_bytes(operation.get('result'))), 'traces': references,
+                'owner_binding': markers.get('binding', {}).get('binding'),
+                'ownership_digest': markers.get('ownership', {}).get('digest'),
+                'execution_mode': markers.get('ownership', {}).get('mode'),
+                'composition_head': markers.get('complete', {}).get('composition_head'),
+                'duration_seconds': (ended - started) / 1e9, 'native_window': {'before': before, 'after': after},
+                'host_window': {'before': first_host, 'after': last_host}, 'cache_state': 'UNCONTROLLED; NOT_COLD_PROOF',
+                'timing_evidence': 'RAW_WALL_WINDOW; HOLD_MARKERS_REQUIRE_SEGMENTATION',
+                'process_counter_scope': 'WINDOW_DELTAS; PER_CALL_DELTAS_CAN_OVERLAP',
+                'claim_scope': 'THIS_COORDINATOR_ISSUED_AT_ACCOUNTING_BOUNDARY; FINAL_CAPTURE_PUBLICATION_EXCLUDED',
+                'mode_scope': 'OWNERSHIP_RECORD_REUSE; NOT_CANONICAL_ATTEMPT_HISTORY',
+                'instrumentation_scope': 'NATIVE_COUNTERS_INCLUDE_CAPTURE_CONTROL_AND_SHARED_DEVICE_ACTIVITY; CALL_ROWS_COVER_DECLARED_EXTENTS'}
+            saved = await await_extent_io(compare_campaign_head, owner, capture_key, head['digest'], value)
+            return {**value, 'capture_key': capture_key, 'capture_digest': saved['digest']}
+        except BaseException as error:
+            if head is None:
+                raise
+            failure = {'type': type(error).__name__, 'code': error.code if isinstance(error, CassetteError) else None,
+                       'detail': str(error)}
+            try:
+                if sampler is not None:
+                    sampler.cancel()
+                    await asyncio.gather(sampler, return_exceptions=True)
+                await await_extent_io(record, {'kind': 'WINDOW_INTERRUPTED', 'ended_ns': time.monotonic_ns(), 'error': failure})
+                await await_extent_io(flush)
+                await await_extent_io(compare_campaign_head, owner, capture_key, head['digest'],
+                    {'context': context, 'status': 'INCOMPLETE', 'traces': references, 'error': failure})
+            except BaseException as receipt_error:
+                raise error from receipt_error
+            raise
+        finally:
+            if sampler is not None:
+                sampler.cancel()
+                await asyncio.gather(sampler, return_exceptions=True)
 
     async def discover_models(self, request: dict) -> dict:
         """Q9/Q52: own discovery admission and record the source adapter's result."""
@@ -1614,6 +2090,60 @@ class CanonicalBroker:
                     'credential_ref': credential_ref, 'authentication': authentication}
         return await self.execute(request, connect)
 
+    async def _prepared_source(self, reference, revision):
+        """Q9/Q42/Q60: join actual provider artifacts to existing preparation and measurements."""
+        composition_request, geometry_request = reference['composition_request'], reference['geometry_request']
+        composition_id, geometry_id = (self.operation_id(item) for item in (composition_request, geometry_request))
+        geometry_record = self._load(geometry_id)
+        arguments = geometry_request['arguments']
+        if (geometry_request['operation'] != 'acquire' or set(arguments) != {'acquisition'}
+                or set(arguments['acquisition']) != {'operation_geometry', 'drive_selection_id'}
+                or geometry_request['target'] != arguments['acquisition']['drive_selection_id']
+                or (geometry_record['kind'], geometry_record['state'], geometry_record['phase']) != ('acquire', 'PAUSED', 'EMPTY')
+                or geometry_record['request_digest'] != digest_bytes(canonical_bytes(geometry_request))):
+            _reject('INVALID_REQUEST', geometry_id, 'prepared source requires its exact recorded geometry qualification request')
+        geometry = OperationGeometry(arguments['acquisition']['operation_geometry'])
+        artifacts = _acquisition_artifacts(revision)
+        if (geometry.source_kind != revision.source_kind
+                or geometry.record()['revision_algorithm'] != revision.immutable_revision.partition(':')[0]
+                or len(geometry.artifacts) != len(artifacts)
+                or any((planned.path, planned.size, planned.digest_algorithm,
+                        planned.validator_template.replace('{digest}', actual.digest.partition(':')[2]))
+                       != (actual.path, actual.size, actual.digest.partition(':')[0], actual.validator)
+                       for planned, actual in zip(geometry.artifacts, artifacts, strict=True))):
+            _reject('SOURCE_REVISION_CHANGED', geometry_id, 'resolved artifact closure differs from the qualified geometry')
+        if any(not item.digest.startswith('sha256:') for item in artifacts):
+            _reject('CAPABILITY_MISMATCH', composition_id, 'prepared SHA-256 commitments require comparable resolved artifact digests')
+        qualification = await self.qualify_composition(composition_request, require_existing=True)
+        if qualification['source_qualification']['status'] != 'PASS':
+            if 'error' in qualification['source_qualification']:
+                raise CassetteError(**qualification['source_qualification']['error'])
+            _reject('CAPABILITY_MISMATCH', composition_id, 'prepared source requires a passing composition profile')
+        destination = self._entry_result(arguments['acquisition']['drive_selection_id'], 'drive.select')
+        selection = await await_extent_io(select_external_apfs_volume, destination['selection']['volume']['volume_uuid'])
+        cartridge = Path(selection.volume.mount_path) / destination['folder']
+        lifecycle = CartridgeLifecycle(destination['cartridge_uuid'])
+        await await_extent_io(lifecycle.mount, cartridge, selection.volume.volume_uuid)
+        if digest_bytes(canonical_bytes(destination['protected_inventory'])) != destination['inventory_digest']:
+            _reject('ROOT_INVALID', geometry_id, 'prepared source drive inventory digest does not verify')
+        compare_inventory(destination['protected_inventory'], await self._protected_inventory(selection, destination['folder']))
+        owner = CapacityCoordinator(cartridge)
+        profile = await self._qualify_download(geometry_id, owner, selection, geometry, require_existing=True)
+        receipts = [event['payload']['source_qualification'] for event in geometry_record['events']
+                    if 'source_qualification' in event['payload']]
+        if not receipts or receipts[-1] != profile:
+            _reject('ROOT_INVALID', geometry_id, 'geometry profile differs from its canonical qualification receipt')
+        ownership = await await_extent_io(campaign_head, cartridge, 'source-compose-' + composition_id.removeprefix('op-'))
+        outputs = [{'path': item.path, 'size': item.size, 'digest': item.digest} for item in artifacts]
+        if (ownership is None or ownership['digest'] != qualification['operation']['result']['ownership_digest']
+                or ownership['value'].get('outputs') != outputs):
+            _reject('SOURCE_REVISION_CHANGED', composition_id, 'resolved artifact digests differ from the committed preparation outputs')
+        return {'composition_operation_id': composition_id,
+                'composition_head': qualification['operation']['result']['composition_head'],
+                'ownership_digest': ownership['digest'], 'composition_profile': qualification['source_qualification'],
+                'geometry_operation_id': geometry_id, 'geometry_digest': digest_bytes(geometry.encoded),
+                'geometry_profile': profile, 'source_lock_digest': digest_bytes(canonical_bytes(_source_record(revision)))}
+
     async def select_source(self, request: dict) -> dict:
         """Q5/Q9: freeze immutable source evidence without acquiring its payload."""
         self.operation_id(request)
@@ -1637,10 +2167,12 @@ class CanonicalBroker:
             requirements = await adapter.license_and_auth(revision)
             descriptor['locator'] = revision.locator
             descriptor['revision'] = revision.immutable_revision
+            preparation = ({} if 'preparation' not in args else
+                           {'preparation': await self._prepared_source(args['preparation'], revision)})
             return {'connection_id': args['connection_id'], 'endpoint': connection['endpoint'],
                     'descriptor': descriptor, 'source_lock': _source_record(revision),
                     'requirements': requirements.record(), 'downloaded_bytes': 0,
-                    'execution_compatibility': 'NOT_VERIFIED'}
+                    'execution_compatibility': 'NOT_VERIFIED', **preparation}
         return await self.execute(request, select)
 
     async def discover_drives(self, request: dict) -> dict:
@@ -2241,7 +2773,8 @@ class CanonicalBroker:
         for key, digest in sealed:
             await asyncio.to_thread(reclaim_profile_extents, owner, key, digest)
 
-    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_lengths=None):
+    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_lengths=None,
+                                require_existing=False):
         """Q42/Q53/Q60: measure the source executor and retain its whole operation working set."""
         observed = await asyncio.to_thread(drive_path_observation, selection)
         host = await asyncio.to_thread(storage_host_observation)
@@ -2294,10 +2827,14 @@ class CanonicalBroker:
         plan = {'binding': binding, 'pattern_count': len(patterns)}
         head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
         if head is None:
+            if require_existing:
+                _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already published geometry profile')
             head = await asyncio.to_thread(compare_campaign_head, owner, key, None, plan)
         if head['value'] != plan:
             _reject('ROOT_INVALID', operation_id, 'saved acquisition profile differs from its source or path')
         complete = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-complete')
+        if require_existing and complete is None:
+            _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already complete geometry profile')
         try:
             if complete is None:
                 observations, revalidations, atom_digests, retained = [], [], [], []
@@ -2497,7 +3034,9 @@ class CanonicalBroker:
                 manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)
                 if manifest is None or not isinstance(manifest['value'], dict):
                     _reject('ROOT_INVALID', extent_key, 'completed profile extent manifest is missing or malformed')
-                if manifest['value'].get('status') == 'RETAINED':
+                if require_existing and manifest['value'].get('status') != 'RECLAIMED':
+                    _reject('SOURCE_UNAVAILABLE', extent_key, 'prepared source requires completed profile extent reclamation')
+                if not require_existing and manifest['value'].get('status') == 'RETAINED':
                     manifest = await asyncio.to_thread(seal_profile_extents, owner, extent_key,
                         retained['retained_digest'], key + '-complete', complete['digest'])
                 if (manifest['value'].get('evidence_key') != key + '-complete'
@@ -2505,11 +3044,13 @@ class CanonicalBroker:
                     _reject('ROOT_INVALID', extent_key, 'profile extent seal references another measurement')
                 seal_digest = (manifest['digest'] if manifest['value'].get('status') == 'SEALED'
                                else manifest['value'].get('seal_digest'))
-                await asyncio.to_thread(reclaim_profile_extents, owner, extent_key, seal_digest)
+                if not require_existing:
+                    await asyncio.to_thread(reclaim_profile_extents, owner, extent_key, seal_digest)
             result = complete['value']['measurements']
             receipt = {'status': result['status'], 'profile_digest': complete['digest'],
                        'profile_key': key + '-complete', 'path': str(owner.cartridge)}
-            self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
+            if not require_existing:
+                self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
             if result['status'] != 'PASS':
                 _reject('CAPABILITY_MISMATCH', operation_id, 'source executor storage qualification is incomplete')
             return receipt

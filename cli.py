@@ -68,12 +68,16 @@ def main(argv=None):
     select.add_argument('--model', required=True)
     select.add_argument('--revision')
     select.add_argument('--license-acceptance-ref')
+    select.add_argument('--preparation', type=Path, help='JSON references to completed preparation and geometry qualification requests.')
     dataset = commands.add_parser('select-dataset', help='Freeze exact dataset files and recheck source access without reading their payload.')
     dataset.add_argument('--connection', required=True)
     dataset.add_argument('--dataset', required=True)
     dataset.add_argument('--revision', required=True)
     dataset.add_argument('--file', action='append', required=True, help='Select one exact file; repeat for every required file.')
     dataset.add_argument('--license-acceptance-ref')
+    composition = commands.add_parser('qualify-composition', help='Measure byte preparation from a verified download on its selected drive.')
+    composition.add_argument('--acquisition', required=True, help='Completed acquisition operation ID.')
+    composition.add_argument('--recipe', type=Path, required=True, help='Bounded JSON byte recipe for the verified input.')
     drives = commands.add_parser('drives', help='List mounted APFS drives and observed access.')
     drive = commands.add_parser('select-drive', help='Select a drive and record the content Cassette must preserve.')
     drive.add_argument('--volume', required=True, help='APFS volume UUID from drives.')
@@ -96,7 +100,7 @@ def main(argv=None):
     remount.add_argument('operation_id')
     remount.add_argument('--reconnected', action='store_true',
                          help='Report a completed physical reconnect and verify the saved drive data now.')
-    for command in (models, connect, select, dataset, drives, drive, go, qualify, headers, remount):
+    for command in (models, connect, select, dataset, composition, drives, drive, go, qualify, headers, remount):
         command.add_argument('--key', default=None, help='Reuse this key to reconcile the same operation.')
     status = commands.add_parser('status', help='Read a recorded operation.')
     status.add_argument('operation_id')
@@ -131,6 +135,8 @@ def main(argv=None):
                          'license_acceptance_ref': args.license_acceptance_ref}
             if args.command == 'select-dataset':
                 selection['artifact_selector'] = {'dataset_paths': sorted(args.file)}
+            elif args.preparation is not None:
+                selection['preparation'] = broker.read_operation_plan(args.preparation)
             request.update(operation='source.select', target=locator, arguments={'selection': selection})
             result = asyncio.run(broker.select_source(request))
         elif args.command == 'drives':
@@ -141,6 +147,19 @@ def main(argv=None):
                 'volume_uuid': args.volume, 'folder': args.folder, 'cartridge_uuid': args.cartridge_uuid}})
             print('Recording the existing files on the selected drive before Cassette writes.', file=sys.stderr, flush=True)
             result = asyncio.run(broker.select_drive(request))
+        elif args.command == 'qualify-composition':
+            request.update(operation='source.compose', target=args.acquisition, arguments={'composition': {
+                'acquisition_operation_id': args.acquisition, 'recipe': broker.read_operation_plan(args.recipe)}})
+            print('Measuring byte preparation on the verified download\'s selected drive.', file=sys.stderr, flush=True)
+            result = asyncio.run(broker.qualify_composition(request))
+            qualification = result['source_qualification']
+            if qualification['status'] == 'PASS':
+                print('Composition drive check passed.', file=sys.stderr, flush=True)
+            elif 'error' in qualification:
+                error = qualification['error']
+                print(f"Composition drive check failed: {error['code']}: {error['detail']}", file=sys.stderr, flush=True)
+            print(json.dumps(result, sort_keys=True))
+            return 0 if qualification['status'] == 'PASS' else 2 if result['operation']['state'] == 'PAUSED' else 1
         elif args.command in {'go', 'qualify', 'headers'}:
             request.update(operation='acquire', target=args.drive_selection, arguments={'acquisition': {
                 'drive_selection_id': args.drive_selection}})

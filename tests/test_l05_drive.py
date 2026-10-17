@@ -31,11 +31,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _attached_apfs_image(tmp_path: Path) -> tuple[Path, Path]:
+def _attached_apfs_image(tmp_path: Path, *, size="64m") -> tuple[Path, Path]:
     image = tmp_path / "cassette-l05.sparseimage"
     subprocess.run(
         [
-            "/usr/bin/hdiutil", "create", "-size", "64m", "-fs", "APFS",
+            "/usr/bin/hdiutil", "create", "-size", size, "-fs", "APFS",
             "-volname", "CassetteL05", "-type", "SPARSE", "-quiet", str(image),
         ],
         check=True,

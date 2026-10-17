@@ -6597,6 +6597,22 @@ def reclaim_profile_extents(owner: CapacityCoordinator, key: str, seal_digest: s
             os.close(descriptor)
 
 
+def _profile_tails(values, points, scale=1):
+    ordered = sorted(values)
+    return {'samples': len(ordered), 'minimum': ordered[0] / scale if ordered else None,
+            'maximum': ordered[-1] / scale if ordered else None,
+            'empirical_percentiles': {str(q): ordered[max(0, math.ceil(q * len(ordered)) - 1)] / scale
+                for q in points} if ordered else {}, 'scope': 'EXACT_EMPIRICAL_ORDER_STATISTICS'}
+
+
+def _profile_rates(intervals):
+    result = _profile_tails([count * 1e9 / duration for count, duration in intervals], (.05, .5, .95))
+    if result['samples'] < 20:
+        result['empirical_percentiles'] = {}
+        result['scope'] = 'MINIMUM_ONLY_CONSERVATIVE_BOUND; FEWER_THAN_20_INTERVALS'
+    return result
+
+
 def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_data_reads, revalidation, data_offset=0,
                          has_state=True, record_base=0, expected_path=None,
                          expected_source_reads=0, source_state_bytes=0):
@@ -6815,37 +6831,571 @@ def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_da
             or source_offsets != set(range(0, expected_source_reads, TRANSFER_CHUNK_BYTES))
             or source_state_reads != source_ranges * source_state_bytes):
         reject('source trace omits its exact retained-source working set or checkpoint reads')
-    def tails(values, points, scale=1):
-        ordered = sorted(values)
-        return {'samples': len(ordered), 'minimum': ordered[0] / scale if ordered else None,
-                'maximum': ordered[-1] / scale if ordered else None,
-                'empirical_percentiles': {str(q): ordered[max(0, math.ceil(q * len(ordered)) - 1)] / scale
-                    for q in points} if ordered else {}, 'scope': 'EXACT_EMPIRICAL_ORDER_STATISTICS'}
-    def rates(intervals):
-        result = tails([count * 1e9 / duration for count, duration in intervals], (.05, .5, .95))
-        if result['samples'] < 20:
-            result['empirical_percentiles'] = {}
-            result['scope'] = 'MINIMUM_ONLY_CONSERVATIVE_BOUND; FEWER_THAN_20_INTERVALS'
-        return result
     return {'data_write_bytes': data_writes, 'host_write_bytes': host_writes, 'data_read_bytes': data_reads,
         'source_read_bytes': source_reads, 'source_state_read_bytes': source_state_reads,
         'source_range_reads': source_ranges, 'process_source_read_bytes': source_process_reads,
         'process_data_read_bytes': process_reads, 'io_calls': io_calls,
-        'diagnostic_call_union': tails((value for phase in phases.values() for values in phase['calls'].values()
+        'diagnostic_call_union': _profile_tails((value for phase in phases.values() for values in phase['calls'].values()
                                         for value in values), (.5, .95, .99, 1.), 1e9),
-        'diagnostic_flush_union': tails((value for phase in phases.values() for name, values in phase['calls'].items()
+        'diagnostic_flush_union': _profile_tails((value for phase in phases.values() for name, values in phase['calls'].items()
                                          if name.endswith(('.fsync', '.F_FULLFSYNC')) for value in values),
                                         (.5, .95, .99, 1.), 1e9),
-        'phases': {name: {'calls': {kind: tails(values, (.5, .95, .99, 1.), 1e9)
+        'phases': {name: {'calls': {kind: _profile_tails(values, (.5, .95, .99, 1.), 1e9)
                                    for kind, values in phase['calls'].items()},
-                         'durable_chunk_bytes_per_second': rates(phase['transitions']),
-                         'source_to_durable_chunk_bytes_per_second': rates(phase['source_transitions']),
-                         'verified_range_bytes_per_second': rates(phase['verified_ranges'])}
+                         'durable_chunk_bytes_per_second': _profile_rates(phase['transitions']),
+                         'source_to_durable_chunk_bytes_per_second': _profile_rates(phase['source_transitions']),
+                         'verified_range_bytes_per_second': _profile_rates(phase['verified_ranges'])}
                    for name, phase in phases.items()},
         'windows': windows, 'active_seconds': sum(window['active_seconds'] for window in windows),
         'downtime_seconds': sum(window['downtime_before_seconds'] for window in windows),
         'continuous': len(windows) == 1, 'interrupted_windows': len(windows) - 1,
         'max_in_window_sampling_gap_seconds': max(window['max_sampling_gap_seconds'] for window in windows)}
+
+
+def composition_trace(cartridge, capture_key, *, expected_context, expected_result, range_plans,
+                      source_sizes, checkpoint_shape, expected_contract):
+    """Q42/Q60: assess sealed observations while preserving incomplete frontiers and unknowns."""
+    def reject(detail):
+        _transaction_reject(capture_key, detail)
+    def natural(value):
+        return type(value) is int and value >= 0
+    head = campaign_head(cartridge, capture_key)
+    capture = None if head is None else head['value']
+    if not isinstance(capture, dict) or capture.get('context') != expected_context:
+        reject('composition capture differs from its exact context')
+    mode = capture.get('execution_mode')
+    complete = capture.get('status') == 'CAPTURED'
+    if (capture.get('status') not in {'CAPTURED', 'INCOMPLETE'} or mode not in {'FRESH', 'RESUME', None}
+            or (complete and mode is None)):
+        reject('composition statistics require sealed complete or explicitly incomplete evidence')
+    if expected_context.get('capture_version') != '2-source-composition':
+        reject('composition statistics require the capture version with every broker hold observed')
+    operation_id = expected_context.get('operation_id')
+    if not isinstance(operation_id, str) or re.fullmatch(r'op-[0-9a-f]{64}', operation_id) is None:
+        reject('composition context lacks its canonical operation identity')
+    owner = campaign_head(cartridge, 'source-compose-' + operation_id[3:])
+    final = campaign_head(cartridge, 'source-compose-' + operation_id[3:] + '-complete')
+    if complete and (owner is None or final is None or capture.get('ownership_digest') != owner['digest']
+            or capture.get('composition_head') != final['digest']
+            or expected_result != {**final['value'], 'composition_head': final['digest']}
+            or capture.get('operation_result_digest') != digest_bytes(canonical_bytes(expected_result))):
+        reject('composition capture differs from its committed owner or canonical result')
+    binding, plan, recipe = (expected_contract[name] for name in ('binding', 'io_plan', 'recipe'))
+    if (binding.get('operation_id') != operation_id
+            or binding.get('recipe_digest') != digest_bytes(canonical_bytes(recipe))
+            or binding.get('io_plan_digest') != digest_bytes(canonical_bytes(plan))
+            or (owner is not None and any(owner['value'].get(name) != expected_contract[name]
+                                         for name in ('binding', 'recipe', 'io_plan')))
+            or (capture.get('owner_binding') is not None and capture['owner_binding'] != binding)
+            or set(range_plans) != {'PREPASS', 'COMPOSE_WRITE'}):
+        reject('composition capture or expected ranges lost their owner and plan binding')
+    required = {segment['path'] for output in recipe['artifacts']
+                for segment in output['segments'] if 'path' in segment}
+    if (not isinstance(source_sizes, dict) or set(source_sizes) != required
+            or any(not natural(size) for size in source_sizes.values())
+            or not isinstance(checkpoint_shape, dict) or set(checkpoint_shape) != {'header_bytes', 'record_bytes'}
+            or any(not natural(count) or count == 0 for count in checkpoint_shape.values())):
+        reject('composition extent expectations lack their exact source and checkpoint geometry')
+    def checkpoint_bytes(size):
+        return checkpoint_shape['header_bytes'] + checkpoint_shape['record_bytes'] * ((size + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES)
+    output_sizes = {item['path']: item['size'] for item in plan['outputs']}
+    phases = {name: {'calls': {}, 'failed_calls': {}, 'failed_ranges': 0,
+                    'ranges': [], 'durable': [], 'io_bytes': {}, 'count': 0, 'peak': 0}
+              for name in ('PREPASS', 'COMPOSE_WRITE')}
+    expected = {name: iter(values) for name, values in range_plans.items()}
+    waiting = {name: {} for name in phases}
+    extents, active_ranges, fetched, pending, written, state_writes, retained, durable = {}, {}, {}, {}, {}, {}, {}, {}
+    closed_outputs = set()
+    markers, references, holds, hold_open, window, close, claim_count = {}, set(), [], None, None, None, None
+    claims, max_io_end, samples, interruption = 0, 0, [], None
+    def retained_range(item):
+        return item['range_offset'] + item['range_length'] <= retained.get(item['output'], {}).get('verified', 0)
+    def interval(start, end, count):
+        if not natural(start) or not natural(end) or end <= start:
+            reject('composition interval lacks positive monotonic duration')
+        return (start, end, count)
+    for reference in capture.get('traces', []):
+        if (not isinstance(reference, dict) or set(reference) != {'attempt', 'name', 'bytes', 'digest'}
+                or reference['attempt'] != capture_key or reference['name'] in references):
+            reject('composition trace reference is malformed or repeated')
+        references.add(reference['name'])
+        rows = verify_campaign_artifact(cartridge, reference['attempt'], reference['name'], reference['digest'],
+            reference['bytes'], maximum_bytes=2097152, include_rows=True)['rows']
+        for row in rows:
+            kind, phase = row.get('kind'), row.get('phase')
+            if window is None:
+                if kind != 'WINDOW_OPEN' or not natural(row.get('started_ns')):
+                    reject('composition trace lacks its first exact window')
+                window = row
+                max_io_end = row['started_ns']
+                samples.append(row.get('host'))
+                continue
+            if kind == 'WINDOW_INTERRUPTED' and any(row.get(field) is not None for field in ('device', 'host')):
+                reject('interrupted composition invents unavailable native or host endpoints')
+            if close is not None:
+                if (not complete and kind == 'WINDOW_INTERRUPTED' and interruption is None
+                        and close['kind'] == 'WINDOW_CLOSE' and row.get('error') == capture.get('error')
+                        and isinstance(row.get('error'), dict) and natural(row.get('ended_ns'))
+                        and row['ended_ns'] >= close['ended_ns']):
+                    interruption = row
+                    continue
+                if close['kind'] == 'WINDOW_INTERRUPTED' or interruption is not None:
+                    reject('composition trace contains execution after its interrupted window')
+                if kind == 'CLAIM_ACCOUNTING_BOUNDARY' and claim_count is None and natural(row.get('claim_count')):
+                    claim_count = row['claim_count']
+                elif kind == 'CAPACITY_CLAIM' and claim_count is not None:
+                    claims += 1
+                else:
+                    reject('composition trace contains execution after its native window')
+                if not natural(row.get('time_ns')) or row['time_ns'] < close['ended_ns']:
+                    reject('composition claim accounting precedes its closed native window')
+                continue
+            if kind in {'WINDOW_CLOSE', 'WINDOW_INTERRUPTED'}:
+                if kind == 'WINDOW_INTERRUPTED':
+                    if complete or not isinstance(row.get('error'), dict) or row['error'] != capture.get('error'):
+                        reject('composition interruption differs from its incomplete capture')
+                    interruption = row
+                if complete and (active_ranges or pending or hold_open is not None):
+                    reject('composition window ends before a range, hold or durable output boundary')
+                interval(window['started_ns'], row.get('ended_ns'), 0)
+                if row['ended_ns'] < max_io_end:
+                    reject('composition native window ends before its observed execution')
+                if kind == 'WINDOW_CLOSE':
+                    samples.append(row.get('host'))
+                close = row
+                continue
+            if kind == 'HOST_SAMPLE':
+                samples.append(row)
+                continue
+            if kind == 'PHASE':
+                if not natural(row.get('time_ns')) or row['time_ns'] < window['started_ns']:
+                    reject('composition phase lacks its in-window monotonic observation')
+                max_io_end = max(max_io_end, row['time_ns'])
+                if phase == 'OUTPUT_COMMIT':
+                    path = row.get('output')
+                    initial = state_writes.get(path)
+                    if (path not in output_sizes or path in closed_outputs or path in pending
+                            or written.get(path, 0) != output_sizes[path]
+                            or any(output == path for output, _ in fetched)
+                            or (path not in written and (initial is None or initial['bytes'] <= 0
+                                or initial['readback'] != initial['bytes'] or not initial['fenced']))):
+                        reject('composition output commit differs from its exact durable frontier')
+                    closed_outputs.add(path)
+                if phase == 'COMPLETE':
+                    if (final is None or 'complete' in markers or row.get('composition_head') != final['digest']
+                            or closed_outputs != set(output_sizes)):
+                        reject('composition completion marker differs from its committed final record')
+                    markers['complete'] = row
+                continue
+            if kind in {'COMPOSITION_BINDING', 'OWNERSHIP'}:
+                key = 'binding' if kind == 'COMPOSITION_BINDING' else 'ownership'
+                if key in markers or (row.get('binding') != binding if key == 'binding' else
+                        owner is None or row.get('digest') != owner['digest']
+                        or row.get('mode') not in {'FRESH', 'RESUME'} or (mode is not None and row.get('mode') != mode)):
+                    reject('composition trace owner marker differs or repeats')
+                if key == 'ownership':
+                    mode = row['mode']
+                markers[key] = row
+                continue
+            if kind == 'EXTENT_BOUND':
+                role, path = row.get('role'), row.get('path')
+                key = (role, path)
+                if (role not in {'source_data', 'source_state', 'output_data', 'output_state'} or key in extents
+                        or not isinstance(path, str) or any(not natural(row.get(field)) for field in
+                            ('offset', 'length', 'device', 'inode', 'allocated_bytes'))
+                        or row.get('operation_id') != (binding['acquisition_operation_id'] if role.startswith('source_') else operation_id)):
+                    reject('composition extent binding differs or repeats')
+                size = (source_sizes if role.startswith('source_') else output_sizes).get(path)
+                if size is None or row['length'] != (checkpoint_bytes(size) if role.endswith('_state') else size):
+                    reject('composition extent differs from its admitted byte geometry')
+                extents[key] = row
+                continue
+            if kind in {'HOLD_OPEN', 'HOLD_CLOSE'}:
+                if not natural(row.get('time_ns')):
+                    reject('composition hold lacks its monotonic observation')
+                if kind == 'HOLD_OPEN':
+                    if hold_open is not None:
+                        reject('composition holds overlap')
+                    hold_open = row
+                else:
+                    if (hold_open is None or hold_open.get('output') != row.get('output')
+                            or hold_open.get('boundary') != row.get('boundary')):
+                        reject('composition hold closes another output')
+                    interval(hold_open['time_ns'], row['time_ns'], 0)
+                    holds.append((hold_open['time_ns'], row['time_ns']))
+                    hold_open = None
+                continue
+            if kind in {'RANGE_OPEN', 'RANGE_CLOSE'}:
+                if phase not in phases or any(not natural(row.get(field)) for field in
+                        ('range_offset', 'range_length', 'range_started_ns')) or not isinstance(row.get('output'), str):
+                    reject('composition range identity is malformed')
+                key = (phase, row['output'], row['range_offset'], row['range_started_ns'])
+                coordinate = (row['output'], row['range_offset'])
+                if kind == 'RANGE_OPEN':
+                    if row['range_started_ns'] < window['started_ns']:
+                        reject('composition range starts before its native window')
+                    max_io_end = max(max_io_end, row['range_started_ns'])
+                    limit = plan['prepass' if phase == 'PREPASS' else 'write']['range_concurrency']
+                    while len(waiting[phase]) < limit:
+                        item = next(expected[phase], None)
+                        if item is None:
+                            break
+                        if mode == 'RESUME' and phase == 'COMPOSE_WRITE' and retained_range(item):
+                            continue
+                        point = (item['output'], item['range_offset'])
+                        if point in waiting[phase]:
+                            reject('expected composition ranges repeat an output coordinate')
+                        waiting[phase][point] = item
+                    item = waiting[phase].pop(coordinate, None)
+                    if item is None or item['range_length'] != row['range_length'] or key in active_ranges:
+                        reject('composition range differs from its exact recipe traversal')
+                    spans = {}
+                    for index, segment in enumerate(item['segments']):
+                        if 'path' in segment:
+                            data = extents.get(('source_data', segment['path']))
+                            state = extents.get(('source_state', segment['path']))
+                            if data is None or state is None:
+                                reject('composition range lacks its bound original source extents')
+                            start = segment['offset'] // TRANSFER_CHUNK_BYTES * TRANSFER_CHUNK_BYTES
+                            end = min(data['length'], ((segment['offset'] + segment['length'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES) * TRANSFER_CHUNK_BYTES)
+                            spans[index] = {'expected': segment, 'state_bytes': 0, 'cursor': start,
+                                            'verified': start, 'end': end, 'io_end': row['range_started_ns']}
+                    active_ranges[key] = {'contract': item, 'spans': spans}
+                    count = sum(point[0] == phase for point in active_ranges)
+                    if count > limit:
+                        reject('composition ranges exceed their declared concurrency')
+                    phases[phase]['peak'] = max(phases[phase]['peak'], count)
+                else:
+                    opened = active_ranges.pop(key, None)
+                    if (not complete and opened is not None and row.get('success') is False
+                            and isinstance(row.get('error_type'), str) and row['error_type']):
+                        interval(row['range_started_ns'], row.get('ended_ns'), 0)
+                        if any(row['ended_ns'] < span['io_end'] for span in opened['spans'].values()):
+                            reject('failed composition range closes before its observed I/O')
+                        max_io_end = max(max_io_end, row['ended_ns'])
+                        phases[phase]['failed_ranges'] += 1
+                        continue
+                    if (opened is None or row.get('success') is not True or row.get('returned_bytes') != row['range_length']
+                            or any(span['verified'] != span['end'] or span['state_bytes'] != extents[
+                                ('source_state', span['expected']['path'])]['length'] or row.get('ended_ns', -1) < span['io_end']
+                                for span in opened['spans'].values())):
+                        reject('composition range closes before its exact source verification')
+                    phases[phase]['ranges'].append(interval(row['range_started_ns'], row.get('ended_ns'), row['range_length']))
+                    max_io_end = max(max_io_end, row['ended_ns'])
+                    phases[phase]['count'] += 1
+                    if phase == 'COMPOSE_WRITE':
+                        if coordinate in fetched:
+                            reject('composition repeats an unwritten fetched range')
+                        fetched[coordinate] = row
+                continue
+            if kind == 'OUTPUT_BOUNDARY':
+                path = row.get('output')
+                item = pending.pop(path, None)
+                if (mode == 'RESUME' and item is None and path not in written
+                        and phase == 'COMPOSE_WRITE' and path in output_sizes):
+                    prefix = retained.get(path)
+                    if (prefix is None or path in state_writes
+                            or (prefix['verified'] == 0 and output_sizes[path] != 0)
+                            or row.get('offset') != prefix['verified'] or prefix['read'] != prefix['verified']
+                            or prefix['state_bytes'] != checkpoint_bytes(prefix['verified'])
+                            or prefix.get('checkpoint_before_data', prefix['state_bytes']) != checkpoint_bytes(prefix['verified'])
+                            or row.get('generation') != (prefix['verified'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES
+                            or not natural(row.get('generation')) or not isinstance(row.get('hash_state_digest'), str)
+                            or re.fullmatch(r'blake3:[0-9a-f]{64}', row['hash_state_digest']) is None):
+                        reject('resumed output boundary lacks its exact verified prefix and checkpoint')
+                    if not natural(row.get('time_ns')) or row['time_ns'] < prefix['io_end']:
+                        reject('resumed output boundary precedes its observed prefix verification')
+                    prefix['ended_ns'] = row['time_ns']
+                    max_io_end = max(max_io_end, row['time_ns'])
+                    written[path] = prefix['verified']
+                    durable[path] = prefix['verified']
+                    continue
+                source = None if item is None else fetched.pop((path, item['offset']), None)
+                if (phase != 'COMPOSE_WRITE' or item is None or source is None
+                        or row.get('offset') != written.get(path) or source['range_length'] != item['bytes']
+                        or item['readback'] != item['bytes'] or not item['data_sync'] or not item['state_sync']
+                        or not natural(row.get('generation')) or not isinstance(row.get('hash_state_digest'), str)
+                        or re.fullmatch(r'blake3:[0-9a-f]{64}', row['hash_state_digest']) is None):
+                    reject('composition output checkpoint lacks its exact fetched, readback and synchronized range')
+                if not natural(row.get('time_ns')) or row['time_ns'] < item['io_end']:
+                    reject('composition output checkpoint precedes its observed I/O')
+                if item['io_start'] < source['range_started_ns']:
+                    reject('composition output I/O starts before its fetched range')
+                max_io_end = max(max_io_end, row['time_ns'])
+                durable[path] = row['offset']
+                phases['COMPOSE_WRITE']['durable'].append(interval(source['range_started_ns'], row['time_ns'], item['bytes']))
+                continue
+            role = row.get('role')
+            if role == 'output_data' and kind == 'VERIFIED_PREFIX':
+                path = row.get('path')
+                prefix = retained.get(path)
+                extent = extents.get((role, path))
+                count = 0 if prefix is None or extent is None else min(TRANSFER_CHUNK_BYTES, extent['length'] - prefix['verified'])
+                if (mode != 'RESUME' or prefix is None or path in written or count <= 0 or phase != 'COMPOSE_WRITE'
+                        or row.get('offset') != extent['offset'] + prefix['verified'] or row.get('length') != count
+                        or prefix['read'] != prefix['verified'] + count or not natural(row.get('time_ns'))
+                        or row['time_ns'] < prefix['io_end']):
+                    reject('resumed output prefix lacks its exact preceding chunk read')
+                prefix['verified'] += count
+                prefix['io_end'] = row['time_ns']
+                max_io_end = max(max_io_end, row['time_ns'])
+                continue
+            if role in {'source_data', 'source_state'} and kind in {'read', 'VERIFIED_PREFIX'}:
+                key = (phase, row.get('output'), row.get('range_offset'), row.get('range_started_ns'))
+                opened = active_ranges.get(key)
+                span = None if opened is None else opened['spans'].get(row.get('span'))
+                if (span is None or row.get('range_length') != opened['contract']['range_length']
+                        or (row.get('input'), row.get('source_offset'), row.get('source_length')) !=
+                           (span['expected']['path'], span['expected']['offset'], span['expected']['length'])):
+                    reject('composition source span differs from the exact recipe traversal')
+                extent = extents[(role, row['input'])]
+                if kind == 'VERIFIED_PREFIX':
+                    count = min(TRANSFER_CHUNK_BYTES, span['end'] - span['verified'])
+                    if (role != 'source_data' or count <= 0 or row.get('offset') != extent['offset'] + span['verified']
+                            or row.get('length') != count or span['cursor'] != span['verified'] + count
+                            or not natural(row.get('time_ns')) or row['time_ns'] < span['io_end']):
+                        reject('composition source prefix lacks its exact chunk read')
+                    span['verified'] += count
+                    span['io_end'] = row['time_ns']
+                    continue
+            elif role not in {'output_data', 'output_state'} or kind not in {'read', 'write', 'fsync', 'F_FULLFSYNC'}:
+                reject('composition trace has an unknown execution observation')
+            if (phase not in phases or kind not in {'read', 'write', 'fsync', 'F_FULLFSYNC'}
+                    or type(row.get('success')) is not bool or (complete and not row['success'])
+                    or any(not natural(row.get(field)) for field in
+                        ('offset', 'requested_bytes', 'returned_bytes', 'started_ns', 'duration_ns'))
+                    or row['returned_bytes'] > row['requested_bytes'] or row['started_ns'] < window['started_ns']):
+                reject('composition I/O is malformed, failed or outside its exact window')
+            max_io_end = max(max_io_end, row['started_ns'] + row['duration_ns'])
+            label = role + '.' + kind
+            if role.startswith('source_'):
+                if kind != 'read' or row['started_ns'] < key[3]:
+                    reject('composition source I/O starts before its observed range or writes an original')
+            else:
+                path = row.get('path')
+                extent = extents.get((role, path))
+                if (extent is None or phase != 'COMPOSE_WRITE' or row['offset'] < extent['offset']
+                        or row['offset'] + row['returned_bytes'] > extent['offset'] + extent['length']):
+                    reject('composition output I/O differs from its bound extent')
+                if path in closed_outputs:
+                    reject('composition output I/O follows its committed output')
+            if not row['success']:
+                if row['returned_bytes'] != 0 or not isinstance(row.get('error_type'), str) or not row['error_type']:
+                    reject('failed composition I/O reports bytes or lacks its observed exception')
+                phases[phase]['failed_calls'].setdefault(label + ':' + row['error_type'], []).append(row['duration_ns'])
+                if role.startswith('source_'):
+                    span['io_end'] = max(span['io_end'], row['started_ns'] + row['duration_ns'])
+                continue
+            phases[phase]['calls'].setdefault(label, []).append(row['duration_ns'])
+            phases[phase]['io_bytes'][label] = phases[phase]['io_bytes'].get(label, 0) + row['returned_bytes']
+            if role.startswith('source_'):
+                if role == 'source_state':
+                    if row['offset'] != extent['offset'] + span['state_bytes'] or span['cursor'] != span['verified']:
+                        reject('composition source checkpoint read is discontinuous')
+                    span['state_bytes'] += row['returned_bytes']
+                else:
+                    if (span['state_bytes'] != extents[('source_state', row['input'])]['length']
+                            or row['offset'] != extent['offset'] + span['cursor']
+                            or span['cursor'] + row['returned_bytes'] > min(span['end'], span['verified'] + TRANSFER_CHUNK_BYTES)):
+                        reject('composition source chunk lacks its complete checkpoint or contiguous read')
+                    span['cursor'] += row['returned_bytes']
+                span['io_end'] = max(span['io_end'], row['started_ns'] + row['duration_ns'])
+                continue
+            if role == 'output_data' and kind == 'write':
+                offset = written.get(path, 0)
+                if row['offset'] != extent['offset'] + offset:
+                    reject('composition output writes are discontinuous')
+                item = pending.setdefault(path, {'offset': offset, 'bytes': 0, 'readback': 0, 'data_sync': False, 'state_sync': False,
+                                                 'io_start': row['started_ns'], 'io_end': 0})
+                item['data_sync'] = item['state_sync'] = False
+                item['checkpoint_parts'] = set()
+                item['bytes'] += row['returned_bytes']
+                written[path] = offset + row['returned_bytes']
+            elif role == 'output_data' and kind == 'read':
+                item = pending.get(path)
+                if mode == 'RESUME' and item is None and path not in written:
+                    prefix = retained.get(path)
+                    if (prefix is None or prefix['state_bytes'] < checkpoint_shape['header_bytes']
+                            or row['offset'] != extent['offset'] + prefix['read']
+                            or prefix['read'] + row['returned_bytes'] > min(extent['length'], prefix['verified'] + TRANSFER_CHUNK_BYTES)
+                            or row['started_ns'] < prefix['io_end']):
+                        reject('resumed output read lacks its preceding checkpoint and contiguous prefix')
+                    prefix.setdefault('checkpoint_before_data', prefix['state_bytes'])
+                    prefix['read'] += row['returned_bytes']
+                    prefix['io_end'] = row['started_ns'] + row['duration_ns']
+                    continue
+                if (item is None or row['offset'] != extent['offset'] + item['offset'] + item['readback']
+                        or item['readback'] + row['returned_bytes'] > item['bytes']):
+                    reject('composition output readback lacks its observed write')
+                item['readback'] += row['returned_bytes']
+            elif role == 'output_state' and kind == 'write':
+                previous = state_writes.get(path)
+                if path not in pending and (path in written
+                        or row['offset'] + row['returned_bytes'] > extent['offset'] + checkpoint_shape['header_bytes']
+                        or (previous is None and row['offset'] != extent['offset'])
+                        or (previous is not None and (previous['readback']
+                            or row['offset'] != previous['offset'] + previous['bytes']))):
+                    reject('composition checkpoint write lacks its initializing header or synchronized output range')
+                if previous is not None and previous['readback'] != previous['bytes']:
+                    if previous['readback'] or row['offset'] != previous['offset'] + previous['bytes']:
+                        reject('composition checkpoint write precedes its earlier readback')
+                    previous['bytes'] += row['returned_bytes']
+                else:
+                    state_writes[path] = {'offset': row['offset'], 'bytes': row['returned_bytes'], 'readback': 0}
+                state_writes[path]['fenced'] = False
+                if path in pending:
+                    pending[path]['state_sync'] = False
+                    if not pending[path]['data_sync']:
+                        reject('composition checkpoint write precedes its synchronized output data')
+                    if row['returned_bytes']:
+                        pending[path]['checkpoint_parts'].add('header' if row['offset'] <
+                            extent['offset'] + checkpoint_shape['header_bytes'] else 'record')
+            elif role == 'output_state' and kind == 'read' and path in state_writes:
+                previous = state_writes[path]
+                if row['offset'] != previous['offset'] + previous['readback']:
+                    reject('composition checkpoint readback is discontinuous')
+                previous['readback'] += row['returned_bytes']
+            elif role == 'output_state' and kind == 'read' and mode == 'RESUME' and path not in written:
+                prefix = retained.setdefault(path, {'state_bytes': 0, 'read': 0, 'verified': 0,
+                    'started_ns': row['started_ns'], 'io_end': 0})
+                if row['offset'] != extent['offset'] + prefix['state_bytes'] or row['started_ns'] < prefix['io_end']:
+                    reject('resumed output checkpoint prefix is discontinuous')
+                prefix['state_bytes'] += row['returned_bytes']
+                prefix['io_end'] = row['started_ns'] + row['duration_ns']
+            elif role == 'output_state' and kind == 'F_FULLFSYNC':
+                previous = state_writes.get(path)
+                if previous is None or previous['readback'] != previous['bytes']:
+                    reject('composition checkpoint sync lacks its exact write and readback')
+                if path in pending:
+                    if not pending[path]['data_sync'] or pending[path]['checkpoint_parts'] != {'header', 'record'}:
+                        reject('composition checkpoint sync lacks data durability or a later checkpoint write')
+                    pending[path]['state_sync'] = True
+                previous['fenced'] = True
+            elif kind == 'F_FULLFSYNC' and path in pending:
+                item = pending[path]
+                item['data_sync'] = item['readback'] == item['bytes']
+            if path in pending:
+                pending[path]['io_start'] = min(pending[path]['io_start'], row['started_ns'])
+                pending[path]['io_end'] = max(pending[path]['io_end'], row['started_ns'] + row['duration_ns'])
+    if close is None or not references or (complete and (active_ranges or pending or fetched
+            or claim_count != claims or set(markers) != {'binding', 'ownership', 'complete'})):
+        reject('composition trace omits its complete window, owner, claims or output frontier')
+    if not complete:
+        if (capture.get('operation_state') == 'SUCCEEDED'
+                or ((extents or 'ownership' in markers or 'complete' in markers) and 'binding' not in markers)
+                or (('complete' in markers or any(role.startswith('output_') for role, _ in extents)
+                     or capture.get('execution_mode') is not None) and 'ownership' not in markers)
+                or (capture.get('owner_binding') is not None and 'binding' not in markers)
+                or (capture.get('ownership_digest') is not None and ('ownership' not in markers
+                    or capture['ownership_digest'] != markers['ownership']['digest']))
+                or (capture.get('composition_head') is not None and ('complete' not in markers
+                    or capture['composition_head'] != markers['complete']['composition_head']))
+                or (claim_count is not None and claims > claim_count)
+                or (close['kind'] == 'WINDOW_CLOSE' and interruption is None and claim_count != claims)):
+            reject('incomplete composition metadata differs from its observed owner, completion or claims')
+    for phase, name in (('PREPASS', 'prepass'), ('COMPOSE_WRITE', 'write')):
+        if not complete:
+            continue
+        if mode == 'FRESH':
+            if waiting[phase] or next(expected[phase], None) is not None or phases[phase]['count'] != plan[name]['range_calls']:
+                reject('composition trace omits exact fresh recipe ranges')
+            for role in ('source_data', 'source_state'):
+                if phases[phase]['io_bytes'].get(role + '.read', 0) != plan[name][role + '_read_bytes']:
+                    reject('composition source reads differ from the complete fresh plan')
+        elif phase == 'PREPASS':
+            if phases[phase]['count'] or phases[phase]['io_bytes']:
+                reject('resumed ownership unexpectedly repeats its original prepass')
+        elif any(not retained_range(item) for group in (waiting[phase].values(), expected[phase]) for item in group):
+            reject('resumed composition omits an unverified recipe suffix')
+    for item in plan['outputs']:
+        if complete and written.get(item['path'], 0) != item['size']:
+            reject('composition output frontier omits its exact output shape')
+    before, after = window.get('device'), close.get('device')
+    first, last = window.get('host'), close.get('host')
+    if not isinstance(before, dict) or before.get('path') != expected_context.get('path') or not isinstance(first, dict):
+        reject('composition opening native or host identity differs from its capture')
+    if close['kind'] == 'WINDOW_CLOSE':
+        observed_windows = {'native_window': {'before': before, 'after': after},
+                            'host_window': {'before': first, 'after': last},
+                            'duration_seconds': (close['ended_ns'] - window['started_ns']) / 1e9}
+        if (not isinstance(after, dict) or before.get('path') != after.get('path') or not isinstance(last, dict)
+                or any(capture.get(field) != value for field, value in observed_windows.items()
+                       if interruption is None or capture.get(field) is not None)):
+            reject('composition native or host window differs from its retained capture')
+    if close['kind'] == 'WINDOW_INTERRUPTED' and any(capture.get(field) is not None
+            for field in ('native_window', 'host_window', 'duration_seconds')):
+        reject('interrupted composition invents unavailable native or host endpoints')
+    if type(first.get('pid')) is not int or first['pid'] <= 0:
+        reject('composition host window lacks its positive process identity')
+    if any(not isinstance(sample, dict) or not natural(sample.get('time_ns')) or sample.get('pid') != first.get('pid')
+            or type(sample.get('thermal_state')) is not int or not 0 <= sample['thermal_state'] <= 3 for sample in samples):
+        reject('composition host samples lost their process, thermal or monotonic identity')
+    counters = {}
+    for label, start, end in [('device', before, after), ('process', first, last)]:
+        fields = ('device_read_bytes', 'device_write_bytes', 'device_read_operations') if label == 'device' else (
+            'process_diskio_read_bytes', 'process_diskio_written_bytes')
+        for field in fields:
+            left, right = start.get(field), None if end is None else end.get(field)
+            if left is None or right is None:
+                counters[field] = None
+            elif not natural(left) or not natural(right) or right < left:
+                reject('composition global device or process counters regress')
+            else:
+                counters[field] = right - left
+    times = sorted({max(window['started_ns'], min(close['ended_ns'], sample['time_ns'])) for sample in samples})
+    gaps = [times[0] - window['started_ns'], close['ended_ns'] - times[-1],
+            *(right - left for left, right in zip(times, times[1:]))]
+    if any(left < window['started_ns'] or right > close['ended_ns'] for left, right in holds):
+        reject('composition hold exceeds its measured native window')
+    if hold_open is not None and not window['started_ns'] <= hold_open['time_ns'] <= close['ended_ns']:
+        reject('unfinished composition hold exceeds its observed window')
+    def active_intervals(intervals):
+        result = []
+        for start, end, count in intervals:
+            duration = end - start - sum(max(0, min(end, right) - max(start, left)) for left, right in holds)
+            if duration <= 0:
+                reject('composition interval has no active duration after observed holds')
+            if count:
+                result.append((count, duration))
+        return result
+    reports = {phase: {'io_bytes': values['io_bytes'], 'range_calls': values['count'], 'peak_open_ranges': values['peak'],
+        'failed_ranges': values['failed_ranges'],
+        'failed_calls': {label: _profile_tails(durations, (.5, .95, .99, 1.), 1e9) for label, durations in values['failed_calls'].items()},
+        'calls': {label: _profile_tails(durations, (.5, .95, .99, 1.), 1e9) for label, durations in values['calls'].items()},
+        'range_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals(values['ranges'])),
+        'source_to_durable_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals(values['durable']))}
+        for phase, values in phases.items()}
+    retained = {path: prefix for path, prefix in retained.items() if 'ended_ns' in prefix}
+    return {'status': 'RECOMPUTED_RAW' if complete else 'RECOMPUTED_INCOMPLETE_RAW',
+        'capture_status': capture['status'], 'captured_operation_state': capture.get('operation_state'),
+        'capture_digest': head['digest'], 'ownership_digest': markers.get('ownership', {}).get('digest'),
+        'completion_record_observed': 'complete' in markers, 'execution_mode': mode,
+        'scope': (('FRESH' if mode == 'FRESH' else 'RESUMED') if complete else 'INCOMPLETE') + '_OBSERVATIONS_ONLY; QUALIFICATION_NOT_RUN', 'phases': reports,
+        'frontiers': {'durable_output': durable, 'written_output': written, 'fetched_ranges': len(fetched),
+            'open_ranges': len(active_ranges), 'pending_output_bytes': sum(item['bytes'] for item in pending.values()),
+            'unfenced_checkpoints': sum(not item['fenced'] for item in state_writes.values())},
+        'retained_output': {'verified_bytes': sum(prefix['verified'] for prefix in retained.values()),
+            'checkpoint_read_bytes': sum(prefix['state_bytes'] for prefix in retained.values()),
+            'output_frontiers': {path: prefix['verified'] for path, prefix in retained.items()},
+            'verification_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals([
+                interval(prefix['started_ns'], prefix['ended_ns'], prefix['verified']) for prefix in retained.values()
+                if prefix['verified'] and 'ended_ns' in prefix]))},
+        'wall_seconds': (close['ended_ns'] - window['started_ns']) / 1e9,
+        'hold_seconds': sum(right - left for left, right in holds) / 1e9,
+        'active_seconds': None if hold_open is not None else (close['ended_ns'] - window['started_ns'] - sum(right - left for left, right in holds)) / 1e9,
+        'open_hold': hold_open, 'hold_scope': 'CLOSED_OBSERVED_HOLDS_ONLY',
+        'max_sampling_gap_seconds': max(gaps) / 1e9, 'thermal_states': sorted({sample['thermal_state'] for sample in samples}),
+        'global_counter_deltas': counters, 'counter_scope': 'PROCESS_AND_SHARED_DEVICE; NOT_PER_RANGE_OR_PATH',
+        'cache_classification': 'UNCONTROLLED; NOT_COLD_PROOF',
+        'claim_scope': capture.get('claim_scope'), 'issued_claim_count': claim_count if claim_count == claims else None,
+        'claim_accounting': {'declared_count': claim_count, 'recorded_count': claims,
+                             'complete': claim_count is not None and claim_count == claims},
+        'profile_inputs': {'context': expected_context, 'composition': binding, 'io_plan': plan,
+            'host_memory_bytes': first.get('host_memory_bytes'),
+            'source_extents': {path: {field: value.get(field) for field in ('length', 'allocated_bytes',
+                'uncached_request', 'cache_flags_before', 'cache_flags_after')}
+                for (role, path), value in extents.items() if role == 'source_data'}},
+        'instrumentation_scope': capture.get('instrumentation_scope')}
 
 
 def storage_profile(binding, patterns, observations, *, expected_binding, revalidations=None):
@@ -6860,6 +7410,111 @@ def storage_profile(binding, patterns, observations, *, expected_binding, revali
         return value
     if binding != expected_binding or not {'drive', 'host', 'path', 'operation', 'plan'} <= binding.keys():
         reject('profile', 'drive, host, path, operation or plan identity differs')
+    plan = binding['plan'] if isinstance(binding['plan'], dict) else {}
+    if plan.get('executor') == 'SOURCE_BYTE_COMPOSITION':
+        if len(patterns) != 1 or len(observations) != 1:
+            reject('composition', 'one exact composition capture and plan are required')
+        observed, pattern = observations[0], patterns[0]
+        if not isinstance(observed, dict) or not isinstance(pattern, dict) or not isinstance(binding['path'], dict):
+            reject('composition', 'composition observations, plan and native path must be objects')
+        inputs = observed.get('profile_inputs', {})
+        if not isinstance(inputs, dict) or not isinstance(inputs.get('context'), dict) or not isinstance(inputs.get('composition'), dict):
+            reject('composition', 'composition profile lacks its decoded native and original-proof inputs')
+        context = inputs.get('context', {})
+        if (observed.get('status') != 'RECOMPUTED_RAW' or observed.get('capture_status') != 'CAPTURED'
+                or observed.get('canonical_operation_state') != 'SUCCEEDED' or observed.get('execution_mode') != 'FRESH'
+                or observed.get('completion_record_observed') is not True or observed.get('open_hold') is not None):
+            reject('composition', 'qualification requires a complete fresh canonical composition')
+        if (pattern != plan.get('io_plan') or pattern != inputs.get('io_plan')
+                or plan.get('composition') != inputs.get('composition')
+                or inputs['composition'].get('io_plan_digest') != digest_bytes(canonical_bytes(pattern))
+                or inputs['composition'].get('operation_id') != binding['operation']
+                or context.get('operation_id') != binding['operation'] or context.get('path') != binding['path']
+                or binding['drive'] != binding['path'].get('volume_uuid')
+                or binding['host'] != binding['path'].get('host')):
+            reject('composition', 'capture, original proof, operation or plan binding differs')
+        memory = number(inputs.get('host_memory_bytes'), 'composition host memory bytes', integer=True, positive=True)
+        if plan.get('host_memory_bytes') != memory:
+            reject('cache', 'host memory differs from the captured native observation')
+        working_set = pattern.get('source_working_set', {})
+        if not isinstance(working_set, dict):
+            reject('cache', 'composition source working set must be an object')
+        source_bytes = number(working_set.get('data_bytes'), 'distinct composition source bytes', integer=True)
+        number(working_set.get('state_bytes'), 'distinct composition checkpoint bytes', integer=True)
+        extents = inputs.get('source_extents', {})
+        if not isinstance(extents, dict):
+            reject('cache', 'composition source extent observations must be an object')
+        for extent in extents.values():
+            if (not isinstance(extent, dict) or context.get('source_data_cache_policy') != 'UNCACHED_REQUESTED'
+                    or extent.get('uncached_request') is not True
+                    or any(type(extent.get(field)) is not int or extent[field] < 0
+                           for field in ('cache_flags_before', 'cache_flags_after'))
+                    or extent['cache_flags_before'] == extent['cache_flags_after']):
+                reject('cache', 'composition lacks its observed uncached source descriptor request')
+        if source_bytes and not extents:
+            reject('cache', 'composition source working set lacks its bound extents')
+        if sum(number(extent.get('length'), 'composition source extent length', integer=True)
+               for extent in extents.values()) < source_bytes:
+            reject('cache', 'composition source extents omit the distinct working set')
+        counters = observed.get('global_counter_deltas', {})
+        if not isinstance(counters, dict):
+            reject('composition', 'composition global counters must be an object')
+        for field in ('process_diskio_written_bytes', 'device_write_bytes'):
+            number(counters.get(field), field, integer=True)
+        cache = {'classification': 'WITHIN_HOST_MEMORY', 'source_bytes': source_bytes,
+                 'host_memory_bytes': memory, 'checkpoint_bytes': working_set['state_bytes'],
+                 'counter_scope': 'PROCESS_AND_SHARED_DEVICE; NOT_PER_RANGE_OR_PATH',
+                 'per_read_attribution': 'NOT_ESTABLISHED',
+                 'descriptor_policy': 'UNCACHED_REQUEST_OBSERVED' if source_bytes else 'NOT_APPLICABLE_NO_SOURCE_DATA'}
+        if source_bytes > memory:
+            minimum = source_bytes - memory
+            allocated = sum(number(extent.get('allocated_bytes'), 'allocated composition source bytes', integer=True)
+                            for extent in extents.values())
+            if (allocated < source_bytes or min(number(counters.get(field), field, integer=True)
+                    for field in ('process_diskio_read_bytes', 'device_read_bytes')) < minimum):
+                reject('cache', 'composition lacks its distinct cache-crossing and physical I/O observations')
+            cache.update(classification='MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO',
+                minimum_bytes_beyond_host_memory=minimum, retained_allocated_source_bytes=allocated,
+                process_accounted_read_bytes=counters['process_diskio_read_bytes'],
+                shared_device_read_bytes=counters['device_read_bytes'])
+        reports = {}
+        if not isinstance(observed.get('phases'), dict) or set(observed['phases']) != {'PREPASS', 'COMPOSE_WRITE'}:
+            reject('composition', 'composition phase coverage differs from its executor')
+        for name, values in observed['phases'].items():
+            field = 'source_to_durable_bytes_per_active_second' if name == 'COMPOSE_WRITE' else 'range_bytes_per_active_second'
+            if (not isinstance(values, dict) or not isinstance(values.get('calls'), dict)
+                    or not isinstance(values.get(field), dict)
+                    or not isinstance(values[field].get('empirical_percentiles'), dict)):
+                reject('composition', 'composition phase calls or interval statistics are malformed')
+            rate = values[field]
+            calls = values['calls']
+            samples = number(rate.get('samples'), 'composition interval samples', integer=True)
+            lower = (number(rate['empirical_percentiles'].get('0.05', rate.get('minimum')),
+                            'composition phase throughput lower bound') if samples else None)
+            latencies, count = [], 0
+            for call in calls.values():
+                if not isinstance(call, dict) or not isinstance(call.get('empirical_percentiles'), dict):
+                    reject('composition', 'composition call statistics are malformed')
+                count += number(call.get('samples'), 'composition I/O call samples', integer=True, positive=True)
+                latencies.append(number(call['empirical_percentiles'].get('0.99', call.get('maximum')),
+                                        'composition call latency upper bound'))
+            reports[name] = {'observations': values, 'io_calls': count,
+                'operation_bounds': {'scope': 'OBSERVED_EXECUTOR_PHASE; CONSERVATIVE_LOW_SAMPLE_BOUNDS',
+                    'throughput_p05_lower_bound_bytes_per_second': lower,
+                    'io_latency_p99_upper_bound_seconds': max(latencies) if latencies else None}}
+        wall = number(observed.get('wall_seconds'), 'composition wall seconds', positive=True)
+        hold = number(observed.get('hold_seconds'), 'composition hold seconds', maximum=wall)
+        thermal = observed.get('thermal_states')
+        if not isinstance(thermal, list) or not thermal or any(type(value) is not int or value not in range(4) for value in thermal):
+            reject('composition', 'composition thermal states are unavailable or invalid')
+        return {'binding': binding, 'status': 'PASS', 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
+            'capture_digest': _digest('composition capture', observed.get('capture_digest'), 'composition'),
+            'source_phases': reports, 'cache': cache,
+            'active_seconds': number(observed.get('active_seconds'), 'composition active seconds', positive=True, maximum=wall),
+            'wall_seconds': wall, 'hold_seconds': hold, 'thermal_states': thermal,
+            'max_sampling_gap_seconds': number(observed.get('max_sampling_gap_seconds'), 'composition sampling gap', maximum=wall),
+            'global_counter_deltas': counters,
+            'statistic_scope': 'EXACT_CAPTURED_COMPOSITION; NO_PHASE_RELABELING_OR_PER_PATH_COUNTER_ATTRIBUTION'}
     if not patterns or len(patterns) != len(observations):
         reject('profile', 'profile observation coverage is incomplete')
     for pattern, observed in zip(patterns, observations, strict=True):
@@ -6891,7 +7546,6 @@ def storage_profile(binding, patterns, observations, *, expected_binding, revali
             "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
             "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
             "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
-    plan = binding['plan'] if isinstance(binding['plan'], dict) else {}
     if 'cache_crossing_required' not in plan:
         return result
     for pattern, observed in zip(patterns, observations, strict=True):

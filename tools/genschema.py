@@ -2191,7 +2191,11 @@ CONTRACTS: dict[str, dict] = {
                         "revision": nullable(bounded_text()),
                         "license_acceptance_ref": nullable(bounded_text()),
                         "artifact_selector": bounded_json_object(),
-                    }, optional=("artifact_selector",)),
+                        "preparation": record("Existing generated source preparation", "Q9/Q42/Q60", {
+                            "composition_request": bounded_json_object(),
+                            "geometry_request": bounded_json_object(),
+                        }),
+                    }, optional=("artifact_selector", "preparation")),
                     "drive": record("Mounted drive selection", "Q44/Q49", {
                         "volume_uuid": bounded_text(), "folder": bounded_text(),
                         "cartridge_uuid": nullable(bounded_text()),
@@ -2204,6 +2208,9 @@ CONTRACTS: dict[str, dict] = {
                             "operation_geometry": ref("operation_geometry"), "drive_selection_id": identifier(),
                         }),
                     ]},
+                    "composition": record("Deterministic source byte preparation", "Q6/Q60", {
+                        "acquisition_operation_id": identifier(), "recipe": ref("source_byte_recipe"),
+                    }),
                     "checkpoint_root": blake3_digest(),
                     "manifest_digest": blake3_digest(),
                     "messages": array(bounded_json_object(), minimum=1, maximum=64),
@@ -2223,7 +2230,7 @@ CONTRACTS: dict[str, dict] = {
                     ),
                 },
                 optional=(
-                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "context_ref", "reconnect_confirmed", "negotiation_id", "tier", "delta_digest",
+                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "composition", "context_ref", "reconnect_confirmed", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
                     "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),

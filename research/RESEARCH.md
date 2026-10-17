@@ -896,7 +896,7 @@ formal_contract:
 evidence:
   - status: INFERRED
     result: "E-005 requires assembled-path measurement; E-009 converts measured values into service bounds."
-build_instruction: "Ship one bounded profiler that emits a content-addressed operation profile from captured native or compiled page traces. Keep the optional broad reference comparison separate from admission. The 2026-10-16 autonomous C3 repair permits an explicit unresolved operation_geometry input: source_lock is null, immutable recipe/upstream provenance and ordered path/size/hash-algorithm/validator-template shapes are frozen, and deterministic synthetic bytes exercise the existing adapter, transfer, checkpoint, retained-read, trace and reclamation path. Its result proves only physical operation geometry, never real source identity, authentication, headers or payload. The later actual generated layout must join that exact plan; real SourceLock qualification remains mandatory before source reacquisition. A geometry-only operation cannot advance into header inspection or acquisition."
+build_instruction: "Ship one bounded profiler that emits a content-addressed operation profile from captured native or compiled page traces. Keep the optional broad reference comparison separate from admission. The 2026-10-16 autonomous C3 repair permits an explicit unresolved operation_geometry input: source_lock is null, immutable recipe/upstream provenance and ordered path/size/hash-algorithm/validator-template shapes are frozen, and deterministic synthetic bytes exercise the existing adapter, transfer, checkpoint, retained-read, trace and reclamation path. Its result proves only physical operation geometry, never real source identity, authentication, headers or payload. The later actual generated layout must join that exact plan; real SourceLock qualification remains mandatory before source reacquisition. A geometry-only operation cannot advance into header inspection or acquisition. The complete original geometry request, including its descriptive free-form provenance, remains bound by its request and geometry digests. Actual composition recipe and input lineage are established separately by the exact canonical composition request, committed ownership and passing composition profile; a free-form provenance label supplies no second recipe authority."
 acceptance_check: "Qualify a small operation and a demanding operation on the same path, then throttle or exhaust the cache only where the bound plan can do so. Classification must follow the operation's sustained p05/p99 values; an advertised link rate or reference-profile result must never substitute for measured Bs."
 depends_on: [Q12, Q19, Q41]
 reopen_only_if: "Live traces introduce a materially different I/O distribution."
@@ -1222,6 +1222,153 @@ decision: "Compilation is a resumable content transaction whose incomplete objec
 formal_contract:
   symbols: "For each output page: PLAN -> Q53_CLAIM -> ALLOCATE_TEMP -> WRITE -> READBACK_HASH -> COMMIT_PAGE_RECORD -> RELEASE_DEAD_SOURCE_EXTENT. The final claimed transition is Q53_CLAIM -> WRITE_INDEX -> VERIFY_TOTAL_MAP -> WRITE_CANDIDATE_ROOT -> FULLFSYNC -> ATOMIC_GENERATION -> FULLFSYNC. Every temporary allocation, release, index, root, and pointer publication is covered by its active next-step claim. Resume scans journal, rehashes only uncommitted or suspect pages, and reconstructs the remaining dependency frontier. GC deletes only unreachable temp extents after a valid root exists and never deletes an object referenced by an active claim, transaction, or journal."
   applicability: "Native layout, deterministic conversion, quantization, Q19-certified compilation, and incremental recompilation."
+  source_byte_preparation: >-
+    The concrete source.compose broker operation prepares deterministic source bytes; it does not
+    resolve or publish a provider SourceLock. Its request has target=acquisition_operation_id and
+    arguments={composition:{acquisition_operation_id,recipe:source_byte_recipe}}. The broker admits
+    only its exact successful acquire/SOURCE_VERIFIED record, source lock and original per-artifact
+    chunk-list commitments. Caller-supplied current checkpoints cannot replace those commitments.
+    Store-granted existing input extents are reopened under the original operation; output extents
+    belong to the new operation. The immutable ownership record binds transform source-byte-recipe-v1,
+    original operation, source-lock digest, original-proof digest, complete recipe and real output
+    SHA-256 prepass results. Each bounded prepass range yields to cooperative cancellation. Each
+    ownership record also binds the digest of its exact fresh I/O plan, derived from the same
+    segment traversal used by actual range reads. The prepass and write pass retain separate
+    concurrency and range counts. Every repeated input span counts its complete touched source
+    chunks and checkpoint reads; small output bytes cannot stand in for those source bytes.
+    This planned geometry is not measured throughput, latency, physical qualification or source
+    identity proof. The distinct source working set unions the complete touched source chunks
+    separately per input, then counts each actually read input checkpoint once. Repeated logical
+    reads and whole declared input extents remain separate descriptive counts; neither can replace
+    that union or establish cache crossing. No planned byte count is a storage admission or physical
+    I/O observation. Recovery, control metadata and checkpoint writes require actual capture. Each
+    output uses the existing Q51 writer, readback, full-sync and checkpoint protocol; an immutable
+    per-output completion record joins its actual partial proof to that ownership record. One final
+    CAS record commits the ordered output and completion-record digests; only a successful canonical
+    operation exposes that completed result. Resume reuses the original ownership record and actual
+    writer checkpoints; duplicate completion must not append a second publication. Retryable Q53
+    failures pause before another transition. This component contract supplies no product Go trigger,
+    physical qualification, provider locator, SourceLock or callable model. Those boundaries retain
+    their existing requirements, including a new exact profile for the prepass and composition I/O.
+    The internal composition capture runs that same owner with bounded immutable JSONL artifacts.
+    Its request/path context, owner binding, original/output extent identities, source range/span
+    coordinates, prepass/write/control phases, output checkpoints, holds, native host/device windows
+    and issued-claim snapshots remain raw evidence. The selected device must own the cartridge
+    filesystem. A complete capture requires the actual admitted owner and its canonical successful
+    result; a terminal cached result cannot stand in for execution. A repeated complete capture
+    verifies its retained artifacts. An incomplete capture stays incomplete and requires a fresh
+    attempt key for continuation. Uncontrolled cache, overlapping per-call process counters and
+    unsegmented wall/hold time do not establish cold reads, per-path traffic or physical qualification.
+    An explicit captured measurement may request F_NOCACHE on its Store-granted original-source
+    data descriptors and retain F_GETFL flags before and after the request. That context and native
+    flag witness describe the request only; they do not establish cold traffic or qualification.
+    Capture version2 observes both composition-checkpoint and canonical-result holds at the sole
+    broker hold boundary. Ownership reuse mode stays separate from canonical attempt history.
+    Native counters include capture-control and shared-device activity; issued-claim snapshots
+    describe this coordinator only. The complete raw reducer joins verified immutable capture, owner,
+    final record and canonical result; it consumes bounded expected range data from the existing
+    SourceByteRecipe span traversal. Every exact source span retains its complete checkpoint,
+    touched chunk reads and verified-prefix boundary. Fresh output writes remain contiguous and
+    join readback, data full-sync, checkpoint readback/full-sync and observed output completion.
+    Empirical call tails reuse the Store statistics implementation. Range-to-durable intervals and
+    wall time subtract only observed hold overlap. Every range close follows its observed source
+    verification, every output checkpoint follows its observed data/checkpoint I/O completion, and
+    the native window contains those completed intervals. Global process/device deltas are reported once,
+    never as sums of overlapping per-call process deltas. Fresh statistics require complete version2
+    captures and remain RECOMPUTED_RAW, not physical qualification. Complete resumed statistics use
+    that same grammar and keep a RESUMED scope. Broker-dispatched original source sizes and the
+    Source checkpoint shape bind every extent; Store does not import Source or author another
+    checkpoint format. Retained output reads require complete checkpoint-prefix reads before the
+    first retained data read, exact chunk
+    verification and an observed prior output boundary. They advance only the retained frontier,
+    never a new-write durability interval. Only the actual uncommitted recipe suffix produces new
+    source ranges, writes and source-to-durable rates. Reused ownership does not repeat its prepass;
+    a wholly retained output may complete without a new source range or write. Uninitialized
+    checkpoint probes or same-window initialization do not become retained-prefix evidence. A
+    zero-byte retained boundary is valid only for an empty output, never a nonempty output whose
+    only observations are uninitialized header probes. A
+    nonpending checkpoint write may initialize only its first header before any output frontier;
+    short initialization writes remain contiguous and precede their readback. Chunk records require the synchronized
+    pending range. Every data write invalidates the earlier checkpoint-write and durability flags.
+    A state fence requires both a chunk record and header written after that data. Each output
+    commit closes its exact durable frontier, including readback and full sync for an empty output,
+    and forbids later output I/O. Completion requires every output commit. The commit checks replace
+    the redundant final-window state-fence check without removing its durability requirement.
+    Every phase observation stays inside the native window. Sealed incomplete observations use that same grammar and retain an explicit
+    INCOMPLETE scope, even if a later canonical attempt succeeds or a final record was already
+    published. Broker derives the expected recipe, plan and original-proof binding through the
+    same binding producer used by execution; an interruption before ownership cannot fabricate
+    an observed owner. Closed successful ranges, failed calls/ranges, fetched but unwritten ranges,
+    pending output bytes and observed durable frontiers stay separate. Incomplete coverage never
+    becomes a complete plan, durable output or qualification. An interrupted row cannot invent
+    native/host endpoints. Without an observed WINDOW_CLOSE, interrupted endpoints stay unknown;
+    a last sample or zero cannot replace them. An actual WINDOW_CLOSE retains its observed endpoints
+    even if cancellation interrupts later claim capture or seal publication. Absent capture metadata
+    does not erase those observations; contradictory supplied metadata rejects. Claim accounting
+    keeps the declared count, recorded count and completeness separate. An absent or partial tail
+    cannot report an exact issued-claim count, and recorded claims cannot exceed the declared count.
+    Every such seal stays incomplete even after a full claim tail or canonical success. Unfinished
+    holds leave active duration and derived rates unknown. Each observed range start and completed
+    interval stays inside the actual window. Cancellation after a committed MEASURING publication
+    seals an incomplete trace even before the owner or sampler exists; an invocation that never
+    acquired that capture head cannot overwrite another invocation's head. Full-candidate proof and
+    independent acceptance of incomplete recomputation, cache-crossing qualification and real
+    generation performance remain required work.
+    The existing Store storage_profile authority may assess an explicit SOURCE_BYTE_COMPOSITION
+    executor from that recomputed capture. It retains PREPASS and COMPOSE_WRITE as distinct phases,
+    binds the exact original proof, recipe, I/O plan, native path and captured host memory, and
+    rejects incomplete or resumed observations as fresh qualification. The raw reducer exposes its
+    already-decoded inputs and source descriptor observations; a qualifier does not parse a second
+    trace grammar or replace the Source plan's distinct working set with repeated read volume.
+    Source-data cache applicability uses those distinct touched data bytes. Supported uncached
+    requests need observed descriptor flags; the request alone proves no physical read. A demanding
+    source window also requires sufficient allocated source bytes and the declared process/shared-
+    device read observations beyond host memory. These remain mixed global observations, never
+    per-path or per-read media attribution. A within-memory source window proves no larger cache
+    crossing. Source checkpoint bytes remain separately reported. Phase bounds reuse the existing
+    empirical and conservative low-sample statistics, and native counters, thermal states, holds
+    and sampling gaps retain their actual scopes. Broker retains the bound measurement through
+    immutable Store campaign records and verifies exact recomputation on reuse. Fixture-only
+    qualification and controlled hardware/counter inputs cannot replace real path qualification,
+    source identity, authentication, generated-layout binding or independent acceptance.
+    The qualify-composition CLI trigger measures that actual source.compose request on its verified
+    product acquisition's original selected cartridge. The broker reuses the canonical drive_prepared
+    record, successful drive selection, Store lifecycle/UUID, durability head/probe and protected
+    inventory checks before measurement. Current native path observations gate captured-profile reuse.
+    The receipt separates the canonical byte-preparation operation from source_qualification. A
+    paused/failed/cancelled operation does not gain a qualification pass; a later profile error does
+    not rewrite an already successful byte-preparation record. The profile key is returned as a
+    reference beside its digest, never included in or substituted for the immutable measurement.
+    The trigger resumes retryable pauses after revalidating the same destination and original proof;
+    manual pauses remain paused. A validated incomplete capture stays immutable. The canonical
+    operation log records its fresh continuation capture key before execution, so repeated requests
+    reuse the latest attempt. Resumed preparation may succeed while freshness qualification fails;
+    continuation never turns resumed observations into a fresh measurement.
+    A same-volume native path change invalidates the old incomplete measurement, not the retained
+    byte preparation. Recovery requires exact operation/request/version/scope/cache-policy context
+    and the same cartridge-relative folder under the old and current mounts. All current destination
+    gates still run; a new attempt measures continuation while preserving the old capture. Complete
+    captures and every other context mismatch retain their rejection. A terminal preparation with
+    an incomplete capture cannot be measured again under that operation; qualification reports a
+    nonretryable error directing the caller to a fresh composition request key, including after
+    a verified path-only change. A contradictory binding still reports its context rejection.
+    This trigger publishes no provider SourceLock, source locator or callable model, and grants no
+    generated-source acquisition until that consumer joins its exact output and operation-plan profile.
+    Source selection may carry preparation={composition_request,geometry_request}, bounded copies
+    of the exact canonical requests. Their original keys derive operation IDs, and stored request
+    digests must match; an operation ID never supplies a missing key. This optional consumer requires
+    completed source.compose and its already complete passing capture/profile, plus a paused EMPTY
+    geometry operation and its already complete passing profile on the same current cartridge/path.
+    Existing-only qualification replays every binding and raw measurement check without starting,
+    resuming, measuring, allocating, sealing, reclaiming or appending events to those operations.
+    Missing proof fails before any such write. The independently resolved provider's entire ordered
+    model-and-metadata closure must match the geometry's source kind, revision algorithm, paths,
+    sizes, digest algorithms and validator templates, and the composition's committed SHA-256 output
+    descriptors. Other artifact digest algorithms cannot be equated with those SHA-256 commitments.
+    The selection result binds the actual SourceLock digest and immutable preparation/profile
+    references. It still reports zero downloaded bytes and unverified execution compatibility.
+    This layout join proves neither model semantic identity nor the later real-source qualification,
+    header inspection, reacquisition, final digest, compiled execution or release acceptance.
 evidence:
   - status: SPECIFIED
     result: "E-005 supplies durability; Q4 supplies bounded extent reclamation; Q57 supplies page/root identities."

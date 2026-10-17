@@ -72,7 +72,7 @@ def _run(adapter, revision, artifact, extents, capacity_coordinator, chunk_diges
 
 
 def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypatch):
-    """Q51/Q53: each transfer transition uses the cartridge's concrete coordinator."""
+    """Q42/Q51/Q53: exact recipe I/O and each transfer transition use the store-owned extents."""
 
     # Q51/Q55: grants retain cartridge ownership at every directory and file boundary.
     outside = tmp_path / "outside"
@@ -132,6 +132,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
     state_extent = replace(state_extent, observer=state_observations.append)
     extents = {artifact_name: (data_extent, state_extent)}
     profile_data_fd = profile_state_fd = header_fd = None
+    composed_fds = []
 
     descriptor = {
         "kind": "huggingface",
@@ -226,9 +227,63 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                         'packed': prefix + payload[13:CHUNK + 18] + b'\x00end\xff' + payload[-24:]}
             inputs = {artifact.path: retained}
             before_reads = len(data_observations), len(state_observations)
-            assert recipe.artifact_digests(inputs) == tuple(
+            io_plan = asyncio.run(recipe.fresh_io_plan())
+            assert before_reads == (len(data_observations), len(state_observations))
+            async def cancel_plan():
+                task = asyncio.create_task(recipe.fresh_io_plan())
+                await asyncio.sleep(0)
+                assert not task.done()
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            asyncio.run(cancel_plan())
+            assert before_reads == (len(data_observations), len(state_observations))
+            assert io_plan['recipe_digest'] == sources_module.digest_bytes(recipe.encoded)
+            assert io_plan['prepass']['range_concurrency'] == 1 and io_plan['write']['range_concurrency'] == 2
+            assert io_plan['prepass']['range_calls'] == 4 and io_plan['write']['range_calls'] == 3
+            assert io_plan['input_extent_logical_bytes'] == artifact.size + transfer_state_bytes(artifact.size)
+            assert io_plan['output_extent_logical_bytes'] == sum(
+                len(value) + transfer_state_bytes(len(value)) for value in expected.values())
+            assert asyncio.run(recipe.artifact_digests(inputs)) == tuple(
                 {'path': path, 'size': len(value), 'digest': 'sha256:' + hashlib.sha256(value).hexdigest()}
                 for path, value in expected.items())
+            for events, begin, name in zip((data_observations, state_observations), before_reads,
+                    ('source_data_read_bytes', 'source_state_read_bytes'), strict=True):
+                assert sum(event['returned_bytes'] for event in events[begin:] if event['kind'] == 'read') == io_plan['prepass'][name]
+                assert io_plan['write'][name] == io_plan['prepass'][name]
+            assert sum(event['kind'] == 'VERIFIED_PREFIX' for event in data_observations[before_reads[0]:]) == io_plan['prepass']['source_verified_chunks']
+            assert sum(event['kind'] == 'read' and event['offset'] == state_extent.offset
+                       for event in state_observations[before_reads[1]:]) == io_plan['prepass']['source_ranges']
+            assert io_plan['write']['output_data_write_bytes'] == sum(map(len, expected.values()))
+            assert io_plan['write']['output_data_readback_bytes'] == sum(map(len, expected.values()))
+            assert io_plan['source_working_set'] == {
+                'scope': 'DISTINCT_TOUCHED_SOURCE_BYTES; CACHE_AND_PHYSICAL_IO_NOT_PROVED',
+                'data_bytes': artifact.size, 'state_bytes': transfer_state_bytes(artifact.size)}
+            # Q42: tiny repeated spans still reverify complete chunks. Neither literal
+            # bytes nor an empty output may conceal those actual source and state reads.
+            amplified = sources_module.SourceByteRecipe({
+                'source_record_digest': recipe_record['source_record_digest'],
+                'artifacts': [{'path': 'tiny', 'segments': [
+                    {'path': artifact.path, 'offset': 0, 'length': 1} for _ in range(64)]}]}, revision, manifests)
+            amplified_plan = asyncio.run(amplified.fresh_io_plan())
+            assert amplified_plan['prepass']['logical_source_bytes'] == 64
+            assert amplified_plan['prepass']['source_ranges'] == 64
+            assert amplified_plan['prepass']['source_data_read_bytes'] == 64 * CHUNK
+            assert amplified_plan['prepass']['source_state_read_bytes'] == 64 * transfer_state_bytes(artifact.size)
+            assert amplified_plan['source_working_set']['data_bytes'] == CHUNK
+            assert amplified_plan['source_working_set']['state_bytes'] == transfer_state_bytes(artifact.size)
+            assert amplified_plan['source_working_set']['data_bytes'] < amplified_plan['input_extent_logical_bytes']
+            literal_plan = asyncio.run(sources_module.SourceByteRecipe({
+                'source_record_digest': recipe_record['source_record_digest'],
+                'artifacts': [{'path': 'literal', 'segments': [{'literal_hex': prefix.hex()}]}]},
+                revision, {}).fresh_io_plan())
+            assert literal_plan['source_working_set']['data_bytes'] == 0
+            assert literal_plan['source_working_set']['state_bytes'] == 0
+            before_amplified = len(data_observations), len(state_observations)
+            assert asyncio.run(amplified.artifact_digests(inputs))[0]['digest'] == 'sha256:' + hashlib.sha256(payload[:1] * 64).hexdigest()
+            for events, begin, name in zip((data_observations, state_observations), before_amplified,
+                    ('source_data_read_bytes', 'source_state_read_bytes'), strict=True):
+                assert sum(event['returned_bytes'] for event in events[begin:] if event['kind'] == 'read') == amplified_plan['prepass'][name]
             for name, value in expected.items():
                 for offset, length in ((0, min(31, len(value))), (len(value), 0)):
                     assert recipe.read_range(name, offset, length, inputs) == value[offset:offset + length]
@@ -296,7 +351,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
                 with pytest.raises(CassetteError):
                     sources_module._retained_source_range(revision, artifact, retained, 0, 31)
                 with pytest.raises(CassetteError):
-                    recipe.artifact_digests(inputs)
+                    asyncio.run(recipe.artifact_digests(inputs))
                 assert os.pread(data_fd, data_extent.length, 0) == before_data
                 assert os.pread(state_fd, state_extent.length, 0) == before_state
                 os.pwrite(descriptor, original, 0)
@@ -315,7 +370,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             forged_state = os.pread(state_fd, state_extent.length, 0)
             for read in (
                     lambda: recipe.read_range('packed', 0, len(prefix) + 1, inputs),
-                    lambda: recipe.artifact_digests(inputs)):
+                    lambda: asyncio.run(recipe.artifact_digests(inputs))):
                 with pytest.raises(CassetteError) as forged_source:
                     read()
                 assert forged_source.value.code == 'IDENTITY_MISMATCH'
@@ -323,8 +378,87 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             assert os.pread(data_fd, data_extent.length, 0) == forged_payload
             assert os.pread(state_fd, state_extent.length, 0) == forged_state
             assert chunks == completed.chunk_digests
+            requests_before_resume = len(server.requests)
+            with pytest.raises(CassetteError) as forged_resume:
+                _run(adapter, revision, artifact, extents, capacity_coordinator)
+            assert forged_resume.value.code == 'IDENTITY_MISMATCH'
+            assert 'stored source hash state' in forged_resume.value.detail
+            assert len(server.requests) == requests_before_resume
+            reset_header, reset_chunks = sources_module._load_state(
+                state_extent, artifact.path, None, 'fixture-proof', read_only=True)
+            assert reset_header['completed_count'] == 0 and reset_chunks == ()
+            assert os.pread(data_fd, data_extent.length, 0) == forged_payload
             os.pwrite(data_fd, payload, 0)
             os.pwrite(state_fd, original_state, 0)
+
+            # Q44/Q51/Q53/Q60: compose with the same durable writer, then resume its
+            # committed prefix without overwriting original source extents.
+            planned = next(item for item in asyncio.run(recipe.artifact_digests(inputs)) if item['path'] == 'packed')
+            generated_data = grant_transfer_extent(cartridge, 's10-compose', 'data', planned['size'],
+                capacity_controller=capacity_coordinator)
+            composed_fds.append(generated_data.fd)
+            generated_state = grant_transfer_extent(cartridge, 's10-compose', 'state',
+                transfer_state_bytes(planned['size']), capacity_controller=capacity_coordinator)
+            composed_fds.append(generated_state.fd)
+            generated_events, generated_state_events = [], []
+            generated_data = replace(generated_data, observer=generated_events.append)
+            generated_state = replace(generated_state, observer=generated_state_events.append)
+            async def interrupt_composition(partial):
+                if partial.contiguous_source_hash_offset == CHUNK:
+                    raise asyncio.CancelledError
+            def compose(digest=planned['digest'], data=generated_data, state=generated_state, callback=None):
+                return asyncio.run(sources_module.compose_artifact(recipe, inputs, 'packed', digest,
+                    data, state, capacity_coordinator, checkpoint_committed=callback))
+            before_fresh = len(data_observations), len(state_observations)
+            with pytest.raises(asyncio.CancelledError):
+                compose(callback=interrupt_composition)
+            packed_pattern = next(item for item in io_plan['outputs'] if item['path'] == 'packed')
+            # The writer fetches both bounded ranges before the first checkpoint hold.
+            for events, begin, name in zip((data_observations, state_observations), before_fresh,
+                    ('source_data_read_bytes', 'source_state_read_bytes'), strict=True):
+                assert sum(event['returned_bytes'] for event in events[begin:] if event['kind'] == 'read') == packed_pattern[name]
+            prefix_header, _ = sources_module._load_state(
+                generated_state, 'packed', None, 'fixture-compose', read_only=True)
+            assert prefix_header['completed_count'] == 1
+            os.pwrite(data_fd, bytes([payload[-1] ^ 1]), len(payload) - 1)
+            with pytest.raises(CassetteError) as changed_input:
+                compose()
+            assert changed_input.value.code == 'IDENTITY_MISMATCH'
+            assert sources_module._load_state(generated_state, 'packed', None, 'fixture-compose',
+                read_only=True)[0]['completed_count'] == 1
+            os.pwrite(data_fd, payload[-1:], len(payload) - 1)
+            composed = compose()
+            assert composed.source_revision == sources_module.digest_bytes(recipe.encoded)
+            assert composed.contiguous_source_hash_offset == planned['size']
+            assert composed.chunk_digests == _chunk_digests(expected['packed'])
+            assert os.pread(generated_data.fd, planned['size'], 0) == expected['packed']
+            writes_before = tuple(sum(event['kind'] == 'write' for event in events)
+                                  for events in (generated_events, generated_state_events))
+            assert compose() == composed
+            assert tuple(sum(event['kind'] == 'write' for event in events)
+                         for events in (generated_events, generated_state_events)) == writes_before
+            assert any(event['kind'] == 'F_FULLFSYNC' for event in generated_events)
+            os.pwrite(generated_data.fd, b'X', 0)
+            with pytest.raises(CassetteError) as changed_output:
+                compose()
+            assert changed_output.value.code == 'IDENTITY_MISMATCH'
+            assert sources_module._load_state(generated_state, 'packed', None, 'fixture-compose',
+                read_only=True)[0]['completed_count'] == 0
+            assert compose().contiguous_source_hash_offset == planned['size']
+            os.pwrite(generated_state.fd, bytes(generated_state.length), 0)
+            with pytest.raises(CassetteError) as wrong_expected_digest:
+                compose(digest='sha256:' + '0' * 64)
+            assert wrong_expected_digest.value.code == 'IDENTITY_MISMATCH'
+            assert 'whole source digest' in wrong_expected_digest.value.detail
+            original_inputs = os.pread(data_fd, data_extent.length, 0), os.pread(state_fd, state_extent.length, 0)
+            for alias_data, alias_state in (
+                    (replace(data_extent, operation_id='s10-compose'), generated_state),
+                    (generated_data, replace(state_extent, operation_id='s10-compose'))):
+                with pytest.raises(CassetteError) as alias:
+                    compose(data=alias_data, state=alias_state)
+                assert alias.value.code == 'INVALID_REQUEST' and 'overlaps a retained input' in alias.value.detail
+            assert original_inputs == (os.pread(data_fd, data_extent.length, 0),
+                                       os.pread(state_fd, state_extent.length, 0))
 
             baseline_claim_ids = {id(claim) for claim in capacity_coordinator.claims()}
             profile_data_observations = []
@@ -438,6 +572,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             transfer_claims = tuple(
                 claim for claim in capacity_coordinator.claims()
                 if (id(claim) in baseline_claim_ids
+                    and claim.transition.operation_id == data_extent.operation_id
                     and ("checkpoint-initial" in claim.transition.boundary_id
                     or ":chunk-" in claim.transition.boundary_id)
                 )
@@ -476,7 +611,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
             assert (clear_claim.transition.declared_writes, clear_claim.writes_started) == (2, 2)
             assert clear_claim.state == "COMPLETED"
     finally:
-        for descriptor in (data_fd, state_fd, profile_data_fd, profile_state_fd, header_fd):
+        for descriptor in (data_fd, state_fd, profile_data_fd, profile_state_fd, header_fd, *composed_fds):
             if descriptor is not None:
                 os.close(descriptor)
     assert capacity_coordinator.active_claims() == ()

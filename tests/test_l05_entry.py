@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -17,9 +19,9 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 import cli
-from broker import CanonicalBroker
+from broker import CanonicalBroker, _source_from
 from errors import CassetteError
-from store import CapacityCoordinator, campaign_head, canonical_bytes, compare_inventory, digest_bytes, source_profile_trace, write_campaign_artifact
+from store import CapacityCoordinator, campaign_head, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, drive_path_observation, select_external_apfs_volume, source_profile_trace, write_campaign_artifact
 from test_l05_drive import _attached_apfs_image
 
 
@@ -207,6 +209,18 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
     header_ranges = []
     revision = ['a' * 40]
     interrupt = [True]
+    generated_model = [weights[:32]]
+    generated_assets = {'config.json': b'{"family":"owned-source-fixture"}',
+                        'license.txt': b'generated-fixture-license'}
+
+    def generated_manifest():
+        def entry(name, payload, media):
+            return {'mediaType': media, 'digest': 'sha256:' + hashlib.sha256(payload).hexdigest(),
+                    'size': len(payload), 'annotations': {'org.opencontainers.image.title': name}}
+        return canonical_bytes({'schemaVersion': 2,
+            'config': entry('config.json', generated_assets['config.json'], 'application/vnd.docker.container.image.v1+json'),
+            'layers': [entry('prepared.bin', generated_model[0], 'application/vnd.ollama.image.model'),
+                       entry('license.txt', generated_assets['license.txt'], 'application/vnd.ollama.image.license')]})
 
     class Provider(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -227,7 +241,20 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
             requests.append(('GET', self.path))
             route = urlparse(self.path).path
             headers = {}
-            if route == '/api/models':
+            if route == '/api/tags':
+                payload = canonical_bytes({'models': [{'name': 'fixture/generated:latest',
+                    'model': 'fixture/generated:latest', 'size': len(generated_model[0])}]})
+            elif route.startswith('/v2/fixture/generated/manifests/'):
+                payload = generated_manifest()
+            elif route.startswith('/v2/fixture/generated/blobs/'):
+                objects = {**generated_assets, 'prepared.bin': generated_model[0]}
+                payload = next(content for content in objects.values()
+                               if 'sha256:' + hashlib.sha256(content).hexdigest() == route.rsplit('/', 1)[1])
+                if 'Range' in self.headers:
+                    start, end = map(int, self.headers['Range'].removeprefix('bytes=').split('-'))
+                    headers['Content-Range'] = f'bytes {start}-{end}/{len(payload)}'
+                    payload = payload[start:end+1]
+            elif route == '/api/models':
                 payload = json.dumps([{'id': 'fixture/model', 'sha': revision[0],
                                        'private': False, 'gated': False}]).encode()
             elif route.startswith('/api/models/fixture/model/revision/'):
@@ -297,6 +324,18 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
             result = subprocess.run([sys.executable, '-B', '-m', 'cli', '--state',
                 str(tmp_path / 'state'), *arguments], cwd=Path(__file__).resolve().parents[1],
                 capture_output=True, text=True, timeout=30)
+            if arguments[0] == 'qualify-composition':
+                evidence = tmp_path / 'composition-cli'
+                evidence.mkdir(exist_ok=True)
+                (evidence / (str(len(list(evidence.iterdir()))) + '.json')).write_bytes(canonical_bytes({
+                    'arguments': list(arguments), 'exit_code': result.returncode,
+                    'stdout': result.stdout, 'stderr': result.stderr}))
+            if '--preparation' in arguments or any(value.startswith('generated-') for value in arguments):
+                evidence = tmp_path / 'generated-cli'
+                evidence.mkdir(exist_ok=True)
+                (evidence / (str(len(list(evidence.iterdir()))) + '.json')).write_bytes(canonical_bytes({
+                    'arguments': list(arguments), 'exit_code': result.returncode,
+                    'stdout': result.stdout, 'stderr': result.stderr}))
             assert result.returncode == expected_code, result.stderr + result.stdout
             if arguments[0] == 'go' and 'dataset-go' in arguments:
                 progress_lines = [line for line in result.stderr.splitlines() if ': received ' in line]
@@ -320,7 +359,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
         assert repeated == selected
         inspected = launch('status', selected['operation_id'])
         assert inspected == selected
-        image, mount = _attached_apfs_image(tmp_path)
+        image, mount = _attached_apfs_image(tmp_path, size="128m")
         watcher = None
         attached = True
         try:
@@ -621,6 +660,259 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
             assert len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]]) == payload_requests
             record = json.loads(record_path.read_bytes())['record']
             assert any(event['payload'].get('source_qualification', {}).get('status') == 'PASS' for event in record['events'])
+            # Q42/Q43/Q60: the product measures composition on its original acquired cartridge.
+            original_acquisition = record_path.read_bytes()
+            recipe_path = tmp_path / 'composition.json'
+            source_record = _source_from(record['checkpoint']['source_lock'], completed['operation_id']).record()
+            recipe = {'source_record_digest': digest_bytes(canonical_bytes(source_record)), 'artifacts': [
+                {'path': 'prepared.bin', 'segments': [{'literal_hex': '00ff'},
+                    {'path': 'model.safetensors', 'offset': 0, 'length': len(weights)}]}]}
+            recipe_path.write_bytes(canonical_bytes(recipe))
+            composition_args = ['qualify-composition', '--acquisition', completed['operation_id'],
+                                '--recipe', str(recipe_path), '--key', 'composition-qualification']
+            qualification = launch(*composition_args, expected_message='Composition drive check passed.')
+            assert qualification['operation']['kind'] == 'source.compose'
+            assert qualification['operation']['state'] == 'SUCCEEDED'
+            measured = qualification['source_qualification']
+            assert measured['status'] == 'PASS'
+            cartridge = mount / 'drewwiberg-lacie/Cassette'
+            profile = campaign_head(cartridge, measured['profile_key'])
+            capture = campaign_head(cartridge, measured['capture_key'])
+            assert profile['digest'] == measured['profile_digest']
+            assert profile['value']['capture_digest'] == capture['digest']
+            assert profile['value']['binding']['operation'] == qualification['operation']['operation_id']
+            assert profile['value']['binding']['plan']['composition']['acquisition_operation_id'] == completed['operation_id']
+            assert profile['value']['binding']['drive'] == volume['volume_uuid']
+            assert profile['value']['binding']['profiler_version'].endswith('/source-byte-composition-v2')
+            assert profile['value']['cache']['classification'] == 'WITHIN_HOST_MEMORY'
+            assert launch(*composition_args) == qualification
+            assert record_path.read_bytes() == original_acquisition
+            assert len([item for item in requests if item[0] == 'GET' and 'model.safetensors' in item[1]]) == payload_requests
+            assert 'source_lock' not in qualification['operation']['result']
+            recipe['artifacts'][0]['segments'][0]['literal_hex'] = '00fe'
+            recipe_path.write_bytes(canonical_bytes(recipe))
+            conflict = launch(*composition_args, expected_code=1)
+            assert conflict['error']['code'] == 'IDEMPOTENCY_CONFLICT'
+            assert campaign_head(cartridge, measured['profile_key']) == profile
+            assert record_path.read_bytes() == original_acquisition
+            recipe['artifacts'][0]['segments'][0]['literal_hex'] = '00ff'
+            recipe_path.write_bytes(canonical_bytes(recipe))
+            invalid = launch('qualify-composition', '--acquisition', selected['operation_id'],
+                '--recipe', str(recipe_path), '--key', 'composition-invalid-acquisition', expected_code=1)
+            assert invalid['error']['code'] == 'INVALID_REQUEST'
+            # Q5/Q60: a killed owner continues the same operation under a new, retained capture.
+            def interrupt_composition(stop_signal, key):
+                interrupted_request = {'protocol_version': '1', 'operation': 'source.compose',
+                    'idempotency_key': key,
+                    'target': completed['operation_id'], 'arguments': {'composition': {
+                        'acquisition_operation_id': completed['operation_id'], 'recipe': recipe}}}
+                control = CanonicalBroker(tmp_path / 'state/operations')
+                try:
+                    interrupted_id = control.issue(interrupted_request)['operation_id']
+                    control.request_hold(interrupted_id, 'composition-checkpoint')
+                finally:
+                    control.close()
+                interrupted_args = [*composition_args[:-1], interrupted_request['idempotency_key']]
+                child = subprocess.Popen([sys.executable, '-B', '-m', 'cli', '--state',
+                    str(tmp_path / 'state'), *interrupted_args], cwd=Path(__file__).resolve().parents[1],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                interrupted_path = tmp_path / 'state/operations' / (interrupted_id + '.json')
+                try:
+                    for _ in range(3000):
+                        live = json.loads(interrupted_path.read_bytes())['record']
+                        if any(event['payload'].get('hold') == 'ACKNOWLEDGED' for event in live['events']):
+                            break
+                        assert child.poll() is None, child.communicate()
+                        time.sleep(.01)
+                    else:
+                        raise AssertionError('composition CLI did not acknowledge its checkpoint hold')
+                    child.send_signal(stop_signal)
+                    stdout, stderr = child.communicate(timeout=30)
+                    assert child.returncode == -stop_signal
+                finally:
+                    if child.poll() is None:
+                        child.kill()
+                        child.communicate(timeout=30)
+                cli_evidence = tmp_path / 'composition-cli'
+                (cli_evidence / (str(len(list(cli_evidence.iterdir()))) + '.json')).write_bytes(canonical_bytes({
+                    'arguments': interrupted_args, 'signal': stop_signal.name, 'exit_code': child.returncode,
+                    'stdout': stdout, 'stderr': stderr}))
+                old_key = 'composition-capture-' + interrupted_id.removeprefix('op-')
+                incomplete = campaign_head(cartridge, old_key)
+                assert incomplete['value']['status'] in {'MEASURING', 'INCOMPLETE'}
+                control = CanonicalBroker(tmp_path / 'state/operations')
+                try:
+                    control.release_hold(interrupted_id, 'composition-checkpoint')
+                finally:
+                    control.close()
+                return interrupted_request, interrupted_id, interrupted_args, interrupted_path, old_key, incomplete
+
+            for stop_signal in (signal.SIGKILL, signal.SIGINT):
+                interrupted_request, interrupted_id, interrupted_args, interrupted_path, old_key, incomplete = interrupt_composition(
+                    stop_signal, 'composition-interrupted-' + stop_signal.name)
+                recovered = launch(*interrupted_args, expected_code=1)
+                assert recovered['operation']['operation_id'] == interrupted_id
+                assert recovered['operation']['state'] == 'SUCCEEDED'
+                assert recovered['source_qualification']['status'] == 'FAIL'
+                assert 'complete fresh canonical composition' in recovered['source_qualification']['error']['detail']
+                successful_record = interrupted_path.read_bytes()
+                attempts = [event['payload']['composition_capture']
+                    for event in json.loads(successful_record)['record']['events']
+                    if 'composition_capture' in event['payload']]
+                assert len(attempts) == 1 and attempts[0] != old_key
+                assert campaign_head(cartridge, attempts[0])['value']['status'] == 'CAPTURED'
+                assert campaign_head(cartridge, old_key) == incomplete
+                assert launch(*interrupted_args, expected_code=1) == recovered
+                assert interrupted_path.read_bytes() == successful_record
+                assert campaign_head(cartridge, old_key) == incomplete
+                assert record_path.read_bytes() == original_acquisition
+            # Q5: the retry policy never clears an operator's deliberate pause.
+            manual_request = {**interrupted_request, 'idempotency_key': 'composition-manual-pause'}
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            try:
+                manual = control.issue(manual_request)
+                manual = control.pause(manual['operation_id'])
+            finally:
+                control.close()
+            manual_args = [*composition_args[:-1], manual_request['idempotency_key']]
+            paused = launch(*manual_args, expected_code=2)
+            assert paused['operation'] == manual
+            assert paused['source_qualification']['status'] == 'NOT_RUN'
+            assert campaign_head(cartridge, 'composition-capture-' + manual['operation_id'].removeprefix('op-')) is None
+            # Q49: a missing selected root pauses before creating another cartridge or source extent.
+            held = cartridge.with_name('Cassette-held-fixture')
+            cartridge.rename(held)
+            missing_args = [*composition_args[:-1], 'composition-missing-root']
+            try:
+                missing = launch(*missing_args, expected_code=2)
+                assert missing['operation']['state'] == 'PAUSED'
+                assert missing['source_qualification']['status'] == 'FAIL'
+                assert missing['source_qualification']['error']['code'] == 'CARTRIDGE_DISCONNECTED'
+                assert not cartridge.exists()
+            finally:
+                if not cartridge.exists():
+                    held.rename(cartridge)
+            resumed = launch(*missing_args)
+            assert resumed['operation']['operation_id'] == missing['operation']['operation_id']
+            assert resumed['operation']['state'] == 'SUCCEEDED'
+            assert resumed['source_qualification']['status'] == 'PASS'
+            assert launch(*missing_args) == resumed
+            assert record_path.read_bytes() == original_acquisition
+            # Retain exact control metadata and raw rows before the owned profile contradiction.
+            evidence = tmp_path / 'composition-fixture'
+            shutil.copytree(cartridge / 'campaign', evidence / 'cartridge/campaign')
+            shutil.copytree(cartridge / 'captures', evidence / 'cartridge/captures')
+            (evidence / 'request.json').write_bytes(canonical_bytes({'protocol_version': '1',
+                'operation': 'source.compose', 'idempotency_key': 'composition-qualification',
+                'target': completed['operation_id'], 'arguments': {'composition': {
+                    'acquisition_operation_id': completed['operation_id'], 'recipe': recipe}}}))
+            (evidence / 'qualification.json').write_bytes(canonical_bytes(qualification))
+            # Q6/Q42/Q60: a failed later profile cannot rewrite a completed byte-preparation result.
+            compose_record = tmp_path / 'state/operations' / (qualification['operation']['operation_id'] + '.json')
+            complete_bytes = compose_record.read_bytes()
+            bad_profile = compare_campaign_head(CapacityCoordinator(cartridge), measured['profile_key'],
+                profile['digest'], {**profile['value'], 'wall_seconds': profile['value']['wall_seconds'] + 1})
+            refused = launch(*composition_args, expected_code=1)
+            assert refused['operation'] == qualification['operation']
+            assert refused['source_qualification']['status'] == 'FAIL'
+            assert refused['source_qualification']['error']['code'] == 'ROOT_INVALID'
+            assert compose_record.read_bytes() == complete_bytes
+            compare_campaign_head(CapacityCoordinator(cartridge), measured['profile_key'], bad_profile['digest'], profile['value'])
+            assert record_path.read_bytes() == original_acquisition
+            # Q9/Q42/Q60: actual provider metadata joins the complete prepared artifact closure.
+            generated_recipe = {'source_record_digest': digest_bytes(canonical_bytes(source_record)), 'artifacts': [
+                {'path': name, 'segments': [{'literal_hex': content.hex()}]}
+                for name, content in sorted(generated_assets.items())] + [
+                {'path': 'prepared.bin', 'segments': [{'path': 'model.safetensors', 'offset': 0, 'length': 32}]}]}
+            generated_recipe_path = tmp_path / 'generated-recipe.json'
+            generated_recipe_path.write_bytes(canonical_bytes(generated_recipe))
+            generated_composition_request = {'protocol_version': '1', 'operation': 'source.compose',
+                'idempotency_key': 'generated-composition', 'target': completed['operation_id'],
+                'arguments': {'composition': {'acquisition_operation_id': completed['operation_id'], 'recipe': generated_recipe}}}
+            generated_composition = launch('qualify-composition', '--acquisition', completed['operation_id'],
+                '--recipe', str(generated_recipe_path), '--key', 'generated-composition')
+            generated_geometry = {'source_lock': None, 'source_kind': 'ollama', 'revision_algorithm': 'sha256',
+                'provenance': {'recipe_digest': digest_bytes(canonical_bytes(generated_recipe))},
+                'artifacts': [{'path': name, 'size': len(content), 'digest_algorithm': 'sha256',
+                               'validator_template': 'sha256:{digest}'}
+                              for name, content in sorted({**generated_assets, 'prepared.bin': generated_model[0]}.items())]}
+            generated_geometry_path = tmp_path / 'generated-geometry.json'
+            generated_geometry_path.write_bytes(canonical_bytes(generated_geometry))
+            generated_geometry_request = {'protocol_version': '1', 'operation': 'acquire',
+                'idempotency_key': 'generated-geometry', 'target': drive['operation_id'],
+                'arguments': {'acquisition': {'drive_selection_id': drive['operation_id'],
+                                            'operation_geometry': generated_geometry}}}
+            generated_measurement = launch('qualify', '--operation-plan', str(generated_geometry_path),
+                '--drive-selection', drive['operation_id'], '--key', 'generated-geometry', expected_code=2)
+            generated_measurement_record = json.loads((tmp_path / 'state/operations'
+                / (generated_measurement['operation_id'] + '.json')).read_bytes())['record']
+            assert generated_measurement['state'] == 'PAUSED' and generated_measurement_record['phase'] == 'EMPTY'
+            generated_connection = launch('connect', '--source', 'ollama', '--endpoint',
+                f'http://127.0.0.1:{server.server_port}', '--public', '--key', 'generated-connection')
+            preparation = {'composition_request': generated_composition_request, 'geometry_request': generated_geometry_request}
+            preparation_path = tmp_path / 'generated-preparation.json'
+            preparation_path.write_bytes(canonical_bytes(preparation))
+            prior_records = {path: path.read_bytes() for path in (tmp_path / 'state/operations').glob('op-*.json')}
+            def cartridge_snapshot():
+                return {str(path.relative_to(cartridge)): hashlib.sha256(path.read_bytes()).hexdigest()
+                        for path in cartridge.rglob('*') if path.is_file()}
+            before_join = cartridge_snapshot()
+            generated_args = ['select-model', '--connection', generated_connection['operation_id'],
+                '--model', 'fixture/generated:latest', '--preparation', str(preparation_path)]
+            joined = launch(*generated_args, '--key', 'generated-selected')
+            assert joined['state'] == 'SUCCEEDED'
+            result = joined['result']
+            assert result['source_lock']['identity'] is None
+            assert result['source_lock']['immutable_revision'] == 'sha256:' + hashlib.sha256(generated_manifest()).hexdigest()
+            assert result['downloaded_bytes'] == 0 and result['execution_compatibility'] == 'NOT_VERIFIED'
+            assert result['preparation']['composition_head'] == generated_composition['operation']['result']['composition_head']
+            assert result['preparation']['geometry_operation_id'] == generated_measurement['operation_id']
+            assert result['preparation']['geometry_digest'] == digest_bytes(canonical_bytes(generated_geometry))
+            assert result['preparation']['source_lock_digest'] == digest_bytes(canonical_bytes(result['source_lock']))
+            after_requests = list(requests)
+            assert launch(*generated_args, '--key', 'generated-selected') == joined
+            assert requests == after_requests
+            assert cartridge_snapshot() == before_join
+            assert all(path.read_bytes() == payload for path, payload in prior_records.items())
+            generated_model[0] = b'z' * 32
+            wrong_source = launch(*generated_args, '--key', 'generated-wrong-source', expected_code=1)
+            assert wrong_source['error']['code'] == 'SOURCE_REVISION_CHANGED'
+            assert 'committed preparation outputs' in wrong_source['error']['detail']
+            generated_model[0] = weights[:32]
+            preparation['composition_request']['arguments']['composition']['recipe'] = recipe
+            preparation_path.write_bytes(canonical_bytes(preparation))
+            wrong_request = launch(*generated_args, '--key', 'generated-wrong-request', expected_code=1)
+            assert wrong_request['error']['code'] == 'INVALID_REQUEST'
+            preparation['composition_request']['arguments']['composition']['recipe'] = generated_recipe
+            missing_geometry_request = json.loads(canonical_bytes(generated_geometry_request))
+            missing_geometry_request['idempotency_key'] = 'generated-geometry-unmeasured'
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            missing_geometry = control.issue(missing_geometry_request)
+            control.pause(missing_geometry['operation_id'])
+            control.close()
+            missing_record = tmp_path / 'state/operations' / (missing_geometry['operation_id'] + '.json')
+            missing_bytes = missing_record.read_bytes()
+            preparation['geometry_request'] = missing_geometry_request
+            preparation_path.write_bytes(canonical_bytes(preparation))
+            missing_profile = launch(*generated_args, '--key', 'generated-missing-profile', expected_code=1)
+            assert missing_profile['error']['code'] == 'SOURCE_UNAVAILABLE'
+            assert 'already published geometry profile' in missing_profile['error']['detail']
+            assert missing_record.read_bytes() == missing_bytes
+            assert cartridge_snapshot() == before_join
+            assert all(path.read_bytes() == payload for path, payload in prior_records.items())
+            assert not any('/blobs/' in path for method, path in requests)
+            preparation['geometry_request'] = generated_geometry_request
+            preparation_path.write_bytes(canonical_bytes(preparation))
+            (evidence / 'generated-join.json').write_bytes(canonical_bytes({
+                'request_reference': preparation, 'selection': joined, 'wrong_source': wrong_source,
+                'wrong_request': wrong_request, 'missing_profile': missing_profile,
+                'cartridge_before': before_join, 'cartridge_after': cartridge_snapshot()}))
+            generated_evidence = evidence / 'generated-proof'
+            shutil.copytree(cartridge / 'campaign', generated_evidence / 'cartridge/campaign')
+            shutil.copytree(cartridge / 'captures', generated_evidence / 'cartridge/captures')
+            shutil.copytree(tmp_path / 'state/operations', generated_evidence / 'operations')
+            (generated_evidence / 'provider-manifest.json').write_bytes(generated_manifest())
+            (generated_evidence / 'provider-requests.json').write_bytes(canonical_bytes(requests))
             # Q42/Q44/Q51/Q53/Q60: qualification executes the retained source path,
             # records bounded traces, then seals and reclaims only its synthetic extents.
             object_dir = mount / 'drewwiberg-lacie/Cassette/campaign/objects'
@@ -638,7 +930,9 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
             resume_atoms = [item for item in profiles
                             if 'artifact' in item['value'] and 'measurement' in item['value']
                             and 'profile_digest' in item['value'] and 'pattern' not in item['value']]
-            assert len(plans) == 3
+            assert len(plans) == 4
+            assert sum(plan['value']['binding']['operation'] == generated_measurement['operation_id']
+                       for plan in plans) == 1
             assert all(plan['value']['binding']['profiler_version'] == '7-retained-source-transfer'
                        for plan in plans)
             assert len(fresh_atoms) == len(resume_atoms) == sum(plan['value']['pattern_count'] for plan in plans)
@@ -773,7 +1067,7 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
                                              item['value']['status'] == 'RECLAIMED')
             assert not list((mount / 'drewwiberg-lacie/Cassette').rglob('profile.bin'))
             seals = [item for item in profiles if 'atoms_digest' in item['value']]
-            assert len(seals) == 3 and sum(seal['value']['atom_count'] for seal in seals) == len(fresh_atoms) + len(resume_atoms)
+            assert len(seals) == len(plans) and sum(seal['value']['atom_count'] for seal in seals) == len(fresh_atoms) + len(resume_atoms)
             for event in record['events']:
                 proof = event['payload'].get('source_qualification', {})
                 if proof.get('status') == 'PASS':
@@ -1190,6 +1484,117 @@ def test_q5_q9_cli_selection_pins_source_without_downloading_weights(tmp_path, m
             assert corrupt_reuse['error']['code'] == 'ROOT_INVALID'
             assert sum(method == 'GET' and path.endswith('/model.safetensors') for method, path in requests) == payload_requests
             prior_probe_path.write_bytes(prior_probe_bytes)
+            # Q43/Q60: reconnect invalidates the old measurement, while the same preparation resumes.
+            before_composition_requests = list(requests)
+            reconnect_request, reconnect_id, reconnect_args, reconnect_path, stale_key, stale = interrupt_composition(
+                signal.SIGKILL, 'composition-reconnect')
+            subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
+            attached = False
+            remounted = subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-plist', str(image)],
+                                       check=True, capture_output=True)
+            mount = next(Path(item['mount-point']) for item in plistlib.loads(remounted.stdout)['system-entities']
+                         if 'mount-point' in item)
+            attached = True
+            cartridge = mount / 'drewwiberg-lacie/Cassette'
+            # Q6: a relative owner spelling cannot escape through Path.relative_to as ValueError.
+            control = CanonicalBroker(tmp_path / 'state/operations')
+            relative_owner = CapacityCoordinator(Path(os.path.relpath(cartridge, Path.cwd())))
+            before_relative = reconnect_path.read_bytes()
+            try:
+                try:
+                    asyncio.run(control._capture_composition_profile(reconnect_request, relative_owner,
+                        select_external_apfs_volume(volume['volume_uuid']), capture_key=stale_key, uncached_source=True))
+                except CassetteError as error:
+                    assert error.code == 'ROOT_INVALID'
+                    assert error.detail == 'generation capture differs from its exact request or path'
+                else:
+                    raise AssertionError('relative capture owner unexpectedly reused the stale context')
+            finally:
+                control.close()
+            assert reconnect_path.read_bytes() == before_relative
+            assert campaign_head(cartridge, stale_key) == stale
+            recovered = launch(*reconnect_args, expected_code=1)
+            assert recovered['operation']['operation_id'] == reconnect_id
+            assert recovered['operation']['state'] == 'SUCCEEDED'
+            assert recovered['source_qualification']['status'] == 'FAIL'
+            assert 'complete fresh canonical composition' in recovered['source_qualification']['error']['detail']
+            succeeded_bytes = reconnect_path.read_bytes()
+            attempts = [event['payload']['composition_capture']
+                        for event in json.loads(succeeded_bytes)['record']['events']
+                        if 'composition_capture' in event['payload']]
+            assert len(attempts) == 1 and attempts[0] != stale_key
+            continued = campaign_head(cartridge, attempts[0])
+            assert continued['value']['status'] == 'CAPTURED'
+            assert continued['value']['execution_mode'] == 'RESUME'
+            assert stale['value']['context']['path'] != continued['value']['context']['path']
+            assert stale['value']['context']['path']['volume_uuid'] == continued['value']['context']['path']['volume_uuid']
+            assert campaign_head(cartridge, stale_key) == stale
+            assert launch(*reconnect_args, expected_code=1) == recovered
+            assert reconnect_path.read_bytes() == succeeded_bytes
+            assert record_path.read_bytes() == original_acquisition
+            # A fresh operation is a legal measurement on the current native path.
+            fresh_args = [*composition_args[:-1], 'composition-reconnect-fresh']
+            fresh = launch(*fresh_args)
+            assert fresh['source_qualification']['status'] == 'PASS'
+            assert requests == before_composition_requests
+            evidence = tmp_path / 'composition-remount-fixture'
+            shutil.copytree(cartridge / 'campaign', evidence / 'cartridge/campaign')
+            shutil.copytree(cartridge / 'captures', evidence / 'cartridge/captures')
+            (evidence / 'request.json').write_bytes(canonical_bytes(reconnect_request))
+            (evidence / 'qualification.json').write_bytes(canonical_bytes(recovered))
+            (evidence / 'fresh-qualification.json').write_bytes(canonical_bytes(fresh))
+            # Q6/Q60: this labelled capture-metadata injection represents success before capture seal.
+            terminal_path = tmp_path / 'state/operations' / (fresh['operation']['operation_id'] + '.json')
+            terminal_bytes = terminal_path.read_bytes()
+            terminal_key = fresh['source_qualification']['capture_key']
+            sealed = campaign_head(cartridge, terminal_key)
+            compare_campaign_head(CapacityCoordinator(cartridge), terminal_key, sealed['digest'],
+                                  {'context': sealed['value']['context'], 'status': 'MEASURING'})
+            unavailable = launch(*fresh_args, expected_code=1)
+            assert unavailable['operation'] == fresh['operation']
+            assert unavailable['source_qualification']['status'] == 'FAIL'
+            error = unavailable['source_qualification']['error']
+            assert error['code'] == 'SOURCE_UNAVAILABLE' and error['retryability'] == 'terminal'
+            assert 'fresh composition request key' in error['detail']
+            assert terminal_path.read_bytes() == terminal_bytes
+            assert launch(*fresh_args, expected_code=1) == unavailable
+            assert terminal_path.read_bytes() == terminal_bytes
+            # Q6/Q43/Q60: the same terminal capture still needs a new request after reconnect.
+            incomplete = campaign_head(cartridge, terminal_key)
+            subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount), '-quiet'], check=True, capture_output=True)
+            attached = False
+            remounted = subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-plist', str(image)],
+                                       check=True, capture_output=True)
+            mount = next(Path(item['mount-point']) for item in plistlib.loads(remounted.stdout)['system-entities']
+                         if 'mount-point' in item)
+            attached = True
+            cartridge = mount / 'drewwiberg-lacie/Cassette'
+            current_path = drive_path_observation(select_external_apfs_volume(volume['volume_uuid']))['path']
+            assert current_path != incomplete['value']['context']['path']
+            assert current_path['volume_uuid'] == incomplete['value']['context']['path']['volume_uuid']
+            unavailable_after_reconnect = launch(*fresh_args, expected_code=1)
+            assert unavailable_after_reconnect == unavailable
+            assert terminal_path.read_bytes() == terminal_bytes
+            assert campaign_head(cartridge, terminal_key) == incomplete
+            assert launch(*fresh_args, expected_code=1) == unavailable_after_reconnect
+            assert terminal_path.read_bytes() == terminal_bytes
+            assert campaign_head(cartridge, terminal_key) == incomplete
+            # Exact request binding still decides before terminal guidance on a changed path.
+            changed = {**incomplete['value'], 'context': {
+                **incomplete['value']['context'], 'request_digest': 'blake3:' + 'f' * 64}}
+            contradicted = compare_campaign_head(CapacityCoordinator(cartridge), terminal_key,
+                                                incomplete['digest'], changed)
+            wrong_request = launch(*fresh_args, expected_code=1)
+            assert wrong_request['operation'] == fresh['operation']
+            assert wrong_request['source_qualification']['error']['code'] == 'ROOT_INVALID'
+            assert terminal_path.read_bytes() == terminal_bytes
+            assert campaign_head(cartridge, terminal_key) == contradicted
+            (evidence / 'terminal-capture-control.json').write_bytes(canonical_bytes({
+                'scope': 'Store capture-metadata injection, not an actual post-success crash',
+                'capture_key': terminal_key, 'sealed_digest': sealed['digest'], 'receipt': unavailable,
+                'incomplete_head': incomplete, 'after_real_reconnect': unavailable_after_reconnect,
+                'path_after_reconnect': current_path,
+                'wrong_request_head': contradicted, 'wrong_request': wrong_request}))
         finally:
             if watcher is not None and watcher.poll() is None:
                 watcher.terminate()

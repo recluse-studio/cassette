@@ -209,19 +209,20 @@ def _algorithm_shape(function):
     return ast.dump(tree, include_attributes=False)
 
 
-def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication(tmp_path):
+def test_q4_q5_q19_q30_q40_q51_q55_q58_q60_q62_streaming_compiler_earns_publication(tmp_path, monkeypatch):
     """Q4/Q5/Q19/Q30/Q40/Q51/Q55/Q58/Q60/Q62 acceptance: hostile bytes cannot outrun complete proof."""
 
     # Q55/Q30: reject every executable-material class and every absent generated tuple before
     # any candidate object exists. The marker proves the template was data, never an instruction.
     marker = tmp_path / "template-executed"
+    monkeypatch.setenv("CASSETTE_COMPILER_TEST_MARKER", str(marker))
 
     def auto_map(document):
         document["model"]["auto_map"] = {"AutoModel": "remote.Model"}
 
     def template(document):
         document["model"]["template_source"] = (
-            "{{ cycler.__init__.__globals__.os.system('touch " + str(marker) + "') }}"
+            "{{ cycler.__init__.__globals__.os.system('touch \"$CASSETTE_COMPILER_TEST_MARKER\"') }}"
         )
 
     def custom_operator(document):
