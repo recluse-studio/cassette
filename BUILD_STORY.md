@@ -9738,3 +9738,24 @@ runtime, dependency, process or numerical kernel was introduced. Earlier failed 
 I am preserving the combined implementation as a development branch checkpoint. Its bounded Opus
 reviews remain attached to their exact claims. The original source-integrity acceptance and all live
 stages stay open; this checkpoint does not install the candidate or begin the larger downloads.
+
+### 2026-10-18 21:42 UTC — Complete the recovery proof
+
+Full67 finished at21:07:13 UTC:340 fixtures passed, zero skips, all14 Q78 controls passed. Every
+archive member matches its212-file manifest. Complete J is[0,0,18330,1,1,9,0,0,8425096], six fewer
+authored executable lines. I retained full65's timeout and the interrupted duplicate check as
+incomplete attempts. The corrected installed65 runtime is unchanged by the ledger-only budget repair.
+
+Native claude-opus-5-5 completed the bounded timeout review with PASS_READY/STATIC and no defect in
+the change. The launcher retains blocked/permission_denied for two out-of-cwd Glob lookups; required
+source reads succeeded. I preserved those denials, verified all214 target hashes, and accepted only
+the completed static verdict. No retry or permission change followed. Actual credit spending remains
+$0, balance$0, auto-reloadOff; the owned Usage tab is closed. The older --prove-j skip-count concern
+remains separate from the zero-skip candidate path used here. No optional edit starts another loop.
+
+The scoped repair and its exact complete-J report form a development checkpoint. Source40 remains
+excluded/unproved; no stage, profile, required payload or live completion is inferred. The original
+read-only drive inventory remains its sole owner. New qualification/card binding follows its actual
+SUCCEEDED receipt, under all current prerequisites. The exact profile-amendment approval is still
+pending and its proposal remains unadopted. Evidence: blocker-resolution64/generation-consolidated67-
+complete.json, budget67-review-adjudication.json and generation-checkpoint67-publication.json.

@@ -2506,26 +2506,22 @@ def _load_state(
             clear('invalid-header')
             _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer checkpoint header remains")
         return None
-    record = max(candidates, key=lambda candidate: candidate["generation"])
-    record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
-    if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
-        clear('records-overflow')
-        _transfer_fail("IDENTITY_MISMATCH", object_id, "transfer chunk records exceed their checkpoint extent")
-    encoded_records = _pread_exact(
-        extent,
-        _TRANSFER_RECORDS_OFFSET,
-        record_bytes,
-        object_id,
-    )
-    digests = []
-    for index in range(record["completed_count"]):
-        start = index * _TRANSFER_RECORD_BYTES
-        raw = encoded_records[start:start + _TRANSFER_RECORD_BYTES]
-        if raw[0] != 1:
-            clear(f'record-{index}')
-            _transfer_fail("IDENTITY_MISMATCH", object_id, f"transfer chunk record {index} is incomplete")
-        digests.append("blake3:" + raw[1:].hex())
-    return record, tuple(digests)
+    for record in sorted(candidates, key=lambda candidate: candidate["generation"], reverse=True):
+        record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
+        if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
+            continue
+        encoded_records = _pread_exact(extent, _TRANSFER_RECORDS_OFFSET, record_bytes, object_id)
+        if any(encoded_records[index * _TRANSFER_RECORD_BYTES] != 1
+               for index in range(record["completed_count"])):
+            continue
+        records_hasher = artifact_hasher("sha256:" + "0" * 64, object_id)
+        records_hasher.update(encoded_records)
+        if _source_hash_state(records_hasher, "sha256:") != record["chunk_records_digest"]:
+            continue
+        return record, tuple("blake3:" + encoded_records[start + 1:start + _TRANSFER_RECORD_BYTES].hex()
+                             for start in range(0, record_bytes, _TRANSFER_RECORD_BYTES))
+    clear('invalid-records')
+    _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer chunk records remain")
 
 
 def _retained_source_range(revision, artifact, extents, offset, length, expected_manifest=None):
@@ -2546,14 +2542,10 @@ def _retained_source_range(revision, artifact, extents, offset, length, expected
             or header['completed_count'] != header['chunk_count']
             or header['contiguous_source_hash_digest'] != artifact.digest):
         _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source checkpoint is incomplete or has another identity')
-    records = resumable_artifact_hasher('sha256:' + '0' * 64, artifact.path)
-    for digest in digests:
-        records.update(b'\x01' + bytes.fromhex(digest[7:]))
     hasher = resume_artifact_hasher(header['serialized_hash_state'], artifact.digest, artifact.size,
         artifact.path, **({'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}))
-    if (_source_hash_state(records, 'sha256:') != header['chunk_records_digest']
-            or _source_hash_state(hasher, artifact.digest) != artifact.digest):
-        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source hash or chunk records differ')
+    if _source_hash_state(hasher, artifact.digest) != artifact.digest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source hash differs')
     result = bytearray()
     for index in range(offset // _TRANSFER_CHUNK_BYTES, (offset + length + _TRANSFER_CHUNK_BYTES - 1) // _TRANSFER_CHUNK_BYTES):
         start = index * _TRANSFER_CHUNK_BYTES
@@ -3023,9 +3015,6 @@ async def _checkpointed_transfer(source_revision, artifact, read_range, data_ext
         records_hasher = resumable_artifact_hasher("sha256:" + "0" * 64, artifact.path)
         for digest in chunk_digests:
             records_hasher.update(b"\x01" + bytes.fromhex(digest[7:]))
-        if _source_hash_state(records_hasher, "sha256:") != header["chunk_records_digest"]:
-            reset_checkpoint(header, header["generation"], "record-digest")
-            _transfer_fail("IDENTITY_MISMATCH", artifact.path, "transfer chunk records changed after checkpoint")
         try:
             hasher = resume_artifact_hasher(
                 header["serialized_hash_state"],

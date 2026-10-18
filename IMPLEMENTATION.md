@@ -5,54 +5,145 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-17 02:57 UTC
+## Current direction — 2026-10-18 21:42 UTC
 
-Continue authorized L05-L10. Consolidated63 is PASS, stopped02:53:45.752230 UTC, exit0.
-All340 existing fixtures passed in1125.02 seconds, zero skips; all14 Q78 deletion/bypass controls
-passed. The ordinary ledger has no violations. J is18336 executable lines, with no new kernel,
-process, runtime, dependency, model branch, duplicate authority or shipped binary. The complete
-212-file archive, canonical manifest and actual source verify exactly. The generated complete-J
-report is copied only to that exact managed generation-consumer worktree; its ordinary ledger also
-passes. Read generation-consolidated63-complete.json and autonomy-candidate-63/result.json.
-System Data free space stayed at least15.62406%; no test/review/download is active.
+Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
+resolve permitted work and finish L05-L10. The unchanged-state polling loop was paused. The existing
+heartbeat now continues concrete execution from actual full67/inventory results under the updated
+prompt; it stays quiet while unchanged and may not duplicate/restart active work or completed review.
+Do not restart an investigation loop that only rereads the old blocker. The pending amendment
+approval remains required for that exact change; independent eligible work continues.
 
-Publish this exact development checkpoint on codex/prepared-source-consumer after explicit-path
-staging, commit-law proof, normal dry-run/push and actual remote hash verification. This preserves
-main's existing working changes and installed bytes. The branch records implementation and machine
-proof; it grants no original Source40/owner41/plan42 independent acceptance, installation, physical04
-binding, real source qualification or live/stage closure. Main executable40 remains unchanged.
-No protected mathematics path enters the checkpoint. The worktree has no executable changes after
-independently reviewed62; only Q42 clarification, narrative and exact generated accounting follow.
+The retained platform receipt records a generic cybersecurity-risk turn failure. It identifies no
+specific denied command, and the prepared review40/challenge40 never ran. This is separate from the
+Q51 defect and from the missing independent behavioral verdict. Preserve the warning and excluded
+historical challenge; do not execute, reconstruct or reroute it. Do not treat the warning as a
+failed test or a rejection of every later Cassette action.
 
-Native62 remains COMPLETE_PASS for G1/G2 at FIXTURE/INTEGRATION level, solely claude-opus-5-5.
-Root resolves U1 from existing authority: the complete geometry request including descriptive
-provenance is immutable; actual recipe/input identity comes from the canonical composition request,
-committed ownership and its separate passing profile. Real provider output closure must match.
-No acceptance predicate is removed. The full candidate has no aggregate independent verdict.
-Complete-but-unreclaimed geometry, a complete FAIL profile and different-cartridge preparation
-remain NOT_RUN behaviorally. All frozen target61/target62/packet62 files and both copies of the500-file
-builder export verify. Reviewer copies/image are removed. Preserve native62's initial missing-script
-probe, denied extra-argument duplicate and Root's failed observers separately from product results.
-The denied duplicate never ran or retried; its authorized primary completed. Read the complete62 audit.
+The former blanket prohibition on all packaging, installation and physical qualification was too
+broad. The governing acquisition_entry_contract requires focused machine proof before live execution;
+IMPLEMENTATION's independent-review rule requires PASS before stage closure. Physical qualification
+START requires its literal consumer prerequisites, and each missing profile blocks its exact
+operation. Those contracts do not create an independent-review prerequisite for all packaging or
+geometry measurements. Retain every actual profile, source-entry, inventory, runtime identity,
+durability and release assertion. L05 stays IN_PROGRESS; L06-L10 remain TODO.
 
-Real operations remain25SUCCEEDED/3FAILED/1PAUSED, none active. Physical04 stays NOT_BOUND/unissued.
-AllL05-L10, required larger model/dataset bytes, actual generated payload, semantic identity and live
-qualification remain open. Source40/owner41/plan42 exact acceptance stays excluded/open. Never run,
-inspect, rephrase, retry or replace the excluded prepared review/shared-writer challenge or coordinated
-payload/checkpoint replacement. The denied wc and denied duplicate variant remain abandoned.
-No real profile, provider Go or required payload begins before the unchanged prerequisites.
+The published development base remains a03b300bf7378f491ca3280d15410f7fd6ff8811 on
+codex/prepared-source-consumer, with candidate63's 340 passing fixtures, 14 controls and clean ledger.
+Read-only Opus64 stopped normally, solely claude-opus-5-5. It made no source changes; all 214 snapshot
+files still match. The launcher records a denied read of the original skill path outside the confined
+folder; the reviewer used its in-snapshot copy. Preserve that denial without permission expansion.
+The report is INCOMPLETE/STATIC, not a behavioral or live pass. The source-hash chain looks correct
+from inspection, but the report found D1: a newer header can refer to an incompletely persisted chunk
+record, and the old loader clears both headers instead of recovering the older valid prefix.
 
-Existing authorization covers routine execution, contained repairs, evidence, reviews, story entries,
-commits and normal pushes. No human action is needed for this checkpoint. Use only existing account
-routes and scoped permissions. Fresh post62 UI wasMax5x,current21%,weekly66%,Fable4%,creditsenabled,
-$0balance/$0spent,autoReloadOff; owned tab15closed, no setting changed. Recheck before another native
-launch. No Copilot or API billing. Preserve security, billing limits, user-owned processes, protected
-content and independent mathematics. Continue eligible work without substituting a component pass
-for a missing acceptance requirement.
+Root reproduced D1 on an owned scratch fixture: terminal IDENTITY_MISMATCH, 1 failed in 8.24 seconds.
+The child now selects the newest header whose entire record prefix is present and digest-valid.
+Both transfer and retained reads use that loader; two redundant later digest checks are removed.
+No wrong-byte result is accepted and no original excluded challenge is executed or reconstructed.
+One intermediate run passed the new recovery assertions and failed a stale fixture request count;
+its correction is retained. The complete affected S10 file then passed 2 tests in 25.54 seconds.
 
-Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
-Active source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
-Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
+Candidate65 full machine proof stopped at19:57:19.836437 UTC with its harness's3600-second wall
+cancellation limit. Seven fixtures passed, zero assertion failures were reported, and the next image
+gradient fixture was incomplete. Q78 controls, complete J report and archive were not created. All
+owned full65 processes are stopped; the wrapper's FAIL is an INCOMPLETE_HARNESS_TIMEOUT, not a
+proved production assertion failure. Preserve its raw log and timeout reconciliation. Separate Opus D1 attempt02 is now
+COMPLETE_PASS at FIXTURE level: 14 scenarios, 137 deciding observations, including fallback-disabled
+sensitivity, unchanged generation, retained read_only refusal and identity-competitor rejection.
+Root verified the actual native sole claude-opus-5-5 receipt, normal stop/exit0, no new denial, no
+subworker, 214 unchanged target hashes, removed scratch and closed listener. Actual post-review usage
+shows $0 spent/$0 balance/auto-reloadOff; the owned tab is closed. Read review65-complete-adjudication.json.
+Attempt01 stays INCOMPLETE after its malformed Write/Edit path rule. Official Claude documentation
+confirmed the precise syntax defect; correcting the session rule preserved the same owned subtree,
+managed/global settings and single assigned command. Historical40 remains excluded and unproved;
+this bounded D1 pass closes neither aggregate source acceptance nor L05-L10. Optional recommendations
+are not new failing requirements and do not justify another change/proof loop.
+
+The corrected private wheel65 and installed65 are complete on LaCie. All40 runtime files match the
+214-file frozen source copy and wheel; isolated import paths, seven dependency pins and CLI help pass.
+Wheel SHA256 is411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded.
+The exact earlier pinned .pth dependency route is reused; no dependency download or old-install change
+occurred. The source repair now has complete full67/Q78/J proof. Read installation65.json and
+generation-consolidated67-complete.json; package evidence remains separate from live qualification.
+Installed64 remains solely the active read-only inventory owner. Bind subsequent positive profile
+work to corrected installed65 and exact current cards/plan/path; no old runtime relabeling or profile
+reuse. The private installation is package evidence, not live/stage completion.
+
+Installed64 drive discovery completed SUCCEEDED as op-50a155c0f5d1dd978968ff47deee05bcbaf468b62ae39ba74116933ed5ffd0b5.
+It observed the same LaCie APFS UUID. Fresh select-drive is RUNNING as
+op-58f61f2b3db5fd6636437f700cf7a347fcbc8103e1ee9bfa02306e98899b54e9,
+using the same authorized cartridge UUID and folder. Its direct CLI process is owned and no model
+payload has started. Reconcile its terminal receipt, then bind exact current runtime/plan/profile
+cards; never reuse physical04's stale card as current authority. Main's four pre-existing edits,
+user-owned work, the old installation and every historical failed attempt remain preserved.
+
+
+The separate read-only native profile-contract66 review is complete, solely claude-opus-5-5,
+exit0/stopped, no denials or subworkers; all217 frozen paths remain unchanged. It confirms a STATIC
+final-contract conflict: appending a changed request leaves both obsolete unconsumed03 and current65
+as required physical owners, so final Q80 replay would require the known-affected old runtime's
+request to PASS. The matrix scopes each missing qualification to its consuming operation. No existing
+same-request mechanism releases a different request. Do not quietly relax those strict checks.
+UNCONSUMED_PROFILE_AMENDMENT.md is an exact PROPOSAL ONLY: explicit path-change succession of a
+proved-unconsumed prior, with every old node/card/result retained and every current assertion/proof
+still required. The original strict same-request rule remains. An async approval question is pending
+because AGENTS requires approval before changing a defined rule. Do not treat silence as approval,
+adopt the draft, or ask the same question again. This final-closure coordinate does not prevent the
+current qualified runtime's independently permitted selection/profile preparation and downloads.
+Root still must verify actual unconsumed operation evidence before any retirement.
+
+Full67 is COMPLETE_MACHINE_PASS_VERIFIED, stopped21:07:13.146837 UTC, exit0. Its complete suite
+passed340 fixtures with zero skips in2146.18 seconds. All14 Q78 controls passed and every deletion/
+bypass failed for its declared owner. Root verified all212 archive members, canonical source manifest
+and archive SHA2567d0f1ec22fec4c1e5211604840c60b2323a459fe2e97800221238a07ee4ba9a3.
+J is[0,0,18330,1,1,9,0,0,8425096], six executable lines below the published parent. The source
+manifest's generated-report member is the new complete J report; copy it only to this exact child.
+All other211 source members match. No worker25849/25861 remains. Minimum Data free space was17.765938%.
+Read generation-consolidated67-complete.json. Full65 remains INCOMPLETE_HARNESS_TIMEOUT after seven
+passes, zero reported assertion failures; do not restart it or combine its partial results with67.
+The redundant standalone Q29 fixture remains INCOMPLETE_CANCELLED_REDUNDANT_CHECK, zero completed
+tests counted; it is covered by full67. Preserve both incomplete instruments and their raw receipts.
+
+Native budget67 run02 completed its finite source/counterexample analysis, solely claude-opus-5-5,
+exit0/stopped, no safety stop or subworker. Its report is PASS_READY/STATIC for the scoped timeout
+choice:21600 for a complete suite,3600 for focused nodes; no fixture, zero-skip, exact-source, J or
+fourteen-control predicate changed. The launcher remains blocked/permission_denied because two
+out-of-cwd Glob lookups were denied. Root retained both denials; the required target and in-cwd
+failure.json reads succeeded, all214 review target hashes remain unchanged, and the complete static
+verdict is accepted only for that finite question. Do not call the launcher clean, expand permissions,
+retry those lookups or rerun the completed review. Read budget67-review-adjudication.json and
+budget67/report-run02.md. The earlier auth-status timeout stays SETUP_BLOCKED_NOT_RUN, not exhaustion.
+Fresh native preflight proves the existing claude.ai/firstParty route; post-review UI still shows
+$0 spent/$0 balance/auto-reloadOff. The owned Usage tab is closed after observation. No account,
+credential, security, billing or provider change occurred.
+
+The report retains a pre-existing conditional concern: --prove-j records a skip count without
+rejecting it, whereas the actual full67 candidate path rejects skips and passed with zero. Preserve
+that separate entrypoint observation; no optional empty-node simplification or unrelated change enters
+this frozen repair. Do not substitute this static verdict for D1's fixture review, complete machine
+proof, excluded Source40/owner41/plan42 acceptance, or live/stage evidence. Opus65 D1 remains
+COMPLETE_PASS/FIXTURE and must not be rerun. No formal profile-amendment rule is adopted.
+
+The scoped product/tool checkpoint uses this exact tested source and new J report; its actual commit,
+account check, ordinary ledger and remote parity belong in generation-checkpoint67-publication.json.
+Only subsequent Story/Implementation narrative may differ from the proved archive. Runtime40 remains
+identical to corrected private installed65; the ledger-only timeout repair requires no reinstall.
+Main's four pre-existing implementation/accounting edits remain protected and uncommitted by this
+checkpoint. L05 is still IN_PROGRESS and L06-L10 remain TODO.
+
+Next concrete work: the original select-drive CLI14324, session17692, still owns the read-only
+inventory. Do not duplicate or restart it. On its SUCCEEDED receipt, run prepare-binding65.py with
+installed65 Python -I -B; it computes exact installed metadata and writes a local draft, not a
+profile/graph/operation. It requires terminal selections and all40 runtime hashes. The finite
+profile65 field inventory identifies remaining current cards/graph ownership; old helper assumptions
+and same-request succession cannot authorize the changed request. Bind a NEW current profile family
+under every source-entry/card/inventory prerequisite, preserving every old obligation unless the
+exact pending amendment is explicitly approved. prepare-binding65.py is written but NOT_RUN.
+The pending approval boundary above remains unchanged; never ask it again without Drew's answer.
+It does not block independently eligible current qualification and acquisition work.
+
+Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
 
 ## Historical worklog — superseded checkpoints
 

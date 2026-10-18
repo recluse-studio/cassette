@@ -618,7 +618,7 @@ def test_q51_q53_chunk_claims_use_the_store_owned_coordinator(tmp_path, monkeypa
 
 
 def test_q51_random_interruption_corruption_validator_resume_without_final_reread(tmp_path, monkeypatch):
-    """Q51/Q60: resume verifies stored chunks; initial completion needs no redundant final reread."""
+    """Q44/Q51/Q60: recover the last durable prefix; completion verifies every stored chunk."""
 
     git_payload = b'{"text":"qualified dataset bytes"}\n'
     git_prefix = f'blob {len(git_payload)}\0'.encode()
@@ -784,6 +784,23 @@ def test_q51_random_interruption_corruption_validator_resume_without_final_rerea
             assert repeated == first_result
             assert data_reads == [(0, CHUNK), (CHUNK, CHUNK), (2 * CHUNK, len(first_payload) - 2 * CHUNK)]
             assert len(server.requests) == requests_before_completed_check
+
+            # A power loss can persist the next header without its last chunk record.
+            # The other header still commits the previous two-chunk prefix.
+            saved_checkpoint = os.pread(first_state.fd, expected_state_bytes[first.path], first_state.offset)
+            tail_record_offset = first_state.offset + HEADER_BYTES + 2 * RECORD_BYTES
+            for lost_record in (bytes(RECORD_BYTES), b"\x01" + bytes(RECORD_BYTES - 1)):
+                os.pwrite(first_state.fd, saved_checkpoint, first_state.offset)
+                os.pwrite(first_state.fd, lost_record, tail_record_offset)
+                os.fsync(first_state.fd)
+                requests_before_recovery = len(server.requests)
+                recovered = _run(adapter, revision, first, extents, capacity_coordinator)
+                assert recovered == first_result
+                recovery_ranges = [request["range"] for request in server.requests[requests_before_recovery:]
+                                   if request["path"].endswith(first.path)]
+                assert recovery_ranges == [f"bytes={first_tail}-{len(first_payload) - 1}"]
+                assert os.pread(data_extent.fd, len(first_payload), data_extent.offset) == first_payload
+            requests_before_completed_check = len(server.requests)
 
             first_data = extents[first.path][0]
             changed_offset = len(first_payload) - 1
