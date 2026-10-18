@@ -9765,3 +9765,55 @@ read-only drive discovery so exact qualification can proceed under the existing 
 
 The repeated heartbeat is paused at Drew's instruction. Active build work continues. L05-L10 are
 still incomplete; package identity and static review are distinct from verified live operation.
+
+
+## 18 October 2026 — the independent read finds a recoverable-write defect
+
+The read-only Opus review finished on claude-opus-5-5. It found a different defect: a newer transfer
+header can reach storage without the last chunk record it names. The old loader chooses that header,
+rejects the incomplete record and clears both slots, even when the older slot still describes a
+valid prefix. This loses resumable progress. It does not accept wrong model bytes.
+
+I reproduced the failure on scratch data before changing production code. The corrected loader tries
+headers in generation order and accepts only a complete, digest-valid record prefix. It reuses the
+store's hash primitive and removes two later copies of that record-digest check. The new fixture
+models only a lost final record; it does not alter the payload or reconstruct the excluded historical
+challenge. Both absent and marker-valid/hash-invalid final records recover from the previous prefix.
+
+The first green attempt exposed a stale request count after those two intentional refetches. After
+correcting that fixture baseline, both S10 checks passed in 25.54 seconds. Full candidate65 proof and
+a separate independent execution review of this exact repair are running. The original static report,
+its denied external skill-file read and all failed instrument attempts remain recorded.
+
+The new installed CLI completed drive discovery and is recording the fresh protected inventory.
+Its old code is now held to that read-only task; qualification writes will use the corrected build.
+The source review, machine checks, physical inventory and future downloads remain separate results.
+
+### 2026-10-18 19:12 UTC — Repair the review instrument
+
+The new D1 reviewer read the repair but could not create its scratch challenge. Its native receipt
+records a denied Write, not a failing transfer. I supplied malformed path rules: Claude treats a
+single leading slash as relative, and Edit(path), not Write(path), governs file writes. The official
+permissions reference confirms both rules. I preserved the incomplete static report, verified all214
+target hashes unchanged and resumed that stopped Opus session with the correct absolute Edit rule
+for the same authorized scratch subtree. No account/global/managed permission changed. The single
+assigned shell command and historical excluded-action boundary remain. Full65 and the installed64
+read-only drive inventory continue; no stage or live result is inferred. Evidence: blocker-resolution64/
+review65-attempt01-reconciliation.json and native-checkpoint65-run02.
+
+### 2026-10-18 19:19 UTC — Prove recovery and package the repair
+
+The corrected review instrument ran once. Native claude-opus-5-5 passed137 observations across14
+scenarios in149.8 seconds. Missing/wrong newest records recovered the older valid prefix and fetched
+only remaining ranges; unchanged progress stayed current, invalid prefixes rejected, retained reads
+left state untouched, and competing identities could not serve the wrong source. Disabling fallback
+in a separate mutant reproduced progress loss. Root verified all214 target hashes, normal stop,
+closed listener, removed scratch and unchanged $0 credit spend. D1 is COMPLETE_PASS/FIXTURE; the
+first failed instrument and original excluded integrity gap remain separately recorded.
+
+I built and privately installed the corrected wheel on LaCie. All40 runtime files match source,
+wheel and installation; isolated imports, seven pins and installed CLI help pass. The exact old pinned
+dependency .pth is reused without copying/resolving dependencies or changing older installations.
+Wheel SHA256:411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded. Full65 and the
+fresh read-only drive inventory remain active; required profiles, payloads and stage closure are open.
+Evidence: blocker-resolution64/review65-complete-adjudication.json and installation65.json.

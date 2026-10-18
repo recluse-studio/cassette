@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-18 18:49 UTC
+## Current direction — 2026-10-18 19:19 UTC
 
 Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
 resolve permitted work and finish L05-L10. The unchanged-state heartbeat is PAUSED at his direction;
@@ -25,24 +25,50 @@ operation. Those contracts do not create an independent-review prerequisite for 
 geometry measurements. Retain every actual profile, source-entry, inventory, runtime identity,
 durability and release assertion. L05 stays IN_PROGRESS; L06-L10 remain TODO.
 
-The tested implementation remains commit a03b300bf7378f491ca3280d15410f7fd6ff8811 on
-codex/prepared-source-consumer. Its existing candidate63 proof is 340 passing fixtures, zero skips,
-14 Q78 controls and zero ordinary ledger violations. A new read-only Opus assessment64 is running on
-an exact separate 214-file committed snapshot, solely claude-opus-5-5 so far. It has no execution
-tools and supplies no behavioral or live pass. Assess its findings before deciding affected work.
+The published development base remains a03b300bf7378f491ca3280d15410f7fd6ff8811 on
+codex/prepared-source-consumer, with candidate63's 340 passing fixtures, 14 controls and clean ledger.
+Read-only Opus64 stopped normally, solely claude-opus-5-5. It made no source changes; all 214 snapshot
+files still match. The launcher records a denied read of the original skill path outside the confined
+folder; the reviewer used its in-snapshot copy. Preserve that denial without permission expansion.
+The report is INCOMPLETE/STATIC, not a behavioral or live pass. The source-hash chain looks correct
+from inspection, but the report found D1: a newer header can refer to an incompletely persisted chunk
+record, and the old loader clears both headers instead of recovering the older valid prefix.
 
-Wheel64 is built from that exact commit; all 40 packaged and privately installed runtime files
-match the source. The runtime lives under the authorized external build root, installed-64/environment.
-It reuses the prior installation's exact dependency .pth route to the pinned project environment;
-actual isolated imports resolve to installed64 and all seven dependency versions match the pins.
-Two offline dependency-resolution attempts failed before installation; retain their records.
-Installed24 and the four pre-existing main edits are preserved. No default runtime pointer changed.
+Root reproduced D1 on an owned scratch fixture: terminal IDENTITY_MISMATCH, 1 failed in 8.24 seconds.
+The child now selects the newest header whose entire record prefix is present and digest-valid.
+Both transfer and retained reads use that loader; two redundant later digest checks are removed.
+No wrong-byte result is accepted and no original excluded challenge is executed or reconstructed.
+One intermediate run passed the new recovery assertions and failed a stale fixture request count;
+its correction is retained. The complete affected S10 file then passed 2 tests in 25.54 seconds.
 
-The actual installed64 CLI has started fresh read-only drive discovery in the existing release-input
-state. Reconcile its terminal receipt, then use the actual volume and same authorized cartridge for
-fresh selection and exact qualification preparation. Do not reuse physical04's old path/plan/card as
-current authority, duplicate active work, claim a new physical reconnect, or begin unqualified model
-headers/payload. Keep model-bearing bytes on the external cartridge and preserve unrelated work.
+Candidate65 full machine proof remains running on frozen source. Separate Opus D1 attempt02 is now
+COMPLETE_PASS at FIXTURE level: 14 scenarios, 137 deciding observations, including fallback-disabled
+sensitivity, unchanged generation, retained read_only refusal and identity-competitor rejection.
+Root verified the actual native sole claude-opus-5-5 receipt, normal stop/exit0, no new denial, no
+subworker, 214 unchanged target hashes, removed scratch and closed listener. Actual post-review usage
+shows $0 spent/$0 balance/auto-reloadOff; the owned tab is closed. Read review65-complete-adjudication.json.
+Attempt01 stays INCOMPLETE after its malformed Write/Edit path rule. Official Claude documentation
+confirmed the precise syntax defect; correcting the session rule preserved the same owned subtree,
+managed/global settings and single assigned command. Historical40 remains excluded and unproved;
+this bounded D1 pass closes neither aggregate source acceptance nor L05-L10. Optional recommendations
+are not new failing requirements and do not justify another change/proof loop.
+
+The corrected private wheel65 and installed65 are complete on LaCie. All40 runtime files match the
+214-file frozen source copy and wheel; isolated import paths, seven dependency pins and CLI help pass.
+Wheel SHA256 is411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded.
+The exact earlier pinned .pth dependency route is reused; no dependency download or old-install change
+occurred. The source repair is not yet committed; full65/Q78/J are pending. Read installation65.json.
+Installed64 remains solely the active read-only inventory owner. Bind subsequent positive profile
+work to corrected installed65 and exact current cards/plan/path; no old runtime relabeling or profile
+reuse. The private installation is package evidence, not live/stage completion.
+
+Installed64 drive discovery completed SUCCEEDED as op-50a155c0f5d1dd978968ff47deee05bcbaf468b62ae39ba74116933ed5ffd0b5.
+It observed the same LaCie APFS UUID. Fresh select-drive is RUNNING as
+op-58f61f2b3db5fd6636437f700cf7a347fcbc8103e1ee9bfa02306e98899b54e9,
+using the same authorized cartridge UUID and folder. Its direct CLI process is owned and no model
+payload has started. Reconcile its terminal receipt, then bind exact current runtime/plan/profile
+cards; never reuse physical04's stale card as current authority. Main's four pre-existing edits,
+user-owned work, the old installation and every historical failed attempt remain preserved.
 
 Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
 
