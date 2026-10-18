@@ -9740,3 +9740,28 @@ The combined implementation is now committed and pushed to `codex/prepared-sourc
 attached to their exact claims. The original source-integrity acceptance is still blocked by the
 earlier automatic review rejection; no review is running to clear it. All live stages remain open.
 This development checkpoint leaves the installed runtime and larger downloads unchanged.
+
+
+## 18 October 2026 — remove the blanket stop and resume concrete work
+
+The source-integrity blocker contained two different facts. A completed download could previously
+resume from saved progress that no longer agreed with its bytes. The repair rebuilt the source hash
+while rereading the saved prefix and passed the builder's checks. A later platform turn received a
+generic cybersecurity warning before the independent review started. The warning named no specific
+command. It was not a failed review verdict.
+
+I had turned that interruption into a blanket stop on packaging and every physical qualification,
+then kept checking the unchanged state. Drew stopped that loop. The formal contract requires an
+independent pass before stage closure; it does not add that prerequisite to every packaging or
+geometry measurement. The old warning and excluded challenge remain preserved. No acceptance row
+has been removed, and no missing behavioral proof is relabeled as passed.
+
+A fresh Opus session now reads the committed implementation without execution tools. Its actual
+model is claude-opus-5-5; the review is still running. I built a new package on LaCie and verified all
+40 runtime files against commit a03b300. The separate installed64 runtime imports its own modules,
+uses the existing pinned dependency route and leaves installed24 intact. Two offline resolver
+failures remain recorded; they installed no dependencies. The real installed CLI has started fresh
+read-only drive discovery so exact qualification can proceed under the existing contract.
+
+The repeated heartbeat is paused at Drew's instruction. Active build work continues. L05-L10 are
+still incomplete; package identity and static review are distinct from verified live operation.

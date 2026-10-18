@@ -5,7 +5,50 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-17 02:59 UTC
+## Current direction — 2026-10-18 18:49 UTC
+
+Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
+resolve permitted work and finish L05-L10. The unchanged-state heartbeat is PAUSED at his direction;
+active build work continues. Do not restart a loop that only rereads the same blocker.
+
+The retained platform receipt records a generic cybersecurity-risk turn failure. It identifies no
+specific denied command, and the prepared review40/challenge40 never ran. This is separate from the
+Q51 defect and from the missing independent behavioral verdict. Preserve the warning and excluded
+historical challenge; do not execute, reconstruct or reroute it. Do not treat the warning as a
+failed test or a rejection of every later Cassette action.
+
+The former blanket prohibition on all packaging, installation and physical qualification was too
+broad. The governing acquisition_entry_contract requires focused machine proof before live execution;
+IMPLEMENTATION's independent-review rule requires PASS before stage closure. Physical qualification
+START requires its literal consumer prerequisites, and each missing profile blocks its exact
+operation. Those contracts do not create an independent-review prerequisite for all packaging or
+geometry measurements. Retain every actual profile, source-entry, inventory, runtime identity,
+durability and release assertion. L05 stays IN_PROGRESS; L06-L10 remain TODO.
+
+The tested implementation remains commit a03b300bf7378f491ca3280d15410f7fd6ff8811 on
+codex/prepared-source-consumer. Its existing candidate63 proof is 340 passing fixtures, zero skips,
+14 Q78 controls and zero ordinary ledger violations. A new read-only Opus assessment64 is running on
+an exact separate 214-file committed snapshot, solely claude-opus-5-5 so far. It has no execution
+tools and supplies no behavioral or live pass. Assess its findings before deciding affected work.
+
+Wheel64 is built from that exact commit; all 40 packaged and privately installed runtime files
+match the source. The runtime lives under the authorized external build root, installed-64/environment.
+It reuses the prior installation's exact dependency .pth route to the pinned project environment;
+actual isolated imports resolve to installed64 and all seven dependency versions match the pins.
+Two offline dependency-resolution attempts failed before installation; retain their records.
+Installed24 and the four pre-existing main edits are preserved. No default runtime pointer changed.
+
+The actual installed64 CLI has started fresh read-only drive discovery in the existing release-input
+state. Reconcile its terminal receipt, then use the actual volume and same authorized cartridge for
+fresh selection and exact qualification preparation. Do not reuse physical04's old path/plan/card as
+current authority, duplicate active work, claim a new physical reconnect, or begin unqualified model
+headers/payload. Keep model-bearing bytes on the external cartridge and preserve unrelated work.
+
+Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
+
+## Historical worklog — superseded checkpoints
+
+### Archived direction — 2026-10-17 02:59 UTC
 
 Continue authorized L05-L10. Consolidated63 is PASS, stopped02:53:45.752230 UTC, exit0.
 All340 existing fixtures passed in1125.02 seconds, zero skips; all14 Q78 deletion/bypass controls
@@ -60,8 +103,6 @@ for a missing acceptance requirement.
 Evidence root: /Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01.
 Active source: /Users/drewwiberg/.codex/worktrees/generation-consumer/cassette.
 Frozen61 proof source: /Users/drewwiberg/.codex/worktrees/source-composition-owner/cassette.
-
-## Historical worklog — superseded checkpoints
 
 ### Archived direction — 2026-10-17 02:33 UTC
 
