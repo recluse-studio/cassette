@@ -9817,3 +9817,51 @@ dependency .pth is reused without copying/resolving dependencies or changing old
 Wheel SHA256:411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded. Full65 and the
 fresh read-only drive inventory remain active; required profiles, payloads and stage closure are open.
 Evidence: blocker-resolution64/review65-complete-adjudication.json and installation65.json.
+
+### 2026-10-18 19:33 UTC — Identify the final ownership conflict
+
+The finite native STATIC profile-contract66 review confirmed a separate queue conflict. A new exact
+measurement can run, but final Q80 ownership still requires an obsolete unused request to PASS even
+though its known-affected runtime must not be resumed. Both native receipts and all217 frozen paths
+verify; no authority or product code changed. I wrote an exact unconsumed-path-change proposal that
+retains historical nodes/results and every current qualification assertion. AGENTS requires approval
+before changing a defined rule, so one async question is pending; silence is not approval. Permitted
+current-runtime work continues. The full65 test and read-only drive scan remain active, not passed.
+The installed65 metadata-binding procedure is prepared but not run before terminal drive selection.
+Evidence: blocker-resolution64/profile-contract66-adjudication.json and UNCONSUMED_PROFILE_AMENDMENT.md.
+
+The continuation timer now consumes the actual active proof/inventory results and advances eligible
+work. Its former unchanged-blocker investigation remains stopped. The prompt forbids duplicates,
+restarting the completed review, adopting the pending amendment without Drew's answer or repeating
+that approval question. It stays quiet on unchanged running state. No queue completion is claimed.
+
+### 2026-10-18 20:16 UTC — Preserve the timeout and repair its bound
+
+Full65 reached seven passing fixtures before the test subprocess hit3600 wall seconds. No assertion
+failed; its next image-gradient test was incomplete. The worker exited at19:57:19 UTC and all owned
+processes stopped. It produced no complete J/archive or Q78 controls. I retained the raw suite and
+wrapper receipts as INCOMPLETE_HARNESS_TIMEOUT; the independent D1 fixture pass remains separate.
+
+The governing machine verification contract requires every fixture/control, not a one-hour suite
+limit. I changed only _pytest's full-suite bound to21600 seconds while retaining3600 for focused
+nodes, adding one tool LOC under Q29/Q78. No gate, test population, duration assertion, runtime or
+pending path-change rule changed. The focused existing Q29 fixture is running; budget67's frozen
+static Opus review and new full67 proof are prepared. No success is claimed before their receipts.
+The original drive selection remains active and unduplicated. Evidence: blocker-resolution64/
+generation-consolidated65-timeout-reconciliation.json and candidate67-tool-repair.json.
+
+### 2026-10-18 20:23 UTC — Start the bounded complete proof
+
+The standalone Q29 check duplicated a fixture already required by the full gate. I interrupted its
+verified owned group22078 and retained its incomplete425.68-second log; no pass is counted. The group
+is stopped. Full67 started20:21:07 UTC with the complete source snapshot and all suite/Q78/J gates,
+using a six-hour suite cancellation bound and the unchanged one-hour focused-control bound. Its
+owned wrapper25849/worker25861 guards Data space. The private installed65 runtime40 is unchanged.
+
+The Opus budget-review launch could not reach a worker: the existing auth-status read timed out
+at30seconds. I recorded SETUP_BLOCKED_NOT_RUN, with no served model, inference, new login, billing,
+credential, permission or provider change. The finite independent contract inventory confirms that
+3600 was an instrument bound. The native review remains pending; no same-timeout retry loop starts.
+The original inventory still owns its scan. The proposed profile-ownership amendment remains
+unadopted pending Drew's answer. Evidence: candidate67-focused-cancel.json,
+generation-consolidated67-running.json and native-budget67-setup-failure.json.

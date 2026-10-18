@@ -5,11 +5,14 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-18 19:19 UTC
+## Current direction — 2026-10-18 20:23 UTC
 
 Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
-resolve permitted work and finish L05-L10. The unchanged-state heartbeat is PAUSED at his direction;
-active build work continues. Do not restart a loop that only rereads the same blocker.
+resolve permitted work and finish L05-L10. The unchanged-state polling loop was paused. The existing
+heartbeat now continues concrete execution from actual full65/inventory results under the updated
+prompt; it stays quiet while unchanged and may not duplicate/restart active work or completed review.
+Do not restart an investigation loop that only rereads the old blocker. The pending amendment
+approval remains required for that exact change; independent eligible work continues.
 
 The retained platform receipt records a generic cybersecurity-risk turn failure. It identifies no
 specific denied command, and the prepared review40/challenge40 never ran. This is separate from the
@@ -41,7 +44,11 @@ No wrong-byte result is accepted and no original excluded challenge is executed 
 One intermediate run passed the new recovery assertions and failed a stale fixture request count;
 its correction is retained. The complete affected S10 file then passed 2 tests in 25.54 seconds.
 
-Candidate65 full machine proof remains running on frozen source. Separate Opus D1 attempt02 is now
+Candidate65 full machine proof stopped at19:57:19.836437 UTC with its harness's3600-second wall
+cancellation limit. Seven fixtures passed, zero assertion failures were reported, and the next image
+gradient fixture was incomplete. Q78 controls, complete J report and archive were not created. All
+owned full65 processes are stopped; the wrapper's FAIL is an INCOMPLETE_HARNESS_TIMEOUT, not a
+proved production assertion failure. Preserve its raw log and timeout reconciliation. Separate Opus D1 attempt02 is now
 COMPLETE_PASS at FIXTURE level: 14 scenarios, 137 deciding observations, including fallback-disabled
 sensitivity, unchanged generation, retained read_only refusal and identity-competitor rejection.
 Root verified the actual native sole claude-opus-5-5 receipt, normal stop/exit0, no new denial, no
@@ -57,7 +64,7 @@ The corrected private wheel65 and installed65 are complete on LaCie. All40 runti
 214-file frozen source copy and wheel; isolated import paths, seven dependency pins and CLI help pass.
 Wheel SHA256 is411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded.
 The exact earlier pinned .pth dependency route is reused; no dependency download or old-install change
-occurred. The source repair is not yet committed; full65/Q78/J are pending. Read installation65.json.
+occurred. The source repair is not yet committed; full67/Q78/J are pending. Read installation65.json.
 Installed64 remains solely the active read-only inventory owner. Bind subsequent positive profile
 work to corrected installed65 and exact current cards/plan/path; no old runtime relabeling or profile
 reuse. The private installation is package evidence, not live/stage completion.
@@ -69,6 +76,39 @@ using the same authorized cartridge UUID and folder. Its direct CLI process is o
 payload has started. Reconcile its terminal receipt, then bind exact current runtime/plan/profile
 cards; never reuse physical04's stale card as current authority. Main's four pre-existing edits,
 user-owned work, the old installation and every historical failed attempt remain preserved.
+
+
+The separate read-only native profile-contract66 review is complete, solely claude-opus-5-5,
+exit0/stopped, no denials or subworkers; all217 frozen paths remain unchanged. It confirms a STATIC
+final-contract conflict: appending a changed request leaves both obsolete unconsumed03 and current65
+as required physical owners, so final Q80 replay would require the known-affected old runtime's
+request to PASS. The matrix scopes each missing qualification to its consuming operation. No existing
+same-request mechanism releases a different request. Do not quietly relax those strict checks.
+UNCONSUMED_PROFILE_AMENDMENT.md is an exact PROPOSAL ONLY: explicit path-change succession of a
+proved-unconsumed prior, with every old node/card/result retained and every current assertion/proof
+still required. The original strict same-request rule remains. An async approval question is pending
+because AGENTS requires approval before changing a defined rule. Do not treat silence as approval,
+adopt the draft, or ask the same question again. This final-closure coordinate does not prevent the
+current qualified runtime's independently permitted selection/profile preparation and downloads.
+Root still must verify actual unconsumed operation evidence before any retirement.
+
+Concrete next work: full65 is reconciled/stopped; do not relaunch that unchanged one-hour instrument.
+The existing select-drive CLI14324 (session17692) remains RUNNING; no duplicate or restart. Root's
+contained Q29/Q78 tool repair changes only the full-suite cancellation ceiling to21600 seconds;
+focused nodes keep3600. It adds one tool LOC and changes no fixture, zero-skip, exact-source, J or
+fourteen-control predicate. The governing verification contract has no3600-second acceptance limit.
+The child now has sources.py, its cited S10 fixture and tools/ledger.py edited; private installed65's
+forty runtime bytes remain unchanged. Candidate67 is the new frozen proof; its exact target is in
+budget67. The focused Q29 accounting fixture is running, and the separate Opus STATIC budget review
+is prepared/planned, not passed. Full67 is prepared but NOT_LAUNCHED until the focused result is
+reconciled. Do not edit this frozen source after launch. On successful drive selection,
+run prepare-binding65.py with installed65 Python -I -B; it computes only the exact installed metadata
+prefix and writes a local draft, not a profile/graph/operation. It requires terminal selections and
+checks all40 runtime hashes. Then bind a NEW current profile family, preserving old obligations
+unless the proposed amendment is explicitly approved. prepare-binding65.py is written but NOT_RUN.
+Current main documentary checkpoint71b5ae6a226444517363b7b3a1567c7ae75501ea is normally pushed with
+actual remote parity; the product D1 repair and tool budget repair stay uncommitted pending full67/Q78/J. Preserve the
+timeout as an incomplete attempt; do not classify host elapsed time alone as a product assertion failure.
 
 Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
 
