@@ -9886,3 +9886,20 @@ read-only drive inventory remains its sole owner. New qualification/card binding
 SUCCEEDED receipt, under all current prerequisites. The exact profile-amendment approval is still
 pending and its proposal remains unadopted. Evidence: blocker-resolution64/generation-consolidated67-
 complete.json, budget67-review-adjudication.json and generation-checkpoint67-publication.json.
+
+### 2026-10-18 22:09 UTC — Preserve the missing-path inventory failure
+
+The original read-only selection64 stopped with CLI exit1 and a canonical CAPABILITY_MISMATCH after
+FileNotFoundError. Its record was last written21:55:17 UTC. It did not retain the missing path, so
+the cause remains unproved. I preserved the failed operation and raw receipts; no inventory result,
+profile, provider payload or completed acquisition is inferred. The original binding65 helper cannot
+run because its exact selection prerequisite failed. No production change is justified by this
+environmental refusal alone.
+
+I verified all40 corrected installed65 runtime files against published227ee79 and started one fresh
+read-only selection68 with the same authorized volume/folder/cartridge. Its sole owned worker42280
+and wrapper42275 guard system Data space. Agent-owned writes to LaCie outside the excluded cartridge
+are frozen during this inventory; user-owned work continues. Prepared binding68 changes only the
+new operation/request labels and retains all original metadata, source-entry/card/inventory guards.
+It is NOT_RUN. The pending profile amendment remains proposal only. Evidence: selection64-terminal-
+reconciliation.json, selection68-running.json and binding68-preparation.json under blocker-resolution64.

@@ -5,7 +5,7 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-18 21:42 UTC
+## Current direction — 2026-10-18 22:09 UTC
 
 Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
 resolve permitted work and finish L05-L10. The unchanged-state polling loop was paused. The existing
@@ -70,13 +70,26 @@ Installed64 remains solely the active read-only inventory owner. Bind subsequent
 work to corrected installed65 and exact current cards/plan/path; no old runtime relabeling or profile
 reuse. The private installation is package evidence, not live/stage completion.
 
-Installed64 drive discovery completed SUCCEEDED as op-50a155c0f5d1dd978968ff47deee05bcbaf468b62ae39ba74116933ed5ffd0b5.
-It observed the same LaCie APFS UUID. Fresh select-drive is RUNNING as
-op-58f61f2b3db5fd6636437f700cf7a347fcbc8103e1ee9bfa02306e98899b54e9,
-using the same authorized cartridge UUID and folder. Its direct CLI process is owned and no model
-payload has started. Reconcile its terminal receipt, then bind exact current runtime/plan/profile
-cards; never reuse physical04's stale card as current authority. Main's four pre-existing edits,
-user-owned work, the old installation and every historical failed attempt remain preserved.
+Installed64 discovery remains SUCCEEDED as op-50a155c0f5d1dd978968ff47deee05bcbaf468b62ae39ba74116933ed5ffd0b5.
+Its subsequent read-only selection64 is now terminal FAILED, CLI exit1, process14324 stopped.
+The canonical record was last written21:55:17.040098 UTC and reports CAPABILITY_MISMATCH,
+"operation worker raised FileNotFoundError". It records neither the exact path nor the cause.
+Do not attribute the missing path to a particular user job or mark a product assertion failure from
+that receipt. The scan's store.inventory_step resolves the root and lstats protected entries; the
+existing inaccessible-inventory fixture expects the broker's canonical capability refusal. No
+protected inventory result, qualification or payload was produced. Preserve selection64-terminal-
+reconciliation.json and raw stdout/stderr. Do not rerun the same terminal idempotency key or execute
+prepare-binding65.py, whose original drive-selection prerequisite failed.
+
+One new read-only selection68 is RUNNING under corrected installed65. All40 installed runtime files
+match the published product227ee79. The actual installed Python -I -B -m cli owns operation
+op-977696984227b6ae74e0c98b5653e56ae59d1ff5d52d2b1958149c21a9ee3625,
+key physical65-drive-selection-20261018-68, wrapper42275/worker42280/session76469. It uses the same
+authorized APFS UUID, folder and cartridge UUID. Read selection68-running.json; no duplicate or
+restart. A Data-space guard owns only that process group. Agent-owned generated content outside
+the excluded cartridge on LaCie is frozen throughout this protected-inventory interval. User-owned
+jobs remain untouched; ordinary logs, receipts and preparation stay off-drive. No provider, model
+payload, profile or external write is authorized by this read-only selection alone.
 
 
 The separate read-only native profile-contract66 review is complete, solely claude-opus-5-5,
@@ -132,16 +145,20 @@ identical to corrected private installed65; the ledger-only timeout repair requi
 Main's four pre-existing implementation/accounting edits remain protected and uncommitted by this
 checkpoint. L05 is still IN_PROGRESS and L06-L10 remain TODO.
 
-Next concrete work: the original select-drive CLI14324, session17692, still owns the read-only
-inventory. Do not duplicate or restart it. On its SUCCEEDED receipt, run prepare-binding65.py with
-installed65 Python -I -B; it computes exact installed metadata and writes a local draft, not a
-profile/graph/operation. It requires terminal selections and all40 runtime hashes. The finite
-profile65 field inventory identifies remaining current cards/graph ownership; old helper assumptions
-and same-request succession cannot authorize the changed request. Bind a NEW current profile family
-under every source-entry/card/inventory prerequisite, preserving every old obligation unless the
-exact pending amendment is explicitly approved. prepare-binding65.py is written but NOT_RUN.
-The pending approval boundary above remains unchanged; never ask it again without Drew's answer.
-It does not block independently eligible current qualification and acquisition work.
+Next concrete work: consume selection68's actual terminal receipt once. While it remains RUNNING,
+make at most one compact reconciliation per heartbeat and stay quiet unless concrete independent
+eligible work exists. Do not repeat the old source warning, full proofs or completed reviews.
+On selection68 SUCCEEDED, use prepared read-only prepare-binding68.py with installed65 Python -I -B.
+The original65 helper is preserved and remains NOT_RUN. The new helper changes only the failed drive
+selection ID and unissued request/consumer/output labels to68; every runtime hash, terminal-selection,
+plan/path, inventory and no-operation/no-external-write guard is retained. Read binding68-preparation.json.
+Its local physical-68/binding-draft.json is metadata only, not a profile, graph, card or operation.
+Then bind a NEW current68 profile family using the finite profile65 field inventory's unchanged field
+requirements, with actual current IDs and every source-entry/card/inventory/runtime prerequisite.
+Old helper/card/controller/runtime aliases and same-request succession are not current authority.
+All old obligations remain unless Drew approves the exact pending amendment. The proposal is still
+unadopted and the original async question remains pending; never ask it again without his answer.
+This final-closure coordinate does not block independently eligible qualification/acquisition work.
 
 Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
 
