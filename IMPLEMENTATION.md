@@ -5,11 +5,11 @@ written; this file governs what is built next, what is already done, and when an
 The step queue below is the implementation counterpart of research/QUESTION_QUEUE.md: numbered,
 dependency-ordered, machine-checkable, resumable.
 
-## Current direction — 2026-10-18 20:23 UTC
+## Current direction — 2026-10-18 21:42 UTC
 
 Drew's 18 October instruction is to stop repeated checks, explain the source-integrity blocker,
 resolve permitted work and finish L05-L10. The unchanged-state polling loop was paused. The existing
-heartbeat now continues concrete execution from actual full65/inventory results under the updated
+heartbeat now continues concrete execution from actual full67/inventory results under the updated
 prompt; it stays quiet while unchanged and may not duplicate/restart active work or completed review.
 Do not restart an investigation loop that only rereads the old blocker. The pending amendment
 approval remains required for that exact change; independent eligible work continues.
@@ -64,7 +64,8 @@ The corrected private wheel65 and installed65 are complete on LaCie. All40 runti
 214-file frozen source copy and wheel; isolated import paths, seven dependency pins and CLI help pass.
 Wheel SHA256 is411cfc75814cb1849afb8e4dd46036e1c4bd1d29eb15dd6d9d8223e86e22bded.
 The exact earlier pinned .pth dependency route is reused; no dependency download or old-install change
-occurred. The source repair is not yet committed; full67/Q78/J are pending. Read installation65.json.
+occurred. The source repair now has complete full67/Q78/J proof. Read installation65.json and
+generation-consolidated67-complete.json; package evidence remains separate from live qualification.
 Installed64 remains solely the active read-only inventory owner. Bind subsequent positive profile
 work to corrected installed65 and exact current cards/plan/path; no old runtime relabeling or profile
 reuse. The private installation is package evidence, not live/stage completion.
@@ -92,23 +93,55 @@ adopt the draft, or ask the same question again. This final-closure coordinate d
 current qualified runtime's independently permitted selection/profile preparation and downloads.
 Root still must verify actual unconsumed operation evidence before any retirement.
 
-Concrete next work: full65 is reconciled/stopped; do not relaunch that unchanged one-hour instrument.
-The existing select-drive CLI14324 (session17692) remains RUNNING; no duplicate or restart. Root's
-contained Q29/Q78 tool repair changes only the full-suite cancellation ceiling to21600 seconds;
-focused nodes keep3600. It adds one tool LOC and changes no fixture, zero-skip, exact-source, J or
-fourteen-control predicate. The governing verification contract has no3600-second acceptance limit.
-The child now has sources.py, its cited S10 fixture and tools/ledger.py edited; private installed65's
-forty runtime bytes remain unchanged. Candidate67 is the new frozen proof; its exact target is in
-budget67. The focused Q29 accounting fixture is running, and the separate Opus STATIC budget review
-is prepared/planned, not passed. Full67 is prepared but NOT_LAUNCHED until the focused result is
-reconciled. Do not edit this frozen source after launch. On successful drive selection,
-run prepare-binding65.py with installed65 Python -I -B; it computes only the exact installed metadata
-prefix and writes a local draft, not a profile/graph/operation. It requires terminal selections and
-checks all40 runtime hashes. Then bind a NEW current profile family, preserving old obligations
-unless the proposed amendment is explicitly approved. prepare-binding65.py is written but NOT_RUN.
-Current main documentary checkpoint71b5ae6a226444517363b7b3a1567c7ae75501ea is normally pushed with
-actual remote parity; the product D1 repair and tool budget repair stay uncommitted pending full67/Q78/J. Preserve the
-timeout as an incomplete attempt; do not classify host elapsed time alone as a product assertion failure.
+Full67 is COMPLETE_MACHINE_PASS_VERIFIED, stopped21:07:13.146837 UTC, exit0. Its complete suite
+passed340 fixtures with zero skips in2146.18 seconds. All14 Q78 controls passed and every deletion/
+bypass failed for its declared owner. Root verified all212 archive members, canonical source manifest
+and archive SHA2567d0f1ec22fec4c1e5211604840c60b2323a459fe2e97800221238a07ee4ba9a3.
+J is[0,0,18330,1,1,9,0,0,8425096], six executable lines below the published parent. The source
+manifest's generated-report member is the new complete J report; copy it only to this exact child.
+All other211 source members match. No worker25849/25861 remains. Minimum Data free space was17.765938%.
+Read generation-consolidated67-complete.json. Full65 remains INCOMPLETE_HARNESS_TIMEOUT after seven
+passes, zero reported assertion failures; do not restart it or combine its partial results with67.
+The redundant standalone Q29 fixture remains INCOMPLETE_CANCELLED_REDUNDANT_CHECK, zero completed
+tests counted; it is covered by full67. Preserve both incomplete instruments and their raw receipts.
+
+Native budget67 run02 completed its finite source/counterexample analysis, solely claude-opus-5-5,
+exit0/stopped, no safety stop or subworker. Its report is PASS_READY/STATIC for the scoped timeout
+choice:21600 for a complete suite,3600 for focused nodes; no fixture, zero-skip, exact-source, J or
+fourteen-control predicate changed. The launcher remains blocked/permission_denied because two
+out-of-cwd Glob lookups were denied. Root retained both denials; the required target and in-cwd
+failure.json reads succeeded, all214 review target hashes remain unchanged, and the complete static
+verdict is accepted only for that finite question. Do not call the launcher clean, expand permissions,
+retry those lookups or rerun the completed review. Read budget67-review-adjudication.json and
+budget67/report-run02.md. The earlier auth-status timeout stays SETUP_BLOCKED_NOT_RUN, not exhaustion.
+Fresh native preflight proves the existing claude.ai/firstParty route; post-review UI still shows
+$0 spent/$0 balance/auto-reloadOff. The owned Usage tab is closed after observation. No account,
+credential, security, billing or provider change occurred.
+
+The report retains a pre-existing conditional concern: --prove-j records a skip count without
+rejecting it, whereas the actual full67 candidate path rejects skips and passed with zero. Preserve
+that separate entrypoint observation; no optional empty-node simplification or unrelated change enters
+this frozen repair. Do not substitute this static verdict for D1's fixture review, complete machine
+proof, excluded Source40/owner41/plan42 acceptance, or live/stage evidence. Opus65 D1 remains
+COMPLETE_PASS/FIXTURE and must not be rerun. No formal profile-amendment rule is adopted.
+
+The scoped product/tool checkpoint uses this exact tested source and new J report; its actual commit,
+account check, ordinary ledger and remote parity belong in generation-checkpoint67-publication.json.
+Only subsequent Story/Implementation narrative may differ from the proved archive. Runtime40 remains
+identical to corrected private installed65; the ledger-only timeout repair requires no reinstall.
+Main's four pre-existing implementation/accounting edits remain protected and uncommitted by this
+checkpoint. L05 is still IN_PROGRESS and L06-L10 remain TODO.
+
+Next concrete work: the original select-drive CLI14324, session17692, still owns the read-only
+inventory. Do not duplicate or restart it. On its SUCCEEDED receipt, run prepare-binding65.py with
+installed65 Python -I -B; it computes exact installed metadata and writes a local draft, not a
+profile/graph/operation. It requires terminal selections and all40 runtime hashes. The finite
+profile65 field inventory identifies remaining current cards/graph ownership; old helper assumptions
+and same-request succession cannot authorize the changed request. Bind a NEW current profile family
+under every source-entry/card/inventory prerequisite, preserving every old obligation unless the
+exact pending amendment is explicitly approved. prepare-binding65.py is written but NOT_RUN.
+The pending approval boundary above remains unchanged; never ask it again without Drew's answer.
+It does not block independently eligible current qualification and acquisition work.
 
 Evidence: /Users/drewwiberg/.codex/reviews/cassette/2026-10-18/blocker-resolution64.
 
