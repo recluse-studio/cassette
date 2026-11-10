@@ -202,5 +202,46 @@ change that requirement or convert completed machine work into live proof.
   32a107d and history join 53a3a5e were pushed to `origin/main` (previously 2692c30). Research files
   that existed only on the published branch were restored first; nothing published was deleted.
   The stale `~/cassette` checkout and its uncommitted October edits were left untouched.
+- 2026-11-10 Drew's direction: rebuilds are not on the plan. The existing compiled path is to be run
+  on real models and its faults fixed one at a time; nothing is redesigned. Cards REC-398 to REC-405
+  track the further work (mid-sized model, chat templates, prepare/run command, client endpoints,
+  existing big-model path on a real model, training on a real model, drive saves, checking tools).
+- 2026-11-10 memory admission sized to the request: `pager.NativeTransformer` takes an optional
+  operation horizon and admits context and activation memory for the positions the operation can
+  reach instead of the whole source context; a step past the admitted horizon is refused.
+  `broker.generate_native` passes prompt plus requested tokens for text requests.
+- 2026-11-10 existing compiled path, first measurement on a real model (Live160, 160M, output
+  matrix 32000x768). Fault fixed first: teacher capture multiplied the whole admitted peak,
+  weights included, by the node count and refused the model; it now adds one retained activation
+  per node for the actual input. Then, unchanged otherwise: capture of one 34-token case took 239 s
+  and produced 222,702,746 bytes of observations; `prepare_native_compiled` with `max_windows=2`
+  took 268 s, 134 s per window. The matrix has 6,144,000 windows: about 9,500 days at this rate.
+  Each window is one 2x2 block with a 16-byte description, so the complete description is the
+  size of the matrix it describes, only the output matrix is transformed, and the runtime accepts
+  only the observed prompt. This is a probe, not the F4 gate. Raw output:
+  /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-live-20261110/compile-probe.out
+- 2026-11-10 checking tools: `tests/test_s23_failure_rows.py` now treats October campaign metadata as
+  optional in the restored matrix; with it, `test_s23`, `test_s26_machine_gate` and
+  `test_s26_phase_machine` collect and 256 of 257 pass. The remaining failure cites the withdrawn
+  `adaptive_capacity_control` matrix block.
+- 2026-11-10 chat templates (REC-399). The contained renderer now uses the reference renderer's
+  block trimming and absent-field behaviour, and admits attribute reads, loop position, bounded
+  concatenation and counter addition, `raise_exception`, `namespace`, a fixed list of harmless
+  string and mapping methods, and bounded `format`, `join`, `list`, `map`, `selectattr` and
+  related filters. Token variables stored as objects are passed by their content. Imports,
+  macros, multiplication, powers, `replace` and other calls stay refused, and the loop and size
+  bounds stay. Checked against the reference settings on a four-message conversation: identical
+  output for SmolLM-135M-Instruct, SmolLM2-135M-Instruct, Llama-160M-Chat, TinyLlama-1.1B-Chat,
+  Qwen3-4B, Qwen2.5-0.5B-Instruct, Qwen3-30B-A3B, Qwen3-235B-A22B-Instruct-2507, Llama-4-Scout
+  (unsloth mirror), Mistral-7B-Instruct-v0.3, Phi-3-mini and DeepSeek-R1-Distill-Qwen-1.5B.
+  Still refused: Llama-3.2 (reads the current date, which would make rendering depend on the
+  day) and SmolLM3 (template syntax extension). Kimi-K3's template was not publicly readable.
+  Checker: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-live-20261110/template_check.py
+- 2026-11-10 drive flush measurement while a download was running: F_FULLFSYNC of one 4 KiB write,
+  eight samples each: LaCie directly, median 3.8 s (0.7–6.5 s); Cassette's image volume on the
+  LaCie, median 10.8 s (6.6–16.9 s); the Mac's internal disk, median 5 ms. Internet throughput to
+  Hugging Face measured 32 MB/s in the same minute. The 1.7B download (3.4 GB,
+  `HuggingFaceTB/SmolLM-1.7B-Instruct`) is therefore limited by per-chunk durable checkpoints on
+  this drive and is still running. Only this one external drive is attached.
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

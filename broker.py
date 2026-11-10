@@ -3213,7 +3213,8 @@ class CanonicalBroker:
                 _reject("CAPABILITY_MISMATCH", operation_id, "prompt and requested generation exceed the source horizon")
             # Q63/Q68: weights and context stay in memory for the operation; the context is committed durably when
             # the operation completes, pauses or is cancelled. Tokens are replayed deterministically after a crash.
-            runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
+            runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest,
+                                              horizon=None if arguments.get("pixels") else maximum + len(rendered["token_ids"]))
             pending = None
             try:
                 while True:
@@ -3232,7 +3233,8 @@ class CanonicalBroker:
                             commit_runtime_state, cartridge, pin.root_digest, operation_id, pending["payload"],
                             capacity_controller=capacity_controller))
                         pending = None
-                        runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
+                        runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest,
+                                              horizon=None if arguments.get("pixels") else maximum + len(rendered["token_ids"]))
                         await self.hold_boundary(operation_id, "runtime-commit")
                     else:
                         runtime.adopt(pending)

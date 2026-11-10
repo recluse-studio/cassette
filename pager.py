@@ -3665,7 +3665,7 @@ class NativeTransformer:
     """Q7/Q20/Q30/Q63: execute a committed source graph and recover its exact native context."""
 
     def __init__(self, cartridge: str | Path, root_digest: str, profile: dict,
-                 session_id: str, request_digest: str, *, purpose: str = "INFERENCE"):
+                 session_id: str, request_digest: str, *, purpose: str = "INFERENCE", horizon: int | None = None):
         self.cartridge, self.root_digest = Path(cartridge), root_digest
         self.session_id, self.request_digest = session_id, request_digest
         root = load_root(cartridge, root_digest)
@@ -3695,6 +3695,10 @@ class NativeTransformer:
         self.maps = {row["semantic_tensor_id"]: row for row in root["tensor_maps"]}
         self.mx, _ = _mlx_runtime()
         _require_runtime(root_digest, self.mx)
+        # Q47: memory is admitted for the positions this operation can reach, never beyond the source context.
+        if horizon is not None and (type(horizon) is not int or not 0 < horizon <= self.graph["context_limit"]):
+            raise _error("INVALID_REQUEST", root_digest, "Q47/Q66: operation horizon", "horizon must be a positive position count within the source context")
+        self.horizon = self.graph["context_limit"] if horizon is None else horizon
         self._admit(profile)
         self.declared_peak_bytes += 4 * sum(row["state_bytes"] for manifest in self.training for row in manifest["adapters"])
         if self.declared_peak_bytes > self.available_bytes:
@@ -3770,8 +3774,8 @@ class NativeTransformer:
         self.available_bytes = max(0, min(max(0, physical - reserve), 9 * recommended // 10)
                                    - profile["execution_bytes"] - profile["other_observed_bytes"])
         graph = self.graph
-        kv_bytes = 2 * graph["layers"] * graph["kv_heads"] * graph["head_dim"] * graph["context_limit"] * 4
-        activation_bytes = graph["context_limit"] * max(graph["hidden_size"], graph["intermediate_size"], graph["vocabulary_size"]) * 4
+        kv_bytes = 2 * graph["layers"] * graph["kv_heads"] * graph["head_dim"] * self.horizon * 4
+        activation_bytes = self.horizon * max(graph["hidden_size"], graph["intermediate_size"], graph["vocabulary_size"]) * 4
         semantic_bytes = sum(math.prod(row["shape"]) for name, row in self.maps.items() if name.startswith("asset."))
         self.declared_peak_bytes = graph["parameter_bytes"] + 8 * kv_bytes + 32 * activation_bytes + 4 * semantic_bytes + 8 * len(canonical_bytes(graph))
         if self.declared_peak_bytes > self.available_bytes:
@@ -4055,7 +4059,10 @@ class NativeTransformer:
         """Q18/Q40: return actual activations, logits and routes from the shared source graph."""
         if not isinstance(ablate, tuple) or len(set(ablate)) != len(ablate) or any(name not in self.graph["contributions"] for name in ablate):
             raise _error("INVALID_REQUEST", self.session_id, "Q18: contribution ablation", "ablation must name unique source contributions")
-        capture_peak = self.declared_peak_bytes * (len(self.graph["nodes"]) + 1)
+        # Capture retains one activation per node for this input; the weights are held once, not once per node.
+        graph = self.graph
+        capture_peak = self.declared_peak_bytes + len(graph["nodes"]) * len(tokens) * max(
+            graph["hidden_size"], graph["intermediate_size"], graph["vocabulary_size"]) * 4
         if capture_peak > self.available_bytes:
             raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: teacher capture", "retained activation bound exceeds the capture memory profile")
         def weight(name):
@@ -4180,6 +4187,8 @@ class NativeTransformer:
         if len(prompt_tokens) > self.graph["context_limit"]:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q66: source context horizon", "prompt exceeds context; truncation is forbidden")
         position = self.state["position"]
+        if position + (1 if position else len(prompt_tokens)) > self.horizon:
+            raise _error("MEMORY_BUDGET_EXCEEDED", self.session_id, "Q47: admitted operation horizon", "step would pass the positions this operation was admitted for")
         if self.compiled:
             allowed = [case["tokens"] for case in self.compiled["observations"]["workload"]["cases"]]
             if prompt_tokens not in allowed:
@@ -4261,7 +4270,13 @@ def capture_native(cartridge, root_digest: str, profile: dict, workload: dict) -
         raise CassetteError("INVALID_REQUEST", root_digest, "Q13/Q18: frozen native workload", "terminal", "Q18: each protected condition requires exactly one frozen case")
     workload_digest = digest_bytes(canonical_bytes(workload))
     baseline_digest = digest_bytes(canonical_bytes(baseline))
-    runtime = NativeTransformer(cartridge, root_digest, profile, "teacher-capture", workload_digest, purpose="EXACT_SOURCE_OBSERVATION")
+    horizon = None if any(case.get("pixels") is not None for case in cases) else max(
+        [len(case["tokens"]) for case in cases if isinstance(case.get("tokens"), list)]
+        + [len(sequence["tokens"]) for case in cases if isinstance(case.get("gradient"), dict)
+           and isinstance(case["gradient"].get("batch"), dict)
+           for sequence in case["gradient"]["batch"].values() if isinstance(sequence.get("tokens"), list)] + [1])
+    runtime = NativeTransformer(cartridge, root_digest, profile, "teacher-capture", workload_digest,
+                                purpose="EXACT_SOURCE_OBSERVATION", horizon=horizon)
     traces = []
     for case in cases:
         if set(case) != {"condition_id", "stratum", "tokens", "pixels", "ablations", "gradient"}:

@@ -10389,7 +10389,8 @@ Three findings came from reading the code and from the measurements. None is a g
 1. The compiled path is what should let a model run while reading a fraction of itself from the
    drive. It exists only at toy scale. It rewrites the output matrix two-by-two, saves each block
    durably, and answers only prompts it has already observed. On the 160M model that is over six
-   million blocks. It cannot pass the 3–8B gate as written and has to be rebuilt for real models.
+   million blocks. It has not been run on a real model, and as written it cannot pass the 3–8B gate. Drew's
+   direction is no rebuild: run what exists on real models and fix its faults one at a time.
 2. The 5 TB LaCie behaves as a spinning hard disk. A forced flush takes one to three seconds. The
    speed floor of ten tokens per second cannot be met by anything that flushes per token on it.
    The remit names flash or SSD storage.

@@ -4041,16 +4041,19 @@ def _native_manifest(source: dict, descriptors: dict[str, int], tensors: list[di
 
 
 def _native_template(source: object):
-    from jinja2 import StrictUndefined, nodes, pass_eval_context
+    from jinja2 import nodes, pass_eval_context
+    from jinja2.utils import Namespace
     from jinja2.visitor import NodeTransformer
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 
     if not isinstance(source, str) or not source or len(source.encode()) > 65536:
         _reject("METADATA_INSUFFICIENT", "chat-template", "source template must be nonempty bounded text")
-    environment = ImmutableSandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
+    # Q10: block trimming and absent-field behaviour follow the reference chat-template renderer exactly.
+    environment = ImmutableSandboxedEnvironment(autoescape=False, trim_blocks=True, lstrip_blocks=True)
     environment.globals.clear()
     environment.filters = {name: value for name, value in environment.filters.items()
-                           if name in {"tojson", "trim", "default", "length", "lower", "upper"}}
+                           if name in {"tojson", "trim", "default", "length", "lower", "upper", "list", "string",
+                                       "first", "last", "join", "selectattr", "rejectattr", "map", "int", "safe"}}
     iteration_count = 0
 
     def tick():
@@ -4065,6 +4068,23 @@ def _native_template(source: object):
             node = self.generic_visit(node, *args, **kwargs)
             node.body.insert(0, nodes.Output([nodes.Call(nodes.Name("_cassette_tick", "load"), [], [], None, None)]))
             return node
+
+        def visit_Concat(self, node, *args, **kwargs):
+            node = self.generic_visit(node, *args, **kwargs)
+            return nodes.Call(nodes.Name("_cassette_concat", "load"), node.nodes, [], None, None, lineno=node.lineno)
+
+    def bounded_concat(*parts):
+        text = "".join(str(part) for part in parts)
+        if len(text.encode()) > 65536:
+            _reject("CONTAINMENT_REJECTED", "chat-template", "template concatenation exceeds 64 KiB")
+        return text
+
+    def raise_exception(message):
+        _reject("CAPABILITY_MISMATCH", "chat-template", f"source template refused this conversation: {str(message)[:200]}")
+
+    # Method calls a template may make on plain conversation data; none can grow its input or reach code.
+    methods = {"strip", "lstrip", "rstrip", "startswith", "endswith", "split", "upper", "lower", "title",
+               "capitalize", "items", "keys", "values", "get"}
 
     original_json = environment.filters["tojson"]
 
@@ -4097,22 +4117,39 @@ def _native_template(source: object):
 
     def bounded_add(context, operator, left, right):
         # Ordinary chat templates join role and content text with +; the result keeps the template byte bound.
+        if type(left) is int and type(right) is int and abs(left) < 2**32 and abs(right) < 2**32:
+            return left + right  # loop counters
         if not isinstance(left, str) or not isinstance(right, str) or len(left.encode()) + len(right.encode()) > 65536:
-            _reject("CONTAINMENT_REJECTED", "chat-template", "template addition accepts bounded text only")
+            _reject("CONTAINMENT_REJECTED", "chat-template", "template addition accepts bounded text or small counters only")
         return left + right
 
+    def bounded_format(pattern, *values):
+        # printf-style padding widths are the only way this filter can grow its input.
+        if not isinstance(pattern, str) or len(pattern) > 4096 or re.search(r"\d{4}|\*", pattern):
+            _reject("CONTAINMENT_REJECTED", "chat-template", "format filter pattern is outside its bound")
+        return pattern % values
+
+    environment.filters["format"] = bounded_format
     environment.filters["tojson"] = bounded_json
     environment.globals["_cassette_tick"] = tick
+    environment.globals["_cassette_concat"] = bounded_concat
+    environment.globals["raise_exception"] = raise_exception
+    environment.globals["namespace"] = Namespace
     environment.intercepted_binops = frozenset({"+"})
     environment.call_binop = bounded_add
     try:
         syntax = environment.parse(source)
-        forbidden = (nodes.Call, nodes.Getattr, nodes.Import, nodes.FromImport, nodes.Include,
-                     nodes.Extends, nodes.Macro, nodes.CallBlock, nodes.Mul, nodes.Pow, nodes.Concat)
-        if any(True for _ in syntax.find_all(forbidden)) or sum(1 for _ in syntax.find_all(nodes.Node)) > 1024:
+        forbidden = (nodes.Import, nodes.FromImport, nodes.Include,
+                     nodes.Extends, nodes.Macro, nodes.CallBlock, nodes.Mul, nodes.Pow)
+        calls_admitted = all(
+            (isinstance(call.node, nodes.Name) and call.node.name in {"raise_exception", "namespace"})
+            or (isinstance(call.node, nodes.Getattr) and call.node.attr in methods)
+            for call in syntax.find_all(nodes.Call))
+        if (not calls_admitted or any(True for _ in syntax.find_all(forbidden))
+                or sum(1 for _ in syntax.find_all(nodes.Node)) > 4096):
             _reject("CONTAINMENT_REJECTED", "chat-template", "source template requests an unadmitted operation")
-        if any(node.name == "_cassette_tick" for node in syntax.find_all(nodes.Name)):
-            _reject("CONTAINMENT_REJECTED", "chat-template", "source template names the internal loop counter")
+        if any(node.name.startswith("_cassette_") for node in syntax.find_all(nodes.Name)):
+            _reject("CONTAINMENT_REJECTED", "chat-template", "source template names an internal helper")
         return environment.from_string(BoundedLoops().visit(syntax))
     except CassetteError:
         raise
@@ -4217,7 +4254,8 @@ def render_native_input(cartridge: str | Path, root_digest: str, messages: list[
         _reject("CAPABILITY_MISMATCH", root_digest, "conversation exceeds its 64 KiB contained-rendering bound")
     configuration = _native_json(read_tensor(cartridge, root_digest, "asset.tokenizer_config.json"), root_digest)
     template = _native_template(configuration.get("chat_template"))
-    context = {key: value for key, value in configuration.items() if key.endswith("_token") and isinstance(value, str)}
+    context = {key: value if isinstance(value, str) else value["content"] for key, value in configuration.items()
+               if key.endswith("_token") and (isinstance(value, str) or (isinstance(value, dict) and isinstance(value.get("content"), str)))}
     parts = []
     length = 0
     try:
