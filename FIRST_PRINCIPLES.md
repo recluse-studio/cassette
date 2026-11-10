@@ -254,5 +254,24 @@ change that requirement or convert completed machine work into live proof.
   (they are never opened), and generation now stops at the source's declared end-of-sequence
   token. Tests `test_l02_native`, `test_l03_execution`, `test_l05_entry`, `test_s09_sources` and
   `test_s16_broker` pass (13).
+- 2026-11-10 client listener (REC-401). `cli.py` gains `serve`, which starts the existing adapter
+  listener for a named client on the selected drive's published model, with an optional short
+  model name. The real Ollama program (0.40.15), pointed at Cassette with `OLLAMA_HOST`, ran
+  `ollama run smollm2 "What is the capital of France?"` and printed "The capital of France is
+  Paris." (190 s, mostly the closing commit on this drive). Faults a real client exposed, each
+  fixed: no idempotency key from ordinary clients (the listener issues one); ordinary transport
+  headers and empty provider fields treated as unimplemented extensions; liveness and version
+  probes and HEAD unsupported; the model-detail request's extra empty fields refused; one
+  listener served only one surface (the request path now selects it); the generate endpoint
+  streamed chat-shaped frames (new generated event format `ollama_generate_ndjson`); answers
+  defaulted to one token (now the remaining context, at most 256, or the compiled horizon);
+  the end marker's text was shown and the finish reason was always `length`.
+- 2026-11-10 checking tools (REC-405). `tools/genschema.py` runs again on the restored documents: the
+  withdrawn October campaign contract is emitted only when its queue block exists. A fresh run
+  reproduced every checked-in schema file byte for byte before the Ollama format was added.
+  `schema/tables.py` and `schema/MANIFEST.json` were regenerated, not hand-edited.
+  `tests/test_s03_schema.py` passes again. `tools/ledger.py` admits the `cli` to `adapters` import.
+  Tests passing after this batch: `test_l02_native`, `test_l03_execution`, `test_s03_schema`,
+  `test_s16_broker`, `test_s17_broker`, `test_s18_adapters`, `test_l05_entry` (17).
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

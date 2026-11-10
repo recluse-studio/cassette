@@ -1,4 +1,4 @@
-# cli.py — product command triggers for canonical broker operations (Q9/Q31/Q52); depends on broker.py, errors.py.
+# cli.py — product command triggers for canonical broker operations (Q9/Q31/Q52); depends on adapters/__init__.py, broker.py, errors.py.
 """Expose implemented Cassette operations without a second lifecycle or writer."""
 
 import argparse
@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import uuid
 
+from adapters import NamedAdapter
 from broker import CanonicalBroker
 from errors import CassetteError
 
@@ -106,6 +107,12 @@ def main(argv=None):
     ask.add_argument('--max-tokens', type=int, default=64)
     for command in (prepare, ask):
         command.add_argument('--key', default=None, help='Reuse this key to reconcile the same operation.')
+    serve = commands.add_parser('serve', help='Offer the model published on the selected drive to a client program on this Mac.')
+    serve.add_argument('--drive-selection', required=True)
+    serve.add_argument('--client', choices=['codex', 'custom', 'hermes', 'ollama', 'openclaw'], required=True)
+    serve.add_argument('--surface', help='Client protocol surface; the client default is used when omitted.')
+    serve.add_argument('--port', type=int, default=0)
+    serve.add_argument('--name', help='Model name the client will use instead of the long identity.')
     remount = commands.add_parser('watch-remount', help='Wait for physical reconnection and verify the held drive.')
     remount.add_argument('operation_id')
     remount.add_argument('--reconnected', action='store_true',
@@ -214,6 +221,18 @@ def main(argv=None):
             result = asyncio.run(broker.ask_selected(request))
             if result['state'] == 'SUCCEEDED':
                 print(result['result']['text'], file=sys.stderr, flush=True)
+        elif args.command == 'serve':
+            async def serve():
+                cartridge, profile, owner, refs = await broker.serve_context(args.drive_selection)
+                adapter = NamedAdapter(args.client, server_contract=True)
+                server = await adapter.listen(broker, cartridge, profile, owner, surface=args.surface, port=args.port,
+                                              name=args.name)
+                print(json.dumps({'listening': 'http://127.0.0.1:%d' % server.sockets[0].getsockname()[1],
+                                  'client': args.client, 'model': args.name or refs[0]}), flush=True)
+                async with server:
+                    await server.serve_forever()
+            asyncio.run(serve())
+            return 0
         elif args.command == 'watch-remount':
             request.update(operation='drive.remount', target=args.operation_id, arguments={'context_ref': args.operation_id})
             if args.reconnected:

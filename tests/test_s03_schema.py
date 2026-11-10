@@ -945,6 +945,8 @@ def test_generator_is_deterministic_and_ledger_rejects_coordinated_hand_edits(tm
         path.relative_to(REPO / "schema").as_posix(): path.read_bytes()
         for path in sorted((REPO / "schema").rglob("*"))
         if path.is_file() and path.name != "MANIFEST.json" and "__pycache__" not in path.parts
+        # The withdrawn October campaign contract is no longer emitted from the restored documents.
+        and (path.parent.name != "campaign" or "campaign/contract.json" in manifest1)
     }
     fresh = {name: (first / "schema" / name).read_bytes() for name in manifest1}
     assert committed == fresh, "committed schema/ differs from fresh generator output"

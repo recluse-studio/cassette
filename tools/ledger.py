@@ -54,7 +54,7 @@ ALLOWED_EDGES = {
     "trainer": {"errors", "schema", "store"},
     "broker": {"errors", "schema", "store", "sources", "compiler", "pager", "trainer"},
     "adapters": {"errors", "schema", "broker"},
-    "cli": {"errors", "broker"},
+    "cli": {"errors", "broker", "adapters"},
 }
 MLX_ALLOWED_FILES = {"pager.py", "trainer.py"}
 IDENTITY_AUTHORITY_IMPORTS = {"blake3", "hashlib", "rfc8785"}

@@ -2069,6 +2069,11 @@ class CanonicalBroker:
             operation_id=operation_id, cartridge_uuid=destination['cartridge_uuid'])
         return cartridge, CapacityCoordinator(cartridge)
 
+    async def serve_context(self, drive_selection_id: str) -> tuple:
+        """Q31: reopen a selected drive for a client listener; returns cartridge, memory profile, owner and model refs."""
+        cartridge, owner = await self._selected_cartridge(drive_selection_id, 'serve')
+        return cartridge, memory_profile(), owner, self.native_capability(cartridge)['model_refs']
+
     async def prepare_selected(self, request: dict) -> dict:
         """Q5: publish a selected model on its selected drive; a completed download's verified bytes are reused."""
         if request.get('operation') != 'prepare' or set(request.get('arguments', {})) != {'preparation'}:
@@ -3231,13 +3236,15 @@ class CanonicalBroker:
             _reject("INVALID_REQUEST", "native-run", "native generation requires a run request and the cartridge capacity owner")
         operation_id = self.operation_id(request)
         arguments = request["arguments"]
-        required = {"messages", "tools", "seed", "temperature", "max_tokens"}
-        if not isinstance(arguments, dict) or not required <= set(arguments) or set(arguments) - required - {"pixels"}:
+        required = {"messages", "tools", "seed", "temperature"}
+        if not isinstance(arguments, dict) or not required <= set(arguments) or set(arguments) - required - {"pixels", "max_tokens"}:
             _reject("INVALID_REQUEST", operation_id, "native request must name conversation, tools and exact sampler fields")
-        maximum = arguments["max_tokens"]
-        if type(maximum) is not int or not 0 < maximum <= 1_048_576:
-            _reject("INVALID_REQUEST", operation_id, "max_tokens must be a bounded positive integer")
+        maximum = arguments.get("max_tokens")
+        if maximum is not None and (type(maximum) is not int or not 0 < maximum <= 1_048_576):
+            _reject("INVALID_REQUEST", operation_id, "max_tokens must be a bounded positive integer or absent")
         request_digest = _json_digest(request, operation_id, "native request")
+
+        stops: set[int] = set()
 
         def expose(tokens: list[int], root_digest: str) -> None:
             record = self._load(operation_id)
@@ -3252,7 +3259,7 @@ class CanonicalBroker:
                     _reject("CAPABILITY_MISMATCH", operation_id, "source tokenizer cannot emit a stable append-only text delta")
                 record = self._append(record, "output_delta", {
                     "token_index": index, "token": tokens[index], "committed_root": root_digest,
-                    "text": current_text[len(previous_text):],
+                    "text": "" if tokens[index] in stops else current_text[len(previous_text):],
                 })
 
         async def generate():
@@ -3261,9 +3268,13 @@ class CanonicalBroker:
                 _reject("IDENTITY_MISMATCH", operation_id, "native target is not the currently published model identity")
             graph = verify_native_bundle(cartridge, pin.root_digest)
             rendered = render_native_input(cartridge, pin.root_digest, arguments["messages"], arguments["tools"])
-            if maximum + len(rendered["token_ids"]) > graph["context_limit"]:
+            nonlocal maximum
+            if maximum is None:  # a client that names no length gets the rest of the context, at most 256 tokens
+                compiled = load_root(cartridge, pin.root_digest)["plans"][0].get("compiled")
+                maximum = min(256, (compiled["horizon"] if compiled else graph["context_limit"]) - len(rendered["token_ids"]))
+            if maximum <= 0 or maximum + len(rendered["token_ids"]) > graph["context_limit"]:
                 _reject("CAPABILITY_MISMATCH", operation_id, "prompt and requested generation exceed the source horizon")
-            stops = set(rendered["stop_tokens"])
+            stops.update(rendered["stop_tokens"])
             # Q63/Q68: weights and context stay in memory for the operation; the context is committed durably when
             # the operation completes, pauses or is cancelled. Tokens are replayed deterministically after a crash.
             runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest,
@@ -3296,8 +3307,10 @@ class CanonicalBroker:
                     pin = await _await_completion(asyncio.to_thread(
                         commit_runtime_state, cartridge, pin.root_digest, operation_id, pending["payload"],
                         capacity_controller=capacity_controller))
-            return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
+            stopped = bool(tokens) and tokens[-1] in stops
+            return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens[:-1] if stopped else tokens),
                     "root_digest": pin.root_digest, "position": runtime.state["position"],
+                    "finish_reason": "stop" if stopped else "length",
                     "execution_mode": "COMPILED_CERTIFIED" if runtime.compiled else "NATIVE"}
 
         async with self._model_execution_lock:
@@ -3389,7 +3402,12 @@ class CanonicalBroker:
         defects = validate("run_request", request)
         if defects:
             _reject("INVALID_REQUEST", "client-run", "; ".join(defects[:8]))
-        if any(name in request for name in ("reasoning", "output_schema", "context_ref", "extensions")):
+        def empty(value):
+            return value in ("", None) or (isinstance(value, (dict, list)) and all(
+                empty(item) for item in (value.values() if isinstance(value, dict) else value)))
+        # Real clients send many empty provider fields; a field that asks for nothing is not an unimplemented contract.
+        if any(name in request and not (name == "extensions" and empty(request[name]))
+               for name in ("reasoning", "output_schema", "context_ref", "extensions")):
             _reject("CAPABILITY_MISMATCH", request["idempotency_key"], "runtime cannot silently consume an unimplemented reasoning, schema, context or extension contract")
         messages = request["input"]
         if isinstance(messages, str):
@@ -3410,7 +3428,9 @@ class CanonicalBroker:
         arguments = {"messages": messages, "tools": request.get("tools", []),
             "seed": generation.get("seed", options.get("seed", 0)),
             "temperature": generation.get("temperature", options.get("temperature", 0.0)),
-            "max_tokens": generation.get("max_output_tokens", generation.get("max_completion_tokens", options.get("num_predict", 1)))}
+            "max_tokens": generation.get("max_output_tokens", generation.get("max_completion_tokens", options.get("num_predict")))}
+        if arguments["max_tokens"] is None:
+            del arguments["max_tokens"]  # generation then uses what the context allows
         canonical = {"protocol_version": "1", "operation": "run", "idempotency_key": request["idempotency_key"],
                      "target": request["model_ref"], "arguments": arguments}
         return canonical
@@ -3469,7 +3489,7 @@ class CanonicalBroker:
                     wire = {"encoding": "jsonl", "record": json.loads(first)}
                 else:
                     method, path, version = first.decode('ascii').strip().split(' ')
-                    if version != "HTTP/1.1" or method not in {"POST", "GET"}:
+                    if version != "HTTP/1.1" or method not in {"POST", "GET", "HEAD"}:
                         _reject("INVALID_REQUEST", "loopback", "listener requires a declared HTTP/1.1 GET or POST surface")
                     headers, total = {}, len(first)
                     while True:

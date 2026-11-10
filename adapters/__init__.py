@@ -6,6 +6,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import time
+import uuid
 
 from broker import CanonicalBroker
 from errors import CassetteError
@@ -258,6 +259,10 @@ def _route_id(value: object, object_id: str) -> str:
     return value
 
 
+_CLIENT_PROBES = {"ollama": {("GET", "/"): {"status": "Cassette is running"}, ("HEAD", "/"): {},
+                             ("GET", "/api/version"): {"version": "0.0.0"}}}
+
+
 class NamedAdapter:
     """A stateless Q31 translator selected entirely by generated Q76 maps."""
 
@@ -283,13 +288,39 @@ class NamedAdapter:
         self._server_contract = server_contract
 
     async def listen(self, broker: CanonicalBroker, cartridge, profile: dict, capacity_controller,
-                     *, surface: str | None = None, port: int = 0):
+                     *, surface: str | None = None, port: int = 0, name: str | None = None):
         """Q31/Q76: connect the generated client mapping to the broker's loopback execution."""
         selected = self._surface(surface)
         if selected.get("method") == "WS":
             raise _fail("CAPABILITY_MISMATCH", self.name, "this listener requires an HTTP or canonical JSONL client surface")
+        def renamed(value, old, new):
+            """Swap the listener's short model name and the published identity in provider-visible fields."""
+            if isinstance(value, dict):
+                return {key: item if key == "x_cassette" else renamed(item, old, new) for key, item in value.items()}
+            if isinstance(value, list):
+                return [renamed(item, old, new) for item in value]
+            return new if value == old else value
+
         async def handle(wire):
+            if name is None:
+                async for response in serve(wire):
+                    yield response
+                return
+            identity = broker.native_capability(cartridge)["model_refs"][0]
+            async for response in serve(renamed(wire, name, identity)):
+                yield renamed(response, identity, name)
+
+        async def serve(wire):
+            nonlocal surface, selected
             discovery = self._definition["discovery"]
+            # Liveness and version probes a client sends before any model request.
+            if (wire.get("method"), wire.get("path")) in _CLIENT_PROBES.get(self.name, {}):
+                yield {"encoding": "json", "records": [_CLIENT_PROBES[self.name][wire["method"], wire["path"]]]}
+                return
+            # One listener serves every HTTP surface of its client; the request path selects the surface.
+            for name, candidate in self._definition["surfaces"].items():
+                if (wire.get("method"), wire.get("path")) == (candidate.get("method"), candidate.get("path")):
+                    surface, selected = name, candidate
             canonical_discovery = wire.get("record") == {"operation": "capabilities"}
             if canonical_discovery or (wire.get("method") == discovery["method"] and wire.get("path") == discovery["path"]):
                 result = self.to_wire_capabilities([broker.native_capability(cartridge)])
@@ -300,8 +331,11 @@ class NamedAdapter:
                     and wire.get("path") == discovery.get("detail_path")):
                 capability = broker.native_capability(cartridge)
                 body = wire.get("body", {})
-                if (not isinstance(body, dict) or set(body) - {"model", "verbose"}
-                        or body.get("model") not in capability["model_refs"]
+                # The pinned client's detail request may also carry its deprecated name field and empty overrides.
+                named = body.get("model") or body.get("name") if isinstance(body, dict) else None
+                if (not isinstance(body, dict) or set(body) - {"model", "name", "verbose", "system", "template", "options"}
+                        or any(body.get(field) for field in ("system", "template", "options"))
+                        or self._canonical_model(named) not in capability["model_refs"]
                         or type(body.get("verbose", False)) is not bool):
                     raise _fail("INVALID_REQUEST", self.name, "model detail requires a published model and optional boolean verbose")
                 yield {"encoding": "json", "records": [{
@@ -330,6 +364,12 @@ class NamedAdapter:
                     result = broker.cancel(request["target"]) if action == "cancel" else await broker.train_native(request, cartridge, profile, capacity_controller)
                     yield {"encoding": "json", "records": [result]}
                     return
+            # Ordinary clients send no idempotency key; the listener then issues one per request.
+            key = next((mapping["wire"][1] for mapping in selected.get("fields", [])
+                        if mapping["canonical"] == ["idempotency_key"] and mapping["wire"][:1] == ["headers"]), None)
+            if key is not None and isinstance(wire.get("headers"), dict) and not any(
+                    name.lower() == key.lower() for name in wire["headers"]):
+                wire = {**wire, "headers": {**wire["headers"], key: str(uuid.uuid4())}}
             request = self.from_wire_request(wire, surface=surface)
             created = int(time.time())
             events = broker.stream_client(request, cartridge, profile, capacity_controller)
@@ -339,7 +379,7 @@ class NamedAdapter:
                     if event["type"] == "output_delta":
                         payload.setdefault("text", "")
                     if event["type"] == "completed":
-                        payload["finish_reason"] = "length"
+                        payload.setdefault("finish_reason", "length")
                         payload["response_output"] = [{"id": event["run_id"], "type": "message",
                             "role": "assistant", "status": "completed", "content": [{"type": "output_text",
                             "text": payload.get("text", ""), "annotations": [], "logprobs": []}]}]
@@ -495,7 +535,10 @@ class NamedAdapter:
         canonical: dict = {}
         _unmapped(work, canonical, selected["fields"], self)
         for name in tuple(work.get("headers", {})):
-            if name.lower() in _SENSITIVE_HEADERS or name.lower() in {"content-type", "accept"}:
+            # Transport headers every HTTP client sends carry no model semantics and are not extensions.
+            if (name.lower() in _SENSITIVE_HEADERS or name.lower().startswith("x-stainless-") or name.lower() in {
+                    "content-type", "accept", "host", "user-agent", "content-length", "connection",
+                    "accept-encoding", "accept-language", "transfer-encoding", "keep-alive"}):
                 del work["headers"][name]
         residue = {name: value for name, value in work.items() if value != {}}
         if residue:

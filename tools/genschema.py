@@ -578,6 +578,19 @@ def q6_routes(cancel_method: str, cancel_path: str, *, native_cancel: bool) -> d
     }
 
 
+# Ollama's generate endpoint streams text in "response"; its chat endpoint streams it in "message.content".
+ADAPTER_EVENT_FORMATS["ollama_generate_ndjson"] = {
+    **ADAPTER_EVENT_FORMATS["ollama_ndjson"],
+    "events": {
+        **ADAPTER_EVENT_FORMATS["ollama_ndjson"]["events"],
+        "output_delta": adapter_event(
+            {"x_cassette.type": "output_delta"},
+            [*_RUN_SEQUENCE, adapter_field("payload.text", "response")],
+            static={"done": False},
+        ),
+    },
+}
+
 ADAPTER_PROTOCOLS = {
     "codex": {
         "adapter_version": "openai-responses@9c8e1216bdaee0b020d1253ab7cc03a32eb36efe",
@@ -640,7 +653,7 @@ ADAPTER_PROTOCOLS = {
                     adapter_field("output_schema", "body.format"),
                 ],
                 {**_ALL_EXACT, "tools": "UNSUPPORTED"},
-                event_format="ollama_ndjson",
+                event_format="ollama_generate_ndjson",
             ),
         },
         "operations": q6_routes(
@@ -2638,43 +2651,45 @@ def emit(outdir: Path) -> dict[str, str]:
         f"CERTIFICATE_DIMENSIONS = {pprint.pformat(certificate_dimensions, sort_dicts=True, width=100)}\n"
     )
     queue_text = (Path(__file__).resolve().parent.parent / "IMPLEMENTATION.md").read_text()
-    live_block = next(block for block in re.findall(r"```yaml\n(.*?)```", queue_text, re.S)
-                      if block.startswith("phase_live_queue:"))
-    live = yaml.safe_load(live_block)["phase_live_queue"]
-    matrix = yaml.safe_load((Path(__file__).resolve().parent.parent / "research/ACCEPTANCE_MATRIX.yaml").read_text())
-    acquisition_models = next(row["model_set"] for row in matrix["source_rows"] if row["id"] == "source_huggingface_all_immutable_models")
-    campaign_contract = {key: live[key] for key in (
-        "materialized_record_contract", "dependency_graph_revision_contract", "expanded_session_families")}
-    campaign_contract["assertion_owner_patterns"] = {
-        "baseline_freeze": ["BASELINES-ALL-PASS"],
-        "adaptive_capacity_control": ["L04"],
-        "storage_eligibility_control": ["L04"],
-        "physical_storage_qualification": ["QUALIFY-.+-VERIFY"],
-        "fixture_gate_rows[id=f4_gate]": ["F4-GATE"],
-        "fixture_gate_rows[id=f5_gate]": ["F5-GATE"],
-        "source_rows[id=source_huggingface_all_immutable_models]": ["ACQ-(" + "|".join(re.escape(model) for model in acquisition_models) + ")-VERIFY"],
-        "source_rows[id=source_ollama_content_addressed_reimport]": ["OLLAMA-VERIFY"],
-        "source_rows[id=source_tinker_export_reimport]": ["TINKER-VERIFY"],
-        "execution_rows[id=exec_c3_k3_compiled_portability]": ["EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY"],
-        "workload_suites[id=capability_complete_q16]": ["EXEC-.+-RUN_VERIFY"],
-        "workload_suites[id=sustained_q48]": ["SUSTAINED-.+-VERIFY"],
-        "protocol_cross_product": ["PROTOCOL-.+"],
-        "training_assertions": ["TRAIN-.+-(adapter_sft_[0-9]+_tokens|adapter_continued_pretraining_[0-9]+_tokens|offline_adapter_dpo_[0-9]+_pairs)-VERIFY"],
-        "failure_rows": ["FAILURE-.+-VERIFY"],
-        "offline_and_privacy_rows[id=offline_inference_all_execution_rows]": ["OFFLINE-INFERENCE-.+-VERIFY"],
-        "offline_and_privacy_rows[id=offline_training_all_training_rows]": ["OFFLINE-TRAINING-.+-VERIFY"],
-        "minimum_code_rows[id=q78_exact_accounting]": ["L04", "FINAL-PROVENANCE"],
-    }
-    campaign_contract['failure_contract'] = {key: matrix['failure_rows'][key] for key in (
-        'phase_live_operation_bindings', 'operation_binding_rule', 'requalification_after_recovery', 'approval_contract',
-        'phase_live_injections', 'expand_over_operations')}
-    campaign_contract["matrix_axes"] = {
-        "training": {"row": "training_rows"}, "execution": {"row": "execution_rows"},
-        "sustained": {"row": "execution_rows"}, "protocol": {"row": "execution_rows", "client": "agent_clients"},
-        "offline_inference": {"row": "execution_rows"}, "offline_training_audit": {"row": "training_rows"},
-    }
-    (outdir / "campaign").mkdir(exist_ok=True)
-    put("campaign/contract.json", json.dumps(campaign_contract, sort_keys=True, indent=2) + "\n")
+    live_block = next((block for block in re.findall(r"```yaml\n(.*?)```", queue_text, re.S)
+                       if block.startswith("phase_live_queue:")), None)
+    # The October campaign queue was withdrawn with the restored August documents; its contract is emitted only when present.
+    if live_block is not None:
+        live = yaml.safe_load(live_block)["phase_live_queue"]
+        matrix = yaml.safe_load((Path(__file__).resolve().parent.parent / "research/ACCEPTANCE_MATRIX.yaml").read_text())
+        acquisition_models = next(row["model_set"] for row in matrix["source_rows"] if row["id"] == "source_huggingface_all_immutable_models")
+        campaign_contract = {key: live[key] for key in (
+            "materialized_record_contract", "dependency_graph_revision_contract", "expanded_session_families")}
+        campaign_contract["assertion_owner_patterns"] = {
+            "baseline_freeze": ["BASELINES-ALL-PASS"],
+            "adaptive_capacity_control": ["L04"],
+            "storage_eligibility_control": ["L04"],
+            "physical_storage_qualification": ["QUALIFY-.+-VERIFY"],
+            "fixture_gate_rows[id=f4_gate]": ["F4-GATE"],
+            "fixture_gate_rows[id=f5_gate]": ["F5-GATE"],
+            "source_rows[id=source_huggingface_all_immutable_models]": ["ACQ-(" + "|".join(re.escape(model) for model in acquisition_models) + ")-VERIFY"],
+            "source_rows[id=source_ollama_content_addressed_reimport]": ["OLLAMA-VERIFY"],
+            "source_rows[id=source_tinker_export_reimport]": ["TINKER-VERIFY"],
+            "execution_rows[id=exec_c3_k3_compiled_portability]": ["EXEC-exec_c3_k3_compiled_portability-RUN_VERIFY"],
+            "workload_suites[id=capability_complete_q16]": ["EXEC-.+-RUN_VERIFY"],
+            "workload_suites[id=sustained_q48]": ["SUSTAINED-.+-VERIFY"],
+            "protocol_cross_product": ["PROTOCOL-.+"],
+            "training_assertions": ["TRAIN-.+-(adapter_sft_[0-9]+_tokens|adapter_continued_pretraining_[0-9]+_tokens|offline_adapter_dpo_[0-9]+_pairs)-VERIFY"],
+            "failure_rows": ["FAILURE-.+-VERIFY"],
+            "offline_and_privacy_rows[id=offline_inference_all_execution_rows]": ["OFFLINE-INFERENCE-.+-VERIFY"],
+            "offline_and_privacy_rows[id=offline_training_all_training_rows]": ["OFFLINE-TRAINING-.+-VERIFY"],
+            "minimum_code_rows[id=q78_exact_accounting]": ["L04", "FINAL-PROVENANCE"],
+        }
+        campaign_contract['failure_contract'] = {key: matrix['failure_rows'][key] for key in (
+            'phase_live_operation_bindings', 'operation_binding_rule', 'requalification_after_recovery', 'approval_contract',
+            'phase_live_injections', 'expand_over_operations')}
+        campaign_contract["matrix_axes"] = {
+            "training": {"row": "training_rows"}, "execution": {"row": "execution_rows"},
+            "sustained": {"row": "execution_rows"}, "protocol": {"row": "execution_rows", "client": "agent_clients"},
+            "offline_inference": {"row": "execution_rows"}, "offline_training_audit": {"row": "training_rows"},
+        }
+        (outdir / "campaign").mkdir(exist_ok=True)
+        put("campaign/contract.json", json.dumps(campaign_contract, sort_keys=True, indent=2) + "\n")
     put("tables.py", tables)
     put("validator.py", VALIDATOR_SRC.format(note=GENERATED_NOTE))
     (outdir / "MANIFEST.json").write_text(
