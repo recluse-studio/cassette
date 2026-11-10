@@ -1400,6 +1400,14 @@ def _mlx_runtime():
     return _MLX
 
 
+def memory_profile() -> dict:
+    """Q47: read this machine's physical memory and the runtime's recommended working set."""
+    mx, _ = _mlx_runtime()
+    info = mx.device_info()
+    return {"physical_bytes": info["memory_size"], "recommended_max_working_set_bytes": info["max_recommended_working_set_size"],
+            "execution_bytes": 0, "other_observed_bytes": 0}
+
+
 def _require_runtime(case_id: str, mx) -> None:
     required = MLX_RUNTIME["package"].split("==", 1)[1]
     observed = importlib.metadata.version("mlx")

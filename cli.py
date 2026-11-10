@@ -96,6 +96,16 @@ def main(argv=None):
         if command is qualify:
             source.add_argument('--operation-plan', type=Path, help='Measure frozen byte geometry with no resolved source or payload access.')
         command.add_argument('--drive-selection', required=True)
+    prepare = commands.add_parser('prepare', help='Publish the selected model on the selected drive so it can be run.')
+    prepare.add_argument('--source-selection', '--model-selection', dest='model_selection', required=True)
+    prepare.add_argument('--drive-selection', required=True)
+    prepare.add_argument('--acquisition', help='Completed download operation whose verified files are reused.')
+    ask = commands.add_parser('ask', help='Ask the model published on the selected drive one question.')
+    ask.add_argument('--drive-selection', required=True)
+    ask.add_argument('--prompt', required=True)
+    ask.add_argument('--max-tokens', type=int, default=64)
+    for command in (prepare, ask):
+        command.add_argument('--key', default=None, help='Reuse this key to reconcile the same operation.')
     remount = commands.add_parser('watch-remount', help='Wait for physical reconnection and verify the held drive.')
     remount.add_argument('operation_id')
     remount.add_argument('--reconnected', action='store_true',
@@ -190,6 +200,20 @@ def main(argv=None):
                     print('Drive check passed. Download remains paused.', file=sys.stderr)
                 else:
                     print('Go paused at the physical drive qualification boundary. Model bytes have not been downloaded.', file=sys.stderr)
+        elif args.command == 'prepare':
+            preparation = {'model_selection_id': args.model_selection, 'drive_selection_id': args.drive_selection}
+            if args.acquisition:
+                preparation['acquisition_operation_id'] = args.acquisition
+            request.update(operation='prepare', target=args.model_selection, arguments={'preparation': preparation})
+            print('Verifying the model files and publishing the model on the drive.', file=sys.stderr, flush=True)
+            result = asyncio.run(broker.prepare_selected(request))
+        elif args.command == 'ask':
+            request.update(operation='run', target=args.drive_selection, arguments={
+                'drive_selection_id': args.drive_selection, 'messages': [{'role': 'user', 'content': args.prompt}],
+                'tools': [], 'seed': 0, 'temperature': 0.0, 'max_tokens': args.max_tokens})
+            result = asyncio.run(broker.ask_selected(request))
+            if result['state'] == 'SUCCEEDED':
+                print(result['result']['text'], file=sys.stderr, flush=True)
         elif args.command == 'watch-remount':
             request.update(operation='drive.remount', target=args.operation_id, arguments={'context_ref': args.operation_id})
             if args.reconnected:

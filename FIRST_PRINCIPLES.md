@@ -243,5 +243,16 @@ change that requirement or convert completed machine work into live proof.
   Hugging Face measured 32 MB/s in the same minute. The 1.7B download (3.4 GB,
   `HuggingFaceTB/SmolLM-1.7B-Instruct`) is therefore limited by per-chunk durable checkpoints on
   this drive and is still running. Only this one external drive is attached.
+- 2026-11-10 prepare and ask commands (REC-400). `cli.py` gains `prepare` and `ask`; `broker.py` gains
+  `prepare_selected` and `ask_selected`, which reopen the recorded drive selection, reuse a
+  completed download's verified extents and call the existing prepare state machine and native
+  generation; `pager.memory_profile` reads the machine's memory. Live on the cartridge volume:
+  `prepare --acquisition` published SmolLM2-135M-Instruct from the earlier `go` download without
+  downloading again (generation 1, model identity blake3:03ec4396…), and `ask` answered "The
+  capital of France is Paris." Two faults fixed on the way: pickled side files such as
+  `training_args.bin` are now left out of preparation instead of refusing the whole repository
+  (they are never opened), and generation now stops at the source's declared end-of-sequence
+  token. Tests `test_l02_native`, `test_l03_execution`, `test_l05_entry`, `test_s09_sources` and
+  `test_s16_broker` pass (13).
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

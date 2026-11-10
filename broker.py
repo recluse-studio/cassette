@@ -40,7 +40,7 @@ from compiler import (
     verify_bundle_structure,
 )
 from errors import CassetteError
-from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
+from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, memory_profile, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
 from sources import Artifact, OperationGeometry, PartialState, ResolvedSource, SourceAdapter, SourceByteRecipe, TransferExtent, compose_artifact, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
@@ -457,8 +457,10 @@ def _compiler_artifacts(revision: ResolvedSource) -> tuple[Artifact, ...]:
     objects = _acquisition_artifacts(revision)
     if any(item.path == "tokenizer.json" for item in objects):
         # Repositories carry many unrelated JSON files; only the compiler's admitted semantic assets are transferred.
-        return tuple(sorted((*revision.artifacts, *(item for item in revision.metadata_assets
-                                                    if item.path in _NATIVE_ASSETS)), key=lambda item: item.path))
+        # Pickled side files such as training_args.bin are never opened, so they are left out rather than refused.
+        return tuple(sorted((*(item for item in revision.artifacts if item.path.endswith((".safetensors", ".gguf"))),
+                             *(item for item in revision.metadata_assets if item.path in _NATIVE_ASSETS)),
+                            key=lambda item: item.path))
     return revision.artifacts
 
 
@@ -2057,6 +2059,56 @@ class CanonicalBroker:
             _reject('INVALID_REQUEST', operation_id, f'{kind} requires a successful recorded operation')
         return _json_copy(record['result'], operation_id, 'entry result')
 
+    async def _selected_cartridge(self, drive_selection_id: str, operation_id: str):
+        """Q41/Q57: reopen the recorded drive selection's Cassette folder and its capacity owner."""
+        destination = self._entry_result(drive_selection_id, 'drive.select')
+        selected = destination['selection']
+        selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
+        selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid)
+        cartridge, _ = await asyncio.to_thread(create_selected_root, selection, destination['folder'],
+            operation_id=operation_id, cartridge_uuid=destination['cartridge_uuid'])
+        return cartridge, CapacityCoordinator(cartridge)
+
+    async def prepare_selected(self, request: dict) -> dict:
+        """Q5: publish a selected model on its selected drive; a completed download's verified bytes are reused."""
+        if request.get('operation') != 'prepare' or set(request.get('arguments', {})) != {'preparation'}:
+            _reject('INVALID_REQUEST', 'prepare', 'prepare requires its two recorded selections')
+        args = request['arguments']['preparation']
+        source_selection = self._entry_result(args['model_selection_id'], 'source.select')
+        descriptor = source_selection['descriptor']
+        request = {**request, 'arguments': {'source': descriptor}}
+        operation_id = self.operation_id(request)
+        cartridge, owner = await self._selected_cartridge(args['drive_selection_id'], operation_id)
+        adapter = SourceAdapter(descriptor['kind'], source_selection['endpoint'],
+            credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], source_selection['endpoint']))
+        revision = _source_from(source_selection['source_lock'], operation_id)
+        extent_owner = args.get('acquisition_operation_id') or operation_id
+        transfers, descriptors = {}, []
+        try:
+            for artifact in _compiler_artifacts(revision):
+                pair = []
+                for role, length in (('data', artifact.size), ('state', transfer_state_bytes(artifact.size))):
+                    pair.append(await asyncio.to_thread(grant_transfer_extent, cartridge, extent_owner,
+                        _transfer_extent_id(extent_owner, artifact.path, role), length, capacity_controller=owner))
+                    descriptors.append(pair[-1].fd)
+                transfers[artifact.path] = tuple(pair)
+            return await self.run_acquisition(request, AcquisitionContext(adapter, owner, transfers, cartridge))
+        finally:
+            for descriptor_fd in descriptors:
+                os.close(descriptor_fd)
+
+    async def ask_selected(self, request: dict) -> dict:
+        """Q10/Q63: run one request against the model currently published on a selected drive."""
+        if request.get('operation') != 'run' or 'drive_selection_id' not in request.get('arguments', {}):
+            _reject('INVALID_REQUEST', 'run', 'ask requires a recorded drive selection')
+        arguments = dict(request['arguments'])
+        cartridge, owner = await self._selected_cartridge(arguments.pop('drive_selection_id'), 'ask')
+        pin = await asyncio.to_thread(recover_generation, cartridge)
+        if pin is None:
+            _reject('OPERATION_NOT_FOUND', 'run', 'no prepared model is published on the selected drive')
+        request = {**request, 'target': load_root(cartridge, pin.root_digest)['identity'], 'arguments': arguments}
+        return await self.generate_native(request, cartridge, memory_profile(), owner)
+
     async def connect_source(self, request: dict, *, token: str | None = None) -> dict:
         """Q9/Q52: validate source access and record only an opaque credential reference."""
         self.operation_id(request)
@@ -3211,6 +3263,7 @@ class CanonicalBroker:
             rendered = render_native_input(cartridge, pin.root_digest, arguments["messages"], arguments["tools"])
             if maximum + len(rendered["token_ids"]) > graph["context_limit"]:
                 _reject("CAPABILITY_MISMATCH", operation_id, "prompt and requested generation exceed the source horizon")
+            stops = set(rendered["stop_tokens"])
             # Q63/Q68: weights and context stay in memory for the operation; the context is committed durably when
             # the operation completes, pauses or is cancelled. Tokens are replayed deterministically after a crash.
             runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest,
@@ -3220,7 +3273,7 @@ class CanonicalBroker:
                 while True:
                     tokens = runtime.state["generated_tokens"]
                     expose(tokens, pin.root_digest)
-                    if len(tokens) >= maximum:
+                    if len(tokens) >= maximum or (tokens and tokens[-1] in stops):
                         break
                     await asyncio.sleep(0)
                     record = self._load(operation_id)

@@ -4270,8 +4270,11 @@ def render_native_input(cartridge: str | Path, root_digest: str, messages: list[
         _reject("CAPABILITY_MISMATCH", root_digest, f"source template cannot render this conversation: {error}")
     rendered = "".join(parts)
     tokenizer = _native_tokenizer(_native_json(read_tensor(cartridge, root_digest, "asset.tokenizer.json"), root_digest))
+    # Q10: the source's declared end-of-sequence token ends an answer.
+    declared = _native_json(read_tensor(cartridge, root_digest, "asset.config.json"), root_digest).get("eos_token_id")
     return {"rendered": rendered, "token_ids": tokenizer.encode(rendered, add_special_tokens=False).ids,
-            "input_digest": digest_bytes(encoded)}
+            "input_digest": digest_bytes(encoded),
+            "stop_tokens": sorted(token for token in (declared if isinstance(declared, list) else [declared]) if type(token) is int)}
 
 
 def decode_native_tokens(cartridge: str | Path, root_digest: str, tokens: list[int]) -> str:
