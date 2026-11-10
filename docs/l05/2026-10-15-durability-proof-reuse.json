@@ -1,0 +1,44 @@
+{
+  "record_kind": "L05_existing_reconnect_proof_fresh_revalidation",
+  "status": "PASS_SUPPORTING_LIVE_READBACK",
+  "observed_at": "2026-10-15T19:01:44.594136+00:00",
+  "installed_source_commit": "372a2ecee6af8eb44c43da8b3d090e820be23702",
+  "installed_wheel": "11",
+  "operation_id": "op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e",
+  "canonical_record_sha256": "b5a77156c9b6d2b4a2c77e0e7e28e62158c5843a57247a4e838e6e90f6fde935",
+  "original_record_and_current_reference_unchanged": true,
+  "volume_uuid": "4cb76495-61cc-4acf-82bd-b84b6dd4e65d",
+  "cartridge_uuid": "501d46d0-cc5d-4821-b3aa-eee724ef0433",
+  "cartridge": "/Volumes/LaCie/drewwiberg-lacie/Cassette-tiny-test-20261001",
+  "probe": {
+    "attempt": "5d830108-c3b2-4f5c-8b51-bb43c04f4287",
+    "bytes": 4096,
+    "digest": "blake3:b6fb73fc46938c981e2b0b4b1ef282adcfc89854d01bfe3972fdc4785b41b2c7",
+    "name": "integrity.bin"
+  },
+  "checks": [
+    "mounted external APFS volume identity",
+    "logical cartridge marker and root snapshot",
+    "same canonical completed operation",
+    "immutable campaign pointer digest and exact binding",
+    "4096-byte integrity probe digest"
+  ],
+  "execution": "Installed broker/store supporting readback; not a new full CLI qualification",
+  "physical_event": "Existing operator-reported reconnect and prior recorded remount proof; no new physical event",
+  "new_cartridge_write": false,
+  "model_or_dataset_payload_read": false,
+  "source_profiles": "NOT_RUN",
+  "SOURCE_ENTRY_PASS": "NOT_RUN",
+  "retained_attempts": [
+    {
+      "log": "durability-fresh-readback.log",
+      "status": "HARNESS_TYPEERROR_BEFORE_REVALIDATION",
+      "correction": "Reuse contextlib.closing for CanonicalBroker.close; no product change"
+    },
+    {
+      "log": "durability-fresh-readback-02.log",
+      "status": "PASS"
+    }
+  ],
+  "private_evidence": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/exact-header-01"
+}

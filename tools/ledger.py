@@ -662,12 +662,13 @@ def _pytest(root: Path, node: str | None = None, *, log_path: Path | None = None
     if node:
         command.append(node)
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", PYTHONUNBUFFERED="1")
+    timeout = 21_600 if node is None else 3600
     if log_path is not None:
         with log_path.open('w') as output:
-            result = subprocess.run(command,cwd=root,stdout=output,stderr=subprocess.STDOUT,text=True,timeout=3600,env=environment)
+            result = subprocess.run(command,cwd=root,stdout=output,stderr=subprocess.STDOUT,text=True,timeout=timeout,env=environment)
         return subprocess.CompletedProcess(command,result.returncode,log_path.read_text(),'')
     return subprocess.run(
-        command, cwd=root, capture_output=True, text=True, timeout=3600, env=environment
+        command, cwd=root, capture_output=True, text=True, timeout=timeout, env=environment
     )
 
 

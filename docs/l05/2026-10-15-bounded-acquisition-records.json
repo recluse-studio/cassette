@@ -1,0 +1,108 @@
+{
+  "status": "PASS_BOUNDED_FIXTURE_INTEGRATION",
+  "date": "2026-10-15",
+  "base_commit": "372a2ecee6af8eb44c43da8b3d090e820be23702",
+  "scope": [
+    "bounded canonical acquisition receipts",
+    "copied live durable-prefix observation",
+    "actual CLI byte progress and restart/replay"
+  ],
+  "authorities": [
+    "Q5",
+    "Q6",
+    "Q9",
+    "Q29",
+    "Q51",
+    "Q52",
+    "Q53",
+    "Q60",
+    "Q79"
+  ],
+  "failed_before": {
+    "canonical_record_limit_bytes": 4194304,
+    "synthetic_60000_chunk_receipt_bytes": 4440350,
+    "large_frozen_inputs_exceed_record_cap": true,
+    "display_defect": "Original renderer repeats a saved artifact line after a zero-length artifact."
+  },
+  "repair": {
+    "source_checkpoint_authority": "UNCHANGED; complete per-chunk binary records retained",
+    "broker_certificate": "count plus BLAKE3 commitment over canonical complete digest list",
+    "progress": "copied observation of committed prefixes; never persisted or used for resume",
+    "events": "one deduplicated source completion per artifact, contiguous historical events retained",
+    "cli": "last displayed byte tuple per artifact"
+  },
+  "independent_review": {
+    "status": "PASS",
+    "successor": "successor-01",
+    "session": "8217f4b4-ba4d-43c6-a452-4df10e58722c",
+    "served_model": "claude-opus-5-5",
+    "process_stopped": true,
+    "permission_denials": [],
+    "Q1": "PASS_FIXTURE_INTEGRATION",
+    "Q2_successor": "PASS_FIXTURE_INTEGRATION",
+    "Q2_original": "FAIL_DISPLAY_UNIQUENESS_LOW_SEVERITY",
+    "core_baseline_checks": 49,
+    "core_baseline_passed": 49,
+    "cli_total_checks": 56,
+    "cli_result": "AS_PREDICTED",
+    "fault_controls_detected": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C7",
+      "C8",
+      "CLI original",
+      "CLI K1",
+      "CLI K2"
+    ],
+    "equivalent_control": "C9; terminal gate and cache removal are redundant for public status",
+    "prepare_path": "reviewer static trace plus author process-recovery evidence; not independently executed",
+    "independence_limit": "separate reviewer on same Mac and account"
+  },
+  "complete_candidate": {
+    "id": 16,
+    "status": "PASS",
+    "tests_passed": 340,
+    "seconds": 629.71,
+    "skips": 0,
+    "component_controls": 14,
+    "ordinary_ledger": "PASS",
+    "J": [
+      0,
+      0,
+      15922,
+      1,
+      1,
+      9,
+      0,
+      0,
+      8425096
+    ],
+    "product_LOC_increase": 14
+  },
+  "installation": {
+    "wheel": 13,
+    "sha256": "b304f2e686558664d2de92830a0e6bec0dae4e4e6ce70ae078a8cadd8acda5c1",
+    "runtime_files": 38,
+    "status": "INSTALLED_VERIFIED",
+    "all_runtime_hashes_match": true,
+    "installer": "existing uv offline no-index/no-deps copy-mode; stopped exit0 before isolated verification"
+  },
+  "retained_attempts": [
+    "coupled-01 CLI timeout on external-backed APFS image; cause unproved",
+    "candidate15 and wheel12 predate final CLI successor; wheel12 never installed",
+    "original reviewer S4 internal replacement rejected and never executed",
+    "original S5 integer serialization fault; corrected minimal reviewer patch",
+    "empty-before-01 mislaunch; empty-before-02 actual reproduced display failure"
+  ],
+  "excluded_NOT_RUN": [
+    "Q42 source-operation physical profiles",
+    "required real source headers and payload downloads",
+    "real Ollama acquisition",
+    "SOURCE_ENTRY_PASS",
+    "L06-L10"
+  ],
+  "private_evidence": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/acquisition-record-01",
+  "observed_at": "2026-10-15T19:38:06.298316+00:00"
+}

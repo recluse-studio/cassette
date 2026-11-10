@@ -1,0 +1,242 @@
+{
+  "authorities": [
+    "Q5",
+    "Q6",
+    "Q42",
+    "Q44",
+    "Q49",
+    "Q51",
+    "acquisition_entry_contract.boundaries"
+  ],
+  "base_commit": "5f696f4bc397f4165a58d53020b928d6158172a2",
+  "boundaries": {
+    "frozen_dataset_downloads": "NOT_RUN",
+    "l05": "IN_PROGRESS",
+    "l06_l10": "TODO",
+    "live_physical_profile": "NOT_RUN",
+    "math_research": "Untouched",
+    "model_header_audits": "NOT_RUN",
+    "prior_single_tiny_model_test": "Preserved; not repeated",
+    "required_large_model_downloads": "NOT_RUN",
+    "source_entry_aggregate": "NOT_RUN"
+  },
+  "complete_proof": {
+    "candidate05": "PASS, predecessor before retry-text/test successor: 340 tests, zero skips, 14 removal controls; ordinary ledger no violations",
+    "candidate06": {
+      "evidence_level": "INTEGRATION",
+      "j": {
+        "authored_executable_LOC": 15661,
+        "direct_dependencies": 9,
+        "duplicate_authorities": 0,
+        "failed_acceptance_rows": 0,
+        "independent_processes": 1,
+        "language_runtimes": 1,
+        "model_specific_branches": 0,
+        "new_numerical_kernels": 0,
+        "shipped_binary_bytes": 8425096
+      },
+      "ordinary_ledger_violations": [],
+      "passed": 340,
+      "removal_controls": 14,
+      "root": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06",
+      "seconds": 420.91,
+      "skipped": 0,
+      "status": "PASS"
+    }
+  },
+  "date": "2026-10-15",
+  "evidence": [
+    {
+      "bytes": 18196,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/red.log",
+      "sha256": "212cdbfeba1ea50696270a61edb204be5827615c2c87eabc649b8a860029e911"
+    },
+    {
+      "bytes": 16692,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/focused.log",
+      "sha256": "19b05d13a158fff085fe85e9ed5002571110862c44dec9e884361f70b3e3c832"
+    },
+    {
+      "bytes": 99,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/focused-02.log",
+      "sha256": "ed9f0613e530c749a89db7b4a1159c64896d798592f51d504553cc88ef0b0588"
+    },
+    {
+      "bytes": 9546,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/retry-red.log",
+      "sha256": "9e4e46c51185d5b84f92235a08fd9d238db995f5bd0971a3ea857174f27dafc2"
+    },
+    {
+      "bytes": 99,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/final-focused.log",
+      "sha256": "e0a9dd8e802740953ad611826cc5711fcba363889fc04657fd82527dbdf78e55"
+    },
+    {
+      "bytes": 33301,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/review-initial.md",
+      "sha256": "cc79ea30ade1f36205c0765d8429f4347562fa4d137badead69d1d892ff23ec6"
+    },
+    {
+      "bytes": 8296,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/review-final.md",
+      "sha256": "d1e9e3af793cc0da73729b0f0aed318da89f8dfaada96c85ef7ba3abe70cd7dd"
+    },
+    {
+      "bytes": 21692,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/reviewer-probe-original.py",
+      "sha256": "77c04dfbdaba63acafd2ff06a1cc21ac006077ac30664dbf71bc77363f4bde3e"
+    },
+    {
+      "bytes": 46233,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/probe-original/unchanged.json",
+      "sha256": "374912268951af1b4302188f436ed326e5b322847e3f21266dcb66421d3a6929"
+    },
+    {
+      "bytes": 46224,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/probe-original/mutant.json",
+      "sha256": "bc171f068eac6779bad7fe41ead201872960c7fc0785b4903a2a2a462398fa67"
+    },
+    {
+      "bytes": 18464,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/probe-original/guard-mutant.json",
+      "sha256": "bdbaaf2eebef068cc34410aa7b1bb9f22bb86c814c28f2bcf5eb4e0611348bca"
+    },
+    {
+      "bytes": 46242,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/probe-final/unchanged.json",
+      "sha256": "7ef0e94293881819efe0565c9aa8bffa7db98d6fc5ff1ffe36dba1721bd94014"
+    },
+    {
+      "bytes": 18472,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/probe-final/mutant.json",
+      "sha256": "6ff30304c101916e4e013a25597935ec5be9b741e3504acb6ad9223178a13974"
+    },
+    {
+      "bytes": 22154,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/snapshot.json",
+      "sha256": "51d3934fb1708a23861023f045de63a771ccc566bfb12e6b8657c2ad3f6b2367"
+    },
+    {
+      "bytes": 21992,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/final-snapshot.json",
+      "sha256": "dafa99aaa02ab865890320152693d93aff15367172578b29c097e0eeca808b89"
+    },
+    {
+      "bytes": 833,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/state-preservation.json",
+      "sha256": "9262e294cdb989832f3024d29c4b423fc6697bbd15e96adb177744cd09159a7d"
+    },
+    {
+      "bytes": 38787,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/opus-01/qualify-review/summary.json",
+      "sha256": "e271f93a6686b70748d23246ffc9ce4272cd2d675b26a40fa170d21737a3adab"
+    },
+    {
+      "bytes": 779921,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/opus-01/qualify-review/events.jsonl",
+      "sha256": "ef665150c5c79b097e16cfbbc3ac06b7d4e951877e0f3d76e45e74aef30a09f0"
+    },
+    {
+      "bytes": 12071,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/opus-02/qualify-review/summary.json",
+      "sha256": "f955305021918d85f4c9f551cb413c6ec99ac1777617b7870b86c89423fcb2fc"
+    },
+    {
+      "bytes": 186598,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/opus-02/qualify-review/events.jsonl",
+      "sha256": "433379208b415d96c9447b217ef0c9729caa014c3fcf1a1aa105b361b5ce6f57"
+    },
+    {
+      "bytes": 12566,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/wheel-06-verification.json",
+      "sha256": "aeadd56f85033fc14ac888af1d0c6a429c1b2c16caad4095946e94446416cfb4"
+    },
+    {
+      "bytes": 10384,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/cleanup.json",
+      "sha256": "657fcb5f2a5148d8d9d383b23e6dcd6b80c9bbe7b9ab7198900fb6dc527b670c"
+    },
+    {
+      "bytes": 324,
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/qualification-entry-01/proof-source-join.json",
+      "sha256": "e6a4c5f5564436d53e541c0b86a40e92fe3616152a4f65d428b0314a7edbc0b3"
+    },
+    {
+      "bytes": 6069,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/result.json",
+      "sha256": "f2a7866194a16754db7339e5dc6353479ed560431389bbcd64e9fcffa4067556"
+    },
+    {
+      "bytes": 6162,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/complete-j-report.json",
+      "sha256": "c6faed073c1db5ff65d98c60043d12da06a949cd72b992b58f6e21314e15bc4c"
+    },
+    {
+      "bytes": 495,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/inputs.json",
+      "sha256": "390b12f799d0ad2f381928dba58a2aaed78d7e83eee913f857579a5387785815"
+    },
+    {
+      "bytes": 4455,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/ledger.json",
+      "sha256": "bc8b44997560efa4807ff967c966c3eca277f540d5caf48659050e12a01bfd8f"
+    },
+    {
+      "bytes": 49516,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/suite.log",
+      "sha256": "d98a72bf487c33fb67a154abafb61541799b61dd708b977cbba373ed822331c4"
+    },
+    {
+      "bytes": 20725,
+      "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06/source-manifest.json",
+      "sha256": "a9cf625ab3f4565d3cee47de360d061e45180f20c57d0f111b46f5e4f2704e26"
+    }
+  ],
+  "focused": {
+    "evidence_level": "FIXTURE_PLATFORM",
+    "passed": 4,
+    "seconds": 23.96
+  },
+  "implementation": "qualify measures and pauses the same acquire operation before payload; go with the same selections/key resumes it",
+  "independent_review": {
+    "complete": true,
+    "initial_attempt": "INCOMPLETE; parent-directory Glob denied, preserved. Evidence delivered inside the existing restricted cwd for continuation; no permission changed.",
+    "questions_passed": 3,
+    "recommendations": {
+      "I1": "Resolved: retry text names the invoked command; reproduced red then green",
+      "I2": "Resolved: existing fixture covers partial progress and prior-cartridge proof reuse",
+      "I3": "Retain the existing truthful durable event recap on re-entry; changing progress-history presentation is optional and outside this bounded change."
+    },
+    "roles": "Separate Opus reviewer; Codex implementer/executor on the same Mac/account",
+    "sensitivity_control": "Removing the qualification-only pause produces 3 model GETs and fails A4.no_payload after 12 passing controls",
+    "served_models": [
+      "claude-opus-5-5"
+    ],
+    "status": "PASS",
+    "unchanged_probe_checks": 36
+  },
+  "instrument_history": [
+    "Initial focused run read phase from public view; corrected to canonical record, preserving failure",
+    "Parent first omitted --mutant on probe-original/mutant.json; it is another unchanged baseline and excluded from sensitivity evidence",
+    "The exact original probe needed no code adaptation; original and final-source runs pass"
+  ],
+  "package": {
+    "qualify_help": "PASS",
+    "runtime_files": 38,
+    "sha256": "ed3fddbb9ca2b68c185e917e78df36c0124cb92e0a6f3ca64cff7234a0581bc5",
+    "status": "INSTALLED_VERIFIED",
+    "wheel": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/wheel-06/cassette-0.0.1-py3-none-any.whl",
+    "wheel_source_install_equal": true
+  },
+  "record_kind": "L05 qualification-only CLI entry",
+  "source_join": {
+    "declared_differences": [
+      "tools/generated/s27_j_report.json"
+    ],
+    "producer": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-06",
+    "runtime_and_tests_match": true,
+    "source_join": "All common frozen source files match except the regenerated complete J report",
+    "status": "PASS"
+  },
+  "status": "PASS_BOUNDED_FIXTURE_PLATFORM"
+}

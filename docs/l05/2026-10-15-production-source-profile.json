@@ -1,0 +1,116 @@
+{
+  "status": "MACHINE_PROVED_SUCCESSOR_NATIVE_REVIEW_PENDING_INCLUDED_ALLOWANCE",
+  "candidate": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-20",
+  "source_manifest_sha256": "1f66bdc62143c41a2221eb3b032ccc3943149530341d7f7383dc662159e4f98c",
+  "suite_passed": 340,
+  "suite_seconds": 500.42,
+  "skipped": 0,
+  "component_controls": 14,
+  "j": [
+    0,
+    0,
+    16947,
+    1,
+    1,
+    9,
+    0,
+    0,
+    8425096
+  ],
+  "prior_j": [
+    0,
+    0,
+    15928,
+    1,
+    1,
+    9,
+    0,
+    0,
+    8425096
+  ],
+  "authored_executable_loc_growth": 1019,
+  "other_j_growth": false,
+  "profiler_version": "4-recoverable-source-executor",
+  "builder_repair_predicates": "PASS on six scenarios, P5 base/bypass; corrected P4 ballast setup explicit; native adjudication pending",
+  "raw_captures_recomputed": 24,
+  "fresh_captures_independent_offset_counts": 12,
+  "review_target": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/source-profile-review-01/source/.review-evidence/successor20/source",
+  "independent_review": "NOT_RUN on successor; native session allowance exhausted; original candidate18 FAIL retained",
+  "native_review_routing": {
+    "provider": "Claude Code Opus only; no new Copilot or fallback",
+    "session_id": "dc28fddd-b428-47d2-808e-99645ce8257f",
+    "latest_observation": "100 percent session used; approximate reset 2026-10-16T03:40:00Z; recheck actual allowance and no-overage before launch",
+    "receipt": "production-source-profile-01/subscription-exhausted-0015.json"
+  },
+  "prepared_return": "production-source-profile-01/review-return-03-jobs.json; stopped session dc28fddd-b428-47d2-808e-99645ce8257f",
+  "physical_profile": "NOT_RUN",
+  "required_provider_headers_and_payloads": "NOT_RUN",
+  "source_entry_pass": "NOT_RUN",
+  "installation": "NOT_CHANGED; wheel14 retained",
+  "source_snapshot_publication": "Authorized commit and normal push; Git and private publication receipt supply final identity; no review or live acceptance claimed",
+  "protected_math_roots": "EXCLUDED_AND_UNCHANGED",
+  "prepared_wheel": {
+    "status": "WHEEL_VERIFIED_UNINSTALLED_SUCCESSOR_REVIEW_PENDING",
+    "sha256": "166224b5bee6894dc87e009f5e12327c0cda6e0c6546100c7fb2285047a86ade",
+    "runtime_files_joined": 38,
+    "evidence": "production-source-profile-01/wheel-16-build.json"
+  },
+  "prepared_physical_requests": {
+    "status": "NOT_EXECUTED",
+    "source_bytes": [
+      8060926626,
+      61084187391
+    ],
+    "host_memory_observation_bytes": 25769803776,
+    "evidence": "production-source-profile-01/prepared-physical-cards-01.json"
+  },
+  "prior_candidate18": {
+    "candidate": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-18",
+    "suite_passed": 340,
+    "suite_seconds": 398.23,
+    "skipped": 0,
+    "component_controls": 14,
+    "j": [
+      0,
+      0,
+      16632,
+      1,
+      1,
+      9,
+      0,
+      0,
+      8425096
+    ],
+    "independent_review": "FAIL Q1/Q2/Q3; served claude-opus-5-5, same native session, phase-two raw-probe adjudication complete; fixed successor not yet reviewed",
+    "prepared_wheel": {
+      "status": "REJECTED_UNINSTALLED; candidate18 source remains frozen",
+      "sha256": "e5f671ba78c15cfcf16d553e51e3a283bc42e7cb5c1e4d7a82c51700d77da608",
+      "runtime_files_joined": 38,
+      "evidence": "production-source-profile-01/wheel-15-build.json"
+    },
+    "review_raw_evidence": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/source-profile-review-01/review-adjudication-02.md",
+    "status": "REVIEW_FAILED; source remains frozen; wheel15 rejected and uninstalled"
+  },
+  "rejected_candidate19": {
+    "suite_passed": 339,
+    "suite_failed": 1,
+    "suite_seconds": 470.71,
+    "classification": "stale fixture generation-equality assertion; exact failed 210-file source retained; corrected test requires newer generation and unchanged other fields",
+    "corrected_fixture_seconds": 3.5
+  },
+  "receipt_copy_control": {
+    "before": "old 24,442-byte complete report repeated 164 additional times gives 4,217,384 canonical bytes against 4,194,304-byte bound; serialized control, not 164 live resumes",
+    "after": "compact 271-byte immutable store reference; complete report/raw traces retained",
+    "red_seconds": 47.36,
+    "green_seconds": 83.7,
+    "evidence": "production-source-profile-01/receipt-bound-control.json"
+  },
+  "proof_limits": [
+    "Fixture and platform support, not full frozen-geometry physical qualification",
+    "P7 rejects a cached fake crossing; P6 existing native positive/negative calibration reused without repetition",
+    "Original D4 large-artifact false pass remains inferred, not observed",
+    "Future Ollama recipe/geometry has unresolved actual blob and manifest identity"
+  ],
+  "private_evidence_root": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/production-source-profile-01",
+  "review_evidence_root": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/source-profile-review-01"
+}

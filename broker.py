@@ -4,23 +4,29 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections import deque
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 import ctypes
 from dataclasses import asdict, dataclass, replace
 import fcntl
 import inspect
+import math
 import json
 import os
 from pathlib import Path
 import re
+import _ssl
 import sys
+import time
+import threading
 from types import MappingProxyType
 import uuid
 
 from compiler import (
     PreparedRevision,
+    _NATIVE_ASSETS,
     inspect_source_identity,
     prepare_native_training_child,
     prepare_native_compiled,
@@ -37,7 +43,7 @@ from errors import CassetteError
 from pager import CertifiedSchedule, NativeTransformer, admit_schedule, capture_native, merge_adapter_material
 from schema.tables import Q77_FIELDS
 from schema.validator import validate
-from sources import Artifact, PartialState, ResolvedSource, SourceAdapter, TransferExtent, transfer_artifact, transfer_state_bytes
+from sources import Artifact, OperationGeometry, PartialState, ResolvedSource, SourceAdapter, SourceByteRecipe, TransferExtent, compose_artifact, header_ranges, source_header_lengths, source_profile_boundary, transfer_artifact, transfer_chunk_count, transfer_header, transfer_state_bytes
 from store import (
     ArtifactIdentity,
     CapacityClaim,
@@ -48,9 +54,19 @@ from store import (
     DriveVolume,
     WriterContext,
     GenerationPin,
+    STORAGE_PROFILER_VERSION,
     apply_revision_delta as apply_store_delta,
     canonical_bytes,
     campaign_head,
+    await_extent_io,
+    grant_profile_extents,
+    seal_profile_extents,
+    reclaim_profile_extents,
+    drive_path_observation,
+    storage_host_observation,
+    storage_profile,
+    source_profile_trace,
+    composition_trace,
     compare_campaign_head,
     verify_campaign_artifact,
     write_campaign_artifact,
@@ -60,7 +76,6 @@ from store import (
     digest_bytes,
     create_selected_root,
     inventory_step,
-    compare_inventory,
     list_external_apfs_volumes,
     revalidate_external_apfs_volume,
     select_external_apfs_volume,
@@ -336,7 +351,7 @@ def _source_record(revision: ResolvedSource) -> dict:
             "validator": artifact.validator,
         }
 
-    return {
+    result = {
         "source_kind": revision.source_kind,
         "locator": revision.locator,
         "immutable_revision": revision.immutable_revision,
@@ -348,6 +363,9 @@ def _source_record(revision: ResolvedSource) -> dict:
         "credential_ref": revision.credential_ref,
         "license_acceptance_ref": revision.license_acceptance_ref,
     }
+    if revision.artifact_selector is not None:
+        result['artifact_selector'] = json.loads(revision.artifact_selector)
+    return result
 
 
 def _source_from(record: object, object_id: str) -> ResolvedSource:
@@ -356,8 +374,10 @@ def _source_from(record: object, object_id: str) -> ResolvedSource:
         "metadata_assets", "auth_scope", "license_digest", "credential_ref",
         "license_acceptance_ref",
     }
-    if not isinstance(record, dict) or set(record) != fields:
+    if not isinstance(record, dict) or set(record) not in (fields, fields | {'artifact_selector'}):
         _reject("ROOT_INVALID", object_id, "source lock has an incorrect field set")
+    if 'artifact_selector' in record and not isinstance(record['artifact_selector'], dict):
+        _reject('ROOT_INVALID', object_id, 'source lock artifact selector must be an object')
 
     def artifacts(value: object, field: str) -> tuple[Artifact, ...]:
         if not isinstance(value, list) or not value:
@@ -411,6 +431,7 @@ def _source_from(record: object, object_id: str) -> ResolvedSource:
         record["license_digest"],
         record["credential_ref"],
         record["license_acceptance_ref"],
+        canonical_bytes(record['artifact_selector']) if 'artifact_selector' in record else None,
     )
     if _source_record(revision) != record:
         _reject("ROOT_INVALID", object_id, "source lock does not round-trip exactly")
@@ -424,7 +445,8 @@ def _partial_record(path: str, partial: PartialState) -> dict:
         "object_size": partial.object_size,
         "validator": partial.validator,
         "completed_interval_set": [list(interval) for interval in partial.completed_interval_set],
-        "chunk_digests": list(partial.chunk_digests),
+        "chunk_digests": {"count": len(partial.chunk_digests),
+                          "digest": digest_bytes(canonical_bytes(list(partial.chunk_digests)))},
         "contiguous_source_hash_offset": partial.contiguous_source_hash_offset,
         "serialized_hash_state": partial.serialized_hash_state,
     }
@@ -434,8 +456,9 @@ def _compiler_artifacts(revision: ResolvedSource) -> tuple[Artifact, ...]:
     """Include the source tokenizer's admitted semantic files in the same verified transfer."""
     objects = _acquisition_artifacts(revision)
     if any(item.path == "tokenizer.json" for item in objects):
+        # Repositories carry many unrelated JSON files; only the compiler's admitted semantic assets are transferred.
         return tuple(sorted((*revision.artifacts, *(item for item in revision.metadata_assets
-                                                    if item.path.endswith(".json"))), key=lambda item: item.path))
+                                                    if item.path in _NATIVE_ASSETS)), key=lambda item: item.path))
     return revision.artifacts
 
 
@@ -458,17 +481,17 @@ def _transfer_extent_id(operation_id: str, path: str, role: str) -> str:
     })).removeprefix("blake3:")
 
 
-def _partials_from(
+def _verify_partials(
     records: object,
     revision: ResolvedSource,
     object_id: str,
     artifacts: tuple[Artifact, ...] | None = None,
-) -> tuple[PartialState, ...]:
+) -> None:
+    """Validate broker certificates; sources retains every full Q51 checkpoint and chunk digest."""
     artifacts = _compiler_artifacts(revision) if artifacts is None else artifacts
     if not isinstance(records, list) or len(records) != len(artifacts):
         _reject("ROOT_INVALID", object_id, "source verification must contain one record per artifact")
     by_path = {artifact.path: artifact for artifact in artifacts}
-    result = []
     for record in records:
         if not isinstance(record, dict) or set(record) != {
             "path", "source_revision", "object_size", "validator", "completed_interval_set",
@@ -478,32 +501,29 @@ def _partials_from(
         artifact = by_path.get(record["path"])
         intervals = record["completed_interval_set"]
         chunks = record["chunk_digests"]
+        chunks_valid = (
+            isinstance(chunks, list) and bool(chunks) == bool(artifact and artifact.size)
+            and all(isinstance(item, str) and _DIGEST.fullmatch(item) is not None for item in chunks)
+        ) or (
+            isinstance(chunks, dict) and set(chunks) == {"count", "digest"}
+            and type(chunks["count"]) is int and artifact is not None
+            and chunks["count"] == transfer_chunk_count(artifact.size)
+            and isinstance(chunks["digest"], str) and _DIGEST.fullmatch(chunks["digest"]) is not None
+        )
         if (
             artifact is None
             or record["source_revision"] != revision.immutable_revision
             or record["object_size"] != artifact.size
             or record["validator"] != artifact.validator
-            or intervals != [[0, artifact.size]]
+            or intervals != ([[0, artifact.size]] if artifact.size else [])
             or type(record["contiguous_source_hash_offset"]) is not int
             or record["contiguous_source_hash_offset"] != artifact.size
-            or not isinstance(chunks, list)
-            or not chunks
-            or any(not isinstance(item, str) or _DIGEST.fullmatch(item) is None for item in chunks)
+            or not chunks_valid
             or not isinstance(record["serialized_hash_state"], str)
         ):
             _reject("ROOT_INVALID", object_id, f"source verification for {record.get('path')!r} is incomplete")
-        result.append(PartialState(
-            record["source_revision"],
-            record["object_size"],
-            record["validator"],
-            tuple(tuple(interval) for interval in intervals),
-            tuple(chunks),
-            record["contiguous_source_hash_offset"],
-            record["serialized_hash_state"],
-        ))
     if [record["path"] for record in records] != sorted(by_path):
         _reject("ROOT_INVALID", object_id, "source verification records are not canonically ordered")
-    return tuple(result)
 
 
 def _compiler_source(revision: ResolvedSource, descriptor: Mapping[str, object]) -> dict:
@@ -625,6 +645,8 @@ class CanonicalBroker:
         self._control_signals: dict[str, asyncio.Event] = {}
         self._event_signals: dict[str, asyncio.Event] = {}
         self._active: dict[str, bool] = {}
+        # Observations of source-owned durable prefixes, never input to resume or verification.
+        self._transfer_progress: dict[str, dict] = {}
         self._profiles: dict[str, dict] = {}
         self._profile_activators: dict[str, Callable[[ScheduledLease, dict], object]] = {}
         self._revision_profiles: dict[str, list[str]] = {}
@@ -686,6 +708,18 @@ class CanonicalBroker:
             self._owner_fd = None
             with suppress(OSError):
                 os.close(descriptor)
+
+    @staticmethod
+    def read_operation_plan(path: str | Path) -> object:
+        """Q6/Q42: bound operator metadata before parsing it or issuing any operation."""
+        try:
+            with Path(path).open('rb') as stream:
+                payload = stream.read(_MAX_RECORD_BYTES + 1)
+            if len(payload) > _MAX_RECORD_BYTES:
+                _reject('INVALID_REQUEST', str(path), f'operation plan exceeds {_MAX_RECORD_BYTES} control bytes')
+            return json.loads(payload)
+        except (OSError, ValueError, RecursionError) as error:
+            _reject('INVALID_REQUEST', str(path), 'operation plan cannot be parsed as bounded UTF-8 JSON: ' + type(error).__name__)
 
     @staticmethod
     def operation_id(request: dict) -> str:
@@ -1451,9 +1485,9 @@ class CanonicalBroker:
     def request_hold(self, operation_id: str, boundary: str) -> dict:
         """Q5/Q25: arm one durable hold before the named operation boundary."""
         record = self._load(operation_id)
-        if record["state"] in _TERMINAL_STATES or not boundary or any(
-                "hold" in event["payload"] for event in record["events"]):
-            _reject("INVALID_REQUEST", operation_id, "hold requires a nonterminal operation with no prior hold")
+        holds = [event['payload'] for event in record['events'] if 'hold' in event['payload']]
+        if record["state"] in _TERMINAL_STATES or not boundary or (holds and holds[-1]['hold'] != 'RELEASED'):
+            _reject("INVALID_REQUEST", operation_id, "hold requires a nonterminal operation with no unreleased hold")
         self._append(record, "output_delta", {"hold": "REQUESTED", "boundary": boundary})
         return self.status(operation_id)
 
@@ -1466,21 +1500,29 @@ class CanonicalBroker:
         self._append(record, "output_delta", {"hold": "RELEASED", "boundary": boundary})
         return self.status(operation_id)
 
-    async def hold_boundary(self, operation_id: str, boundary: str) -> None:
+    async def hold_boundary(self, operation_id: str, boundary: str, *, observer=None) -> None:
         """Remain at a committed boundary until its durable release is observed."""
-        while True:
-            record = self._load(operation_id)
-            holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
-            if not holds or holds[-1]["hold"] == "RELEASED":
-                return
-            hold = holds[-1]
-            if hold["boundary"] != boundary:
-                if hold["hold"] == "ACKNOWLEDGED":
-                    _reject("ROOT_INVALID", operation_id, "operation moved beyond its unreleased hold")
-                return
-            if hold["hold"] == "REQUESTED":
-                self._append(record, "output_delta", {"hold": "ACKNOWLEDGED", "boundary": boundary})
-            await asyncio.sleep(0.02)
+        opened = False
+        try:
+            while True:
+                record = self._load(operation_id)
+                holds = [event["payload"] for event in record["events"] if "hold" in event["payload"]]
+                if not holds or holds[-1]["hold"] == "RELEASED":
+                    return
+                hold = holds[-1]
+                if hold["boundary"] != boundary:
+                    if hold["hold"] == "ACKNOWLEDGED":
+                        _reject("ROOT_INVALID", operation_id, "operation moved beyond its unreleased hold")
+                    return
+                if observer is not None and not opened:
+                    await await_extent_io(observer, {'kind': 'HOLD_OPEN', 'boundary': boundary, 'time_ns': time.monotonic_ns()})
+                    opened = True
+                if hold["hold"] == "REQUESTED":
+                    self._append(record, "output_delta", {"hold": "ACKNOWLEDGED", "boundary": boundary})
+                await asyncio.sleep(0.02)
+        finally:
+            if opened:
+                await await_extent_io(observer, {'kind': 'HOLD_CLOSE', 'boundary': boundary, 'time_ns': time.monotonic_ns()})
 
     async def execute(
         self,
@@ -1488,6 +1530,8 @@ class CanonicalBroker:
         worker: Callable[[], object],
         *,
         cancellable: bool = True,
+        pause_on_retryable_error: bool = False,
+        hold_observer=None,
     ) -> dict:
         """Run one non-preparation Q6 operation through the canonical operation log.
 
@@ -1513,14 +1557,478 @@ class CanonicalBroker:
                 if not isinstance(result, dict):
                     _reject("INVALID_REQUEST", operation_id, "operation worker must return one result object")
                 _json_digest(result, operation_id, "operation result")
-                await self.hold_boundary(operation_id, "result")
+                await self.hold_boundary(operation_id, "result", observer=hold_observer)
                 return self._operation(self._success(self._load(operation_id), result))
             except _ControlStop as stopped:
                 return self._operation(self._stop(self._load(operation_id), stopped.action))
             except asyncio.CancelledError:
                 raise
             except CassetteError as error:
+                if pause_on_retryable_error and error.retryability == "retryable":
+                    return self._operation(self._paused(self._load(operation_id), error))
                 return self._operation(self._failed(self._load(operation_id), error))
+
+    def _composition_recipe(self, args, operation_id):
+        original = self._load(args['acquisition_operation_id'])
+        if (original['kind'], original['state'], original['phase']) != ('acquire', 'SUCCEEDED', 'SOURCE_VERIFIED'):
+            _reject('INVALID_REQUEST', operation_id, 'composition requires a completed acquisition source proof')
+        checkpoint = original['checkpoint']
+        revision = _source_from(checkpoint['source_lock'], operation_id)
+        partials = {item['path']: item for item in checkpoint['partials']}
+        required = {segment['path'] for item in args['recipe']['artifacts']
+                    for segment in item['segments'] if 'path' in segment}
+        if not required <= partials.keys():
+            _reject('INVALID_REQUEST', operation_id, 'recipe inputs are absent from the original acquisition')
+        manifests = {}
+        for path in required:
+            proof = partials[path]['chunk_digests']
+            manifests[path] = proof['digest'] if isinstance(proof, dict) else digest_bytes(canonical_bytes(proof))
+        recipe = SourceByteRecipe(args['recipe'], revision, manifests)
+        return original, revision, recipe
+
+    def _composition_binding(self, original, recipe, io_plan, operation_id):
+        checkpoint = original['checkpoint']
+        return {'transform': 'source-byte-recipe-v1', 'operation_id': operation_id,
+                'acquisition_operation_id': original['operation_id'],
+                'source_lock_digest': digest_bytes(canonical_bytes(checkpoint['source_lock'])),
+                'source_proof_digest': digest_bytes(canonical_bytes(checkpoint['partials'])),
+                'recipe_digest': digest_bytes(recipe.encoded), 'io_plan_digest': digest_bytes(canonical_bytes(io_plan))}
+
+    async def compose_source(self, request: dict, owner: CapacityCoordinator, *, _capture=None, _uncached_source=False) -> dict:
+        """Q6/Q60: own verified deterministic byte preparation, without publishing a source or model."""
+        operation_id = self.operation_id(request)
+        if request['operation'] != 'source.compose' or set(request['arguments']) != {'composition'}:
+            _reject('INVALID_REQUEST', 'source.compose', 'composition requires its named closed argument record')
+        args = request['arguments']['composition']
+        if request.get('target') != args['acquisition_operation_id'] or not isinstance(owner, CapacityCoordinator):
+            _reject('INVALID_REQUEST', 'source.compose', 'composition requires its exact acquisition target and store owner')
+        if _capture is not None and not callable(_capture):
+            _reject('INVALID_REQUEST', operation_id, 'composition capture must be callable')
+        if type(_uncached_source) is not bool or _uncached_source and _capture is None:
+            _reject('INVALID_REQUEST', operation_id, 'uncached source measurement requires a boolean policy and capture')
+        phase = 'ADMISSION'
+        async def emit(kind, **fields):
+            if _capture is not None:
+                await await_extent_io(_capture, {'kind': kind, 'phase': phase, 'time_ns': time.monotonic_ns(), **fields})
+        async def enter(name, **fields):
+            nonlocal phase
+            phase = name
+            await emit('PHASE', **fields)
+        def observe(row):
+            _capture({'phase': phase, **row})
+        async def compose():
+            await enter('ADMISSION')
+            original, revision, recipe = self._composition_recipe(args, operation_id)
+            required = dict(recipe.input_manifests)
+            await enter('PLANNING')
+            io_plan = await recipe.fresh_io_plan()
+            binding = self._composition_binding(original, recipe, io_plan, operation_id)
+            await emit('COMPOSITION_BINDING', binding=binding)
+            key = 'source-compose-' + operation_id.removeprefix('op-')
+            inputs, opened = {}, []
+            def grant(source_operation, path, role, length, descriptors, *, require_existing=False):
+                extent = grant_transfer_extent(owner.cartridge, source_operation,
+                    _transfer_extent_id(source_operation, path, role), length,
+                    capacity_controller=owner, require_existing=require_existing)
+                descriptors.append(extent.fd)
+                if _capture is not None:
+                    cache = {}
+                    if require_existing and role == 'data' and _uncached_source:
+                        command = getattr(fcntl, 'F_NOCACHE', None)
+                        if command is None:
+                            _reject('CAPABILITY_MISMATCH', path, 'uncached source descriptor requests are unavailable')
+                        try:
+                            before = fcntl.fcntl(extent.fd, fcntl.F_GETFL)
+                            fcntl.fcntl(extent.fd, command, 1)
+                            cache = {'uncached_request': True, 'cache_flags_before': before,
+                                     'cache_flags_after': fcntl.fcntl(extent.fd, fcntl.F_GETFL)}
+                        except OSError as error:
+                            _reject('CAPABILITY_MISMATCH', path, f'uncached source descriptor request failed: {error}')
+                    metadata = os.fstat(extent.fd)
+                    observe({'kind': 'EXTENT_BOUND', 'time_ns': time.monotonic_ns(), 'path': path,
+                        'role': ('source_' if require_existing else 'output_') + role,
+                        'operation_id': source_operation, 'offset': extent.offset, 'length': extent.length,
+                        'device': metadata.st_dev, 'inode': metadata.st_ino, 'allocated_bytes': metadata.st_blocks * 512, **cache})
+                    if not require_existing:
+                        extent = replace(extent, observer=lambda event: observe({'path': path, 'role': 'output_' + role, **event}))
+                return extent
+            try:
+                await enter('INPUT_REOPEN')
+                for artifact in _acquisition_artifacts(revision):
+                    if artifact.path not in required:
+                        continue
+                    inputs[artifact.path] = {}
+                    for role, length in (('data', artifact.size), ('state', transfer_state_bytes(artifact.size))):
+                        extent = await await_extent_io(grant, original['operation_id'], artifact.path, role,
+                            length, opened, require_existing=True)
+                        inputs[artifact.path][role] = extent
+                head = await await_extent_io(campaign_head, owner.cartridge, key)
+                if head is None:
+                    await enter('PREPASS')
+                    outputs = list(await recipe.artifact_digests(inputs, observer=observe if _capture is not None else None))
+                    await enter('OWNERSHIP_COMMIT')
+                    head = await await_extent_io(compare_campaign_head, owner, key, None,
+                        {'binding': binding, 'recipe': recipe.record(), 'io_plan': io_plan, 'outputs': outputs})
+                    await emit('OWNERSHIP', digest=head['digest'], mode='FRESH')
+                else:
+                    await emit('OWNERSHIP', digest=head['digest'], mode='RESUME')
+                value = head['value']
+                if (not isinstance(value, dict) or set(value) != {'binding', 'recipe', 'io_plan', 'outputs'} or value['binding'] != binding
+                        or value['recipe'] != recipe.record() or value['io_plan'] != io_plan or not isinstance(value['outputs'], list)):
+                    _reject('ROOT_INVALID', operation_id, 'saved composition ownership differs from its admitted inputs')
+                shapes = [(item['path'], sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment
+                           else segment['length'] for segment in item['segments'])) for item in recipe.record()['artifacts']]
+                outputs = value['outputs']
+                if len(outputs) != len(shapes) or any(
+                        not isinstance(item, dict) or set(item) != {'path', 'size', 'digest'}
+                        or (item['path'], item['size']) != shape or type(item['size']) is not int
+                        or not isinstance(item['digest'], str) or re.fullmatch(r'sha256:[0-9a-f]{64}', item['digest']) is None
+                        for item, shape in zip(outputs, shapes, strict=True)):
+                    _reject('ROOT_INVALID', operation_id, 'saved composition outputs differ from the exact recipe shape')
+                completed = []
+                for item in outputs:
+                    pair, output_fds = {}, []
+                    try:
+                        await enter('COMPOSE_WRITE', output=item['path'])
+                        for role, length in (('data', item['size']), ('state', transfer_state_bytes(item['size']))):
+                            pair[role] = await await_extent_io(grant, operation_id, item['path'], role, length, output_fds)
+                        async def checkpoint_committed(partial):
+                            if _capture is not None:
+                                await emit('OUTPUT_BOUNDARY', output=item['path'],
+                                    offset=partial.contiguous_source_hash_offset, generation=partial.checkpoint_generation,
+                                    hash_state_digest=digest_bytes(partial.serialized_hash_state.encode()))
+                            await self.hold_boundary(operation_id, 'composition-checkpoint', observer=None if _capture is None else
+                                lambda row: observe({'output': item['path'], **row}))
+                        partial = await compose_artifact(recipe, inputs, item['path'], item['digest'],
+                            pair['data'], pair['state'], owner, checkpoint_committed=checkpoint_committed,
+                            observer=observe if _capture is not None else None)
+                        await enter('OUTPUT_COMMIT', output=item['path'])
+                        result = {'ownership_digest': head['digest'], 'output': item,
+                                  'partial': _partial_record(item['path'], partial)}
+                        output_key = 'source-compose-output-' + digest_bytes(canonical_bytes({
+                            'operation_id': operation_id, 'path': item['path']})).removeprefix('blake3:')
+                        saved = await await_extent_io(campaign_head, owner.cartridge, output_key)
+                        if saved is None:
+                            saved = await await_extent_io(compare_campaign_head, owner, output_key, None, result)
+                        if saved['value'] != result:
+                            _reject('ROOT_INVALID', operation_id, 'saved output completion differs from its verified bytes')
+                        completed.append(saved['digest'])
+                    finally:
+                        for descriptor in output_fds:
+                            os.close(descriptor)
+                await enter('FINAL_COMMIT')
+                result = {'acquisition_operation_id': original['operation_id'], 'recipe_digest': binding['recipe_digest'],
+                          'ownership_digest': head['digest'], 'output_count': len(outputs),
+                          'outputs_digest': digest_bytes(canonical_bytes(outputs)),
+                          'completion_records_digest': digest_bytes(canonical_bytes(completed))}
+                final = await await_extent_io(campaign_head, owner.cartridge, key + '-complete')
+                if final is None:
+                    final = await await_extent_io(compare_campaign_head, owner, key + '-complete', None, result)
+                if final['value'] != result:
+                    _reject('ROOT_INVALID', operation_id, 'final composition record differs from its verified outputs')
+                await enter('COMPLETE', composition_head=final['digest'])
+                return {**result, 'composition_head': final['digest']}
+            finally:
+                for descriptor in opened:
+                    os.close(descriptor)
+
+        return await self.execute(request, compose, pause_on_retryable_error=True,
+                                  hold_observer=observe if _capture is not None else None)
+
+    async def _composition_statistics(self, request, owner, *, capture_key):
+        """Q42/Q60: assess sealed raw observations without promoting incomplete execution."""
+        operation_id = self.operation_id(request)
+        operation = self._load(operation_id)
+        capture = await await_extent_io(campaign_head, owner.cartridge, capture_key)
+        if (request['operation'] != 'source.compose'
+                or capture is None or capture['value'].get('context', {}).get('operation_id') != operation_id
+                or capture['value']['context'].get('request_digest') != digest_bytes(canonical_bytes(request))
+                or (capture['value'].get('status') == 'CAPTURED' and operation['state'] != 'SUCCEEDED')):
+            _reject('INVALID_REQUEST', capture_key, 'generation statistics require their exact canonical capture and complete-result state')
+        original, _, recipe = self._composition_recipe(request['arguments']['composition'], operation_id)
+        plan = await recipe.fresh_io_plan()
+        input_names = dict(recipe.input_manifests)
+        statistics = await await_extent_io(composition_trace, owner.cartridge, capture_key,
+            expected_context=capture['value']['context'], expected_result=operation['result'],
+            expected_contract={'binding': self._composition_binding(original, recipe, plan, operation_id),
+                               'recipe': recipe.record(), 'io_plan': plan},
+            source_sizes={item.path: item.size for item in (*recipe.source.artifacts, *recipe.source.metadata_assets)
+                          if item.path in input_names},
+            checkpoint_shape={'header_bytes': transfer_state_bytes(0),
+                              'record_bytes': transfer_state_bytes(1) - transfer_state_bytes(0)},
+            range_plans={'PREPASS': recipe.profile_ranges(include_empty=True),
+                         'COMPOSE_WRITE': recipe.profile_ranges(include_empty=False)})
+        return {**statistics, 'canonical_operation_state': operation['state']}
+
+    async def _composition_profile(self, request, owner, *, capture_key, require_existing=False):
+        """Q42/Q43: qualify one exact complete composition through the existing Store authority."""
+        statistics = await self._composition_statistics(request, owner, capture_key=capture_key)
+        inputs = statistics['profile_inputs']
+        path = inputs['context']['path']
+        binding = {'drive': path['volume_uuid'], 'host': path['host'], 'path': path,
+            'operation': self.operation_id(request), 'profiler_version': STORAGE_PROFILER_VERSION + '/source-byte-composition-v2',
+            'plan': {'executor': 'SOURCE_BYTE_COMPOSITION', 'composition': inputs['composition'],
+                     'io_plan': inputs['io_plan'], 'host_memory_bytes': inputs['host_memory_bytes']}}
+        measurement = await await_extent_io(storage_profile, binding, [inputs['io_plan']], [statistics],
+                                            expected_binding=binding)
+        key = 'composition-profile-' + digest_bytes(canonical_bytes(binding))[7:]
+        head = await await_extent_io(campaign_head, owner.cartridge, key)
+        if head is None:
+            if require_existing:
+                _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already published composition profile')
+            head = await await_extent_io(compare_campaign_head, owner, key, None, measurement)
+        if head['value'] != measurement:
+            _reject('ROOT_INVALID', key, 'saved composition profile differs from its exact recomputed observation')
+        return {**measurement, 'profile_digest': head['digest'], 'profile_key': key}
+
+    async def qualify_composition(self, request: dict, *, require_existing=False) -> dict:
+        """Q42/Q43/Q60: measure preparation on its verified acquisition's selected cartridge.
+
+        Canonical byte preparation and the later qualification receipt remain separate outcomes.
+        """
+        operation_id = self.operation_id(request)
+        if (request['operation'] != 'source.compose' or set(request['arguments']) != {'composition'}
+                or request.get('target') != request['arguments']['composition']['acquisition_operation_id']):
+            _reject('INVALID_REQUEST', operation_id, 'composition qualification requires its exact acquisition target and recipe')
+        original, _, _ = self._composition_recipe(request['arguments']['composition'], operation_id)
+        if require_existing:
+            saved = self._load(operation_id)
+            if (saved['kind'] != 'source.compose' or saved['state'] != 'SUCCEEDED'
+                    or saved['request_digest'] != digest_bytes(canonical_bytes(request))):
+                _reject('INVALID_REQUEST', operation_id, 'prepared source requires its exact completed composition request')
+        operation = self.issue(request)
+        if (operation['state'] == 'PAUSED'
+                and self.events(operation_id)[-1]['payload'].get('error', {}).get('retryability') == 'retryable'):
+            operation = self.resume(operation_id)
+        qualification = {'status': 'NOT_RUN'}
+        if operation['state'] not in {'PAUSED', 'FAILED', 'CANCELLED'}:
+            try:
+                prepared = [event['payload']['drive_prepared'] for event in original['events']
+                            if 'drive_prepared' in event['payload']]
+                if len(prepared) != 1 or not isinstance(prepared[0], dict):
+                    _reject('INVALID_REQUEST', operation_id, 'composition measurement requires the product acquisition drive record')
+                proof = prepared[0]
+                binding = proof.get('binding', {})
+                if (not isinstance(binding, dict) or binding.get('operation_id') != original['operation_id']
+                        or not isinstance(binding.get('drive_selection_id'), str)
+                        or not isinstance(proof.get('protected_inventory'), dict)):
+                    _reject('ROOT_INVALID', operation_id, 'acquisition drive record lost its binding or protected inventory')
+                destination = self._entry_result(binding['drive_selection_id'], 'drive.select')
+                expected = {'volume_uuid': destination['selection']['volume']['volume_uuid'],
+                    'cartridge_uuid': destination['cartridge_uuid'], 'folder': destination['folder'],
+                    'inventory_digest': destination['inventory_digest']}
+                if (any(binding.get(field) != value for field, value in expected.items())
+                        or digest_bytes(canonical_bytes(proof['protected_inventory'])) != expected['inventory_digest']):
+                    _reject('ROOT_INVALID', operation_id, 'acquisition drive binding differs from its recorded selection')
+                selection = await await_extent_io(select_external_apfs_volume, expected['volume_uuid'])
+                cartridge = Path(selection.volume.mount_path) / expected['folder']
+                lifecycle = CartridgeLifecycle(expected['cartridge_uuid'])
+                await await_extent_io(lifecycle.mount, cartridge, expected['volume_uuid'])
+                head = await await_extent_io(campaign_head, cartridge, proof['campaign_key'])
+                if head is None or head['digest'] != proof['campaign_digest'] or head['value'] != binding:
+                    _reject('ROOT_INVALID', operation_id, 'acquisition durability record no longer verifies on the selected cartridge')
+                probe = binding['probe']
+                await await_extent_io(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                      probe['digest'], probe['bytes'])
+                await self._observe_inventory(operation_id, selection, expected['folder'], proof['protected_inventory'])
+                owner = CapacityCoordinator(cartridge)
+                base_key = 'composition-capture-' + operation_id.removeprefix('op-')
+                attempts = [event['payload']['composition_capture'] for event in self.events(operation_id)
+                            if 'composition_capture' in event['payload']]
+                capture_key = attempts[-1] if attempts else base_key
+                prior = await await_extent_io(campaign_head, cartridge, capture_key)
+                if require_existing and (prior is None or not isinstance(prior['value'], dict)
+                                         or prior['value'].get('status') != 'CAPTURED'):
+                    _reject('SOURCE_UNAVAILABLE', capture_key, 'prepared source requires its already complete composition capture')
+                try:
+                    capture = await self._capture_composition_profile(request, owner, selection,
+                        capture_key=capture_key, uncached_source=True)
+                except CassetteError as error:
+                    record = self._load(operation_id)
+                    if (prior is None or not isinstance(prior['value'], dict)
+                            or prior['value'].get('status') not in {'MEASURING', 'INCOMPLETE'}
+                            or error.code not in {'SOURCE_UNAVAILABLE', 'CARTRIDGE_DISCONNECTED'}
+                            or error.object_id != capture_key
+                            or record['state'] not in {'PENDING', 'RUNNING'}):
+                        raise
+                    capture_key = base_key + '-' + uuid.uuid4().hex
+                    self._append(record, 'output_delta', {'composition_capture': capture_key})
+                    capture = await self._capture_composition_profile(request, owner, selection,
+                        capture_key=capture_key, uncached_source=True)
+                if capture['status'] == 'CAPTURED':
+                    profile = await self._composition_profile(request, owner, capture_key=capture_key,
+                                                              require_existing=require_existing)
+                    qualification = {'status': profile['status'], 'profile_key': profile['profile_key'],
+                        'profile_digest': profile['profile_digest'], 'capture_key': capture_key}
+            except CassetteError as error:
+                record = self._load(operation_id)
+                if record['state'] in {'PENDING', 'RUNNING'}:
+                    if error.retryability == 'retryable':
+                        self._paused(record, error)
+                    else:
+                        self._failed(record, error)
+                qualification = {'status': 'FAIL', 'error': error.payload()}
+        return {'operation': self.status(operation_id), 'source_qualification': qualification}
+
+    async def _capture_composition_profile(self, request, owner, selection, *, capture_key, uncached_source=False):
+        """Q42/Q43/Q60: retain raw owner execution, without granting physical qualification."""
+        operation_id = self.operation_id(request)
+        if request.get('operation') != 'source.compose' or not isinstance(owner, CapacityCoordinator):
+            _reject('INVALID_REQUEST', operation_id, 'generation capture requires its concrete composition and store owner')
+        if type(uncached_source) is not bool:
+            _reject('INVALID_REQUEST', capture_key, 'uncached source measurement policy must be a boolean')
+        if not isinstance(selection, DriveSelection) or not owner.owns(selection.volume.mount_path):
+            _reject('INVALID_REQUEST', operation_id, 'generation capture drive and cartridge filesystem differ')
+        before = await await_extent_io(drive_path_observation, selection)
+        context = {'operation_id': operation_id, 'request_digest': digest_bytes(canonical_bytes(request)),
+                   'cartridge': str(owner.cartridge), 'path': before['path'], 'capture_version': '2-source-composition',
+                   'scope': 'RAW_COMPONENT_CAPTURE; QUALIFICATION_NOT_RUN'}
+        if uncached_source:
+            context['source_data_cache_policy'] = 'UNCACHED_REQUESTED'
+        head = await await_extent_io(campaign_head, owner.cartridge, capture_key)
+        operation = self.issue(request)
+        if head is not None:
+            value = head['value']
+            if not isinstance(value, dict) or value.get('context') != context:
+                old_context = value.get('context') if isinstance(value, dict) else None
+                old_path = old_context.get('path') if isinstance(old_context, dict) else None
+                if not (isinstance(old_path, dict) and set(old_context) == set(context)
+                        and value.get('status') in {'MEASURING', 'INCOMPLETE'}
+                        and operation['state'] in (_TERMINAL_STATES | {'PENDING', 'RUNNING'})
+                        and old_path.get('volume_uuid') == before['path']['volume_uuid']
+                        and isinstance(old_path.get('mount_path'), str)
+                        and {**old_context, 'path': context['path'], 'cartridge': context['cartridge']} == context
+                        and owner.cartridge.is_relative_to(selection.volume.mount_path)
+                        and old_context['cartridge'] == str(Path(old_path['mount_path'])
+                            / owner.cartridge.relative_to(selection.volume.mount_path))):
+                    _reject('ROOT_INVALID', capture_key, 'generation capture differs from its exact request or path')
+                if operation['state'] in {'PENDING', 'RUNNING'}:
+                    _reject('CARTRIDGE_DISCONNECTED', capture_key,
+                        'incomplete generation capture belongs to a prior native path; use a fresh capture attempt',
+                        retryability='retryable')
+            if value.get('status') != 'CAPTURED':
+                if operation['state'] in _TERMINAL_STATES:
+                    _reject('SOURCE_UNAVAILABLE', capture_key,
+                        'terminal preparation has no complete capture; use a fresh composition request key')
+                _reject('SOURCE_UNAVAILABLE', capture_key, 'incomplete generation capture requires a fresh attempt key', retryability='retryable')
+            if operation['state'] != 'SUCCEEDED' or value.get('operation_result_digest') != digest_bytes(canonical_bytes(operation['result'])):
+                _reject('ROOT_INVALID', capture_key, 'completed generation capture differs from its canonical operation result')
+            if (not isinstance(value.get('traces'), list) or not value['traces']
+                    or any(not isinstance(item, dict) or set(item) != {'attempt', 'name', 'digest', 'bytes'}
+                           or item['attempt'] != capture_key for item in value['traces'])
+                    or value.get('ownership_digest') != operation['result']['ownership_digest']
+                    or value.get('composition_head') != operation['result']['composition_head']):
+                _reject('ROOT_INVALID', capture_key, 'completed generation capture lost its exact trace or owner references')
+            for reference in value['traces']:
+                await await_extent_io(verify_campaign_artifact, owner.cartridge, reference['attempt'], reference['name'],
+                    reference['digest'], reference['bytes'], maximum_bytes=2097152)
+            return {**value, 'capture_key': capture_key, 'capture_digest': head['digest']}
+        if operation['state'] in _TERMINAL_STATES:
+            _reject('INVALID_REQUEST', capture_key, 'a new capture cannot measure an already terminal composition')
+        first_host = await await_extent_io(storage_host_observation)
+        claim_start = len(owner.claims())
+        trace, references, lock, markers = bytearray(), [], threading.Lock(), {}
+        def begin():
+            nonlocal head
+            head = compare_campaign_head(owner, capture_key, None, {'context': context, 'status': 'MEASURING'})
+        def flush_locked():
+            if trace:
+                payload, name = bytes(trace), str(len(references)) + '-' + uuid.uuid4().hex + '.jsonl'
+                write_campaign_artifact(owner, capture_key, name, payload)
+                references.append({'attempt': capture_key, 'name': name, 'bytes': len(payload), 'digest': digest_bytes(payload)})
+                trace.clear()
+        def record(row):
+            payload = canonical_bytes(row) + b'\n'
+            if len(payload) > 1048576:
+                _reject('CAPABILITY_MISMATCH', capture_key, 'generation trace row exceeds its bounded capture size')
+            with lock:
+                marker = ('binding' if row.get('kind') == 'COMPOSITION_BINDING' else
+                          'ownership' if row.get('kind') == 'OWNERSHIP' else
+                          'complete' if row.get('kind') == 'PHASE' and row.get('phase') == 'COMPLETE' else None)
+                if marker is not None:
+                    if marker in markers:
+                        _reject('ROOT_INVALID', capture_key, 'generation capture repeats an owner identity boundary')
+                    markers[marker] = row
+                trace.extend(payload)
+                if len(trace) >= 1048576:
+                    flush_locked()
+        def flush():
+            with lock:
+                flush_locked()
+        async def sample_interval():
+            while True:
+                await asyncio.sleep(.5)
+                sample = await await_extent_io(storage_host_observation)
+                await await_extent_io(record, {'kind': 'HOST_SAMPLE', **sample})
+        started = time.monotonic_ns()
+        sampler = None
+        try:
+            await await_extent_io(record, {'kind': 'WINDOW_OPEN', 'started_ns': started, 'device': before,
+                                          'host': first_host, 'active_claims': list(owner.active_claims())})
+            await await_extent_io(begin)
+            sampler = asyncio.create_task(sample_interval())
+            operation = await self.compose_source(request, owner, _capture=record, _uncached_source=uncached_source)
+            if operation['state'] == 'SUCCEEDED' and (set(markers) != {'binding', 'ownership', 'complete'}
+                    or markers['binding']['binding']['operation_id'] != operation_id
+                    or markers['ownership']['digest'] != operation['result']['ownership_digest']
+                    or markers['complete']['composition_head'] != operation['result']['composition_head']):
+                _reject('SOURCE_UNAVAILABLE', capture_key, 'composition completed without its complete captured owner route', retryability='retryable')
+            if sampler.done():
+                sampler.result()
+            sampler.cancel()
+            await asyncio.gather(sampler, return_exceptions=True)
+            after = await await_extent_io(drive_path_observation, selection)
+            last_host = await await_extent_io(storage_host_observation)
+            if before['path'] != after['path']:
+                _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during generation capture')
+            ended = time.monotonic_ns()
+            await await_extent_io(record, {'kind': 'WINDOW_CLOSE', 'ended_ns': ended, 'device': after,
+                                          'host': last_host, 'active_claims': list(owner.active_claims())})
+            claims = owner.claims()[claim_start:]
+            await await_extent_io(record, {'kind': 'CLAIM_ACCOUNTING_BOUNDARY', 'time_ns': time.monotonic_ns(), 'claim_count': len(claims)})
+            for claim in claims:
+                await await_extent_io(record, {'kind': 'CAPACITY_CLAIM', 'time_ns': time.monotonic_ns(),
+                    'transition': asdict(claim.transition), 'state': claim.state, 'history': list(claim.history),
+                    'observations': list(claim.observations), 'writes_started': claim.writes_started,
+                    'recovery_parent': None if claim.recovery_parent is None else asdict(claim.recovery_parent),
+                    'recovery_parent_callable': claim.recovery_parent_callable})
+            await await_extent_io(flush)
+            value = {'context': context, 'status': 'CAPTURED' if operation['state'] == 'SUCCEEDED' else 'INCOMPLETE',
+                'operation_state': operation['state'], 'operation_error': operation.get('error'),
+                'operation_result_digest': digest_bytes(canonical_bytes(operation.get('result'))), 'traces': references,
+                'owner_binding': markers.get('binding', {}).get('binding'),
+                'ownership_digest': markers.get('ownership', {}).get('digest'),
+                'execution_mode': markers.get('ownership', {}).get('mode'),
+                'composition_head': markers.get('complete', {}).get('composition_head'),
+                'duration_seconds': (ended - started) / 1e9, 'native_window': {'before': before, 'after': after},
+                'host_window': {'before': first_host, 'after': last_host}, 'cache_state': 'UNCONTROLLED; NOT_COLD_PROOF',
+                'timing_evidence': 'RAW_WALL_WINDOW; HOLD_MARKERS_REQUIRE_SEGMENTATION',
+                'process_counter_scope': 'WINDOW_DELTAS; PER_CALL_DELTAS_CAN_OVERLAP',
+                'claim_scope': 'THIS_COORDINATOR_ISSUED_AT_ACCOUNTING_BOUNDARY; FINAL_CAPTURE_PUBLICATION_EXCLUDED',
+                'mode_scope': 'OWNERSHIP_RECORD_REUSE; NOT_CANONICAL_ATTEMPT_HISTORY',
+                'instrumentation_scope': 'NATIVE_COUNTERS_INCLUDE_CAPTURE_CONTROL_AND_SHARED_DEVICE_ACTIVITY; CALL_ROWS_COVER_DECLARED_EXTENTS'}
+            saved = await await_extent_io(compare_campaign_head, owner, capture_key, head['digest'], value)
+            return {**value, 'capture_key': capture_key, 'capture_digest': saved['digest']}
+        except BaseException as error:
+            if head is None:
+                raise
+            failure = {'type': type(error).__name__, 'code': error.code if isinstance(error, CassetteError) else None,
+                       'detail': str(error)}
+            try:
+                if sampler is not None:
+                    sampler.cancel()
+                    await asyncio.gather(sampler, return_exceptions=True)
+                await await_extent_io(record, {'kind': 'WINDOW_INTERRUPTED', 'ended_ns': time.monotonic_ns(), 'error': failure})
+                await await_extent_io(flush)
+                await await_extent_io(compare_campaign_head, owner, capture_key, head['digest'],
+                    {'context': context, 'status': 'INCOMPLETE', 'traces': references, 'error': failure})
+            except BaseException as receipt_error:
+                raise error from receipt_error
+            raise
+        finally:
+            if sampler is not None:
+                sampler.cancel()
+                await asyncio.gather(sampler, return_exceptions=True)
 
     async def discover_models(self, request: dict) -> dict:
         """Q9/Q52: own discovery admission and record the source adapter's result."""
@@ -1537,7 +2045,7 @@ class CanonicalBroker:
                 _reject('INVALID_REQUEST', 'source.discover', 'catalogue endpoint differs from its connection')
             credential_ref = connection['credential_ref']
         adapter = SourceAdapter(args['source'], args['endpoint'],
-            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(args['source'], args['endpoint']))
+            credential_lookup=MacOSSourceCredentialProvider().lookup_callback(args['source'], args['endpoint']))
         async def discover():
             return await adapter.discover(args['query'], limit=args['limit'], cursor=args['cursor'],
                                           credential_ref=credential_ref)
@@ -1555,16 +2063,23 @@ class CanonicalBroker:
         if request['operation'] != 'source.connect' or set(request['arguments']) != {'connection'}:
             _reject('INVALID_REQUEST', 'source.connect', 'connection requires its generated argument record')
         args = request['arguments']['connection']
-        if args['mode'] == 'public' and (token is not None or args['credential_ref'] is not None):
-            _reject('INVALID_REQUEST', 'source.connect', 'public connection cannot contain a credential')
+        if args['mode'] != 'token' and (token is not None or args['credential_ref'] is not None):
+            _reject('INVALID_REQUEST', 'source.connect', 'public and existing-login connections accept no supplied credential')
         adapter = SourceAdapter(args['source'], args['endpoint'])
         async def connect():
             if args['mode'] == 'public':
                 await adapter.discover('', limit=1)
                 credential_ref = None
                 authentication = {'authenticated': False, 'scope': 'public'}
+            elif args['mode'] == 'existing':
+                adapter._require_existing_login()
+                vault = MacOSSourceCredentialProvider()
+                credential_ref = await asyncio.to_thread(vault.existing_login, args['source'], args['endpoint'])
+                authenticated_adapter = SourceAdapter(args['source'], args['endpoint'],
+                    credential_lookup=vault.lookup_callback(args['source'], args['endpoint']))
+                authentication = await authenticated_adapter._validate_credential(credential_ref)
             else:
-                vault = MacOSKeychainCredentialProvider()
+                vault = MacOSSourceCredentialProvider()
                 credential_ref = args['credential_ref']
                 if token is None or credential_ref is not None:
                     _reject('INVALID_REQUEST', 'source.connect', 'token connection requires masked input and no caller-supplied reference')
@@ -1575,18 +2090,73 @@ class CanonicalBroker:
                     'credential_ref': credential_ref, 'authentication': authentication}
         return await self.execute(request, connect)
 
-    async def select_model(self, request: dict) -> dict:
-        """Q5/Q9: freeze immutable source evidence without acquiring model payload."""
+    async def _prepared_source(self, reference, revision):
+        """Q9/Q42/Q60: join actual provider artifacts to existing preparation and measurements."""
+        composition_request, geometry_request = reference['composition_request'], reference['geometry_request']
+        composition_id, geometry_id = (self.operation_id(item) for item in (composition_request, geometry_request))
+        geometry_record = self._load(geometry_id)
+        arguments = geometry_request['arguments']
+        if (geometry_request['operation'] != 'acquire' or set(arguments) != {'acquisition'}
+                or set(arguments['acquisition']) != {'operation_geometry', 'drive_selection_id'}
+                or geometry_request['target'] != arguments['acquisition']['drive_selection_id']
+                or (geometry_record['kind'], geometry_record['state'], geometry_record['phase']) != ('acquire', 'PAUSED', 'EMPTY')
+                or geometry_record['request_digest'] != digest_bytes(canonical_bytes(geometry_request))):
+            _reject('INVALID_REQUEST', geometry_id, 'prepared source requires its exact recorded geometry qualification request')
+        geometry = OperationGeometry(arguments['acquisition']['operation_geometry'])
+        artifacts = _acquisition_artifacts(revision)
+        if (geometry.source_kind != revision.source_kind
+                or geometry.record()['revision_algorithm'] != revision.immutable_revision.partition(':')[0]
+                or len(geometry.artifacts) != len(artifacts)
+                or any((planned.path, planned.size, planned.digest_algorithm,
+                        planned.validator_template.replace('{digest}', actual.digest.partition(':')[2]))
+                       != (actual.path, actual.size, actual.digest.partition(':')[0], actual.validator)
+                       for planned, actual in zip(geometry.artifacts, artifacts, strict=True))):
+            _reject('SOURCE_REVISION_CHANGED', geometry_id, 'resolved artifact closure differs from the qualified geometry')
+        if any(not item.digest.startswith('sha256:') for item in artifacts):
+            _reject('CAPABILITY_MISMATCH', composition_id, 'prepared SHA-256 commitments require comparable resolved artifact digests')
+        qualification = await self.qualify_composition(composition_request, require_existing=True)
+        if qualification['source_qualification']['status'] != 'PASS':
+            if 'error' in qualification['source_qualification']:
+                raise CassetteError(**qualification['source_qualification']['error'])
+            _reject('CAPABILITY_MISMATCH', composition_id, 'prepared source requires a passing composition profile')
+        destination = self._entry_result(arguments['acquisition']['drive_selection_id'], 'drive.select')
+        selection = await await_extent_io(select_external_apfs_volume, destination['selection']['volume']['volume_uuid'])
+        cartridge = Path(selection.volume.mount_path) / destination['folder']
+        lifecycle = CartridgeLifecycle(destination['cartridge_uuid'])
+        await await_extent_io(lifecycle.mount, cartridge, selection.volume.volume_uuid)
+        if digest_bytes(canonical_bytes(destination['protected_inventory'])) != destination['inventory_digest']:
+            _reject('ROOT_INVALID', geometry_id, 'prepared source drive inventory digest does not verify')
+        await self._observe_inventory(geometry_id, selection, destination['folder'], destination['protected_inventory'])
+        owner = CapacityCoordinator(cartridge)
+        profile = await self._qualify_download(geometry_id, owner, selection, geometry, require_existing=True)
+        receipts = [event['payload']['source_qualification'] for event in geometry_record['events']
+                    if 'source_qualification' in event['payload']]
+        if not receipts or receipts[-1] != profile:
+            _reject('ROOT_INVALID', geometry_id, 'geometry profile differs from its canonical qualification receipt')
+        ownership = await await_extent_io(campaign_head, cartridge, 'source-compose-' + composition_id.removeprefix('op-'))
+        outputs = [{'path': item.path, 'size': item.size, 'digest': item.digest} for item in artifacts]
+        if (ownership is None or ownership['digest'] != qualification['operation']['result']['ownership_digest']
+                or ownership['value'].get('outputs') != outputs):
+            _reject('SOURCE_REVISION_CHANGED', composition_id, 'resolved artifact digests differ from the committed preparation outputs')
+        return {'composition_operation_id': composition_id,
+                'composition_head': qualification['operation']['result']['composition_head'],
+                'ownership_digest': ownership['digest'], 'composition_profile': qualification['source_qualification'],
+                'geometry_operation_id': geometry_id, 'geometry_digest': digest_bytes(geometry.encoded),
+                'geometry_profile': profile, 'source_lock_digest': digest_bytes(canonical_bytes(_source_record(revision)))}
+
+    async def select_source(self, request: dict) -> dict:
+        """Q5/Q9: freeze immutable source evidence without acquiring its payload."""
         self.operation_id(request)
         if request['operation'] != 'source.select' or set(request['arguments']) != {'selection'}:
             _reject('INVALID_REQUEST', 'source.select', 'selection requires its generated argument record')
         args = request['arguments']['selection']
         connection = self._entry_result(args['connection_id'], 'source.connect')
         adapter = SourceAdapter(connection['source'], connection['endpoint'],
-            credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(connection['source'], connection['endpoint']))
+            credential_lookup=MacOSSourceCredentialProvider().lookup_callback(connection['source'], connection['endpoint']))
         async def select():
             descriptor = {'kind': connection['source'], 'locator': args['locator']}
             for field, value in (('revision', args['revision']),
+                                 ('artifact_selector', args.get('artifact_selector')),
                                  ('credential_ref', connection['credential_ref']),
                                  ('license_acceptance_ref', args['license_acceptance_ref'])):
                 if value is not None:
@@ -1595,11 +2165,14 @@ class CanonicalBroker:
             if await adapter.enumerate(revision) != revision.artifacts:
                 _reject('SOURCE_REVISION_CHANGED', revision.locator, 'model artifacts changed during selection')
             requirements = await adapter.license_and_auth(revision)
+            descriptor['locator'] = revision.locator
             descriptor['revision'] = revision.immutable_revision
+            preparation = ({} if 'preparation' not in args else
+                           {'preparation': await self._prepared_source(args['preparation'], revision)})
             return {'connection_id': args['connection_id'], 'endpoint': connection['endpoint'],
                     'descriptor': descriptor, 'source_lock': _source_record(revision),
                     'requirements': requirements.record(), 'downloaded_bytes': 0,
-                    'execution_compatibility': 'NOT_VERIFIED'}
+                    'execution_compatibility': 'NOT_VERIFIED', **preparation}
         return await self.execute(request, select)
 
     async def discover_drives(self, request: dict) -> dict:
@@ -1616,10 +2189,21 @@ class CanonicalBroker:
         while True:
             revalidate_external_apfs_volume(selection)
             result = await asyncio.to_thread(inventory_step, selection.volume.mount_path,
-                excluded=('.Spotlight-V100', '.Trashes', '.fseventsd', folder), checkpoint=checkpoint)
+                excluded=('.Spotlight-V100', '.Trashes', '.fseventsd', '.DocumentRevisions-V100', '.TemporaryItems', folder), checkpoint=checkpoint)
             if result['inventory'] is not None:
                 return result['inventory']
             checkpoint = result['checkpoint']
+
+    async def _observe_inventory(self, operation_id, selection, folder, before):
+        """Q41/Q80: retain broad shared-drive changes without attributing another writer's work."""
+        after = await self._protected_inventory(selection, folder)
+        if before != after:
+            self._append(self._load(operation_id), 'output_delta', {'protected_inventory_comparison': {
+                'selected': [{'name': name, **entry} for name, entry in sorted(before.items())],
+                'observed': [{'name': name, **entry} for name, entry in sorted(after.items())],
+                'selected_digest': digest_bytes(canonical_bytes(before)),
+                'observed_digest': digest_bytes(canonical_bytes(after))}})
+        return after
 
     async def select_drive(self, request: dict) -> dict:
         """Q44/Q49: retain destination intent and a protected inventory before any drive write."""
@@ -1639,30 +2223,56 @@ class CanonicalBroker:
                     'inventory_digest': digest_bytes(canonical_bytes(inventory)), 'drive_write_proof': 'NOT_RUN'}
         return await self.execute(request, select)
 
-    async def start_download(self, request: dict) -> dict:
-        """Q5/Q44/Q49: bind Go to its selections and reach the physical durability hold."""
+    async def start_download(self, request: dict, *, qualification_only: bool = False,
+                             header_only: bool = False, header_json_bytes: list[str] | None = None) -> dict:
+        """Q5/Q42/Q44/Q49-Q51: qualify the requested path, then pause, inspect headers or acquire."""
+        if any(type(value) is not bool for value in (qualification_only, header_only)):
+            _reject('INVALID_REQUEST', 'acquire', 'qualification_only and header_only must be boolean execution limits')
         self.operation_id(request)
         if request['operation'] != 'acquire' or set(request['arguments']) != {'acquisition'}:
             _reject('INVALID_REQUEST', 'acquire', 'Go requires its two recorded selections')
         args = request['arguments']['acquisition']
-        model = self._entry_result(args['model_selection_id'], 'source.select')
+        geometry = OperationGeometry(args['operation_geometry']) if 'operation_geometry' in args else None
+        if geometry is not None and (not qualification_only or header_only or header_json_bytes is not None):
+            _reject('INVALID_REQUEST', 'acquire', 'unresolved geometry permits only whole-operation qualification')
+        source_selection = None if geometry is not None else self._entry_result(args['model_selection_id'], 'source.select')
         destination = self._entry_result(args['drive_selection_id'], 'drive.select')
-        descriptor = model['descriptor']
-        request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
+        header_lengths = None
+        if header_only:
+            selected = _source_from(source_selection['source_lock'], args['model_selection_id'])
+            header_lengths = source_header_lengths(selected, header_json_bytes)
+        elif header_json_bytes is not None:
+            _reject('INVALID_REQUEST', 'acquire', 'header declarations require header-only execution')
+        if geometry is None:
+            descriptor = source_selection['descriptor']
+            request = {**request, 'arguments': {**request['arguments'], 'source': descriptor}}
         operation = self.issue(request)
         operation_id = operation['operation_id']
-        if operation['state'] in _TERMINAL_STATES or operation['state'] == 'PAUSED':
+        if operation['state'] in _TERMINAL_STATES:
             return operation
+        if operation['state'] == 'PAUSED':
+            pause_error = self.events(operation_id)[-1]['payload'].get('error', {})
+            released = any('drive_remounted' in event['payload'] or 'drive_revalidated' in event['payload']
+                           for event in self.events(operation_id))
+            holds = [event['payload'] for event in self.events(operation_id) if 'hold' in event['payload']]
+            if pause_error.get('retryability') != 'retryable' and not (
+                    released and (not holds or holds[-1].get('hold') == 'RELEASED')):
+                return operation
+            self.resume(operation_id)
         try:
-            selected = destination['selection']
+            remounts = [event['payload'][field] for event in self.events(operation_id)
+                       for field in ('drive_remounted', 'drive_revalidated') if field in event['payload']]
+            selected = remounts[-1]['selection'] if remounts else destination['selection']
             selection = DriveSelection(DriveVolume(**selected['volume']), WriterContext(**selected['writer']))
-            selection = await asyncio.to_thread(revalidate_external_apfs_volume, selection)
-            adapter = SourceAdapter(descriptor['kind'], model['endpoint'],
-                credential_lookup=MacOSKeychainCredentialProvider().lookup_callback(descriptor['kind'], model['endpoint']))
-            revision = await adapter.resolve(descriptor)
-            if _source_record(revision) != model['source_lock']:
-                _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable model')
-            await adapter.license_and_auth(revision)
+            selection = await asyncio.to_thread(select_external_apfs_volume, selection.volume.volume_uuid) if remounts else await asyncio.to_thread(revalidate_external_apfs_volume, selection)
+            revision = geometry
+            if geometry is None:
+                adapter = SourceAdapter(descriptor['kind'], source_selection['endpoint'],
+                    credential_lookup=MacOSSourceCredentialProvider().lookup_callback(descriptor['kind'], source_selection['endpoint']))
+                revision = await adapter.resolve(descriptor)
+                if _source_record(revision) != source_selection['source_lock']:
+                    _reject('SOURCE_REVISION_CHANGED', operation_id, 'Go source evidence differs from the selected immutable input')
+                await adapter.license_and_auth(revision)
             observed_inventory = destination['protected_inventory']
             if digest_bytes(canonical_bytes(observed_inventory)) != destination['inventory_digest']:
                 _reject('ROOT_INVALID', operation_id, 'selected protected inventory digest does not verify')
@@ -1670,10 +2280,12 @@ class CanonicalBroker:
                 destination['folder'], operation_id=operation_id, cartridge_uuid=destination['cartridge_uuid'])
             owner = CapacityCoordinator(cartridge)
             key = 'go-durability-' + operation_id.removeprefix('op-')
-            binding = {'operation_id': operation_id, 'source_revision': revision.immutable_revision,
-                'model_selection_id': args['model_selection_id'], 'drive_selection_id': args['drive_selection_id'],
+            binding = {'operation_id': operation_id, 'source_revision': None if geometry is not None else revision.immutable_revision,
+                'model_selection_id': args.get('model_selection_id'), 'drive_selection_id': args['drive_selection_id'],
                 'volume_uuid': selection.volume.volume_uuid, 'cartridge_uuid': cartridge_uuid,
                 'folder': destination['folder'], 'inventory_digest': destination['inventory_digest']}
+            if geometry is not None:
+                binding['operation_geometry_digest'] = digest_bytes(geometry.encoded)
             head = await asyncio.to_thread(campaign_head, cartridge, key)
             if head is None:
                 probe_id = str(uuid.uuid4())
@@ -1687,7 +2299,7 @@ class CanonicalBroker:
             probe = binding['probe']
             await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
                                    probe['digest'], probe['bytes'])
-            compare_inventory(observed_inventory, await self._protected_inventory(selection, destination['folder']))
+            await self._observe_inventory(operation_id, selection, destination['folder'], observed_inventory)
             record = self._load(operation_id)
             if not any('drive_prepared' in event['payload'] for event in record['events']):
                 self._append(record, 'output_delta', {'drive_prepared': {
@@ -1696,18 +2308,827 @@ class CanonicalBroker:
                     'selection': _json_copy(asdict(selection), operation_id, 'writer selection'),
                     'protected_inventory': observed_inventory,
                     'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}})
-            self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
-            self._append(self._load(operation_id), 'output_delta',
-                         {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
-            return self._operation(self._paused(self._load(operation_id)))
+            if not remounts:
+                prior = await self._revalidate_durability(cartridge, binding)
+                holds = [event['payload'] for event in self.events(operation_id) if 'hold' in event['payload']]
+                if prior is None:
+                    if not holds:
+                        self.request_hold(operation_id, 'CARTRIDGE-DURABILITY')
+                    elif holds[-1] not in ({'hold': 'REQUESTED', 'boundary': 'CARTRIDGE-DURABILITY'},
+                                           {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}):
+                        _reject('ROOT_INVALID', operation_id, 'durability preparation conflicts with its saved hold')
+                    if not holds or holds[-1]['hold'] == 'REQUESTED':
+                        self._append(self._load(operation_id), 'output_delta',
+                                     {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+                    return self._operation(self._paused(self._load(operation_id)))
+                if holds and holds[-1] == {'hold': 'REQUESTED', 'boundary': 'CARTRIDGE-DURABILITY'}:
+                    self._append(self._load(operation_id), 'output_delta',
+                                 {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'})
+                    holds[-1] = {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}
+                if holds and holds[-1] == {'hold': 'ACKNOWLEDGED', 'boundary': 'CARTRIDGE-DURABILITY'}:
+                    self.release_hold(operation_id, 'CARTRIDGE-DURABILITY')
+                self._append(self._load(operation_id), 'output_delta', {'drive_revalidated': {
+                    'proof_operation_id': prior, 'selection': _json_copy(asdict(selection), operation_id, 'writer selection')}})
+            qualification = await self._qualify_download(operation_id, owner, selection, revision,
+                                                          header_lengths=header_lengths)
+            if qualification_only:
+                return self.pause(operation_id)
+            if header_only:
+                try:
+                    await self._inspect_headers(operation_id, adapter, owner, revision,
+                                                qualification['profile_digest'], header_lengths)
+                except CassetteError as error:
+                    return self._operation(self._paused(self._load(operation_id), error))
+                return self.pause(operation_id)
+            return await self.run_acquisition(request, AcquisitionContext(adapter, owner, None, cartridge))
         except CassetteError as error:
+            if error.retryability == 'retryable':
+                return self._operation(self._paused(self._load(operation_id), error))
             return self._operation(self._failed(self._load(operation_id), error))
 
+    async def _revalidate_durability(self, cartridge, binding):
+        """Q44/Q49: reread a completed operation's exact durable proof on the same cartridge."""
+        for path in sorted(self.operation_log.glob('op-*.json')):
+            record = self._load(path.stem)
+            if record['kind'] != 'acquire' or record['state'] != 'SUCCEEDED':
+                continue
+            if not any('drive_remounted' in event['payload'] for event in record['events']):
+                continue
+            prepared = next((event['payload']['drive_prepared'] for event in record['events']
+                             if 'drive_prepared' in event['payload']), None)
+            if prepared is None or any(prepared['binding'][field] != binding[field]
+                                       for field in ('volume_uuid', 'cartridge_uuid', 'folder')):
+                continue
+            head = await asyncio.to_thread(campaign_head, cartridge, prepared['campaign_key'])
+            if head is None or head['digest'] != prepared['campaign_digest'] or head['value'] != prepared['binding']:
+                _reject('ROOT_INVALID', path.stem, 'prior cartridge durability pointer no longer verifies')
+            probe = head['value']['probe']
+            await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
+                                   probe['digest'], probe['bytes'])
+            return path.stem
+        return None
+
+    async def _capture_source_profile(self, operation_id, owner, selection, baseline, adapter,
+                                      revision, artifact, extents, *, header_bytes=None, saved_header=None,
+                                      revalidation=False, capture_key, source_extents=None):
+        """Q42/Q44/Q51: capture actual source I/O; immutable trace batches bound memory use."""
+        hold_name = 'retained-source-checkpoint' if source_extents is not None else 'profile-checkpoint'
+        trace, captures = bytearray(), []
+        host_samples = {'count': 0, 'max_gap_ns': 0, 'states': set(), 'first': None, 'last': None}
+        capture_lock = threading.Lock()
+        timings = {kind: [] for kind in ('read', 'write', 'fsync', 'F_FULLFSYNC', 'PARSER_READ')}
+        totals = dict(read_bytes=0, data_read_bytes=0, write_bytes=0, data_write_bytes=0, errors=0, io_calls=0,
+                      process_data_read_bytes=0, data_reads_with_process_io=0, data_reads_without_process_io=0,
+                      source_read_bytes=0, source_state_read_bytes=0, process_source_read_bytes=0)
+        attempt = capture_key
+        # The localhost listener changes on restart; its port is transport, not source identity.
+        source_lock = _source_record(revision)
+        source_lock['artifacts'] = [{key: value for key, value in item.items() if key != 'range_uri'}
+                                    for item in source_lock['artifacts']]
+        context = {'operation_id': operation_id, 'source_lock': source_lock,
+                   'artifact': {key: value for key, value in artifact.record().items() if key != 'range_uri'},
+                   'extent_operation': extents['data'].operation_id,
+                   'source_extent_operation': None if source_extents is None else source_extents['data'].operation_id,
+                   'revalidation': revalidation, 'header_json_bytes': header_bytes, 'path': baseline['path']}
+        capture_head = await asyncio.to_thread(campaign_head, owner.cartridge, attempt)
+        windows, restored_boundary, recovery_history = [], None, []
+        fresh_read_window = False
+        if capture_head is not None and revalidation:
+            saved = capture_head['value']
+            if isinstance(saved, dict) and saved.get('status') in {'MEASURING', 'INCOMPLETE'}:
+                if any(saved.get(key) != value for key, value in context.items()):
+                    _reject('ROOT_INVALID', attempt, 'retained read restart differs from its bound source or extent')
+                recovery_history = json.loads(canonical_bytes(saved.get('recovery_history', [])))
+                if not isinstance(recovery_history, list):
+                    _reject('ROOT_INVALID', attempt, 'retained read recovery history must be an ordered list')
+                recovery_history.append({'capture_digest': capture_head['digest'], 'error': saved.get('error'),
+                                         'status': saved['status']})
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**context, 'status': 'MEASURING', 'superseded_capture': capture_head['digest'],
+                     'recovery_history': recovery_history})
+                fresh_read_window = True
+        if capture_head is None:
+            capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, None,
+                                                   {**context, 'status': 'MEASURING'})
+        elif not fresh_read_window:
+            saved = capture_head['value']
+            if (not isinstance(saved, dict) or any(saved.get(key) != value for key, value in context.items())
+                    or saved.get('status') not in {'MEASURING', 'INCOMPLETE', 'CHECKPOINTED', 'CAPTURED'}):
+                _reject('ROOT_INVALID', attempt, 'source profile capture differs from its exact source and extent')
+            recovery_history = json.loads(canonical_bytes(saved.get('recovery_history', [])))
+            if not isinstance(recovery_history, list):
+                _reject('ROOT_INVALID', attempt, 'profile recovery history must be an ordered list')
+            if saved.get('error') is not None:
+                recovery_history.append({'capture_digest': capture_head['digest'], 'error': saved['error']})
+            if saved['status'] in {'MEASURING', 'INCOMPLETE'}:
+                _reject('SOURCE_UNAVAILABLE', attempt, 'source profile requires a fresh measured extent generation', retryability='retryable')
+            checkpoint = json.loads(canonical_bytes(saved.get('checkpoint')))
+            if saved['status'] != 'CAPTURED' and not isinstance(checkpoint, dict):
+                _reject('ROOT_INVALID', attempt, 'source profile checkpoint must be an observation object')
+            captures = saved.get('traces') if saved['status'] == 'CAPTURED' else checkpoint.get('traces')
+            captures = json.loads(canonical_bytes(captures))
+            if not isinstance(captures, list) or not captures:
+                _reject('ROOT_INVALID', attempt, 'source profile capture has no durable trace coverage')
+            for trace_ref in captures:
+                if not isinstance(trace_ref, dict) or set(trace_ref) != {'attempt', 'name', 'bytes', 'digest'}:
+                    _reject('ROOT_INVALID', attempt, 'source profile trace reference is malformed')
+                await asyncio.to_thread(verify_campaign_artifact, owner.cartridge, trace_ref['attempt'],
+                    trace_ref['name'], trace_ref['digest'], trace_ref['bytes'], maximum_bytes=2097152)
+            if saved['status'] == 'CAPTURED':
+                if not isinstance(saved.get('measurement'), dict) or saved['measurement'].get('traces') != captures:
+                    _reject('ROOT_INVALID', attempt, 'completed capture lost its measured result')
+                return {**saved['measurement'], 'capture_record_key': attempt, 'capture_record_digest': capture_head['digest']}
+            if (not isinstance(checkpoint, dict) or set(checkpoint) != {'totals', 'timings', 'host_samples', 'windows', 'traces', 'source_boundary'}
+                    or not isinstance(checkpoint['totals'], dict) or set(checkpoint['totals']) != set(totals)
+                    or any(type(value) is not int or value < 0 for value in checkpoint['totals'].values())
+                    or not isinstance(checkpoint['timings'], dict) or set(checkpoint['timings']) != set(timings)
+                    or any(not isinstance(values, list) or any(type(value) is not int or value < 0 for value in values)
+                           for values in checkpoint['timings'].values())
+                    or not isinstance(checkpoint['host_samples'], dict)
+                    or set(checkpoint['host_samples']) != set(host_samples)
+                    or not isinstance(checkpoint['host_samples']['states'], list)
+                    or any(type(value) is not int or not 0 <= value <= 3 for value in checkpoint['host_samples']['states'])
+                    or any(type(checkpoint['host_samples'][name]) is not int or checkpoint['host_samples'][name] < 0
+                           for name in ('count', 'max_gap_ns'))
+                    or any(not isinstance(checkpoint['host_samples'][name], dict)
+                           or type(checkpoint['host_samples'][name].get('time_ns')) is not int
+                           for name in ('first', 'last'))
+                    or not isinstance(checkpoint['windows'], list) or not checkpoint['windows']
+                    or any(not isinstance(window, dict)
+                           or type(window.get('duration_seconds')) not in (int, float)
+                           or not math.isfinite(window['duration_seconds']) or window['duration_seconds'] <= 0
+                           or any(type(window.get(name)) is not int or window[name] < 0 for name in
+                                  ('device_write_bytes', 'process_diskio_read_bytes', 'process_diskio_written_bytes'))
+                           or (window.get('device_read_bytes') is not None
+                               and (type(window['device_read_bytes']) is not int or window['device_read_bytes'] < 0))
+                           for window in checkpoint['windows'])):
+                _reject('ROOT_INVALID', attempt, 'source profile observation checkpoint is malformed')
+            restored_boundary = checkpoint['source_boundary']
+            if (not isinstance(restored_boundary, dict)
+                    or (set(restored_boundary) != {'header_digest'} if header_bytes is not None
+                        else set(restored_boundary) != {'offset', 'hash_state_digest', 'generation'})
+                    or _DIGEST.fullmatch(str(restored_boundary.get('header_digest' if header_bytes is not None else 'hash_state_digest'))) is None
+                    or (header_bytes is None and (type(restored_boundary.get('offset')) is not int
+                        or not 0 <= restored_boundary['offset'] <= artifact.size
+                        or type(restored_boundary.get('generation')) is not int or restored_boundary['generation'] < 0))):
+                _reject('ROOT_INVALID', attempt, 'profile checkpoint lost its exact source boundary')
+            if header_bytes is not None:
+                if saved_header is not None and saved_header != restored_boundary['header_digest']:
+                    _reject('ROOT_INVALID', attempt, 'profile header boundary differs from its expected digest')
+                saved_header = restored_boundary['header_digest']
+            totals, timings, host_samples, windows = (checkpoint[key] for key in
+                                                     ('totals', 'timings', 'host_samples', 'windows'))
+            host_samples['states'] = set(host_samples['states'])
+            # The source executor's binary checkpoint remains the recovery authority. This
+            # receipt restores observations only; the held job performs no new source I/O yet.
+            self._append(self._load(operation_id), 'output_delta', {'source_profile_resume': {
+                'capture_key': attempt, 'checkpoint_digest': capture_head['digest'],
+                'extent_operation': extents['data'].operation_id}})
+            await self.hold_boundary(operation_id, hold_name)
+        def flush_locked():
+            if trace:
+                payload = bytes(trace)
+                name = str(len(captures)) + '-' + uuid.uuid4().hex + '.jsonl'
+                write_campaign_artifact(owner, attempt, name, payload)
+                captures.append({'attempt': attempt, 'name': name, 'bytes': len(payload),
+                                 'digest': digest_bytes(payload)})
+                trace.clear()
+        def record(row):
+            with capture_lock:
+                trace.extend(canonical_bytes(row) + b'\n')
+                if len(trace) >= 1048576:
+                    flush_locked()
+        def flush():
+            with capture_lock:
+                flush_locked()
+        def observe(role, event):
+            phase = ('RETAINED_REVALIDATION' if revalidation else
+                     'RESUME_VERIFY' if restored_boundary is not None else 'FRESH_WRITE_READBACK')
+            record({'role': role, 'phase': phase, **event})
+            if event['kind'] == 'VERIFIED_PREFIX':
+                return
+            totals['io_calls'] += 1
+            totals['errors'] += not event['success']
+            timings[event['kind']].append(event['duration_ns'])
+            if event['kind'] in ('read', 'PARSER_READ'):
+                totals['read_bytes'] += event['returned_bytes']
+                if role == 'data':
+                    totals['data_read_bytes'] += event['returned_bytes']
+                elif role == 'source_data':
+                    totals['source_read_bytes'] += event['returned_bytes']
+                    totals['process_source_read_bytes'] += event['process_diskio_read_bytes']
+                elif role == 'source_state':
+                    totals['source_state_read_bytes'] += event['returned_bytes']
+            elif event['kind'] == 'write':
+                totals['write_bytes'] += event['returned_bytes']
+                if role == 'data':
+                    if event['offset'] != extents['data'].offset + totals['data_write_bytes']:
+                        _reject('SOURCE_UNAVAILABLE', attempt, 'source profile write coverage is discontinuous', retryability='retryable')
+                    totals['data_write_bytes'] += event['returned_bytes']
+            if role == 'data' and event['kind'] in ('read', 'PARSER_READ') and revalidation:
+                disk_bytes = event['process_diskio_read_bytes']
+                totals['process_data_read_bytes'] += disk_bytes
+                totals['data_reads_with_process_io' if disk_bytes else 'data_reads_without_process_io'] += 1
+        measuring, held = True, False
+        try:
+            observed_extents = {role: replace(extent, observer=lambda event, role=role: observe(role, event),
+                                             observe_process_reads=revalidation and role == 'data')
+                                for role, extent in extents.items()}
+            if source_extents is not None:
+                for role, extent in tuple(source_extents.items()):
+                    source_extents[role] = replace(extent,
+                        observer=lambda event, role=role: observe('source_' + role, event),
+                        observe_process_reads=role == 'data')
+                command = getattr(fcntl, 'F_NOCACHE', None)
+                if command is not None:
+                    try:
+                        fcntl.fcntl(source_extents['data'].fd, command, 1)
+                    except OSError as error:
+                        _reject('CAPABILITY_MISMATCH', artifact.path, f'uncached source descriptor request failed: {error}')
+            if revalidation:
+                # A descriptor request does not evict existing cache pages. The samples below decide
+                # whether this retained working-set window actually produced process-accounted I/O.
+                command = getattr(fcntl, 'F_NOCACHE', None)
+                if command is not None:
+                    try:
+                        fcntl.fcntl(observed_extents['data'].fd, command, 1)
+                    except OSError as error:
+                        _reject('CAPABILITY_MISMATCH', artifact.path, f'uncached descriptor request failed: {error}')
+            async def checkpoint(partial):
+                nonlocal capture_head, before, started, measuring, window_host, restored_boundary, held
+                boundary = ({'header_digest': partial['header_digest']} if header_bytes is not None else {
+                    'offset': partial.contiguous_source_hash_offset,
+                    'generation': partial.checkpoint_generation,
+                    'hash_state_digest': digest_bytes(partial.serialized_hash_state.encode())})
+                if restored_boundary is not None:
+                    if boundary != restored_boundary:
+                        _reject('SOURCE_UNAVAILABLE', attempt, 'source checkpoint advanced beyond its durable measured boundary', retryability='retryable')
+                record({'kind': 'SOURCE_BOUNDARY', 'time_ns': time.monotonic_ns(), 'source_boundary': boundary})
+                if restored_boundary is not None:
+                    restored_boundary = None
+                holds = [event['payload'] for event in self._load(operation_id)['events'] if 'hold' in event['payload']]
+                if not holds or holds[-1] != {'hold': 'REQUESTED', 'boundary': hold_name}:
+                    return
+                measuring = False
+                await close_window()
+                snapshot = json.loads(canonical_bytes({'totals': totals, 'timings': timings,
+                    'host_samples': {**host_samples, 'states': sorted(host_samples['states'])}, 'windows': windows,
+                    'traces': captures, 'source_boundary': boundary}))
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**context, 'status': 'CHECKPOINTED', 'traces': captures,
+                     'checkpoint': snapshot, 'recovery_history': recovery_history})
+                held = True
+                await self.hold_boundary(operation_id, hold_name)
+                held = False
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**capture_head['value'], 'status': 'MEASURING'})
+                before = await asyncio.to_thread(drive_path_observation, selection)
+                sample_host()
+                window_host = host_samples['last']
+                started = time.monotonic_ns()
+                record({'kind': 'WINDOW_OPEN', 'started_ns': started, 'observer_pid': window_host['pid'],
+                        'device': before, 'host': window_host})
+                measuring = True
+                return source_extents is not None
+            def sample_host():
+                sample = storage_host_observation()
+                if host_samples['last'] is not None:
+                    host_samples['max_gap_ns'] = max(host_samples['max_gap_ns'],
+                        sample['time_ns'] - host_samples['last']['time_ns'])
+                else:
+                    host_samples['first'] = sample
+                host_samples['last'] = sample
+                host_samples['count'] += 1
+                host_samples['states'].add(sample['thermal_state'])
+                record({'kind': 'HOST_SAMPLE', **sample})
+            async def sample_interval():
+                while True:
+                    await asyncio.sleep(.5)
+                    if measuring:
+                        sample_host()
+            async def close_window():
+                nonlocal measuring
+                after = await asyncio.to_thread(drive_path_observation, selection)
+                sample_host()
+                finished = time.monotonic_ns()
+                if before['path'] != baseline['path'] or after['path'] != baseline['path']:
+                    _reject('CARTRIDGE_DISCONNECTED', operation_id, 'drive path changed during source-executor measurement')
+                writes = (before['device_write_bytes'], after['device_write_bytes'])
+                reads = (before.get('device_read_bytes'), after.get('device_read_bytes'))
+                if None in writes or writes[1] < writes[0] or (None not in reads and reads[1] < reads[0]):
+                    _reject('CAPABILITY_MISMATCH', operation_id, 'physical source telemetry is unavailable or regressed')
+                windows.append({'started_ns': started, 'ended_ns': finished,
+                    'duration_seconds': (finished - started) / 1e9,
+                    'device_write_bytes': writes[1] - writes[0],
+                    'device_read_bytes': None if None in reads else reads[1] - reads[0],
+                    'observer_pid': window_host['pid'],
+                    'process_diskio_read_bytes': host_samples['last']['process_diskio_read_bytes'] - window_host['process_diskio_read_bytes'],
+                    'process_diskio_written_bytes': host_samples['last']['process_diskio_written_bytes'] - window_host['process_diskio_written_bytes'],
+                    'counter_candidates': {'before': before.get('counter_candidates'), 'after': after.get('counter_candidates')},
+                    'device_counters': {'before': {name: before.get(name) for name in
+                        ('device_read_bytes', 'device_write_bytes', 'device_read_operations')},
+                        'after': {name: after.get(name) for name in
+                        ('device_read_bytes', 'device_write_bytes', 'device_read_operations')}}})
+                record({'kind': 'WINDOW_CLOSE', 'ended_ns': finished, 'observer_pid': window_host['pid'],
+                        'device': after, 'host': host_samples['last']})
+                measuring = False
+                await await_extent_io(flush)
+            if capture_head['value']['status'] != 'MEASURING':
+                capture_head = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**capture_head['value'], 'status': 'MEASURING'})
+            before = await asyncio.to_thread(drive_path_observation, selection)
+            sample_host()
+            window_host = host_samples['last']
+            sampler = asyncio.create_task(sample_interval())
+            started = time.monotonic_ns()
+            record({'kind': 'WINDOW_OPEN', 'started_ns': started, 'observer_pid': window_host['pid'],
+                    'device': before, 'host': window_host})
+            try:
+                if header_bytes is None:
+                    partial = await transfer_artifact(adapter, revision, artifact,
+                        observed_extents['data'], observed_extents['state'], owner,
+                        checkpoint_committed=checkpoint)
+                    if partial.contiguous_source_hash_offset != artifact.size:
+                        _reject('ROOT_INVALID', artifact.path, 'profile source executor did not complete its artifact')
+                    parsed = None
+                else:
+                    parsed = await transfer_header(adapter, revision, artifact, observed_extents['data'], owner,
+                        expected_header_json_bytes=header_bytes, expected_header_digest=saved_header)
+                    await checkpoint(parsed)
+                await close_window()
+            finally:
+                sampler.cancel()
+                try:
+                    await sampler
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    await await_extent_io(flush)
+            expected_writes = 0 if revalidation else artifact.size if header_bytes is None else header_bytes + 8
+            if totals['data_write_bytes'] != expected_writes:
+                _reject('SOURCE_UNAVAILABLE', attempt, 'source profile does not cover its exact data writes', retryability='retryable')
+            statistics = await asyncio.to_thread(source_profile_trace, owner.cartridge, captures,
+                expected_data_writes=expected_writes,
+                expected_data_reads=artifact.size if header_bytes is None else header_bytes + 8, revalidation=revalidation,
+                data_offset=extents['data'].offset, has_state='state' in extents,
+                record_base=transfer_state_bytes(0), expected_path=baseline['path'],
+                expected_source_reads=0 if source_extents is None else artifact.size,
+                source_state_bytes=0 if source_extents is None else source_extents['state'].length)
+            if (statistics['data_write_bytes'] != totals['data_write_bytes'] or statistics['io_calls'] != totals['io_calls']
+                    or statistics['host_write_bytes'] != totals['write_bytes']
+                    or statistics['data_read_bytes'] != totals['data_read_bytes']
+                    or statistics['process_data_read_bytes'] != totals['process_data_read_bytes']
+                    or statistics['source_read_bytes'] != totals['source_read_bytes']
+                    or statistics['source_state_read_bytes'] != totals['source_state_read_bytes']
+                    or statistics['process_source_read_bytes'] != totals['process_source_read_bytes']):
+                _reject('SOURCE_UNAVAILABLE', attempt, 'raw source trace differs from its live byte or call count', retryability='retryable')
+            elapsed = sum(window['duration_seconds'] for window in windows)
+            measurement = {'duration_seconds': elapsed, 'write_seconds': sum(timings['write']) / 1e9,
+                    'read_seconds': (sum(timings['read']) + sum(timings['PARSER_READ'])) / 1e9,
+                    'flush_seconds': (sum(timings['fsync']) + sum(timings['F_FULLFSYNC'])) / 1e9,
+                    'readback_ok': True, 'flush_ok': True, 'errors': totals['errors'],
+                    'host_write_bytes': totals['write_bytes'], 'observed_read_bytes': totals['read_bytes'],
+                    'observed_data_write_bytes': totals['data_write_bytes'],
+                    'observed_data_read_bytes': totals['data_read_bytes'],
+                    'observed_source_read_bytes': totals['source_read_bytes'],
+                    'observed_source_state_read_bytes': totals['source_state_read_bytes'],
+                    'process_source_read_bytes': totals['process_source_read_bytes'],
+                    'source_allocated_bytes': 0 if source_extents is None else os.fstat(source_extents['data'].fd).st_blocks * 512,
+                    'device_write_bytes': sum(window['device_write_bytes'] for window in windows),
+                    'device_read_bytes': (None if any(window['device_read_bytes'] is None for window in windows)
+                                          else sum(window['device_read_bytes'] for window in windows)),
+                    'device_counter_authority': 'nearest IOBlockStorageDriver in bound native path; shared device interval',
+                    'measurement_windows': windows, 'timing_evidence': 'SUM_OF_ACTIVE_WINDOWS; INTERRUPTIONS_EXCLUDED',
+                    'trace_statistics': statistics,
+                    'recovery_history': recovery_history,
+                    'process_data_read_bytes': totals['process_data_read_bytes'],
+                    'data_reads_with_process_io': totals['data_reads_with_process_io'],
+                    'data_reads_without_process_io': totals['data_reads_without_process_io'],
+                    'read_counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA',
+                    'uncached_request': revalidation and getattr(fcntl, 'F_NOCACHE', None) is not None,
+                    'data_allocated_bytes': os.fstat(extents['data'].fd).st_blocks * 512,
+                    'io_calls': totals['io_calls'], 'iops': totals['io_calls'] / elapsed,
+                    'io_latency_seconds': statistics['diagnostic_call_union']['empirical_percentiles'],
+                    'flush_latency_seconds': statistics['diagnostic_flush_union']['empirical_percentiles'],
+                    'legacy_latency_scope': 'DIAGNOSTIC_CALL_UNION_ONLY; QUALIFICATION_USES_SEPARATE_PHASES',
+                    'host_telemetry': {'evidence': 'SAMPLED_STATE', 'samples': host_samples['count'],
+                        'max_gap_seconds': statistics['max_in_window_sampling_gap_seconds'],
+                        'scope': 'ACTIVE_WINDOWS_ONLY; DOWNTIME_REPORTED_SEPARATELY',
+                        'thermal_states': sorted(host_samples['states']),
+                        'process_diskio_read_bytes': sum(window['process_diskio_read_bytes'] for window in windows),
+                        'process_diskio_written_bytes': sum(window['process_diskio_written_bytes'] for window in windows)},
+                    'traces': captures, 'header': parsed, 'scratch_retention': 'NAMED_UNTIL_SEALED'}
+            captured = await asyncio.to_thread(compare_campaign_head, owner, attempt, capture_head['digest'],
+                {**context, 'status': 'CAPTURED', 'traces': captures, 'measurement': measurement,
+                 'recovery_history': recovery_history})
+            return {**measurement, 'capture_record_key': attempt, 'capture_record_digest': captured['digest']}
+        except BaseException as error:
+            failure = {'type': type(error).__name__, 'code': error.code if isinstance(error, CassetteError) else None,
+                       'detail': str(error)}
+            try:
+                if measuring:
+                    record({'kind': 'WINDOW_INTERRUPTED', 'ended_ns': time.monotonic_ns(), 'error': failure})
+                await await_extent_io(flush)
+            except BaseException as trace_error:
+                failure['trace_flush_error'] = type(trace_error).__name__ + ': ' + str(trace_error)
+            try:
+                await await_extent_io(compare_campaign_head, owner, attempt, capture_head['digest'],
+                    {**capture_head['value'], 'status': ('CHECKPOINTED' if capture_head['value'].get('status') == 'CHECKPOINTED'
+                        and held else 'INCOMPLETE'), 'traces': captures, 'recovery_history': recovery_history,
+                     'pending_trace_bytes': len(trace), 'error': failure})
+            except BaseException as receipt_error:
+                raise error from receipt_error
+            raise
+
+    async def _abandon_profile_extents(self, operation_id, owner, keys, error, capture_keys=()):
+        """Q44/Q53/Q60: preserve failed evidence before reclaiming only its pinned synthetic files."""
+        retained, sealed = [], []
+        for key in keys:
+            manifest = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+            if manifest is None or not isinstance(manifest['value'], dict):
+                continue
+            value = manifest['value']
+            if value.get('status') == 'RETAINED':
+                retained.append({'key': key, 'retained_digest': manifest['digest']})
+            elif value.get('status') in {'SEALED', 'RECLAIMING'}:
+                evidence = await asyncio.to_thread(campaign_head, owner.cartridge, value['evidence_key'])
+                if (evidence is None or evidence['digest'] != value['evidence_digest']
+                        or not isinstance(evidence['value'], dict) or evidence['value'].get('disposition') != 'ABANDONED'):
+                    _reject('ROOT_INVALID', key, 'failed profile cleanup reached a completed measurement seal')
+                sealed.append((key, manifest['digest'] if value['status'] == 'SEALED' else value['seal_digest']))
+        if retained:
+            captures = []
+            for key in capture_keys:
+                capture = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+                if capture is not None:
+                    captures.append({'key': key, 'digest': capture['digest']})
+            evidence_key = 'profile-abandoned-' + uuid.uuid4().hex
+            evidence = await asyncio.to_thread(compare_campaign_head, owner, evidence_key, None, {
+                'status': 'INCOMPLETE', 'disposition': 'ABANDONED', 'operation_id': operation_id,
+                'error': error.payload(), 'captures': captures, 'retained_manifests': retained})
+            for item in retained:
+                manifest = await asyncio.to_thread(seal_profile_extents, owner, item['key'], item['retained_digest'],
+                    evidence_key, evidence['digest'])
+                sealed.append((item['key'], manifest['digest']))
+        for key, digest in sealed:
+            await asyncio.to_thread(reclaim_profile_extents, owner, key, digest)
+
+    async def _qualify_download(self, operation_id, owner, selection, revision, *, header_lengths=None,
+                                require_existing=False):
+        """Q42/Q53/Q60: measure the source executor and retain its whole operation working set."""
+        observed = await asyncio.to_thread(drive_path_observation, selection)
+        host = await asyncio.to_thread(storage_host_observation)
+        geometry = isinstance(revision, OperationGeometry)
+        retained_source = geometry and revision.record().get('source_storage', 'MEMORY') == 'CARTRIDGE_RETAINED'
+        artifacts = revision.artifacts if geometry or header_lengths is not None else _acquisition_artifacts(revision)
+        patterns = [{'artifact': artifact.path,
+                     'write_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8,
+                     'read_bytes': artifact.size if header_lengths is None else header_lengths[artifact.path] + 8}
+                    for artifact in artifacts]
+        lengths = [{'data': artifact.size, **({'state': transfer_state_bytes(artifact.size)}
+                                             if header_lengths is None else {})} for artifact in artifacts]
+        preparation_patterns = patterns
+        if retained_source:
+            patterns = [{**pattern, 'source_read_bytes': artifact.size,
+                         'source_state_bytes_per_range': lengths[index]['state']}
+                        for index, (pattern, artifact) in enumerate(zip(patterns, artifacts, strict=True))]
+        binding = {'drive': selection.volume.volume_uuid, 'host': observed['path']['host'],
+                   'path': observed['path'], 'operation': operation_id,
+                   'profiler_version': STORAGE_PROFILER_VERSION,
+                   'plan': {'source_lock': None if geometry else _source_record(revision), 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
+                            'queue_depth': 1, 'network_range_concurrency': 2,
+                            'source_storage': 'CARTRIDGE_RETAINED' if retained_source else 'MEMORY',
+                            'cache_state': 'FRESH_READBACK_AND_RETAINED_REVALIDATION',
+                            'working_set_bytes': (sum(sum(item.values()) for item in lengths) * (2 if retained_source else 1) if header_lengths is None
+                                                  else sum(header_lengths[artifact.path] + 8 for artifact in artifacts)),
+                            'retained_extent_logical_bytes': sum(sum(item.values()) for item in lengths) * (2 if retained_source else 1),
+                            'host_memory_bytes': host['host_memory_bytes'],
+                            'artifact_bytes': sum(artifact.size for artifact in artifacts),
+                            'checkpoint_pattern': 'SOURCE_EXECUTOR_ALTERNATING_SLOTS_AND_RECORDS',
+                            'checkpoint_record_base': transfer_state_bytes(0),
+                            'service_deadline_seconds': None, 'training_endurance': 'NOT_APPLICABLE',
+                            'unavailable_telemetry': ['cable_capability', 'media_health'],
+                            'thermal_evidence': 'SAMPLED_STATE_WITH_RETAINED_GAPS',
+                            'uncached_read_request_available': getattr(fcntl, 'F_NOCACHE', None) is not None,
+                            'cache_crossing_required': sum(pattern['read_bytes'] for pattern in patterns) > host['host_memory_bytes'],
+                            'cold_read_verification': 'RETAINED_SOURCE_WINDOW; FLAG_ALONE_IS_NOT_PROOF'}}
+        if geometry:
+            binding['plan'].update(operation_geometry=revision.record(),
+                                   operation_geometry_digest=digest_bytes(revision.encoded),
+                                   source_identity_verification='NOT_RUN')
+        if header_lengths is not None:
+            binding['plan'].update(header_only=True, header_json_bytes=header_lengths,
+                artifact_ranges={artifact.path: [list(pair) for pair in header_ranges(artifact, header_lengths[artifact.path])]
+                                 for artifact in artifacts}, checkpoint_pattern='SOURCE_EXECUTOR_HEADER_AND_COMPLETE_PARSER')
+        key = 'download-profile-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
+        stage_suffixes = ('', '-copy') if retained_source else ('',)
+        extent_keys = [key + '-' + str(index) + suffix + '-extents'
+                       for suffix in stage_suffixes for index in range(len(artifacts))]
+        plan = {'binding': binding, 'pattern_count': len(patterns)}
+        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+        if head is None:
+            if require_existing:
+                _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already published geometry profile')
+            head = await asyncio.to_thread(compare_campaign_head, owner, key, None, plan)
+        if head['value'] != plan:
+            _reject('ROOT_INVALID', operation_id, 'saved acquisition profile differs from its source or path')
+        complete = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-complete')
+        if require_existing and complete is None:
+            _reject('SOURCE_UNAVAILABLE', key, 'prepared source requires its already complete geometry profile')
+        try:
+            if complete is None:
+                observations, revalidations, atom_digests, retained = [], [], [], []
+                self._append(self._load(operation_id), 'output_delta', {'source_qualification': {'status': 'MEASURING'}})
+                async with AsyncExitStack() as boundaries:
+                    adapter, synthetic = await boundaries.enter_async_context(
+                        source_profile_boundary(revision, artifacts, header_lengths=header_lengths))
+                    source_handles = None
+                    for stage, suffix in enumerate(stage_suffixes):
+                        if stage:
+                            source_handles = {}
+                            adapter, synthetic = await boundaries.enter_async_context(
+                                source_profile_boundary(revision, artifacts, retained_sources=source_handles))
+                        observations = []
+                        stage_patterns = preparation_patterns if retained_source and not stage else patterns
+                        for index, (artifact, pattern, shape) in enumerate(zip(synthetic.artifacts, stage_patterns, lengths, strict=True)):
+                            atom_key = key + '-' + str(index) + suffix
+                            extent_key = atom_key + '-extents'
+                            extent_binding = {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
+                            source_manifest, source_extents = None, None
+                            if stage:
+                                source_key, source_digest = retained[index]
+                                source_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, source_key)
+                                if (source_manifest is None or source_manifest['digest'] != source_digest
+                                        or source_manifest['value'].get('status') != 'RETAINED'):
+                                    _reject('ROOT_INVALID', artifact.path, 'source counterpart is not the exact retained preparation')
+                                extent_binding['source_extent_manifest'] = source_digest
+                            manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key, extent_binding, shape)
+                            capture_key = 'source-' + manifest['digest'].split(':', 1)[1] + '-capture'
+                            restart_error = None
+                            try:
+                                if stage:
+                                    reopened, source_extents = await asyncio.to_thread(grant_profile_extents, owner,
+                                        retained[index][0], {'profile_digest': head['digest'], 'artifact': artifacts[index].record()}, shape)
+                                    if reopened['digest'] != source_manifest['digest']:
+                                        _reject('ROOT_INVALID', artifact.path, 'source counterpart changed before its measured reads')
+                                    source_handles[artifact.path] = source_extents
+                                atom = await asyncio.to_thread(campaign_head, owner.cartridge, atom_key)
+                                if atom is None:
+                                    measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
+                                        adapter, synthetic, artifact, extents,
+                                        header_bytes=None if header_lengths is None else header_lengths[artifact.path],
+                                        capture_key=capture_key, source_extents=source_extents)
+                                    if measurement['observed_data_write_bytes'] != pattern['write_bytes']:
+                                        _reject('SOURCE_UNAVAILABLE', capture_key, 'profile does not cover its exact data writes', retryability='retryable')
+                                    atom = await asyncio.to_thread(compare_campaign_head, owner, atom_key, None,
+                                        {'profile_digest': head['digest'], 'pattern': pattern, 'measurement': measurement})
+                                if (not isinstance(atom['value'], dict)
+                                        or set(atom['value']) != {'profile_digest', 'pattern', 'measurement'}
+                                        or atom['value'].get('profile_digest') != head['digest']
+                                        or atom['value'].get('pattern') != pattern
+                                        or not isinstance(atom['value'].get('measurement'), dict)):
+                                    _reject('ROOT_INVALID', artifact.path, 'saved source profile atom differs from its exact plan')
+                                parsed = atom['value']['measurement'].get('header')
+                                if header_lengths is not None and (not isinstance(parsed, dict)
+                                        or not isinstance(parsed.get('header_digest'), str)
+                                        or _DIGEST.fullmatch(parsed['header_digest']) is None
+                                        or parsed.get('header_bytes') != header_lengths[artifact.path] + 8):
+                                    _reject('ROOT_INVALID', artifact.path, 'saved profile header differs from its complete declared bytes')
+                                observations.append({**atom['value']['measurement'], 'binding': binding, 'pattern': pattern})
+                                atom_digests.append(atom['digest'])
+                                retained.append((extent_key, manifest['digest']))
+                            except CassetteError as error:
+                                if source_extents is not None:
+                                    # A timed-out client can leave its server reading source handles.
+                                    await boundaries.aclose()
+                                failed_capture = await asyncio.to_thread(campaign_head, owner.cartridge, capture_key)
+                                incomplete = (failed_capture is not None and isinstance(failed_capture['value'], dict)
+                                              and failed_capture['value'].get('status') == 'INCOMPLETE')
+                                if (error.retryability != 'retryable' or not (incomplete
+                                        or error.code == 'SOURCE_UNAVAILABLE' and error.object_id == capture_key)):
+                                    raise
+                                restart_error = error
+                            except BaseException:
+                                if source_extents is not None:
+                                    await boundaries.aclose()
+                                raise
+                            finally:
+                                for extent in (*extents.values(), *(source_extents or {}).values()):
+                                    os.close(extent.fd)
+                                if source_handles is not None:
+                                    source_handles.pop(artifact.path, None)
+                            if restart_error is not None:
+                                await self._abandon_profile_extents(operation_id, owner, [extent_key], restart_error, [capture_key])
+                                raise restart_error
+                    # Reopen the complete retained working set; the source executor verifies every committed byte.
+                    for index, artifact in enumerate(synthetic.artifacts):
+                        extent_key, _ = retained[-len(artifacts) + index]
+                        manifest, extents = await asyncio.to_thread(grant_profile_extents, owner, extent_key,
+                            {'profile_digest': head['digest'], 'artifact': artifacts[index].record(),
+                             **({'source_extent_manifest': retained[index][1]} if retained_source else {})}, lengths[index])
+                        try:
+                            measurement = await self._capture_source_profile(operation_id, owner, selection, observed,
+                                adapter, synthetic, artifact, extents,
+                                header_bytes=None if header_lengths is None else header_lengths[artifact.path],
+                                saved_header=None if header_lengths is None else observations[index]['header']['header_digest'],
+                                revalidation=True, capture_key='source-' + manifest['digest'].split(':', 1)[1] + '-resume-capture')
+                            if measurement['host_write_bytes'] or measurement['observed_read_bytes'] < patterns[index]['read_bytes']:
+                                _reject('ROOT_INVALID', artifact.path, 'retained profile did not revalidate its complete bytes without writing')
+                            proof_key = key + '-' + str(index) + '-resume'
+                            proof = await asyncio.to_thread(campaign_head, owner.cartridge, proof_key)
+                            if proof is None:
+                                proof = await asyncio.to_thread(compare_campaign_head, owner, proof_key, None,
+                                    {'profile_digest': head['digest'], 'artifact': artifact.path, 'measurement': measurement})
+                            if (not isinstance(proof['value'], dict)
+                                    or set(proof['value']) != {'profile_digest', 'artifact', 'measurement'}
+                                    or proof['value'].get('profile_digest') != head['digest']
+                                    or proof['value'].get('artifact') != artifact.path
+                                    or not isinstance(proof['value'].get('measurement'), dict)):
+                                _reject('ROOT_INVALID', artifact.path, 'saved retained read differs from its source profile')
+                            atom_digests.append(proof['digest'])
+                            revalidations.append({**proof['value']['measurement'], 'binding': binding, 'pattern': patterns[index]})
+                        finally:
+                            for extent in extents.values():
+                                os.close(extent.fd)
+                result = storage_profile(binding, patterns, observations, expected_binding=binding,
+                                         revalidations=revalidations)
+                seal = {'profile_digest': head['digest'], 'atom_count': len(atom_digests),
+                        'atoms_digest': digest_bytes(canonical_bytes(atom_digests)), 'measurements': result,
+                        'retained_manifests': [{'key': extent_key, 'retained_digest': manifest_digest}
+                                               for extent_key, manifest_digest in retained]}
+                complete = await asyncio.to_thread(compare_campaign_head, owner, key + '-complete', None, seal)
+            value = complete['value']
+            if (not isinstance(value, dict) or value.get('profile_digest') != head['digest']
+                    or not isinstance(value.get('measurements'), dict)
+                    or value['measurements'].get('binding') != binding
+                    or not isinstance(value.get('retained_manifests'), list)
+                    or any(not isinstance(item, dict) or set(item) != {'key', 'retained_digest'}
+                           or not isinstance(item['retained_digest'], str)
+                           or _DIGEST.fullmatch(item['retained_digest']) is None
+                           for item in value['retained_manifests'])
+                    or [item.get('key') if isinstance(item, dict) else None for item in value['retained_manifests']]
+                        != extent_keys):
+                _reject('ROOT_INVALID', operation_id, 'completed source profile differs from its bound operation or extents')
+            checked, digests = [[], []], []
+            stages = ([('', preparation_patterns, False, False)] if retained_source else []) + [
+                (stage_suffixes[-1], patterns, False, retained_source), ('-resume', patterns, True, False)]
+            for suffix, stage_patterns, revalidation, uses_source in stages:
+                for index, pattern in enumerate(stage_patterns):
+                    atom = await asyncio.to_thread(campaign_head, owner.cartridge, key + '-' + str(index) + suffix)
+                    if (atom is None or not isinstance(atom['value'], dict)
+                            or atom['value'].get('profile_digest') != head['digest']
+                            or not isinstance(atom['value'].get('measurement'), dict)
+                            or (atom['value'].get('pattern') != pattern if not revalidation
+                                else atom['value'].get('artifact') != artifacts[index].path)):
+                        _reject('ROOT_INVALID', operation_id, 'completed profile measurement is missing or differs')
+                    measurement = atom['value']['measurement']
+                    capture = await asyncio.to_thread(campaign_head, owner.cartridge, measurement.get('capture_record_key'))
+                    if (capture is None or capture['digest'] != measurement.get('capture_record_digest')
+                            or not isinstance(capture['value'], dict) or capture['value'].get('status') != 'CAPTURED'
+                            or capture['value'].get('operation_id') != operation_id
+                            or capture['value'].get('traces') != measurement.get('traces')
+                            or capture['value'].get('measurement') != {name: value for name, value in measurement.items()
+                                if name not in {'capture_record_key', 'capture_record_digest'}}
+                            or not isinstance(measurement.get('traces'), list) or not measurement['traces']):
+                        _reject('ROOT_INVALID', operation_id, 'source I/O capture is missing or differs from its measurement')
+                    expected_source_operation = None
+                    if uses_source:
+                        source_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_keys[index])
+                        destination_manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_keys[len(artifacts) + index])
+                        if (source_manifest is None or destination_manifest is None
+                                or source_manifest['value'].get('binding') != {
+                                    'profile_digest': head['digest'], 'artifact': artifacts[index].record()}
+                                or destination_manifest['value'].get('binding') != {
+                                    'profile_digest': head['digest'], 'artifact': artifacts[index].record(),
+                                    'source_extent_manifest': value['retained_manifests'][index]['retained_digest']}):
+                            _reject('ROOT_INVALID', operation_id, 'source-to-destination extent binding differs from its retained preparation')
+                        expected_source_operation = source_manifest['value'].get('operation_id')
+                    if capture['value'].get('source_extent_operation') != expected_source_operation:
+                        _reject('ROOT_INVALID', operation_id, 'source read capture names another retained extent operation')
+                    recomputed = await asyncio.to_thread(source_profile_trace, owner.cartridge, measurement['traces'],
+                        expected_data_writes=0 if revalidation else pattern['write_bytes'], expected_data_reads=pattern['read_bytes'],
+                        revalidation=revalidation, expected_source_reads=pattern['source_read_bytes'] if uses_source else 0,
+                        source_state_bytes=lengths[index]['state'] if uses_source else 0,
+                        has_state=header_lengths is None, record_base=transfer_state_bytes(0), expected_path=binding['path'])
+                    if (recomputed != measurement.get('trace_statistics')
+                            or recomputed['data_write_bytes'] != measurement.get('observed_data_write_bytes')
+                            or recomputed['host_write_bytes'] != measurement.get('host_write_bytes')
+                            or recomputed['data_read_bytes'] != measurement.get('observed_data_read_bytes')
+                            or recomputed['process_data_read_bytes'] != measurement.get('process_data_read_bytes')
+                            or recomputed['source_read_bytes'] != measurement.get('observed_source_read_bytes')
+                            or recomputed['source_state_read_bytes'] != measurement.get('observed_source_state_read_bytes')
+                            or recomputed['process_source_read_bytes'] != measurement.get('process_source_read_bytes')
+                            or recomputed['io_calls'] != measurement.get('io_calls')):
+                        _reject('ROOT_INVALID', operation_id, 'raw source rows differ from their claimed measurement statistics')
+                    if suffix == '-resume' or not retained_source or uses_source:
+                        checked[int(revalidation)].append({**measurement, 'binding': binding, 'pattern': pattern})
+                    digests.append(atom['digest'])
+            if (value.get('atom_count') != len(digests)
+                    or value.get('atoms_digest') != digest_bytes(canonical_bytes(digests))
+                    or storage_profile(binding, patterns, checked[0], expected_binding=binding,
+                                       revalidations=checked[1]) != value['measurements']):
+                _reject('ROOT_INVALID', operation_id, 'completed profile differs from its verified measurement and trace objects')
+            # Reconcile after every entry, including a crash between global seal and individual reclamation.
+            for retained in value['retained_manifests']:
+                extent_key = retained['key']
+                manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)
+                if manifest is None or not isinstance(manifest['value'], dict):
+                    _reject('ROOT_INVALID', extent_key, 'completed profile extent manifest is missing or malformed')
+                if require_existing and manifest['value'].get('status') != 'RECLAIMED':
+                    _reject('SOURCE_UNAVAILABLE', extent_key, 'prepared source requires completed profile extent reclamation')
+                if not require_existing and manifest['value'].get('status') == 'RETAINED':
+                    manifest = await asyncio.to_thread(seal_profile_extents, owner, extent_key,
+                        retained['retained_digest'], key + '-complete', complete['digest'])
+                if (manifest['value'].get('evidence_key') != key + '-complete'
+                        or manifest['value'].get('evidence_digest') != complete['digest']):
+                    _reject('ROOT_INVALID', extent_key, 'profile extent seal references another measurement')
+                seal_digest = (manifest['digest'] if manifest['value'].get('status') == 'SEALED'
+                               else manifest['value'].get('seal_digest'))
+                if not require_existing:
+                    await asyncio.to_thread(reclaim_profile_extents, owner, extent_key, seal_digest)
+            result = complete['value']['measurements']
+            receipt = {'status': result['status'], 'profile_digest': complete['digest'],
+                       'profile_key': key + '-complete', 'path': str(owner.cartridge)}
+            if not require_existing:
+                self._append(self._load(operation_id), 'output_delta', {'source_qualification': receipt})
+            if result['status'] != 'PASS':
+                _reject('CAPABILITY_MISMATCH', operation_id, 'source executor storage qualification is incomplete')
+            return receipt
+        except CassetteError as error:
+            if complete is None and error.retryability == 'terminal':
+                keys = extent_keys
+                capture_keys = []
+                for index, extent_key in enumerate(keys):
+                    manifest = await asyncio.to_thread(campaign_head, owner.cartridge, extent_key)
+                    if manifest is not None and isinstance(manifest['value'], dict):
+                        namespace = 'source-' + manifest['digest'].split(':', 1)[1]
+                        capture_keys.extend((namespace + '-capture', namespace + '-resume-capture'))
+                await self._abandon_profile_extents(operation_id, owner, keys, error, capture_keys)
+            raise
+
+    async def _inspect_headers(self, operation_id, adapter, owner, revision, profile_digest, header_lengths):
+        """Q44/Q50: publish parsed headers separately from full-source and execution proof."""
+        metadata = await adapter.read_metadata(revision)
+        summaries = []
+        source_digest = digest_bytes(canonical_bytes(_source_record(revision)))
+        for artifact in revision.artifacts:
+            binding = {'operation_id': operation_id, 'source_lock_digest': source_digest,
+                       'artifact': artifact.record(), 'validator': artifact.validator,
+                       'header_json_bytes': header_lengths[artifact.path],
+                       'physical_profile_digest': profile_digest}
+            key = 'source-header-' + digest_bytes(canonical_bytes(binding)).split(':')[1]
+            head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+            if head is not None and (not isinstance(head['value'], dict)
+                    or set(head['value']) != {'binding', 'parsed'} or head['value']['binding'] != binding
+                    or not isinstance(head['value']['parsed'], dict)
+                    or set(head['value']['parsed']) != {'header_digest', 'header_bytes', 'inventory', 'payload_verification'}
+                    or not isinstance(head['value']['parsed']['header_digest'], str)
+                    or _DIGEST.fullmatch(head['value']['parsed']['header_digest']) is None):
+                _reject('ROOT_INVALID', operation_id, 'saved header inventory differs from its source or profile')
+            extent = await asyncio.to_thread(grant_transfer_extent, owner.cartridge, operation_id,
+                _transfer_extent_id(operation_id, artifact.path, 'header'), artifact.size,
+                capacity_controller=owner, require_existing=head is not None)
+            try:
+                parsed = await transfer_header(adapter, revision, artifact, extent, owner,
+                    expected_header_json_bytes=header_lengths[artifact.path],
+                    expected_header_digest=None if head is None else head['value']['parsed']['header_digest'])
+            finally:
+                os.close(extent.fd)
+            if head is None:
+                head = await asyncio.to_thread(compare_campaign_head, owner, key, None,
+                                               {'binding': binding, 'parsed': parsed})
+            elif head['value']['parsed'] != parsed:
+                _reject('ROOT_INVALID', operation_id, 'saved header inventory differs from its verified header bytes')
+            summaries.append({'path': artifact.path, 'header_bytes': parsed['header_bytes'],
+                'header_digest': parsed['header_digest'], 'header_record_key': key,
+                'header_record_digest': head['digest'], 'tensor_count': len(parsed['inventory']['tensors'])})
+        summary_binding = {'operation_id': operation_id, 'source_lock_digest': source_digest,
+                           'physical_profile_digest': profile_digest}
+        key = 'source-headers-' + digest_bytes(canonical_bytes(summary_binding)).split(':')[1]
+        value = {**summary_binding,
+                 'metadata': metadata, 'artifacts': summaries, 'payload_verification': 'NOT_RUN'}
+        head = await asyncio.to_thread(campaign_head, owner.cartridge, key)
+        if head is None:
+            head = await asyncio.to_thread(compare_campaign_head, owner, key, None, value)
+        if head['value'] != value:
+            _reject('ROOT_INVALID', operation_id, 'completed header inventory differs from its source evidence')
+        self._append(self._load(operation_id), 'output_delta', {'source_headers': {
+            'status': 'PARSED', 'artifacts': summaries, 'metadata_record_digest': head['digest'],
+            'metadata_record_key': key, 'payload_verification': 'NOT_RUN'}})
+
     async def watch_drive_remount(self, request: dict) -> dict:
-        """Q44/Q49: observe disconnection and verify the same cartridge after physical reconnection."""
+        """Q44/Q49: verify saved bytes after an observed or operator-reported physical reconnect."""
         self.operation_id(request)
-        if request['operation'] != 'drive.remount' or set(request['arguments']) != {'context_ref'}:
+        arguments = request['arguments']
+        if (request['operation'] != 'drive.remount'
+                or set(arguments) not in ({'context_ref'}, {'context_ref', 'reconnect_confirmed'})
+                or ('reconnect_confirmed' in arguments and arguments['reconnect_confirmed'] is not True)):
             _reject('INVALID_REQUEST', 'drive.remount', 'remount requires the held Go operation')
+        watcher_id = self.operation_id(request)
+        if self._path(watcher_id).exists():
+            recorded = self.issue(request)
+            if recorded['state'] in _TERMINAL_STATES:
+                return recorded
         operation_id = request['arguments']['context_ref']
         record = self._load(operation_id)
         prepared = [event['payload']['drive_prepared'] for event in record['events'] if 'drive_prepared' in event['payload']]
@@ -1719,7 +3140,10 @@ class CanonicalBroker:
         binding = proof['binding']
         async def verify():
             disconnected = any('drive_disconnected' in event['payload'] for event in self.events(operation_id))
-            while True:
+            reported = arguments.get('reconnect_confirmed') is True
+            if reported:
+                self._append(self._load(operation_id), 'output_delta', {'physical_reconnect_reported': 'OPERATOR'})
+            while not reported:
                 volumes = await asyncio.to_thread(list_external_apfs_volumes)
                 matches = [volume for volume in volumes if volume.volume_uuid == binding['volume_uuid']]
                 if not matches and not disconnected:
@@ -1738,7 +3162,6 @@ class CanonicalBroker:
             probe = binding['probe']
             await asyncio.to_thread(verify_campaign_artifact, cartridge, probe['attempt'], probe['name'],
                                    probe['digest'], probe['bytes'])
-            compare_inventory(proof['protected_inventory'], await self._protected_inventory(selection, binding['folder']))
             result = {'go_operation_id': operation_id, 'campaign_digest': head['digest'],
                       'selection': _json_copy(asdict(selection), operation_id, 'remounted selection'),
                       'source_qualification': 'NOT_RUN', 'model_bytes_downloaded': 0}
@@ -1788,24 +3211,39 @@ class CanonicalBroker:
             rendered = render_native_input(cartridge, pin.root_digest, arguments["messages"], arguments["tools"])
             if maximum + len(rendered["token_ids"]) > graph["context_limit"]:
                 _reject("CAPABILITY_MISMATCH", operation_id, "prompt and requested generation exceed the source horizon")
-            while True:
-                runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
-                tokens = runtime.state["generated_tokens"]
-                expose(tokens, pin.root_digest)
-                if tokens:
-                    await self.hold_boundary(operation_id, "runtime-commit")
-                if len(tokens) >= maximum:
-                    return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
-                            "root_digest": pin.root_digest, "position": runtime.state["position"],
-                            "execution_mode": "COMPILED_CERTIFIED" if runtime.compiled else "NATIVE"}
-                candidate = await runtime.execute_step(rendered["token_ids"], seed=arguments["seed"],
-                                         temperature=arguments["temperature"], pixels=arguments.get("pixels"))
-                pin = await _await_completion(asyncio.to_thread(
-                    commit_runtime_state, cartridge, pin.root_digest, operation_id, candidate["payload"],
-                    capacity_controller=capacity_controller,
-                ))
-                expose(candidate["state"]["generated_tokens"], pin.root_digest)
-                await asyncio.sleep(0)
+            # Q63/Q68: weights and context stay in memory for the operation; the context is committed durably when
+            # the operation completes, pauses or is cancelled. Tokens are replayed deterministically after a crash.
+            runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
+            pending = None
+            try:
+                while True:
+                    tokens = runtime.state["generated_tokens"]
+                    expose(tokens, pin.root_digest)
+                    if len(tokens) >= maximum:
+                        break
+                    await asyncio.sleep(0)
+                    record = self._load(operation_id)
+                    if record["pause_requested"] or record["cancel_requested"]:
+                        await asyncio.Event().wait()  # the controller cancels here; the context below is then committed
+                    pending = await runtime.execute_step(rendered["token_ids"], seed=arguments["seed"],
+                                             temperature=arguments["temperature"], pixels=arguments.get("pixels"))
+                    if runtime.compiled or any("hold" in event["payload"] for event in record["events"]):
+                        pin = await _await_completion(asyncio.to_thread(
+                            commit_runtime_state, cartridge, pin.root_digest, operation_id, pending["payload"],
+                            capacity_controller=capacity_controller))
+                        pending = None
+                        runtime = NativeTransformer(cartridge, pin.root_digest, profile, operation_id, request_digest)
+                        await self.hold_boundary(operation_id, "runtime-commit")
+                    else:
+                        runtime.adopt(pending)
+            finally:
+                if pending is not None:
+                    pin = await _await_completion(asyncio.to_thread(
+                        commit_runtime_state, cartridge, pin.root_digest, operation_id, pending["payload"],
+                        capacity_controller=capacity_controller))
+            return {"tokens": tokens, "text": decode_native_tokens(cartridge, pin.root_digest, tokens),
+                    "root_digest": pin.root_digest, "position": runtime.state["position"],
+                    "execution_mode": "COMPILED_CERTIFIED" if runtime.compiled else "NATIVE"}
 
         async with self._model_execution_lock:
             return await self.execute(request, generate)
@@ -2271,6 +3709,12 @@ class CanonicalBroker:
                     _reject("INVALID_REQUEST", operation_id, "transfers must name every required source artifact exactly once")
                 partials = []
                 for artifact in artifacts:
+                    async def checkpoint_committed(partial):
+                        self._transfer_progress[operation_id] = {
+                            'artifact': artifact.path, 'received_bytes': partial.contiguous_source_hash_offset,
+                            'verified_bytes': partial.contiguous_source_hash_offset,
+                            'verification': 'CHUNK_READBACK', 'checkpoint': 'DURABLE'}
+                        await self.hold_boundary(operation_id, 'source-checkpoint')
                     owned_extents = context.transfers is None
                     if owned_extents:
                         data_extent = await asyncio.to_thread(
@@ -2307,24 +3751,30 @@ class CanonicalBroker:
                             data_extent,
                             state_extent,
                             context.capacity_controller,
-                            checkpoint_committed=lambda: self.hold_boundary(operation_id, "source-checkpoint"),
+                            checkpoint_committed=checkpoint_committed,
                         ))
                     finally:
                         if owned_extents:
                             os.close(state_extent.fd)
                             os.close(data_extent.fd)
+                    progress = {'artifact': artifact.path, 'received_bytes': artifact.size,
+                                'verified_bytes': artifact.size, 'verification': 'SOURCE_DIGEST', 'checkpoint': 'DURABLE'}
+                    current = self._load(operation_id)
+                    if not any(event['payload'] == progress for event in current['events']):
+                        self._append(current, 'output_delta', progress)
                 return [
                     _partial_record(artifact.path, partial)
                     for artifact, partial in zip(artifacts, partials, strict=True)
                 ]
 
             checkpoint["partials"] = await self._controlled(operation_id, acquire, cancellable=True)
+            record = self._load(operation_id)
             artifacts = (
                 _acquisition_artifacts(revision)
                 if request["operation"] == ACQUIRE_OPERATION
                 else _compiler_artifacts(revision)
             )
-            _partials_from(checkpoint["partials"], revision, operation_id, artifacts)
+            _verify_partials(checkpoint["partials"], revision, operation_id, artifacts)
             if request["operation"] == ACQUIRE_OPERATION:
                 result = {
                     "immutable_revision": revision.immutable_revision,
@@ -2342,7 +3792,7 @@ class CanonicalBroker:
                     event_payload={"phase": "SOURCE_VERIFIED", "result": result},
                 )
             return self._phase(record, "SOURCE_VERIFIED", checkpoint)
-        partials = _partials_from(checkpoint["partials"], revision, operation_id)
+        _verify_partials(checkpoint["partials"], revision, operation_id)
         if phase == "SOURCE_VERIFIED":
             material = await self._controlled(operation_id,
                 lambda: asyncio.to_thread(inspect_source_identity,
@@ -2678,7 +4128,7 @@ class CanonicalBroker:
             else _compiler_artifacts(revision)
         )
         if phase >= PHASES.index("SOURCE_VERIFIED"):
-            _partials_from(checkpoint["partials"], revision, object_id, artifacts)
+            _verify_partials(checkpoint["partials"], revision, object_id, artifacts)
         if record["kind"] == ACQUIRE_OPERATION:
             return
         if phase >= PHASES.index("PLANNED"):
@@ -2749,6 +4199,9 @@ class CanonicalBroker:
             result["result"] = record["result"]
         if record["error"] is not None:
             result["error"] = record["error"]
+        if (record["state"] not in _TERMINAL_STATES and record["phase"] == "ACQUIRING"
+                and record["operation_id"] in self._transfer_progress):
+            result["result"] = {"transfer_progress": dict(self._transfer_progress[record["operation_id"]])}
         return result
 
     def _phase(self, record: dict, phase: str, checkpoint: dict) -> dict:
@@ -2849,6 +4302,8 @@ class CanonicalBroker:
         event = self._event(record["operation_id"], len(record["events"]), event_type, payload)
         updated = {**record, **changes, "events": [*record["events"], event]}
         self._write(updated)
+        if updated["state"] in _TERMINAL_STATES or updated["phase"] != "ACQUIRING":
+            self._transfer_progress.pop(record["operation_id"], None)
         signal = self._event_signals.get(record["operation_id"])
         if signal is not None:
             signal.set()
@@ -2977,8 +4432,8 @@ class _CFDictionaryCallbacks(ctypes.Structure):
     )
 
 
-class MacOSKeychainCredentialProvider:
-    """Store source tokens in macOS Keychain and expose provider-bound lookups."""
+class MacOSSourceCredentialProvider:
+    """Resolve endpoint-bound Keychain tokens and the existing Ollama signing key."""
 
     def __init__(self) -> None:
         if sys.platform != "darwin":
@@ -3018,14 +4473,117 @@ class MacOSKeychainCredentialProvider:
         finally:
             self._release(attributes)
 
-    def lookup_callback(self, provider: str, endpoint: str) -> Callable[[str], str | None]:
+    def lookup_callback(self, provider: str, endpoint: str) -> Callable[[str], str | Callable[[bytes], str] | None]:
         """Return the one-argument credential lookup callback SourceAdapter accepts."""
         self._binding(provider, endpoint)
         return lambda reference: self.load(reference, provider, endpoint)
 
-    def load(self, reference: str, provider: str, endpoint: str) -> str | None:
+    def existing_login(self, provider: str, endpoint: str) -> str:
+        """Bind an existing provider-owned key without copying or changing that key."""
+        _, public = self._ollama_key()
+        return 'ollama-key:v1:' + digest_bytes(self._binding(provider, endpoint) + public)
+
+    @staticmethod
+    def _ollama_key() -> tuple[bytes, bytes]:
+        """Read Ollama's unencrypted OpenSSH Ed25519 key; reject other encodings."""
+        try:
+            with (Path.home() / '.ollama/id_ed25519').open('rb') as stream:
+                if os.fstat(stream.fileno()).st_mode & 0o077:
+                    raise ValueError('key permissions')
+                encoded = stream.read(4097)
+            lines = encoded.strip().splitlines()
+            if (len(encoded) > 4096 or lines[0] != b'-----BEGIN OPENSSH PRIVATE KEY-----'
+                    or lines[-1] != b'-----END OPENSSH PRIVATE KEY-----'):
+                raise ValueError('key envelope')
+            block = base64.b64decode(b''.join(lines[1:-1]), validate=True)
+            if not block.startswith(b'openssh-key-v1\0'):
+                raise ValueError('key format')
+            cursor = 15
+
+            def word() -> int:
+                nonlocal cursor
+                if cursor + 4 > len(block):
+                    raise ValueError('truncated key')
+                value = int.from_bytes(block[cursor:cursor + 4], 'big')
+                cursor += 4
+                return value
+
+            def field() -> bytes:
+                nonlocal cursor
+                length = word()
+                if cursor + length > len(block):
+                    raise ValueError('truncated key field')
+                value = block[cursor:cursor + length]
+                cursor += length
+                return value
+
+            if field() != b'none' or field() != b'none' or field() != b'' or word() != 1:
+                raise ValueError('encrypted or multiple keys')
+            public = field()
+            private = field()
+            if cursor != len(block) or len(private) % 8:
+                raise ValueError('key extent')
+            block, cursor = private, 0
+            if word() != word() or field() != b'ssh-ed25519':
+                raise ValueError('key check or type')
+            raw_public, raw_private = field(), field()
+            field()  # OpenSSH comment does not participate in authentication.
+            padding = block[cursor:]
+            if (len(raw_public) != 32 or len(raw_private) != 64
+                    or raw_private[32:] != raw_public
+                    or public != b'\0\0\0\x0bssh-ed25519\0\0\0\x20' + raw_public
+                    or not padding or padding != bytes(range(1, len(padding) + 1))):
+                raise ValueError('key identity or padding')
+            return raw_private[:32], public
+        except (OSError, ValueError, IndexError):
+            _reject('AUTH_REQUIRED', 'ollama', 'existing Ollama login key is missing, unreadable or invalid', retryability='retryable')
+
+    def _sign_ollama(self, reference: str, provider: str, endpoint: str, challenge: bytes) -> str:
+        """Use CPython's linked OpenSSL Ed25519 primitive; author no signing algorithm."""
+        seed, public = self._ollama_key()
+        if reference != 'ollama-key:v1:' + digest_bytes(self._binding(provider, endpoint) + public):
+            _reject('AUTH_REQUIRED', reference, 'Ollama login key or endpoint binding changed', retryability='retryable')
+        try:
+            crypto = ctypes.CDLL(_ssl.__file__)
+            function_types = {
+                'OBJ_txt2nid': (ctypes.c_int, [ctypes.c_char_p]),
+                'EVP_PKEY_new_raw_private_key': (ctypes.c_void_p, [ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]),
+                'EVP_PKEY_get_raw_public_key': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t)]),
+                'EVP_MD_CTX_new': (ctypes.c_void_p, []),
+                'EVP_DigestSignInit': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+                'EVP_DigestSign': (ctypes.c_int, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_size_t]),
+                'EVP_PKEY_free': (None, [ctypes.c_void_p]),
+                'EVP_MD_CTX_free': (None, [ctypes.c_void_p]),
+            }
+            for name, (result, arguments) in function_types.items():
+                function = getattr(crypto, name)
+                function.restype, function.argtypes = result, arguments
+        except (AttributeError, OSError):
+            _reject('CAPABILITY_MISMATCH', 'ollama', 'this Python SSL runtime lacks the required OpenSSL Ed25519 symbols')
+        key = crypto.EVP_PKEY_new_raw_private_key(crypto.OBJ_txt2nid(b'ED25519'), None, seed, len(seed))
+        context = crypto.EVP_MD_CTX_new()
+        try:
+            derived_public, public_size = ctypes.create_string_buffer(32), ctypes.c_size_t(32)
+            if (not key or not context or crypto.EVP_PKEY_get_raw_public_key(key, derived_public, ctypes.byref(public_size)) != 1
+                    or public_size.value != 32 or derived_public.raw != public[-32:]):
+                _reject('AUTH_REQUIRED', reference, 'Ollama private key does not match its public identity', retryability='retryable')
+            signature, size = ctypes.create_string_buffer(64), ctypes.c_size_t(64)
+            if (crypto.EVP_DigestSignInit(context, None, None, None, key) != 1
+                    or crypto.EVP_DigestSign(context, signature, ctypes.byref(size), challenge, len(challenge)) != 1
+                    or size.value != 64):
+                _reject('CAPABILITY_MISMATCH', reference, 'OpenSSL could not sign the Ollama authorization challenge')
+            return base64.b64encode(public).decode('ascii') + ':' + base64.b64encode(signature.raw).decode('ascii')
+        finally:
+            crypto.EVP_MD_CTX_free(context)
+            crypto.EVP_PKEY_free(key)
+
+    def load(self, reference: str, provider: str, endpoint: str) -> str | Callable[[bytes], str] | None:
         """Resolve one reference only when its stored provider and endpoint binding matches."""
         binding = self._binding(provider, endpoint)
+        if isinstance(reference, str) and reference.startswith('ollama-key:v1:'):
+            if reference != self.existing_login(provider, endpoint):
+                _reject('AUTH_REQUIRED', reference, 'Ollama login key or endpoint binding changed', retryability='retryable')
+            return lambda challenge: self._sign_ollama(reference, provider, endpoint, challenge)
         self._reference(reference)
         query = self._query(reference, binding, return_data=True)
         result = ctypes.c_void_p()

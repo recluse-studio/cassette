@@ -4,19 +4,27 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import base64
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, replace
 import errno
 import fcntl
 from http.client import IncompleteRead
+from html.parser import HTMLParser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from ipaddress import ip_address
 import json
 import os
+import random
 import re
 import stat
+import time
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, parse_http_list, parse_keqv_list
+
+import yaml
 
 from errors import CassetteError
 from schema.validator import validate
@@ -26,13 +34,18 @@ from store import (
     CapacityTransition,
     artifact_hasher,
     artifact_hash_state,
+    await_extent_io,
     canonical_bytes,
     complete_capacity_claim,
     digest_bytes,
     execute_claimed_write,
     TransferExtent,
+    SAFETENSORS_HEADER_BYTES,
+    TRANSFER_CHUNK_BYTES as _TRANSFER_CHUNK_BYTES,
     grant_transfer_extent,
     git_blob_sha256,
+    inspect_safetensors,
+    observe_extent_io,
     pause_capacity_claim,
     resumable_artifact_hasher,
     resume_artifact_hasher,
@@ -42,7 +55,6 @@ _CONTROL_BYTES = 8 * 1024 * 1024
 _DIGEST = re.compile(r"(?P<algorithm>blake3|sha256|git-sha1):(?P<hex>[0-9a-f]+)")
 _DIGEST_LENGTH = {"blake3": 64, "sha256": 64, "git-sha1": 40}
 _SENSITIVE_HEADERS = frozenset({"authorization", "x-cassette-license-acceptance"})
-_TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
 _TRANSFER_PARALLEL_RANGES = 2
 _TRANSFER_SLOT_BYTES = 64 * 1024
 _TRANSFER_RECORD_BYTES = 33
@@ -108,16 +120,270 @@ class ResolvedSource:
     license_digest: str
     credential_ref: str | None
     license_acceptance_ref: str | None
+    artifact_selector: bytes | None = None
 
     def record(self) -> dict:
         """Return the exact durable Q9 result without authentication material."""
-        return {
+        record = {
             "immutable_revision": self.immutable_revision,
             "artifacts": [artifact.record() for artifact in self.artifacts],
             "metadata_assets": [artifact.record() for artifact in self.metadata_assets],
             "auth_scope": self.auth_scope,
             "license_digest": self.license_digest,
         }
+        if self.artifact_selector is not None:
+            record['artifact_selector'] = json.loads(self.artifact_selector)
+        return record
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedArtifact:
+    """An operation's byte and checkpoint shape, without a claimed source digest."""
+
+    path: str
+    size: int
+    digest_algorithm: str
+    validator_template: str
+
+    def record(self) -> dict:
+        return {"path": self.path, "size": self.size, "digest_algorithm": self.digest_algorithm,
+                "validator_template": self.validator_template}
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class SourceByteRecipe:
+    """Q9/Q33/Q51/Q52: compose bytes anchored to separately admitted acquisition manifests.
+
+    The owner supplies the original committed chunk-list digests, never current checkpoint digests.
+    """
+
+    encoded: bytes
+    source: ResolvedSource
+    input_manifests: tuple[tuple[str, str], ...]
+
+    def __init__(self, record: dict, source: ResolvedSource, input_manifests: Mapping[str, str]):
+        defects = validate('source_byte_recipe', record)
+        if defects or not isinstance(source, ResolvedSource):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', '; '.join(defects) or 'resolved input source is required')
+        encoded = canonical_bytes(record)
+        if len(encoded) > _CONTROL_BYTES:
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'byte recipe exceeds the control metadata bound')
+        if record['source_record_digest'] != digest_bytes(canonical_bytes(source.record())):
+            _transfer_fail('SOURCE_REVISION_CHANGED', 'source-byte-recipe', 'byte recipe names another input source record')
+        inputs = {artifact.path: artifact for artifact in (*source.artifacts, *source.metadata_assets)}
+        if len(inputs) != len(source.artifacts) + len(source.metadata_assets):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input source paths are duplicated')
+        paths = [artifact['path'] for artifact in record['artifacts']]
+        if paths != sorted(set(paths)) or any(
+                any(part in {'', '.', '..'} for part in path.split('/')) or '\\' in path for path in paths):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'output paths must be unique ordered relative paths')
+        for artifact in record['artifacts']:
+            size = 0
+            for segment in artifact['segments']:
+                if 'literal_hex' in segment:
+                    if len(segment['literal_hex']) % 2:
+                        _transfer_fail('INVALID_REQUEST', artifact['path'], 'literal hexadecimal bytes require complete pairs')
+                    size += len(segment['literal_hex']) // 2
+                else:
+                    item = inputs.get(segment['path'])
+                    if item is None or segment['offset'] + segment['length'] > item.size:
+                        _transfer_fail('INVALID_REQUEST', artifact['path'], 'recipe range is outside its named input source object')
+                    size += segment['length']
+                if size > _MAX_FILE_OFFSET:
+                    _transfer_fail('INVALID_REQUEST', artifact['path'], 'composed object exceeds a signed 64-bit file offset')
+        required = {segment['path'] for artifact in record['artifacts'] for segment in artifact['segments'] if 'path' in segment}
+        if (not isinstance(input_manifests, Mapping) or set(input_manifests) != required
+                or any(not isinstance(value, str) or re.fullmatch(r'blake3:[0-9a-f]{64}', value) is None
+                       for value in input_manifests.values())):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'original acquisition manifests must exactly name the recipe inputs')
+        object.__setattr__(self, 'encoded', encoded)
+        object.__setattr__(self, 'source', source)
+        object.__setattr__(self, 'input_manifests', tuple(sorted(input_manifests.items())))
+
+    def record(self) -> dict:
+        return json.loads(self.encoded)
+
+    def _range_segments(self, path: str, offset: int, length: int):
+        """Yield the exact literal and input spans used by both execution and its Q42 plan."""
+        artifacts = self.record()['artifacts']
+        artifact = next((item for item in artifacts if item['path'] == path), None)
+        if artifact is None or type(offset) is not int or type(length) is not int or offset < 0 or not 0 <= length <= _TRANSFER_CHUNK_BYTES:
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'composed range requires a named output, integer offset and bounded length')
+        size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                   for segment in artifact['segments'])
+        if offset + length > size:
+            _transfer_fail('INVALID_REQUEST', path, 'composed range exceeds its output object')
+        position = 0
+        for segment in artifact['segments']:
+            count = len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+            start, end = max(offset, position), min(offset + length, position + count)
+            if start < end:
+                begin = start - position
+                if 'literal_hex' in segment:
+                    yield {'literal_hex': segment['literal_hex'][2 * begin:2 * (end - position)]}
+                else:
+                    yield {'path': segment['path'], 'offset': segment['offset'] + begin, 'length': end - start}
+            position += count
+
+    def read_range(self, path: str, offset: int, length: int,
+                   inputs: Mapping[str, dict[str, TransferExtent]], *, observer=None) -> bytes:
+        """Read at most one transfer chunk; touched bytes must join the admitted acquisition proof."""
+        required = dict(self.input_manifests)
+        if (not isinstance(inputs, Mapping) or set(inputs) != set(required)
+                or any(not isinstance(extents, Mapping) or set(extents) != {'data', 'state'}
+                       or any(not isinstance(extent, TransferExtent) for extent in extents.values())
+                       for extents in inputs.values())):
+            _transfer_fail('INVALID_REQUEST', 'source-byte-recipe', 'input handles must exactly name the recipe source extents')
+        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        context = {'output': path, 'range_offset': offset, 'range_length': length,
+                   'range_started_ns': time.monotonic_ns()}
+        if observer is not None:
+            if not callable(observer):
+                _transfer_fail('INVALID_REQUEST', path, 'recipe range observer must be callable')
+            observer({'kind': 'RANGE_OPEN', **context})
+        result = bytearray()
+        try:
+            for index, segment in enumerate(self._range_segments(path, offset, length)):
+                if 'literal_hex' in segment:
+                    result.extend(bytes.fromhex(segment['literal_hex']))
+                else:
+                    item, extents = sources[segment['path']], inputs[segment['path']]
+                    if observer is not None:
+                        def observe(role, event, segment=segment, index=index):
+                            previous = inputs[segment['path']][role].observer
+                            if previous is not None:
+                                previous(event)
+                            observer({**context, 'input': segment['path'], 'span': index,
+                                'source_offset': segment['offset'], 'source_length': segment['length'],
+                                'role': 'source_' + role, **event})
+                        extents = {role: replace(extent,
+                            observer=lambda event, role=role, observe=observe: observe(role, event),
+                            observe_process_reads=role == 'data') for role, extent in extents.items()}
+                    result.extend(_retained_source_range(self.source, item, extents,
+                        segment['offset'], segment['length'], required[item.path]))
+        except BaseException as error:
+            if observer is not None:
+                try:
+                    observer({'kind': 'RANGE_CLOSE', **context, 'ended_ns': time.monotonic_ns(),
+                              'success': False, 'error_type': type(error).__name__})
+                except BaseException as observer_error:
+                    raise error from observer_error
+            raise
+        if observer is not None:
+            observer({'kind': 'RANGE_CLOSE', **context, 'ended_ns': time.monotonic_ns(),
+                      'success': True, 'returned_bytes': len(result)})
+        return bytes(result)
+
+    def profile_ranges(self, *, include_empty: bool):
+        """Q42: stream bounded expected range records from the execution span traversal."""
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            for offset in range(0, max(size, int(include_empty)), _TRANSFER_CHUNK_BYTES):
+                length = min(_TRANSFER_CHUNK_BYTES, size - offset)
+                yield {'output': artifact['path'], 'range_offset': offset, 'range_length': length,
+                       'segments': list(self._range_segments(artifact['path'], offset, length))}
+
+    async def fresh_io_plan(self) -> dict:
+        """Q42: freeze fresh prepass/write geometry; metadata and recovery require actual capture."""
+        sources = {item.path: item for item in (*self.source.artifacts, *self.source.metadata_assets)}
+        outputs, source_read_intervals = [], {}
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            counts = dict(source_ranges=0, logical_source_bytes=0, source_data_read_bytes=0,
+                          source_state_read_bytes=0, source_verified_chunks=0)
+            for offset in range(0, size, _TRANSFER_CHUNK_BYTES):
+                for segment in self._range_segments(artifact['path'], offset, min(_TRANSFER_CHUNK_BYTES, size - offset)):
+                    if 'path' not in segment:
+                        continue
+                    source = sources[segment['path']]
+                    first = segment['offset'] // _TRANSFER_CHUNK_BYTES
+                    last = (segment['offset'] + segment['length'] - 1) // _TRANSFER_CHUNK_BYTES
+                    counts['source_ranges'] += 1
+                    counts['logical_source_bytes'] += segment['length']
+                    counts['source_verified_chunks'] += last - first + 1
+                    start, end = first * _TRANSFER_CHUNK_BYTES, min(source.size, (last + 1) * _TRANSFER_CHUNK_BYTES)
+                    counts['source_data_read_bytes'] += end - start
+                    source_read_intervals.setdefault(source.path, []).append((start, end))
+                    counts['source_state_read_bytes'] += transfer_state_bytes(source.size)
+                await asyncio.sleep(0)
+            outputs.append({'path': artifact['path'], 'size': size, 'chunks': transfer_chunk_count(size), **counts})
+        reads = {name: sum(item[name] for item in outputs) for name in counts}
+        distinct_source_bytes = 0
+        for intervals in source_read_intervals.values():
+            end = 0
+            for start, stop in sorted(intervals):
+                distinct_source_bytes += max(0, stop - max(start, end))
+                end = max(end, stop)
+        total = sum(item['size'] for item in outputs)
+        return {'scope': 'FRESH_ONLY; RECOVERY_AND_CONTROL_IO_REQUIRE_ACTUAL_CAPTURE',
+                'recipe_digest': digest_bytes(self.encoded), 'chunk_bytes': _TRANSFER_CHUNK_BYTES,
+                'source_working_set': {'scope': 'DISTINCT_TOUCHED_SOURCE_BYTES; CACHE_AND_PHYSICAL_IO_NOT_PROVED',
+                    'data_bytes': distinct_source_bytes,
+                    'state_bytes': sum(transfer_state_bytes(sources[path].size) for path in source_read_intervals)},
+                'input_extent_logical_bytes': sum(sources[path].size + transfer_state_bytes(sources[path].size)
+                                                   for path, _ in self.input_manifests),
+                'output_extent_logical_bytes': sum(item['size'] + transfer_state_bytes(item['size']) for item in outputs),
+                'outputs': outputs,
+                'prepass': {'range_concurrency': 1, 'range_calls': sum(max(1, item['chunks']) for item in outputs), **reads},
+                'write': {'range_concurrency': _TRANSFER_PARALLEL_RANGES,
+                          'range_calls': sum(item['chunks'] for item in outputs), **reads,
+                          'output_data_write_bytes': total, 'output_data_readback_bytes': total}}
+
+    async def artifact_digests(self, inputs: Mapping[str, dict[str, TransferExtent]], *, observer=None) -> tuple[dict, ...]:
+        """Hash bounded composed ranges with cancellation; these descriptors are not a SourceLock."""
+        result = []
+        for artifact in self.record()['artifacts']:
+            size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+                       for segment in artifact['segments'])
+            hasher = artifact_hasher('sha256:' + '0' * 64, artifact['path'])
+            for offset in range(0, max(size, 1), _TRANSFER_CHUNK_BYTES):
+                hasher.update(await await_extent_io(self.read_range, artifact['path'], offset,
+                    min(_TRANSFER_CHUNK_BYTES, size - offset), inputs, observer=observer))
+            result.append({'path': artifact['path'], 'size': size, 'digest': 'sha256:' + hasher.hexdigest()})
+        return tuple(result)
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class OperationGeometry:
+    """Freeze a Q42 plan separately from any resolved source identity or access claim."""
+
+    encoded: bytes
+
+    def __init__(self, record: dict):
+        defects = validate('operation_geometry', record)
+        if defects:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry must match its generated contract', '; '.join(defects))
+        paths = [item['path'] for item in record['artifacts']]
+        if paths != sorted(set(paths)) or any(
+                any(part in {'', '.', '..'} for part in path.split('/')) or '\\' in path for path in paths):
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry paths must be unique ordered relative paths', 'unsafe or unordered artifact path')
+        if not record['provenance'] or any(
+                '{' in item['validator_template'].replace('{digest}', '')
+                or '}' in item['validator_template'].replace('{digest}', '')
+                or item['validator_template'] != item['validator_template'].strip() for item in record['artifacts']):
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry binds provenance and literal validator shape', 'missing provenance, unknown validator variable or surrounding whitespace')
+        try:
+            for item in record['artifacts']:
+                item['validator_template'].encode('latin-1')
+                resumable_artifact_hasher(item['digest_algorithm'] + ':', item['path'], object_size=item['size'])
+            encoded = canonical_bytes(record)
+        except (CassetteError, ValueError) as error:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: geometry hash, validator and metadata must execute the existing source path',
+                  error.detail if isinstance(error, CassetteError) else str(error))
+        object.__setattr__(self, 'encoded', encoded)
+
+    def record(self) -> dict:
+        return json.loads(self.encoded)
+
+    @property
+    def source_kind(self) -> str:
+        return self.record()['source_kind']
+
+    @property
+    def artifacts(self) -> tuple[PlannedArtifact, ...]:
+        return tuple(PlannedArtifact(**item) for item in self.record()['artifacts'])
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +507,7 @@ class PartialState:
     chunk_digests: tuple[str, ...]
     contiguous_source_hash_offset: int
     serialized_hash_state: str
+    checkpoint_generation: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,8 +535,8 @@ class _Wire:
 _WIRES = {
     "huggingface": _Wire(
         ("sha",), "git-sha1:", ("identity",), ("siblings",),
-        ("metadata_siblings",), ("rfilename",), ("size",), ("lfs", "sha256"),
-        "sha256:", ("download_url",), ("etag",), ("auth", "scope"),
+        ("metadata_siblings",), ("rfilename",), ("size",), ("digest",),
+        "", ("download_url",), ("etag",), ("auth", "scope"),
         ("license", "digest"), ("remote_metadata",), ("auth", "scope"),
         ("auth", "required"), ("license", "digest"), ("license", "acceptance_required"),
     ),
@@ -289,7 +556,7 @@ _WIRES = {
     ),
 }
 
-CredentialLookup = Callable[[str], str | None]
+CredentialLookup = Callable[[str], str | Callable[[bytes], str] | None]
 
 
 def _fail(code: str, object_id: str, invariant: str, detail: str, retryability: str = "terminal"):
@@ -346,7 +613,9 @@ class _CredentialSafeRedirect(HTTPRedirectHandler):
                 _fail("SOURCE_UNAVAILABLE", self.object_id, "Q9: control redirects must retain source authority", "cross-origin control redirect refused")
             for collection in (redirected.headers, redirected.unredirected_hdrs):
                 for name in tuple(collection):
-                    if name.lower() in _SENSITIVE_HEADERS:
+                    # A content-addressed blob path already names its digest; the storage origin's own ETag cannot match it.
+                    if name.lower() in _SENSITIVE_HEADERS or (name.lower() == "if-match" and self.validator is not None
+                            and urlparse(request.full_url).path.endswith("/blobs/" + self.validator)):
                         del collection[name]
         if headers.get("X-Linked-Etag") is not None:
             if self.validator is not None and headers["X-Linked-Etag"] != self.validator:
@@ -396,6 +665,63 @@ def _digest(value: object, prefix: str, field: str, object_id: str) -> str:
     return result
 
 
+def _card_license_matches(content: bytes, claim: object) -> bool:
+    """Q9: compare one YAML declaration without constructing objects or losing duplicate keys."""
+    expected = [claim] if isinstance(claim, str) else claim
+    if not isinstance(expected, list) or not expected or any(not isinstance(value, str) or not value for value in expected):
+        return False
+    try:
+        parts = re.split(r'(?m)^---[ \t]*\r?$', content.decode('utf-8'), maxsplit=2)
+        root = yaml.compose(parts[1], Loader=yaml.BaseLoader) if len(parts) == 3 and not parts[0].strip() else None
+    except (ValueError, OverflowError, yaml.YAMLError, RecursionError):
+        return False
+    if not isinstance(root, yaml.MappingNode) or root.tag != 'tag:yaml.org,2002:map':
+        return False
+    declarations = []
+    for key, value in root.value:
+        if not isinstance(key, yaml.ScalarNode) or key.tag != 'tag:yaml.org,2002:str':
+            return False
+        if key.value == 'license':
+            declarations.append(value)
+    if len(declarations) != 1:
+        return False
+    value = declarations[0]
+    items = (value.value if isinstance(value, yaml.SequenceNode) and value.tag == 'tag:yaml.org,2002:seq' else [value])
+    return (all(isinstance(item, yaml.ScalarNode) and item.tag == 'tag:yaml.org,2002:str' for item in items)
+            and [item.value for item in items] == expected)
+
+
+class _OllamaSearchPage(HTMLParser):
+    """Read model-card links and the provider's continuation from bounded search HTML."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links, self.continuations, self.counts = [], [], []
+        self.in_item = False
+        self.href, self.model_link = None, False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if 'data-result-count' in attrs:
+            self.counts.append(attrs['data-result-count'])
+        if tag == 'li':
+            self.in_item = True
+            if 'hx-get' in attrs:
+                self.continuations.append(attrs['hx-get'])
+        elif tag == 'a' and self.in_item:
+            self.href, self.model_link = attrs.get('href'), False
+        elif tag == 'h2' and self.href is not None:
+            self.model_link = True
+
+    def handle_endtag(self, tag):
+        if tag == 'a':
+            if self.model_link:
+                self.links.append(self.href)
+            self.href, self.model_link = None, False
+        elif tag == 'li':
+            self.in_item = False
+
+
 @dataclass(frozen=True, slots=True)
 class SourceAdapter:
     """Own source protocol translation without acquisition lifecycle state."""
@@ -421,8 +747,12 @@ class SourceAdapter:
                 and (not isinstance(cursor, str) or not 0 < len(cursor) <= 4096))):
             _fail("INVALID_REQUEST", self.kind, "Q52: discovery inputs must be bounded", "invalid query, page size or cursor")
         if self.kind == "ollama":
+            if urlparse(self.base_url).hostname in {'ollama.com', 'registry.ollama.ai'}:
+                return await self._discover_ollama_public(query, limit, cursor, credential_ref)
             if cursor is not None:
                 _fail("CAPABILITY_MISMATCH", self.kind, "Q52: Ollama catalogue has no documented cursor", "Ollama catalogue pagination is unavailable")
+            if credential_ref is not None and credential_ref.startswith('ollama-key:v1:'):
+                await self._validate_credential(credential_ref)
             _, payload, _ = await self._request(
                 self._ollama_catalogue_url(), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
             )
@@ -497,6 +827,62 @@ class SourceAdapter:
             _fail("SOURCE_UNAVAILABLE", self.kind, "Q52: catalogue output must conform", '; '.join(defects))
         return result
 
+    async def _discover_ollama_public(self, query, limit, cursor, credential_ref):
+        """Q9/Q52: public search pages are distinct from a daemon's installed-model list."""
+        page, offset = 1, 0
+        if cursor is not None:
+            try:
+                value = json.loads(base64.urlsafe_b64decode(cursor), object_pairs_hook=_unique_object)
+                if (not isinstance(value, dict) or set(value) != {'q', 'page', 'offset'} or value['q'] != query
+                        or type(value['page']) is not int or value['page'] < 1
+                        or type(value['offset']) is not int or value['offset'] < 0):
+                    raise ValueError('invalid search cursor')
+                page, offset = value['page'], value['offset']
+            except (ValueError, TypeError, KeyError, UnicodeError):
+                _fail('INVALID_REQUEST', self.kind, 'Q52: cursor must bind the catalogue query and position', 'invalid Ollama search cursor')
+        if credential_ref is not None:
+            await self._validate_credential(credential_ref)
+        _, payload, _ = await self._request('https://ollama.com/search?' + urlencode({'page': page, 'q': query}),
+            None, None, {'HX-Request': 'true'}, _CONTROL_BYTES, self.kind)
+        parsed = _OllamaSearchPage()
+        try:
+            parsed.feed(payload.decode('utf-8'))
+            parsed.close()
+        except (ValueError, UnicodeError):
+            _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: search must return readable HTML', 'malformed Ollama search page')
+        if (len(parsed.counts) > 1 or (page == 1 and parsed.counts != [str(len(parsed.links))])
+                or (page > 1 and not parsed.links) or len(parsed.continuations) > 1
+                or offset > len(parsed.links) or len(set(parsed.links)) != len(parsed.links)):
+            _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: search must retain its model list and page position', 'invalid Ollama search result structure')
+        candidates = []
+        for link in parsed.links:
+            target = urlparse(link)
+            parts = target.path.strip('/').split('/')
+            if (target.scheme or target.netloc or target.query or target.fragment or len(parts) != 2
+                    or any(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', part) is None for part in parts)):
+                _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: model cards must name provider-relative repositories', 'invalid Ollama model link')
+            locator = parts[1] if parts[0] == 'library' else '/'.join(parts)
+            if self._ollama_name(locator) is None:
+                _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: candidate must name an Ollama model', 'invalid Ollama model locator')
+            candidates.append({'kind': self.kind, 'locator': locator, 'revision': None,
+                'private': None, 'gated': None, 'downloadability': 'NOT_VERIFIED'})
+        if parsed.continuations:
+            target = urlparse(parsed.continuations[0])
+            if (target.scheme or target.netloc or target.path != '/search' or target.fragment
+                    or {**({} if query else {'q': ['']}), **parse_qs(target.query, keep_blank_values=True)} != {'page': [str(page + 1)], 'q': [query]}):
+                _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: continuation must advance the same provider search', 'invalid Ollama next-page link')
+        end = min(offset + limit, len(candidates))
+        next_cursor = None
+        if end < len(candidates) or parsed.continuations:
+            value = {'q': query, 'page': page if end < len(candidates) else page + 1,
+                     'offset': end if end < len(candidates) else 0}
+            next_cursor = base64.urlsafe_b64encode(canonical_bytes(value)).decode('ascii')
+        result = {'candidates': candidates[offset:end], 'next_cursor': next_cursor}
+        defects = validate('source_catalogue', result)
+        if defects:
+            _fail('SOURCE_UNAVAILABLE', self.kind, 'Q52: catalogue output must conform', '; '.join(defects))
+        return result
+
     async def resolve(self, descriptor: dict) -> ResolvedSource:
         """Resolve a Q9 descriptor to immutable source evidence."""
         defects = validate("source_descriptor", descriptor)
@@ -518,8 +904,8 @@ class SourceAdapter:
         return resolved
 
     async def enumerate(self, revision: ResolvedSource) -> tuple[Artifact, ...]:
-        """Enumerate every immutable model artifact without changing operation semantics."""
-        self._revision(revision)
+        """Enumerate the exact immutable source artifacts without changing operation semantics."""
+        selector = self._revision(revision)
         if self.kind == "ollama":
             actual = await self._ollama_resolved({
                 "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
@@ -529,7 +915,7 @@ class SourceAdapter:
             if actual != revision:
                 _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: enumeration must remain bound to the resolved revision", "registry manifest changed after resolve")
             return actual.artifacts
-        payload = await self._json("artifacts", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
+        payload = await self._json("artifacts", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector)
         actual_revision = self._revision_digest(payload, revision.locator)
         artifacts = self._artifacts(payload, self._wire.artifacts, revision.locator)
         assets = self._artifacts(payload, self._wire.metadata_assets, revision.locator)
@@ -539,7 +925,7 @@ class SourceAdapter:
 
     async def read_metadata(self, revision: ResolvedSource, ranges: tuple[tuple[str, int, int], ...] = ()) -> dict:
         """Read Q50-shaped evidence; optional ranges name bounded metadata inspection requests."""
-        self._revision(revision)
+        selector = self._revision(revision)
         encoded = []
         for path, offset, length in ranges:
             if not isinstance(path, str) or not path or isinstance(offset, bool) or isinstance(length, bool) or not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or not 0 < length <= _CONTROL_BYTES:
@@ -561,7 +947,7 @@ class SourceAdapter:
                     _fail("INVALID_REQUEST", revision.locator, "Q50: metadata range must name a pinned artifact", path)
                 await self.open_range(actual, artifact, int(offset), int(length), artifact.validator)
             return self._ollama_metadata(actual)
-        payload = await self._json("metadata", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, ranges=tuple(encoded))
+        payload = await self._json("metadata", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector, ranges=tuple(encoded))
         metadata = _at(payload, self._wire.metadata, revision.locator)
         defects = validate("remote_metadata", metadata)
         if defects:
@@ -603,7 +989,7 @@ class SourceAdapter:
 
     async def license_and_auth(self, revision: ResolvedSource) -> Requirements:
         """Translate source requirements while keeping credential bytes outside every result."""
-        self._revision(revision)
+        selector = self._revision(revision)
         if self.kind == "ollama":
             actual = await self._ollama_resolved({
                 "kind": self.kind, "locator": revision.locator, "revision": revision.immutable_revision,
@@ -613,7 +999,7 @@ class SourceAdapter:
             if actual != revision:
                 _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q9/Q52: requirements must remain bound to resolve", "registry manifest changed after resolve")
             return Requirements(actual.auth_scope, False, actual.license_digest, False)
-        payload = await self._json("requirements", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref)
+        payload = await self._json("requirements", revision.locator, revision.immutable_revision, revision.credential_ref, revision.license_acceptance_ref, selector)
         wire = self._wire
         requirements = Requirements(
             _text(_at(payload, wire.requirement_auth_scope, revision.locator), "auth_scope", revision.locator),
@@ -629,9 +1015,19 @@ class SourceAdapter:
     def _wire(self) -> _Wire:
         return _WIRES[self.kind]
 
-    def _revision(self, revision: ResolvedSource) -> None:
+    def _revision(self, revision: ResolvedSource) -> dict | None:
         if not isinstance(revision, ResolvedSource) or revision.source_kind != self.kind:
             _fail("INVALID_REQUEST", self.kind, "Q52: revision must belong to the selected adapter", "source kind mismatch")
+        if revision.artifact_selector is None:
+            return None
+        try:
+            selector = json.loads(revision.artifact_selector, object_pairs_hook=_unique_object)
+            if (type(revision.artifact_selector) is not bytes or not isinstance(selector, dict)
+                    or canonical_bytes(selector) != revision.artifact_selector):
+                raise ValueError('noncanonical selector')
+            return selector
+        except (TypeError, ValueError, UnicodeError):
+            _fail('INVALID_REQUEST', revision.locator, 'Q9: frozen selection must be canonical JSON', 'invalid artifact selector')
 
     def _range_base_url(self) -> str:
         return self._ollama_registry_url() if self.kind == "ollama" else self.base_url
@@ -680,8 +1076,14 @@ class SourceAdapter:
                                                and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", requested) is None):
             _fail("INVALID_REQUEST", locator, "Q9: Ollama revision must be a manifest digest or tag", "invalid Ollama revision")
         registry = self._ollama_registry_url()
+        credential_ref = descriptor.get('credential_ref')
+        if credential_ref is not None and credential_ref.startswith('ollama-key:v1:'):
+            await self._validate_credential(credential_ref)
         repo = f"{namespace}/{model}"
-        manifest_url = f"{registry}/v2/{quote(repo, safe='/')}/manifests/{quote(requested, safe=':')}"
+        source_tag = tag if requested.startswith('sha256:') else requested
+        name = locator.rsplit(':', 1)[0] if ':' in locator else locator
+        locator = f'{name}:{source_tag}'
+        manifest_url = f"{registry}/v2/{quote(repo, safe='/')}/manifests/{quote(source_tag, safe='')}"
         _, raw_manifest, _ = await self._request(
             manifest_url, descriptor.get("credential_ref"), descriptor.get("license_acceptance_ref"),
             {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}, _CONTROL_BYTES, locator,
@@ -701,7 +1103,9 @@ class SourceAdapter:
         layers = _at(manifest, ("layers",), locator)
         if not isinstance(config, Mapping) or not isinstance(layers, list):
             _fail("SOURCE_UNAVAILABLE", locator, "Q52: Ollama registry manifest must list config and layers", "invalid registry manifest shape")
-        entries = [("config.json", config)] + [(f"layer-{index:06d}", layer) for index, layer in enumerate(layers)]
+        tensor_media_type = "application/vnd.ollama.image.tensor"
+        has_tensor_layers = any(isinstance(layer, Mapping) and layer.get("mediaType") == tensor_media_type for layer in layers)
+        entries = [("ollama-config.json" if has_tensor_layers else "config.json", config)] + [(f"layer-{index:06d}", layer) for index, layer in enumerate(layers)]
         artifacts, metadata_assets = [], []
         license_digests = []
         seen = set()
@@ -717,6 +1121,8 @@ class SourceAdapter:
             seen.add(digest)
             annotations = entry.get("annotations")
             title = annotations.get("org.opencontainers.image.title") if isinstance(annotations, Mapping) else None
+            if title is None and has_tensor_layers:
+                title = entry.get("name")
             if title is not None:
                 if (not isinstance(title, str) or not title or any(part in {"", ".", ".."} for part in title.split("/"))
                         or "\\" in title or "\x00" in title):
@@ -724,10 +1130,12 @@ class SourceAdapter:
                 path = title
             elif media_type == "application/vnd.ollama.image.model":
                 path += ".gguf"
+            if media_type == tensor_media_type and not path.endswith(".safetensors"):
+                path += ".safetensors"
             if any(existing.path == path for existing in (*artifacts, *metadata_assets)):
                 _fail("SOURCE_UNAVAILABLE", locator, "Q9: Ollama blob paths must be unique", path)
             artifact = Artifact(path, size, digest, f"{registry}/v2/{quote(repo, safe='/')}/blobs/{digest}", digest)
-            (artifacts if media_type == "application/vnd.ollama.image.model" else metadata_assets).append(artifact)
+            (artifacts if media_type in {"application/vnd.ollama.image.model", tensor_media_type} else metadata_assets).append(artifact)
             if media_type == "application/vnd.ollama.image.license":
                 license_digests.append(digest)
         if len(license_digests) != 1:
@@ -756,23 +1164,39 @@ class SourceAdapter:
         })
         return _source_metadata_record(metadata, self.kind, revision.locator)
 
+    def _require_existing_login(self) -> None:
+        """Q9: the source adapter owns admission of the provider's existing-login flow."""
+        if self.kind != 'ollama':
+            _fail('CAPABILITY_MISMATCH', self.kind, 'Q9: existing-login connection requires a supported provider', 'existing-login connection supports Ollama')
+
     async def _validate_credential(self, credential_ref: str | None) -> dict:
         if credential_ref is None:
             return {"provider": self.kind, "authenticated": False, "scope": f"{self.kind}:public"}
         if self.kind == "ollama":
-            _fail("CAPABILITY_MISMATCH", self.kind, "Q9: Ollama has no documented token introspection route", "select and resolve a private registry model to validate its access")
-        if self.kind != "huggingface":
+            if not credential_ref.startswith('ollama-key:v1:'):
+                _fail("CAPABILITY_MISMATCH", self.kind, "Q9: Ollama account validation uses its existing signing key", "use an existing-login connection")
+            account_url = self._ollama_catalogue_url().rsplit('/', 1)[0] + '/me'
+            _, payload, _ = await self._request(account_url, credential_ref, None, {}, _CONTROL_BYTES, self.kind, method='POST')
+        elif self.kind == "huggingface":
+            _, payload, _ = await self._request(
+                urljoin(self.base_url.rstrip("/") + "/", "api/whoami-v2"), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
+            )
+        else:
             _fail("CAPABILITY_MISMATCH", self.kind, "Q9: provider credential validation is unavailable", "source has no supported credential validation route")
-        _, payload, _ = await self._request(
-            urljoin(self.base_url.rstrip("/") + "/", "api/whoami-v2"), credential_ref, None, {}, _CONTROL_BYTES, self.kind,
-        )
         try:
             record = json.loads(payload, object_pairs_hook=_unique_object)
         except (UnicodeDecodeError, ValueError):
             _fail("SOURCE_UNAVAILABLE", self.kind, "Q9: credential validation must return JSON", "provider returned malformed whoami record")
-        if not isinstance(record, Mapping) or not isinstance(record.get("name"), str) or not record["name"]:
+        name_field = 'Name' if self.kind == 'ollama' and isinstance(record, Mapping) and 'Name' in record else 'name'
+        if (isinstance(record, Mapping) and 'Name' in record and 'name' in record
+                and record['Name'] != record['name']):
+            _fail('SOURCE_UNAVAILABLE', self.kind, 'Q9: account identity must be unambiguous', 'provider returned conflicting account names')
+        if not isinstance(record, Mapping) or not isinstance(record.get(name_field), str) or not record[name_field]:
             _fail("AUTH_REQUIRED", self.kind, "Q9: provider must confirm a user credential", "provider returned no account identity", "retryable")
-        return {"provider": "huggingface", "authenticated": True, "scope": "NOT_VERIFIED"}
+        result = {"provider": self.kind, "authenticated": True, "scope": "NOT_VERIFIED"}
+        if self.kind == 'ollama':
+            result['account'] = record[name_field]
+        return result
 
     def _revision_digest(self, payload: object, object_id: str) -> str:
         return _digest(_at(payload, self._wire.revision, object_id), self._wire.revision_prefix, "immutable_revision", object_id)
@@ -799,7 +1223,7 @@ class SourceAdapter:
                 _text(_at(item, self._wire.artifact_validator, object_id), "artifact.validator", object_id),
             ))
         if not artifacts:
-            _fail("SOURCE_UNAVAILABLE", object_id, "Q9: a resolved model requires at least one artifact", "artifact collection is empty")
+            _fail("SOURCE_UNAVAILABLE", object_id, "Q9: a resolved source requires at least one artifact", "artifact collection is empty")
         return tuple(sorted(artifacts, key=lambda artifact: artifact.path))
 
     def _resolved(self, payload: object, descriptor: dict) -> ResolvedSource:
@@ -816,6 +1240,7 @@ class SourceAdapter:
             _digest(_at(payload, wire.license_digest, locator), "", "license_digest", locator),
             descriptor.get("credential_ref"),
             descriptor.get("license_acceptance_ref"),
+            canonical_bytes(descriptor['artifact_selector']) if descriptor.get('artifact_selector') is not None else None,
         )
 
     @staticmethod
@@ -825,16 +1250,27 @@ class SourceAdapter:
         return value
 
     async def _hub_payload(self, operation, locator, revision, credential_ref, license_ref, selector, ranges):
-        """Q9/Q52: translate public Hub records; parsed model identity remains unknown."""
+        """Q9/Q52: translate Hub records; preserve complete models or an exact dataset subset."""
         if (len(locator.split("/")) != 2 or any(part in {"", ".", ".."} for part in locator.split("/"))
                 or any(char in locator for char in "?#\\\x00")):
             _fail("INVALID_REQUEST", locator, "Q9: Hub locator must name an owner and repository", "invalid repository locator")
+        selected_paths = None
         if selector is not None:
-            _fail("MODEL_UNSUPPORTED", locator, "Q9: acquisition retains the complete pinned repository", "artifact selectors are not supported by the Hub adapter")
+            if not isinstance(selector, dict) or set(selector) != {'dataset_paths'}:
+                _fail('MODEL_UNSUPPORTED', locator, 'Q9: Hub selection names a complete model or exact dataset paths', 'unsupported artifact selector')
+            names = selector['dataset_paths']
+            if (not isinstance(names, list) or not 0 < len(names) <= 4096
+                    or any(not isinstance(name, str) or not name or len(name) > 4096
+                           or any(part in {'', '.', '..'} for part in name.split('/'))
+                           or '\\' in name or '\x00' in name for name in names)
+                    or len(set(names)) != len(names)):
+                _fail('INVALID_REQUEST', locator, 'Q9: dataset selection requires unique bounded relative paths', 'invalid dataset_paths')
+            selected_paths = set(names)
         requested = revision.removeprefix("git-sha1:") or "main"
         endpoint = self.base_url.rstrip("/")
         repo = quote(locator, safe="/")
-        uri = f"{endpoint}/api/models/{repo}/revision/{quote(requested, safe='')}?blobs=true"
+        repo_type = 'datasets' if selected_paths is not None else 'models'
+        uri = f"{endpoint}/api/{repo_type}/{repo}/revision/{quote(requested, safe='')}?blobs=true"
         _, body, _ = await self._request(uri, credential_ref, license_ref, {}, _CONTROL_BYTES, locator)
         try:
             info = json.loads(body, object_pairs_hook=_unique_object)
@@ -855,6 +1291,12 @@ class SourceAdapter:
         if not isinstance(siblings, list) or not siblings:
             _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub manifest requires immutable files", "siblings is empty or invalid")
         objects, licenses = [], []
+        license_files = {_text(_at(item, ('rfilename',), locator), 'rfilename', locator).upper() for item in siblings} & {
+            'LICENSE', 'LICENSE.TXT', 'LICENSE.MD', 'COPYING'}
+        card_license = info.get('cardData', {}).get('license') if isinstance(info.get('cardData'), dict) else None
+        if selected_paths is not None and any(name.upper() in {'README.MD', 'LICENSE', 'LICENSE.TXT', 'LICENSE.MD', 'COPYING'}
+                                              for name in selected_paths):
+            _fail('MODEL_UNSUPPORTED', locator, 'Q9: dataset payload selection is separate from source license metadata', 'selected dataset paths include a source metadata asset')
         paths = set()
         for item in siblings:
             name = _text(_at(item, ("rfilename",), locator), "rfilename", locator)
@@ -863,10 +1305,14 @@ class SourceAdapter:
                     or "\\" in name or "\x00" in name or type(size) is not int or size < 0):
                 _fail("SOURCE_UNAVAILABLE", locator, "Q9: Hub paths and sizes must be exact and unique", name)
             paths.add(name)
-            url = f"{endpoint}/{repo}/resolve/{commit[9:]}/{quote(name, safe='/')}"
             license_file = name.upper() in {"LICENSE", "LICENSE.TXT", "LICENSE.MD", "COPYING"}
+            selected_payload = selected_paths is not None and name in selected_paths
+            if selected_paths is not None and not selected_payload and not license_file and not (name == 'README.md' and not license_files):
+                continue
+            source_repo = 'datasets/' + repo if selected_paths is not None else repo
+            url = f"{endpoint}/{source_repo}/resolve/{commit[9:]}/{quote(name, safe='/')}"
             lfs = item.get("lfs")
-            if lfs is None and name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
+            if lfs is None and not selected_payload and name.endswith((".safetensors", ".bin", ".gguf", ".jsonl")):
                 _fail("METADATA_INSUFFICIENT", name,
                       "Q9/Q50: non-LFS model bytes require a qualified metadata mechanism",
                       "resolution cannot read model-bearing Git content")
@@ -884,7 +1330,16 @@ class SourceAdapter:
                 if not blob.startswith("git-sha1:"):
                     _fail("SOURCE_UNAVAILABLE", locator, "Q9: ordinary Hub files require Git blob identities", name)
                 validator = '"' + blob[9:] + '"'
-            if lfs is None or license_file:
+                if selected_payload:
+                    if size > _TRANSFER_CHUNK_BYTES:
+                        _fail('MODEL_UNSUPPORTED', name, 'Q51: Git payload verification requires one bounded transfer tail', 'selected Git blob exceeds the supported tail')
+                    digest = blob
+                    status, _, headers = await self._request(url, credential_ref, license_ref, {}, 0, name,
+                        allow_cross_origin_redirect=True, method='HEAD')
+                    if status != 200 or headers.get('Content-Length') != str(size) or not (
+                            headers.get('X-Cassette-Source-ETag') == validator or headers.get('ETag') == validator):
+                        _fail('SOURCE_REVISION_CHANGED', name, 'Q9: dataset HEAD must retain its Git blob and size', 'selected Git blob HEAD differs')
+            if (lfs is None and not selected_payload) or license_file:
                 if size > _CONTROL_BYTES:
                     _fail("METADATA_INSUFFICIENT", name, "Q50: inline Git metadata must fit the bounded control read", f"{size} exceeds {_CONTROL_BYTES} bytes")
                 status, content, headers = await self._request(url, credential_ref, license_ref,
@@ -901,18 +1356,25 @@ class SourceAdapter:
                         _fail("SOURCE_REVISION_CHANGED", name, "Q9: license bytes must match the source digest", "license digest changed")
                 if license_file:
                     licenses.append(digest)
-            objects.append({"rfilename": name, "size": size, "lfs": {"sha256": digest[7:]},
+                elif not license_files and name == 'README.md' and _card_license_matches(content, card_license):
+                    licenses.append(digest)
+            objects.append({"rfilename": name, "size": size, "digest": digest,
                             "download_url": url, "etag": validator})
         if len(licenses) != 1:
-            _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity", "one root LICENSE or COPYING file is required")
+            _fail("METADATA_INSUFFICIENT", locator, "Q9: source license must have one exact byte identity",
+                  "one root license file or a verified model-card license declaration is required")
+        if selected_paths is not None and not selected_paths <= paths:
+            _fail('METADATA_INSUFFICIENT', locator, 'Q9: every selected dataset path must exist at the pinned revision',
+                  'selected paths absent from manifest: ' + ', '.join(sorted(selected_paths-paths)))
         objects.sort(key=lambda item: item["rfilename"])
-        artifacts = [item for item in objects if item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl"))]
+        artifacts = [item for item in objects if (item['rfilename'] in selected_paths if selected_paths is not None
+                                                else item["rfilename"].endswith((".safetensors", ".bin", ".gguf", ".jsonl")))]
         assets = [item for item in objects if item not in artifacts]
         authority = f"source:huggingface:{locator}@{commit}"
         fields = (*_PREFLIGHT_REQUIRED, "processor", "revision_ancestry", "training_precision")
         metadata = {field: {"trust": "ABSENT", "authority": authority} for field in fields}
         values = {"total_bytes": sum(item["size"] for item in artifacts), "artifact_count": len(artifacts),
-                  "artifact_digests": ["sha256:" + item["lfs"]["sha256"] for item in artifacts],
+                  "artifact_digests": [item['digest'] for item in artifacts],
                   "license": licenses[0], "gating": gated is not False,
                   "source_validators": {item["rfilename"]: item["etag"] for item in objects}}
         metadata.update({field: {"value": value, "trust": "DECLARED", "authority": authority}
@@ -924,7 +1386,7 @@ class SourceAdapter:
                    "remote_metadata": metadata}
         if ranges:
             resolved = self._resolved(payload, {"locator": locator, "credential_ref": credential_ref,
-                                               "license_acceptance_ref": license_ref})
+                                               "license_acceptance_ref": license_ref, 'artifact_selector': selector})
             by_path = {item.path: item for item in (*resolved.artifacts, *resolved.metadata_assets)}
             for encoded in ranges:
                 name, start, count = encoded.rsplit(":", 2)
@@ -969,19 +1431,64 @@ class SourceAdapter:
         method: str = "GET",
     ) -> tuple[int, bytes, Mapping[str, str]]:
         request_headers = dict(headers)
+        signer = None
         if credential_ref is not None:
             try:
-                secret = self.credential_lookup(credential_ref) if self.credential_lookup is not None else None
+                credential = await asyncio.to_thread(self.credential_lookup, credential_ref) if self.credential_lookup is not None else None
+            except CassetteError:
+                raise
             except Exception as error:
                 _fail("AUTH_REQUIRED", object_id, "Q9: credential_ref must resolve at operation time", f"credential provider failed with {type(error).__name__}", "retryable")
-            if not isinstance(secret, str) or not secret:
+            if callable(credential) and self.kind == 'ollama' and credential_ref.startswith('ollama-key:v1:'):
+                signer = credential
+                if _origin(url) not in {_origin(self._ollama_catalogue_url()), _origin(self._ollama_registry_url())}:
+                    _fail('AUTH_REQUIRED', object_id, 'Q9: signing key must remain on the connected provider origins', 'request origin differs from the connection')
+                if urlparse(url).path.endswith('/api/me'):
+                    parsed = urlparse(url)
+                    query = urlencode({'ts': str(int(time.time()))})
+                    url = parsed._replace(query=query).geturl()
+                    request_headers['Authorization'] = await asyncio.to_thread(signer, f'{method},{parsed.path}?{query}'.encode())
+            elif not isinstance(credential, str) or not credential:
                 _fail("AUTH_REQUIRED", object_id, "Q9: credential_ref must resolve at operation time", "credential reference is unavailable", "retryable")
-            if secret == credential_ref:
+            elif credential == credential_ref:
                 _fail("INVALID_REQUEST", object_id, "Q9: credential_ref must be opaque", "credential_ref must not contain credential material")
-            request_headers["Authorization"] = f"Bearer {secret}"
+            else:
+                request_headers["Authorization"] = f"Bearer {credential}"
         if license_ref is not None:
             request_headers["X-Cassette-License-Acceptance"] = license_ref
-        return await asyncio.to_thread(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method)
+        return await await_extent_io(self._blocking_request, url, request_headers, maximum, object_id, allow_cross_origin_redirect, method, signer)
+
+    def _ollama_registry_token(self, url: str, challenge: str, signer: Callable[[bytes], str], object_id: str) -> str:
+        """Exchange one same-origin pull challenge for an in-memory registry bearer token."""
+        scheme, _, parameters = challenge.partition(' ')
+        try:
+            fields = parse_http_list(parameters)
+            values = parse_keqv_list(fields)
+            parsed = urlparse(url)
+            repository = '/'.join(parsed.path.split('/')[2:4])
+            realm = values.get('realm', '')
+            token_url = urlparse(realm)
+        except ValueError:
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry challenge must be well formed', 'registry returned malformed authorization fields', 'retryable')
+        if (scheme.lower() != 'bearer' or len(fields) != 3 or set(values) != {'realm', 'service', 'scope'}
+                or _origin(realm) != _origin(url) or token_url.username or token_url.password or token_url.fragment
+                or not parsed.path.startswith('/v2/') or values['scope'] != f'repository:{repository}:pull'
+                or set(parse_qs(token_url.query)) & {'service', 'scope', 'ts', 'nonce'}):
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry challenge must bind the same origin and selected pull scope', 'registry returned an invalid authorization challenge', 'retryable')
+        query = parse_qsl(token_url.query) + [('service', values['service']), ('scope', values['scope']),
+            ('ts', str(int(time.time()))), ('nonce', base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip('='))]
+        realm = token_url._replace(query=urlencode(sorted(query))).geturl()
+        empty_hash = artifact_hasher('sha256:' + '0' * 64, object_id).hexdigest().encode('ascii')
+        authorization = signer(b'GET,' + realm.encode() + b',' + base64.b64encode(empty_hash))
+        _, payload, _ = self._blocking_request(realm, {'Authorization': authorization}, _CONTROL_BYTES, object_id, False)
+        try:
+            record = json.loads(payload, object_pairs_hook=_unique_object)
+        except (UnicodeError, ValueError):
+            _fail('SOURCE_UNAVAILABLE', object_id, 'Q9: registry grant must be JSON', 'registry returned a malformed token grant')
+        token = record.get('token') if isinstance(record, dict) else None
+        if not isinstance(token, str) or not token or any(character in token for character in '\r\n'):
+            _fail('AUTH_REQUIRED', object_id, 'Q9: registry grant must contain a bearer token', 'registry returned no usable token', 'retryable')
+        return token
 
     def _blocking_request(
         self,
@@ -991,6 +1498,7 @@ class SourceAdapter:
         object_id: str,
         allow_cross_origin_redirect: bool,
         method: str = "GET",
+        signer: Callable[[bytes], str] | None = None,
     ) -> tuple[int, bytes, Mapping[str, str]]:
         try:
             redirects = _CredentialSafeRedirect(object_id, allow_cross_origin_redirect, headers.get("If-Match"))
@@ -1005,6 +1513,12 @@ class SourceAdapter:
                     response.headers["X-Cassette-Source-ETag"] = redirects.verified_source_validator
                 return response.status, payload, response.headers
         except HTTPError as error:
+            if error.code == 401 and signer is not None and urlparse(url).path.startswith('/v2/'):
+                challenge = error.headers.get('WWW-Authenticate', '')
+                error.close()
+                token = self._ollama_registry_token(url, challenge, signer, object_id)
+                return self._blocking_request(url, {**headers, 'Authorization': 'Bearer ' + token},
+                                              maximum, object_id, allow_cross_origin_redirect, method)
             if error.code in {401, 403}:
                 _fail("AUTH_REQUIRED", object_id, "Q9: source rejected the credential reference", f"source returned HTTP {error.code}", "retryable")
             if error.code in {409, 412}:
@@ -1012,6 +1526,286 @@ class SourceAdapter:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source operation must complete", f"source returned HTTP {error.code}", "retryable")
         except (IncompleteRead, URLError, OSError, TimeoutError) as error:
             _fail("SOURCE_UNAVAILABLE", object_id, "Q52: source endpoint must be reachable", type(error).__name__, "retryable")
+
+
+@asynccontextmanager
+async def source_profile_boundary(
+    revision: ResolvedSource | OperationGeometry,
+    artifacts: tuple[Artifact | PlannedArtifact, ...],
+    *,
+    header_lengths: Mapping[str, int] | None = None,
+    retained_sources: Mapping[str, dict[str, TransferExtent]] | None = None,
+):
+    """Serve deterministic bounded source ranges through the real adapter boundary."""
+    if retained_sources is not None and (not isinstance(retained_sources, Mapping) or header_lengths is not None):
+        _fail('INVALID_REQUEST', 'source-profile', 'Q42: retained sources require whole-object range execution', 'retained source mapping or header mode is invalid')
+    if not isinstance(revision, (ResolvedSource, OperationGeometry)):
+        _fail("INVALID_REQUEST", "source-profile", "Q42: profile boundary requires a source or frozen geometry", "revision has no source or operation geometry")
+    geometry = isinstance(revision, OperationGeometry)
+    if geometry:
+        # Synthetic identities exist only inside the loopback executor; the plan keeps source_lock=null.
+        plan = OperationGeometry(revision.record())
+        if tuple(artifacts) != plan.artifacts:
+            _fail('INVALID_REQUEST', 'operation-geometry', 'Q42: profile must use its complete frozen geometry', 'selected artifacts differ from the operation plan')
+        plan_digest = digest_bytes(plan.encoded)
+        algorithm = plan.record()['revision_algorithm']
+        revision = ResolvedSource(plan.source_kind, 'synthetic-operation-profile',
+            algorithm + ':' + plan_digest.split(':')[1][:_DIGEST_LENGTH[algorithm]], None,
+            tuple(Artifact(item.path, item.size,
+                item.digest_algorithm + ':' + digest_bytes(canonical_bytes({'plan': plan_digest, 'artifact': item.path})).split(':')[1][:_DIGEST_LENGTH[item.digest_algorithm]],
+                '/synthetic-only', item.validator_template.replace('{digest}', '0' * _DIGEST_LENGTH[item.digest_algorithm]))
+                for item in plan.artifacts), (), 'synthetic-profile-only', digest_bytes(b''), None, None)
+        artifacts = revision.artifacts
+    if revision.source_kind not in _WIRES:
+        _fail("MODEL_UNSUPPORTED", revision.locator, "Q42: profile boundary requires a declared source adapter wire", "source kind has no adapter wire")
+    try:
+        selected = tuple(artifacts)
+    except TypeError:
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile boundary requires ordered artifacts", "artifacts is not iterable")
+    if not selected or any(not isinstance(artifact, Artifact) for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile boundary requires resolved artifacts", "artifact list is empty or contains another type")
+    if len({artifact.path for artifact in selected}) != len(selected):
+        _fail("SOURCE_REVISION_CHANGED", revision.locator, "Q42: profile artifacts require unique paths", "artifact paths are duplicated")
+    resolved_objects = (*revision.artifacts, *revision.metadata_assets)
+    if any(artifact not in resolved_objects for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifacts must belong to the resolved source", "selected artifact is not in the source lock")
+    if any(type(artifact.size) is not int or artifact.size < 0 for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifact sizes must be nonnegative integers", "artifact size is invalid")
+    if any(
+        not isinstance(artifact.digest, str)
+        or (match := _DIGEST.fullmatch(artifact.digest)) is None
+        or len(match.group("hex")) != _DIGEST_LENGTH.get(match.group("algorithm"))
+        for artifact in selected
+    ):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile artifact digests must have fixed widths", "artifact digest is not canonical")
+    if any(not isinstance(artifact.validator, str) or not artifact.validator or any(char in artifact.validator for char in "\r\n")
+           for artifact in selected):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile validators must be safe HTTP values", "artifact validator is invalid")
+
+    lengths = None
+    if header_lengths is not None:
+        if not isinstance(header_lengths, Mapping) or set(header_lengths) != {artifact.path for artifact in selected}:
+            _fail("INVALID_REQUEST", revision.locator, "Q42: header profile lengths must name every selected artifact", "header lengths do not match selected paths")
+        lengths = {}
+        for artifact in selected:
+            value = header_lengths[artifact.path]
+            if type(value) is not int:
+                _fail("INVALID_REQUEST", artifact.path, "Q42: header profile lengths must be integers", "header length is not an integer")
+            header_ranges(artifact, value)
+            lengths[artifact.path] = value
+
+    revision_match = (
+        _DIGEST.fullmatch(revision.immutable_revision)
+        if isinstance(revision.immutable_revision, str) else None
+    )
+    if revision_match is None or len(revision_match.group("hex")) != _DIGEST_LENGTH.get(revision_match.group("algorithm")):
+        _fail("INVALID_REQUEST", revision.locator, "Q42: profile revision must have a fixed digest width", "source revision is not a canonical digest")
+    revision_digest = digest_bytes(canonical_bytes(revision.record())).split(":", 1)[1]
+    synthetic_revision = f"{revision_match.group('algorithm')}:{revision_digest[:len(revision_match.group('hex'))]}"
+    chunk_bytes = _TRANSFER_CHUNK_BYTES
+    seed_bases = {
+        artifact.path: int(artifact.digest.partition(":")[2][:16], 16)
+        for artifact in selected
+    }
+
+    def acquisition_slice(artifact: Artifact, offset: int, length: int) -> bytes:
+        if not 0 <= offset <= artifact.size or not 0 <= length <= artifact.size - offset:
+            raise ValueError("synthetic range is outside its artifact")
+        if length == 0:
+            return b""
+        first_chunk = offset // chunk_bytes
+        if offset % chunk_bytes == 0 and length == min(chunk_bytes, artifact.size - offset):
+            seed = seed_bases[artifact.path] + first_chunk
+            return random.Random(seed).randbytes(length)
+        output = bytearray()
+        position = offset
+        end = offset + length
+        while position < end:
+            chunk_index = position // chunk_bytes
+            chunk_start = chunk_index * chunk_bytes
+            chunk_length = min(chunk_bytes, artifact.size - chunk_start)
+            seed = seed_bases[artifact.path] + chunk_index
+            chunk = random.Random(seed).randbytes(chunk_length)
+            start = position - chunk_start
+            take = min(end - position, chunk_length - start)
+            output.extend(chunk[start:start + take])
+            position += take
+        return bytes(output)
+
+    def header_slice(artifact: Artifact, offset: int, length: int, json_bytes: int) -> bytes:
+        if offset < 0 or length <= 0 or offset + length > json_bytes + 8:
+            raise ValueError("synthetic header range is outside its qualified prefix")
+        tensor_bytes = artifact.size - json_bytes - 8
+        encoded = json.dumps(
+            {"weight": {"dtype": "U8", "shape": [tensor_bytes], "data_offsets": [0, tensor_bytes]}},
+            separators=(",", ":"),
+        ).encode()
+        if len(encoded) > json_bytes:
+            raise ValueError("synthetic SafeTensors header declaration is too short")
+        prefix = json_bytes.to_bytes(8, "little")
+        output = bytearray(b" " * length)
+        for base, source in ((0, prefix), (8, encoded)):
+            left = max(offset, base)
+            right = min(offset + length, base + len(source))
+            if left < right:
+                output[left - offset:right - offset] = source[left - base:right - base]
+        return bytes(output)
+
+    if lengths is not None:
+        for artifact in selected:
+            header_slice(artifact, 0, min(8, lengths[artifact.path] + 8), lengths[artifact.path])
+
+    async def synthetic_digest(artifact: Artifact) -> str:
+        hasher = artifact_hasher(
+            artifact.digest,
+            artifact.path,
+            **({"object_size": artifact.size} if artifact.digest.startswith("git-sha1:") else {}),
+        )
+        for offset in range(0, artifact.size, chunk_bytes):
+            hasher.update(acquisition_slice(artifact, offset, min(chunk_bytes, artifact.size - offset)))
+            await asyncio.sleep(0)
+        digest = artifact.digest.partition(":")[0] + ":" + hasher.hexdigest()
+        if len(digest) != len(artifact.digest):
+            _fail("SOURCE_UNAVAILABLE", artifact.path, "Q42: synthetic digest must preserve the source algorithm width", "generated digest width differs from the selected artifact")
+        return digest
+
+    synthetic_digests = {}
+    if lengths is None:
+        for artifact in selected:
+            synthetic_digests[artifact.path] = await synthetic_digest(artifact)
+
+    base_items = []
+    for index, artifact in enumerate(selected):
+        base_items.append(replace(
+            artifact,
+            digest=artifact.digest if lengths is not None else synthetic_digests[artifact.path],
+            range_uri=f"/profile/{index}",
+        ))
+    route_paths = {f"/profile/{index}": index for index in range(len(base_items))}
+    class ProfileServer(HTTPServer):
+        allow_reuse_address = True
+
+        def get_request(self):
+            request, client_address = super().get_request()
+            request.settimeout(5.0)
+            return request, client_address
+
+        def handle_error(self, request, client_address):
+            return
+
+    class ProfileHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        server_version = "CassetteProfile"
+        sys_version = ""
+
+        def log_message(self, format, *args):
+            return
+
+        def log_request(self, code="-", size="-"):
+            return
+
+        def log_error(self, format, *args):
+            return
+
+        def _respond(self, status: int, payload: bytes = b"", headers: Mapping[str, str] | None = None):
+            if len(payload) > chunk_bytes:
+                raise ValueError("synthetic response exceeds its bounded range")
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Connection", "close")
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            if payload:
+                self.wfile.write(payload)
+            self.close_connection = True
+
+        def do_GET(self):
+            if self.request_version != "HTTP/1.1":
+                self._respond(400)
+                return
+            try:
+                parsed = urlparse(self.path)
+            except ValueError:
+                self._respond(400)
+                return
+            if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+                self._respond(400)
+                return
+            index = route_paths.get(parsed.path)
+            ranges = self.headers.get_all("Range") or []
+            validators = self.headers.get_all("If-Match") or []
+            if index is None or len(ranges) != 1 or len(validators) != 1:
+                self._respond(400)
+                return
+            range_match = re.fullmatch(r"bytes=(\d+)-(\d+)", ranges[0].strip())
+            if range_match is None:
+                self._respond(416)
+                return
+            try:
+                offset, end = (int(value) for value in range_match.groups())
+            except ValueError:
+                self._respond(416)
+                return
+            artifact = base_items[index]
+            length = end - offset + 1
+            if validators[0].strip() != artifact.validator:
+                self._respond(412)
+                return
+            if offset < 0 or end < offset or end >= artifact.size or length > chunk_bytes:
+                self._respond(416)
+                return
+            if retained_sources is not None:
+                try:
+                    payload = _retained_source_range(synthetic, artifact, retained_sources[artifact.path], offset, length)
+                except (CassetteError, KeyError):
+                    self._respond(412)
+                    return
+            elif lengths is None:
+                payload = acquisition_slice(artifact, offset, length)
+            else:
+                maximum = lengths[artifact.path] + 8
+                if end >= maximum:
+                    self._respond(416)
+                    return
+                payload = header_slice(artifact, offset, length, lengths[artifact.path])
+            self._respond(206, payload, {
+                "Content-Range": f"bytes {offset}-{end}/{artifact.size}",
+                "ETag": artifact.validator,
+            })
+
+    server = ProfileServer(("127.0.0.1", 0), ProfileHandler)
+    endpoint = f"http://127.0.0.1:{server.server_port}"
+    synthetic_items = tuple(replace(artifact, range_uri=endpoint + artifact.range_uri) for artifact in base_items)
+    synthetic = replace(
+        revision,
+        immutable_revision=synthetic_revision,
+        identity=None,
+        artifacts=synthetic_items,
+        metadata_assets=(),
+        credential_ref=None,
+        license_acceptance_ref=None,
+        artifact_selector=None,
+    )
+    adapter = SourceAdapter(revision.source_kind, endpoint)
+    serve_future = asyncio.get_running_loop().run_in_executor(None, server.serve_forever)
+
+    async def cleanup():
+        try:
+            await await_extent_io(server.shutdown)
+        finally:
+            server.server_close()
+            await serve_future
+
+    try:
+        yield adapter, synthetic
+    finally:
+        cleanup_task = asyncio.create_task(cleanup())
+        try:
+            await asyncio.shield(cleanup_task)
+        except asyncio.CancelledError:
+            await asyncio.shield(cleanup_task)
+            raise
 
 
 def _preflight_fail(object_id: str, detail: str) -> None:
@@ -1096,7 +1890,7 @@ def _verified_metadata_candidates(
         artifact = available[path]
         if len(payload) != artifact.size or len(payload) > _CONTROL_BYTES:
             _preflight_fail(path, "verified metadata bytes must match one bounded resolved asset")
-        hasher = artifact_hasher(artifact.digest, path)
+        hasher = artifact_hasher(artifact.digest, path, object_size=artifact.size)
         hasher.update(payload)
         actual = f"{artifact.digest.partition(':')[0]}:{hasher.hexdigest()}"
         if actual != artifact.digest:
@@ -1646,7 +2440,15 @@ def _pread_exact(extent: TransferExtent, offset: int, length: int, object_id: st
     payload = bytearray()
     while len(payload) < length:
         try:
-            part = os.pread(extent.fd, length - len(payload), extent.offset + offset + len(payload))
+            requested = length - len(payload)
+            absolute_offset = extent.offset + offset + len(payload)
+            part = observe_extent_io(
+                extent,
+                "read",
+                absolute_offset,
+                requested,
+                lambda: os.pread(extent.fd, requested, absolute_offset),
+            )
         except OSError as error:
             _transfer_fail("CARTRIDGE_DISCONNECTED", object_id, f"cartridge read failed: {error}", "retryable")
         if not part:
@@ -1669,7 +2471,15 @@ def _pwrite_all(
         written = 0
         while written < len(payload):
             try:
-                count = os.pwrite(extent.fd, payload[written:], extent.offset + offset + written)
+                requested = len(payload) - written
+                absolute_offset = extent.offset + offset + written
+                count = observe_extent_io(
+                    extent,
+                    "write",
+                    absolute_offset,
+                    requested,
+                    lambda: os.pwrite(extent.fd, payload[written:], absolute_offset),
+                )
             except OSError as error:
                 if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
                     raise OSError(errno.ENOSPC, error.strerror) from error
@@ -1694,13 +2504,19 @@ def _pwrite_verified(
         _transfer_fail("DURABILITY_UNSUPPORTED", object_id, f"{description} changed during readback")
 
 
-def _sync_fd(fd: int, object_id: str, claim: CapacityClaim) -> None:
+def _sync_fd(extent: TransferExtent, object_id: str, claim: CapacityClaim) -> None:
     def synchronize() -> None:
         try:
-            os.fsync(fd)
+            observe_extent_io(extent, "fsync", extent.offset, 0, lambda: os.fsync(extent.fd))
             command = getattr(fcntl, "F_FULLFSYNC", None)
             if command is not None:
-                fcntl.fcntl(fd, command)
+                observe_extent_io(
+                    extent,
+                    "F_FULLFSYNC",
+                    extent.offset,
+                    0,
+                    lambda: fcntl.fcntl(extent.fd, command),
+                )
         except OSError as error:
             if error.errno in {errno.EDQUOT, errno.EFBIG, errno.ENOSPC}:
                 raise OSError(errno.ENOSPC, error.strerror) from error
@@ -1761,9 +2577,14 @@ def _decode_state_slot(payload: bytes, slot: int) -> dict | None:
 def _load_state(
     extent: TransferExtent,
     object_id: str,
-    capacity_coordinator: CapacityCoordinator,
+    capacity_coordinator: CapacityCoordinator | None,
     boundary_prefix: str,
+    *,
+    read_only: bool = False,
 ) -> tuple[dict, tuple[str, ...]] | None:
+    def clear(suffix):
+        if not read_only:
+            _clear_state(extent, object_id, capacity_coordinator, f"{boundary_prefix}:{suffix}")
     slots = tuple(
         _pread_exact(extent, slot * _TRANSFER_SLOT_BYTES, _TRANSFER_SLOT_BYTES, object_id)
         for slot in range(2)
@@ -1774,44 +2595,60 @@ def _load_state(
     )
     if not candidates:
         if any(any(payload) for payload in slots):
-            _clear_state(
-                extent,
-                object_id,
-                capacity_coordinator,
-                f"{boundary_prefix}:invalid-header",
-            )
+            clear('invalid-header')
             _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer checkpoint header remains")
         return None
-    record = max(candidates, key=lambda candidate: candidate["generation"])
-    record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
-    if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
-        _clear_state(
-            extent,
-            object_id,
-            capacity_coordinator,
-            f"{boundary_prefix}:records-overflow",
-        )
-        _transfer_fail("IDENTITY_MISMATCH", object_id, "transfer chunk records exceed their checkpoint extent")
-    encoded_records = _pread_exact(
-        extent,
-        _TRANSFER_RECORDS_OFFSET,
-        record_bytes,
-        object_id,
-    )
-    digests = []
-    for index in range(record["completed_count"]):
-        start = index * _TRANSFER_RECORD_BYTES
-        raw = encoded_records[start:start + _TRANSFER_RECORD_BYTES]
-        if raw[0] != 1:
-            _clear_state(
-                extent,
-                object_id,
-                capacity_coordinator,
-                f"{boundary_prefix}:record-{index}",
-            )
-            _transfer_fail("IDENTITY_MISMATCH", object_id, f"transfer chunk record {index} is incomplete")
-        digests.append("blake3:" + raw[1:].hex())
-    return record, tuple(digests)
+    for record in sorted(candidates, key=lambda candidate: candidate["generation"], reverse=True):
+        record_bytes = record["completed_count"] * _TRANSFER_RECORD_BYTES
+        if record_bytes > extent.length - _TRANSFER_RECORDS_OFFSET:
+            continue
+        encoded_records = _pread_exact(extent, _TRANSFER_RECORDS_OFFSET, record_bytes, object_id)
+        if any(encoded_records[index * _TRANSFER_RECORD_BYTES] != 1
+               for index in range(record["completed_count"])):
+            continue
+        records_hasher = artifact_hasher("sha256:" + "0" * 64, object_id)
+        records_hasher.update(encoded_records)
+        if _source_hash_state(records_hasher, "sha256:") != record["chunk_records_digest"]:
+            continue
+        return record, tuple("blake3:" + encoded_records[start + 1:start + _TRANSFER_RECORD_BYTES].hex()
+                             for start in range(0, record_bytes, _TRANSFER_RECORD_BYTES))
+    clear('invalid-records')
+    _transfer_fail("IDENTITY_MISMATCH", object_id, "no valid transfer chunk records remain")
+
+
+def _retained_source_range(revision, artifact, extents, offset, length, expected_manifest=None):
+    """Q42/Q51: read verified source chunks without repairing or writing their checkpoint."""
+    data, state = extents['data'], extents['state']
+    _extent(data, artifact.size, artifact.path, 'retained source data')
+    _extent(state, transfer_state_bytes(artifact.size), artifact.path, 'retained source checkpoint')
+    if data.operation_id != state.operation_id or not 0 <= offset <= offset + length <= artifact.size:
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'retained source range or extent operation differs')
+    loaded = _load_state(state, artifact.path, None, 'retained-source', read_only=True)
+    identity = _transfer_identity(revision.immutable_revision, artifact, None)
+    if loaded is None:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source has no complete checkpoint')
+    header, digests = loaded
+    if expected_manifest is not None and digest_bytes(canonical_bytes(list(digests))) != expected_manifest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source chunk records differ from the committed acquisition proof')
+    if (any(header[name] != value for name, value in identity.items())
+            or header['completed_count'] != header['chunk_count']
+            or header['contiguous_source_hash_digest'] != artifact.digest):
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source checkpoint is incomplete or has another identity')
+    hasher = resume_artifact_hasher(header['serialized_hash_state'], artifact.digest, artifact.size,
+        artifact.path, **({'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}))
+    if _source_hash_state(hasher, artifact.digest) != artifact.digest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source hash differs')
+    result = bytearray()
+    for index in range(offset // _TRANSFER_CHUNK_BYTES, (offset + length + _TRANSFER_CHUNK_BYTES - 1) // _TRANSFER_CHUNK_BYTES):
+        start = index * _TRANSFER_CHUNK_BYTES
+        chunk = _pread_exact(data, start, min(_TRANSFER_CHUNK_BYTES, artifact.size - start), artifact.path)
+        if digest_bytes(chunk) != digests[index]:
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'retained source chunk changed before serving')
+        if data.observer is not None:
+            data.observer({'kind': 'VERIFIED_PREFIX', 'offset': data.offset + start,
+                           'length': len(chunk), 'time_ns': time.monotonic_ns()})
+        result.extend(chunk[max(offset - start, 0):min(offset + length - start, len(chunk))])
+    return bytes(result)
 
 
 def _write_state(
@@ -1829,7 +2666,7 @@ def _write_state(
         "transfer checkpoint header",
         claim,
     )
-    _sync_fd(extent.fd, object_id, claim)
+    _sync_fd(extent, object_id, claim)
 
 
 def _clear_state(
@@ -1859,7 +2696,7 @@ def _clear_state(
             "discarded transfer checkpoint",
             claim,
         )
-        _sync_fd(extent.fd, object_id, claim)
+        _sync_fd(extent, object_id, claim)
         complete_capacity_claim(claim)
     except Exception:
         _pause_transfer_claim(claim, "discarded checkpoint did not reach a durable boundary")
@@ -1875,7 +2712,7 @@ def _reset_state(
     boundary_id: str,
 ) -> dict:
     identity = {name: material[name] for name in _TRANSFER_IDENTITY_FIELDS}
-    source = resumable_artifact_hasher(identity["expected_digest"], object_id)
+    source = resumable_artifact_hasher(identity["expected_digest"], object_id, object_size=identity['object_size'])
     records = resumable_artifact_hasher("sha256:" + "0" * 64, object_id)
     record = {
         **identity,
@@ -1907,7 +2744,7 @@ def _reset_state(
     return record
 
 
-def _chunk_count(size: int) -> int:
+def transfer_chunk_count(size: int) -> int:
     return (size + _TRANSFER_CHUNK_BYTES - 1) // _TRANSFER_CHUNK_BYTES
 
 
@@ -1925,17 +2762,18 @@ def _partial(record: dict, chunk_digests: tuple[str, ...]) -> PartialState:
         chunk_digests,
         offset,
         record["serialized_hash_state"],
+        record["generation"],
     )
 
 
 def _transfer_identity(
-    revision: ResolvedSource,
+    source_revision: str,
     artifact: Artifact,
     authoritative_chunk_digests: tuple[str, ...] | None,
 ) -> dict:
     if type(artifact.size) is not int or not 0 <= artifact.size <= _MAX_FILE_OFFSET:
         _transfer_fail("INVALID_REQUEST", artifact.path, "artifact size must fit a signed 64-bit file offset")
-    count = _chunk_count(artifact.size)
+    count = transfer_chunk_count(artifact.size)
     if authoritative_chunk_digests is not None:
         if (not isinstance(authoritative_chunk_digests, tuple)
                 or len(authoritative_chunk_digests) != count
@@ -1947,11 +2785,13 @@ def _transfer_identity(
     else:
         manifest_digest = None
     if (not isinstance(artifact.digest, str)
-            or re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.digest) is None
+            or not (re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.digest)
+                    or (re.fullmatch(r'git-sha1:[0-9a-f]{40}', artifact.digest)
+                        and artifact.size <= _TRANSFER_CHUNK_BYTES))
             or not isinstance(artifact.validator, str) or not artifact.validator):
-        _transfer_fail("SOURCE_UNAVAILABLE", artifact.path, "an authoritative SHA-256 digest and stable validator are required")
+        _transfer_fail("SOURCE_UNAVAILABLE", artifact.path, "SHA-256 or one bounded Git blob tail and a stable validator are required")
     artifact_id = digest_bytes(canonical_bytes({
-        "source_revision": revision.immutable_revision,
+        "source_revision": source_revision,
         "path": artifact.path,
         "size": artifact.size,
         "digest": artifact.digest,
@@ -1960,7 +2800,7 @@ def _transfer_identity(
     return {
         "version": 1,
         "artifact_id": artifact_id,
-        "source_revision": revision.immutable_revision,
+        "source_revision": source_revision,
         "object_size": artifact.size,
         "validator": artifact.validator,
         "expected_digest": artifact.digest,
@@ -2017,6 +2857,102 @@ def _checkpoint_transition(
     )
 
 
+def header_ranges(artifact: Artifact, json_bytes: int) -> tuple[tuple[int, int], ...]:
+    """Q42/Q50: bind one prefix and exact body ranges before any source-header request."""
+    if not isinstance(artifact, Artifact):
+        _transfer_fail('INVALID_REQUEST', 'source-header', 'header plan requires a resolved artifact')
+    if not artifact.path.endswith('.safetensors') or artifact.size <= 8:
+        _transfer_fail('MODEL_UNSUPPORTED', artifact.path, 'header preparation requires bounded SafeTensors sources')
+    if type(json_bytes) is not int or not 0 < json_bytes <= min(SAFETENSORS_HEADER_BYTES, artifact.size-8):
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'declared JSON header bytes exceed the source or parser bound')
+    return ((0, 8), *((offset, min(_TRANSFER_CHUNK_BYTES, json_bytes+8-offset))
+                      for offset in range(8, json_bytes+8, _TRANSFER_CHUNK_BYTES)))
+
+
+def source_header_lengths(revision: ResolvedSource, declarations: list[str] | None) -> dict[str, int]:
+    """Q42/Q50: require one exact PATH=N declaration per selected SafeTensors artifact."""
+    if any(not artifact.path.endswith('.safetensors') or artifact.size <= 8 for artifact in revision.artifacts):
+        _transfer_fail('MODEL_UNSUPPORTED', revision.locator, 'header preparation requires bounded SafeTensors sources')
+    if not isinstance(declarations, list) or not declarations:
+        _transfer_fail('INVALID_REQUEST', revision.locator, 'declare JSON header bytes for every selected artifact')
+    lengths = {}
+    for declaration in declarations:
+        name, separator, value = declaration.rpartition('=') if isinstance(declaration, str) else ('', '', '')
+        if not separator or not name or name in lengths or re.fullmatch(r'[1-9][0-9]{0,8}', value) is None:
+            _transfer_fail('INVALID_REQUEST', revision.locator, 'header declarations require unique exact PATH=N positive byte counts')
+        lengths[name] = int(value)
+    if set(lengths) != {artifact.path for artifact in revision.artifacts}:
+        _transfer_fail('INVALID_REQUEST', revision.locator, 'header declarations must match every selected artifact path')
+    for artifact in revision.artifacts:
+        header_ranges(artifact, lengths[artifact.path])
+    return lengths
+
+
+async def transfer_header(adapter: SourceAdapter, revision: ResolvedSource, artifact: Artifact,
+                          extent: TransferExtent, owner: CapacityCoordinator,
+                          *, expected_header_json_bytes: int, expected_header_digest: str | None = None) -> dict:
+    """Q44/Q50/Q53: land only a SafeTensors header; never certify the whole artifact digest."""
+    if not isinstance(adapter, SourceAdapter) or not isinstance(owner, CapacityCoordinator):
+        _transfer_fail('INVALID_REQUEST', 'source-header', 'source adapter and store capacity owner are required')
+    adapter._revision(revision)
+    if artifact not in revision.artifacts or not artifact.path.endswith('.safetensors'):
+        _transfer_fail('MODEL_UNSUPPORTED', revision.locator, 'header inspection requires a resolved SafeTensors artifact')
+    if (not isinstance(extent, TransferExtent) or extent.offset != 0 or not owner.owns_descriptor(extent.fd)
+            or _extent(extent, artifact.size, artifact.path, 'header extent').st_size != artifact.size):
+        _transfer_fail('INVALID_REQUEST', artifact.path, 'header inspection requires a complete logical source extent')
+    if artifact.size <= 8:
+        _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'source is too short for a SafeTensors header')
+    ranges = header_ranges(artifact, expected_header_json_bytes)
+    if expected_header_digest is not None:
+        if not _digest(expected_header_digest, 'blake3:', 'header digest', artifact.path).startswith('blake3:'):
+            _transfer_fail('INVALID_REQUEST', artifact.path, 'saved header digest requires BLAKE3')
+
+    async def land(offset, length):
+        if expected_header_digest is not None:
+            return await await_extent_io(_pread_exact, extent, offset, length, artifact.path)
+        write_bytes = length
+        claim = _transfer_claim(owner, _checkpoint_transition(extent.operation_id,
+            f'header:{artifact.path}:{offset}', payload_bytes=write_bytes, checkpoint_bytes=0,
+            write_bytes=(write_bytes, 0)), artifact.path)
+        try:
+            payload = await adapter.open_range(revision, artifact, offset, length, artifact.validator)
+            await await_extent_io(_pwrite_verified, extent, offset, payload,
+                                    artifact.path, 'source header', claim)
+            await await_extent_io(_sync_fd, extent, artifact.path, claim)
+            complete_capacity_claim(claim)
+            return payload
+        except BaseException:
+            _pause_transfer_claim(claim, 'header range did not reach its durable readback boundary')
+            raise
+
+    prefix = await land(0, 8)
+    length = int.from_bytes(prefix, 'little')
+    if not 0 < length <= SAFETENSORS_HEADER_BYTES or length + 8 > artifact.size:
+        if expected_header_digest is not None:
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header length differs from its file or parser bound')
+        _transfer_fail('METADATA_INSUFFICIENT', artifact.path, 'SafeTensors header exceeds its source or parser bound')
+    if length != expected_header_json_bytes:
+        _transfer_fail('IDENTITY_MISMATCH' if expected_header_digest is not None else 'METADATA_INSUFFICIENT',
+                       artifact.path, f'actual JSON header bytes {length} differ from qualified declaration {expected_header_json_bytes}')
+    total = length + 8
+    hasher = artifact_hasher('blake3:', artifact.path)
+    hasher.update(prefix)
+    for offset, count in ranges[1:]:
+        hasher.update(await land(offset, count))
+    digest = 'blake3:' + hasher.hexdigest()
+    if expected_header_digest is not None and digest != expected_header_digest:
+        _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'saved source header differs from its immutable receipt')
+    inventory = await await_extent_io(
+        inspect_safetensors,
+        extent.fd,
+        digest,
+        io_observer=extent.observer,
+        observe_process_reads=extent.observe_process_reads,
+    )
+    return {'header_digest': digest, 'header_bytes': total, 'inventory': inventory,
+            'payload_verification': 'NOT_RUN'}
+
+
 async def transfer_artifact(
     adapter: SourceAdapter,
     revision: ResolvedSource,
@@ -2028,7 +2964,10 @@ async def transfer_artifact(
     authoritative_chunk_digests: tuple[str, ...] | None = None,
     checkpoint_committed=None,
 ) -> PartialState:
-    """Resume one Q51 artifact and return only after its durable final proof is complete."""
+    """Resume one Q51 artifact through its durable final proof.
+
+    Checkpoint control may return True to refetch uncommitted prefetched ranges.
+    """
 
     if not isinstance(adapter, SourceAdapter):
         _transfer_fail("INVALID_REQUEST", "transfer:unidentified", "SourceAdapter is required")
@@ -2037,6 +2976,44 @@ async def transfer_artifact(
     adapter._revision(revision)
     if not isinstance(artifact, Artifact) or artifact not in (*revision.artifacts, *revision.metadata_assets):
         _transfer_fail("INVALID_REQUEST", revision.locator, "artifact must belong to the resolved source revision")
+    return await _checkpointed_transfer(revision.immutable_revision, artifact,
+        lambda offset, length: adapter.open_range(revision, artifact, offset, length, artifact.validator),
+        data_extent, state_extent, capacity_coordinator,
+        authoritative_chunk_digests=authoritative_chunk_digests, checkpoint_committed=checkpoint_committed)
+
+
+async def compose_artifact(recipe: SourceByteRecipe, inputs: Mapping[str, dict[str, TransferExtent]],
+                           path: str, expected_digest: str, data_extent: TransferExtent,
+                           state_extent: TransferExtent, capacity_coordinator: CapacityCoordinator,
+                           *, checkpoint_committed=None, observer=None) -> PartialState:
+    """Q44/Q51/Q53/Q60: checkpoint exact recipe bytes against their explicit prepass SHA-256.
+
+    The owner admits original input proofs and profiles the prepass plus this write pass separately.
+    This returns a completed transfer proof, never a provider descriptor or SourceLock.
+    """
+    if not isinstance(recipe, SourceByteRecipe):
+        _transfer_fail('INVALID_REQUEST', 'source-composition', 'a source byte recipe is required')
+    item = next((item for item in recipe.record()['artifacts'] if item['path'] == path), None)
+    if item is None or not isinstance(expected_digest, str) or re.fullmatch(r'sha256:[0-9a-f]{64}', expected_digest) is None:
+        _transfer_fail('INVALID_REQUEST', 'source-composition', 'composition requires a named output and its prepass SHA-256')
+    if checkpoint_committed is not None and not callable(checkpoint_committed):
+        _transfer_fail('INVALID_REQUEST', path, 'checkpoint control must be callable')
+    recipe.read_range(path, 0, 0, inputs)
+    size = sum(len(segment['literal_hex']) // 2 if 'literal_hex' in segment else segment['length']
+               for segment in item['segments'])
+    # These private checkpoint fields name no provider URI and are never published as a source.
+    artifact = Artifact(path, size, expected_digest, '', expected_digest)
+    async def read_range(offset, length):
+        return await await_extent_io(recipe.read_range, path, offset, length, inputs, observer=observer)
+    return await _checkpointed_transfer(digest_bytes(recipe.encoded), artifact, read_range,
+        data_extent, state_extent, capacity_coordinator, checkpoint_committed=checkpoint_committed,
+        protected_extents=tuple(extent for extents in inputs.values() for extent in extents.values()))
+
+
+async def _checkpointed_transfer(source_revision, artifact, read_range, data_extent, state_extent,
+                                 capacity_coordinator, *, authoritative_chunk_digests=None,
+                                 checkpoint_committed=None, protected_extents=()):
+    """Own the single verified chunk writer for remote acquisition and concrete recipe output."""
     if not isinstance(capacity_coordinator, CapacityCoordinator):
         _transfer_fail(
             "INVALID_REQUEST",
@@ -2052,7 +3029,8 @@ async def transfer_artifact(
             artifact.path,
             "transfer extents must belong to the coordinator's cartridge filesystem",
         )
-    identity = _transfer_identity(revision, artifact, authoritative_chunk_digests)
+    identity = _transfer_identity(source_revision, artifact, authoritative_chunk_digests)
+    hash_bounds = {'object_size': artifact.size} if artifact.digest.startswith('git-sha1:') else {}
     state_required = transfer_state_bytes(artifact.size)
     data_metadata = _extent(data_extent, artifact.size, artifact.path, "data extent")
     state_metadata = _extent(state_extent, state_required, artifact.path, "checkpoint extent")
@@ -2062,6 +3040,14 @@ async def transfer_artifact(
         _transfer_fail("INVALID_REQUEST", artifact.path, "data and checkpoint extents overlap")
     if data_extent.operation_id != state_extent.operation_id:
         _transfer_fail("INVALID_REQUEST", artifact.path, "transfer extents must share one operation ID")
+    for retained in protected_extents:
+        metadata = _extent(retained, 0, artifact.path, 'retained composition input')
+        for extent, required, output in ((data_extent, artifact.size, data_metadata),
+                                         (state_extent, state_required, state_metadata)):
+            if ((metadata.st_dev, metadata.st_ino) == (output.st_dev, output.st_ino)
+                    and max(retained.offset, extent.offset)
+                    < min(retained.offset + retained.length, extent.offset + required)):
+                _transfer_fail('INVALID_REQUEST', artifact.path, 'composition output overlaps a retained input extent')
 
     def reset_checkpoint(material: dict, generation: int, reason: str) -> dict:
         artifact_id = material.get("artifact_id", identity["artifact_id"])
@@ -2081,7 +3067,7 @@ async def transfer_artifact(
         f"{identity['artifact_id']}:checkpoint-clear",
     )
     if loaded is None:
-        hasher = resumable_artifact_hasher(artifact.digest, artifact.path)
+        hasher = resumable_artifact_hasher(artifact.digest, artifact.path, **hash_bounds)
         header = {
             **identity,
             "generation": 0,
@@ -2121,15 +3107,13 @@ async def transfer_artifact(
         records_hasher = resumable_artifact_hasher("sha256:" + "0" * 64, artifact.path)
         for digest in chunk_digests:
             records_hasher.update(b"\x01" + bytes.fromhex(digest[7:]))
-        if _source_hash_state(records_hasher, "sha256:") != header["chunk_records_digest"]:
-            reset_checkpoint(header, header["generation"], "record-digest")
-            _transfer_fail("IDENTITY_MISMATCH", artifact.path, "transfer chunk records changed after checkpoint")
         try:
             hasher = resume_artifact_hasher(
                 header["serialized_hash_state"],
                 artifact.digest,
                 header["contiguous_source_hash_offset"],
                 artifact.path,
+                **hash_bounds,
             )
         except CassetteError:
             reset_checkpoint(header, header["generation"], "hash-state")
@@ -2137,11 +3121,7 @@ async def transfer_artifact(
         if _source_hash_state(hasher, artifact.digest) != header["contiguous_source_hash_digest"]:
             reset_checkpoint(header, header["generation"], "hash-digest")
             _transfer_fail("IDENTITY_MISMATCH", artifact.path, "serialized source hash state changed after checkpoint")
-        if header["completed_count"] == header["chunk_count"]:
-            if header["contiguous_source_hash_digest"] != artifact.digest:
-                reset_checkpoint(header, header["generation"], "completed-digest")
-                _transfer_fail("IDENTITY_MISMATCH", artifact.path, "completed checkpoint does not carry the expected whole-object digest")
-            return _partial(header, chunk_digests)
+        verified_hasher = resumable_artifact_hasher(artifact.digest, artifact.path, **hash_bounds)
         for index, expected in enumerate(chunk_digests):
             offset = index * _TRANSFER_CHUNK_BYTES
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
@@ -2149,20 +3129,31 @@ async def transfer_artifact(
             if digest_bytes(payload) != expected:
                 reset_checkpoint(header, header["generation"], f"local-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local transfer chunk {index} changed before resume")
+            verified_hasher.update(payload)
+            if data_extent.observer is not None:
+                data_extent.observer({'kind': 'VERIFIED_PREFIX', 'offset': data_extent.offset + offset,
+                                      'length': length, 'time_ns': time.monotonic_ns()})
+            await asyncio.sleep(0)
+        if artifact_hash_state(verified_hasher, artifact.digest, header['contiguous_source_hash_offset'], artifact.path) != header['serialized_hash_state']:
+            reset_checkpoint(header, header['generation'], 'prefix-hash')
+            _transfer_fail('IDENTITY_MISMATCH', artifact.path, 'local transfer prefix differs from its stored source hash state')
+        if header["completed_count"] == header["chunk_count"]:
+            if header["contiguous_source_hash_digest"] != artifact.digest:
+                reset_checkpoint(header, header["generation"], "completed-digest")
+                _transfer_fail("IDENTITY_MISMATCH", artifact.path, "completed checkpoint does not carry the expected whole-object digest")
+            partial = _partial(header, chunk_digests)
+            if checkpoint_committed is not None:
+                await checkpoint_committed(partial)
+            return partial
 
     completed = header["completed_count"]
     if completed and checkpoint_committed is not None:
-        await checkpoint_committed()
+        await checkpoint_committed(_partial(header, chunk_digests))
     while completed < header["chunk_count"]:
         indices = tuple(range(completed, min(completed + _TRANSFER_PARALLEL_RANGES, header["chunk_count"])))
         results = await asyncio.gather(*(
-            adapter.open_range(
-                revision,
-                artifact,
-                index * _TRANSFER_CHUNK_BYTES,
-                min(_TRANSFER_CHUNK_BYTES, artifact.size - index * _TRANSFER_CHUNK_BYTES),
-                artifact.validator,
-            )
+            read_range(index * _TRANSFER_CHUNK_BYTES,
+                       min(_TRANSFER_CHUNK_BYTES, artifact.size - index * _TRANSFER_CHUNK_BYTES))
             for index in indices
         ), return_exceptions=True)
         revision_failure = next((
@@ -2183,13 +3174,15 @@ async def transfer_artifact(
         for index, payload in zip(indices, results, strict=True):
             offset = index * _TRANSFER_CHUNK_BYTES
             length = min(_TRANSFER_CHUNK_BYTES, artifact.size - offset)
-            network_digest = digest_bytes(payload)
+            if not isinstance(payload, bytes) or len(payload) != length:
+                _transfer_fail('SOURCE_UNAVAILABLE', artifact.path, 'range reader returned another byte type or length')
+            chunk_digest = digest_bytes(payload)
             if (authoritative_chunk_digests is not None
-                    and network_digest != authoritative_chunk_digests[index]):
+                    and chunk_digest != authoritative_chunk_digests[index]):
                 reset_checkpoint(header, header["generation"], f"source-chunk-{index}")
                 _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"source chunk {index} differs from its authoritative digest")
             hasher.update(payload)
-            chunk = TransferChunk(identity["artifact_id"], offset, length, network_digest)
+            chunk = TransferChunk(identity["artifact_id"], offset, length, chunk_digest)
             chunk_record = b"\x01" + bytes.fromhex(chunk.blake3_digest[7:])
             records_hasher.update(chunk_record)
             next_completed = completed + 1
@@ -2227,9 +3220,9 @@ async def transfer_artifact(
             try:
                 _pwrite_all(data_extent, offset, payload, artifact.path, claim)
                 readback = _pread_exact(data_extent, offset, length, artifact.path)
-                if digest_bytes(readback) != network_digest:
+                if digest_bytes(readback) != chunk_digest:
                     _transfer_fail("IDENTITY_MISMATCH", artifact.path, f"local write changed transfer chunk {index}")
-                _sync_fd(data_extent.fd, artifact.path, claim)
+                _sync_fd(data_extent, artifact.path, claim)
                 _pwrite_verified(
                     state_extent,
                     _TRANSFER_RECORDS_OFFSET + index * _TRANSFER_RECORD_BYTES,
@@ -2246,8 +3239,8 @@ async def transfer_artifact(
             completed = next_completed
             chunk_digests += (chunk.blake3_digest,)
             header = next_header
-            if checkpoint_committed is not None:
-                await checkpoint_committed()
+            if checkpoint_committed is not None and await checkpoint_committed(_partial(header, chunk_digests)) is True:
+                break
 
     if header["contiguous_source_hash_digest"] != artifact.digest:
         reset_checkpoint(header, header["generation"], "whole-digest")
@@ -2264,12 +3257,12 @@ def training_records(artifact: Artifact, extent: TransferExtent, state: PartialS
             or type(record_limit_bytes) is not int or not 0 < record_limit_bytes <= 4194304):
         _transfer_fail("INVALID_REQUEST", "training-dataset", "dataset requires a complete transfer and a bounded record size")
     _extent(extent, artifact.size, artifact.path, "dataset")
-    hasher = artifact_hasher(artifact.digest, artifact.path)
+    hasher = artifact_hasher(artifact.digest, artifact.path, object_size=artifact.size)
     for offset in range(0, artifact.size, 65536):
         hasher.update(_pread_exact(extent, offset, min(65536, artifact.size-offset), artifact.path))
     if hasher.hexdigest() != artifact.digest.split(":")[1]:
         _transfer_fail("IDENTITY_MISMATCH", artifact.path, "dataset bytes differ from their immutable source digest")
-    if len(state.chunk_digests) != _chunk_count(artifact.size):
+    if len(state.chunk_digests) != transfer_chunk_count(artifact.size):
         _transfer_fail("INVALID_REQUEST", artifact.path, "dataset checkpoint lacks its complete chunk digest sequence")
     buffer = bytearray()
     for index, offset in enumerate(range(0, artifact.size, _TRANSFER_CHUNK_BYTES)):

@@ -1,0 +1,195 @@
+# First principles — original Cassette specification and progress
+
+The governing specification is the August 31, 2026 source at
+`074f594a0bacc4c08e953acf4539f129eb1f041d`. The original remit, mathematics,
+research decisions, question queue, acceptance matrix, live runbook and S28 closeout
+have been restored from that source. Later specification additions and campaign
+procedures are withdrawn. Their text is retained off-tree as history.
+
+The original result is a full model on an external drive, usable through consumer
+Apple hardware and the named agents, trainable on the drive when compatible,
+with the original capability, speed, reliability and minimum-code requirements.
+
+## What is done
+
+These checks record the August implementation results. They do not claim a fresh
+run of today's source or a passing live product.
+
+- [x] Storage identities, page layout, transactions, integrity and cartridge lifecycle
+  were implemented and checked on scratch cartridges (S01–S08).
+- [x] Source handling, resumable verified transfers and compatibility decisions were
+  implemented and checked against controlled source servers (S09–S11).
+- [x] Mathematical plans, paging and the small complete transformer path were
+  implemented and checked (S12–S15).
+- [x] Broker, scheduling and named-agent protocol adapters were implemented and
+  checked (S16–S18).
+- [x] Compilation, hardware plans and both training paths were implemented and
+  checked on the declared fixtures (S19–S22).
+- [x] Failure handling, export, update, removal, integration and code accounting
+  were checked within the machine phase (S23–S27).
+- [x] The machine phase closed on August 31 with 307 passing tests and a passing
+  ledger at its recorded source (S28).
+- [ ] Complete live storage qualification under the original contract.
+- [ ] Complete real-source acquisition under the original contract.
+- [ ] Demonstrate the dense and sparse mechanisms on real models.
+- [ ] Demonstrate the full frontier-model execution, training and client requirements.
+- [ ] Complete the final clean-root run and reproducible completion result.
+
+The existing September checkpoint records a real 4,096-byte write to LaCie,
+verification, restart recovery and repeated-operation handling. That is useful
+partial evidence, not a full model download or a complete drive qualification.
+Its source is commit `9d6b41a4a4850d8899c0216090f5e244ae5e1329`.
+No complete original live-stage pass was found in the inspected records.
+
+## What remains for the acquisition work called stage 5
+
+This heading preserves Drew's reference to the acquisition step. Its original
+requirements are the August L01 storage and L02 acquisition requirements below;
+the later L05–L10 queue supplies no additional conditions.
+
+- [x] Measure the actual drive's read/write behavior for its required use and
+  verify that committed data remains correct after remount. (2026-11-10: Cassette's drive
+  check passed for this download; remount proved on the cartridge volume, not by
+  unplugging the LaCie. The full Q42 long-duration profile has not been run.)
+- [x] Exercise Cassette's acquisition path with a real tiny Ollama model downloaded
+  directly to the drive, preserving its exact source identity. (2026-11-10: `smollm:135m`.)
+- [x] Interrupt and resume a real transfer, then verify every final file against
+  its expected digest. Keep model files off the Mac's internal storage. (2026-11-10)
+- [x] Verify that the Ollama manifest and blobs preserve the complete model identity.
+  (2026-11-10: pinned manifest digest and all five blob digests verified.)
+
+These are the immediate acquisition checks. Complete original L02 closure still
+requires its named full-model source rows. The Tinker row consumes a trained
+child model, so that particular proof needs the training result; it is not a
+prerequisite for exercising the tiny Ollama transfer. Neither that dependency
+nor the full-model performance work adds machinery to the small acquisition check.
+
+Drew has directed that basic acquisition use a real tiny Ollama model.
+`smollm2:135m` is listed by Ollama at 271 MB:
+https://ollama.com/library/smollm2:135m
+The installed Ollama CLI reports version 0.40.11. This model provides a concrete
+small input for the download, byte-verification and interrupted-transfer work;
+it adds no stage or acceptance requirement. It has not been downloaded by this task.
+The original large-model capacity, quality and performance claims remain separate.
+
+## The original live stages
+
+| Original stage | What it must demonstrate | Current closure |
+|---|---|---|
+| L01 | Actual storage performance, reliable saved data and required writable-drive behavior. | Incomplete; partial physical evidence exists. |
+| L02 | Real Hugging Face, Ollama and Tinker acquisition/re-import, exact model identity and resumed transfers, with model bytes on the external drive. | Incomplete. |
+| L03 | Dense F4 followed by sparse F5: the original quality, reduced byte use, training and resource bounds on real models. | No complete live pass found. |
+| L04 | Original frontier execution and comparisons, sustained operation, all named clients, compatible training, failure recovery and offline operation. | No complete live pass found. |
+| L05 | Repeat the complete original matrix from clean source and clean cartridges; reproduce code accounting and offline proof; emit the completion digest only if every required row passes. | Not complete. |
+
+The August file calls the final whole-system proof L05. Clearing that original
+L05 requires all five rows of this table. The later acquisition label does not
+change that requirement or convert completed machine work into live proof.
+
+## Restoration worklog
+
+- Drew ordered the August specification restored, later additions ignored, completed
+  work checked off, and the remaining acquisition work explained plainly.
+- Drew clarified that basic acquisition should use an available real tiny Ollama model.
+- The restored source owns product requirements. This file reports progress and maps
+  the familiar acquisition label; it creates no new gate, test, reviewer or stage.
+- Existing implementation and raw evidence remain available for reuse against the
+  original requirements. Post-August code, test names and campaign records do not
+  create requirements merely by existing.
+- This task restores documents and reports status. It does not resume the old test
+  campaign, download a model, certify the current executable or publish a release.
+- 2026-11-10: Drew asked for the remaining work on the Linear board, labelled `cassette`,
+  with no human approval or review gates, and for execution through to completion.
+  Cards REC-374 to REC-378 track original L01–L05 in dependency order.
+- 2026-11-10 hardware observation, before any L01 measurement: the attached host is an
+  M4 MacBook Air with 24 GB (Mac16,13, macOS 27.0.1 build 26A434) and the attached drive
+  is a LaCie Rugged USB-C 5 TB, APFS, on a 5 Gb/s USB link. The matrix classes are
+  `c1_air_32` (M5, 32 GB), `c2_max_128`, `c3_ultra_512`, and NVMe storage on USB4 40 Gb/s
+  or Thunderbolt 5. No attached device matches a matrix class. L01 stays TODO; nothing
+  was measured, downloaded or remounted in this session.
+- 2026-11-10 hardware amendment, at Drew's instruction: the acceptance hardware is his
+  MacBook Air, optionally his Mac mini as a lesser machine, and the available LaCie drives.
+  `research/ACCEPTANCE_MATRIX.yaml` now declares `c1_air_24`, optional `c2_mini` and
+  `s1_lacie_usb`; the M5/Max/Ultra and NVMe classes are withdrawn. The Qwen row moves to the
+  Air; the Kimi K3 portability row and its two training rows move to the mini and apply only
+  when the mini is enrolled; the Ultra-only native teacher row is withdrawn. Models, gates
+  and thresholds are unchanged. This supersedes the remit's sentence that the work is not
+  for Drew's specific hardware, for acceptance purposes only. `PHASE_LIVE_RUNBOOK.md` carries
+  the same names. Generated schemas and machine fixtures were not regenerated: the current
+  generator expects the withdrawn October queue and cannot run against the restored files.
+  Replaced text: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-hardware-amendment-20261110
+- 2026-11-10 L01 start, state and raw output under
+  /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-l01-20261110. Cassette's `drives`
+  lists the LaCie (APFS, 3.85 TB available). The first public Ollama connection failed with
+  SOURCE_UNAVAILABLE under Q52: Ollama omits an empty `q` from its next-page link and
+  `sources.py` required it. One-line repair in the continuation check; a non-empty query
+  must still be echoed. The connection then succeeded and `select-model` froze
+  `smollm2:135m` at manifest sha256:9077fe9d…, one 270,885,952-byte GGUF layer, zero bytes
+  downloaded. `select-drive` on folder `drewwiberg-lacie/Cassette-cartridge-20261110` was
+  started; its inventory result is not yet recorded. No measurement, remount or payload
+  transfer has run. The existing test suite was not rerun after the repair.
+- 2026-11-10 shared-drive working method, at Drew's instruction: existing drive content is
+  untouched and other agents keep using the drive while Cassette runs. Cassette's cartridge is
+  an APFS volume inside one growable image file on the LaCie,
+  `/Volumes/LaCie/drewwiberg-lacie/cassette-cartridge/CassetteCartridge.asif` (2 TB ceiling,
+  volume UUID ec9a65ac-c5af-43d3-83f7-05a255df45e8, folder `Cassette`). No product code changed
+  for this. Remount proof ejects and reattaches only that volume; the LaCie stays mounted.
+  This proves Cassette's commit path across a filesystem remount. It is not a physical unplug
+  of the LaCie. The whole-LaCie inventory started earlier was stopped unfinished and is unused.
+- 2026-11-10 basic acquisition result. Model changed at Drew's instruction to the smallest
+  viable Ollama model: `smollm:135m`, manifest sha256:b0b2a461…0133, 91,727,296-byte GGUF plus
+  four small blobs. Go operation op-7c5c7c7e… failed terminally with SOURCE_REVISION_CHANGED
+  (HTTP 412): the registry redirects blob reads to a storage origin whose own ETag can never
+  equal the digest sent in If-Match. Repair in `sources.py`: on a cross-origin redirect of a
+  content-addressed `/blobs/<digest>` path, drop If-Match; the final digest check is unchanged.
+  The failed operation is retained. New operation op-5c9be7a4…: durability hold, cartridge
+  remount verified, drive check PASS, transfer interrupted by SIGINT after the 8 MiB
+  checkpoint, resumed under the same key from that checkpoint, SUCCEEDED with 91,739,413
+  verified bytes. An independent `shasum -a 256` of the stored GGUF equals
+  eb2c714d…9b94. No model-sized file was found on the internal disk. Tests
+  `test_s09_sources`, `test_s10_transfer` and `test_l05_ollama` pass (7) after both repairs;
+  the full suite and ledger were not run. L01 and L02 stay open: the long-duration Q42
+  profile, the Hugging Face models and the Tinker row are not done.
+- 2026-11-10 Drew's direction: take charge and keep the work moving without waiting on him. Card
+  REC-396 added at his instruction: after the live tests, compare measured performance with MATHS.md.
+- 2026-11-10 Hugging Face acquisition through the CLI: `HuggingFaceTB/SmolLM2-135M-Instruct` at
+  git-sha1:12fd25f7…, 25 files, 1,969,841,187 verified bytes, operation key `hf-smol-go`, SUCCEEDED.
+  Its weights are BF16; the native path accepts only F32, so this model cannot yet be run.
+- 2026-11-10 first real model run from the drive. `Felladrin/Llama-160M-Chat-v1` (Apache-2.0, F32,
+  git-sha1:3701ea6a…) was acquired and published through the product prepare operation on
+  `/Volumes/CassetteCartridge/Live160` (root blake3:26d20cde…, identity blake3:d6ed8e38…). Asked
+  "What is the capital of France?", it answered "The capital of France is Paris." Drivers and raw
+  output: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-live-20261110.
+  Four repairs were needed before a real repository could be prepared or run usefully:
+  (1) `broker.py` passed every repository JSON file to the compiler, which rejects unknown files; it
+  now passes only the compiler's admitted semantic files. (2) `compiler.py` refused the ordinary
+  ChatML template because it joins text with `+`; bounded text addition is now admitted.
+  (3) `compiler.py` required a shard-index byte total that real indexes may omit; a declared total
+  must still be exact. (4) Generation re-read every weight and ran a full durable generation
+  commit for every token: 96 s per token, of which about 85% was drive flushes and re-verification.
+  `pager.py` now keeps verified weights in memory for the operation (already charged by Q47
+  admission) and `broker.py` commits the context when the operation completes, pauses, is held or
+  is cancelled. Measured after: 24 tokens in 157 s end to end; model computation is under 0.1 s per
+  token after load; the remaining per-token cost is one durable operation-log append (2–3 s on this
+  drive) and the single closing commit takes about 175 s. `tests/test_l02_native.py` and
+  `tests/test_l03_execution.py` pass (5) after the repairs; the pause observer in the L02 test now
+  yields at every worker boundary instead of relying on slow commits.
+- 2026-11-10 findings that bear on L03 and L04, from reading the code, not from a gate run:
+  (a) The compiled path (`compiler._native_head_windows`) transforms only the output matrix, one
+  2x2 block per durably committed window, in exact rational arithmetic, and the compiled runtime
+  accepts only prompts identical to its observed cases. For this 160M model that is 6,144,000
+  windows. It cannot reduce bytes read per token on a real model, so the F4 predicates cannot be
+  met by the present mechanism. No F4 result is claimed; the gate has not been run.
+  (b) The attached 5 TB LaCie Rugged behaves as a spinning disk: one F_FULLFSYNC costs 1–3 s on it
+  (macOS reports no media type for it; the 5 TB Rugged is sold as a hard disk). The Q68
+  floors (10 tokens/s, 100 ms per token) cannot be met by any path that flushes per token on this
+  drive. The remit names flash or SSD storage.
+  (c) Native execution requires the whole model in memory (Q47 admission), so on the 24 GB Air it
+  covers models up to roughly 4 GB of F32 weights. Models larger than memory depend on (a).
+- 2026-11-10 full suite after the repairs: 76 passed, 8 failed, 3 collection errors (528 s). Every
+  failure is in ledger, schema, campaign or matrix bookkeeping (`test_s01`, `test_s03`, `test_s23`,
+  `test_s26`, `test_s27`, `test_l04_campaign`, `test_live_stage_acceptance`): the tools and fixtures
+  still expect the withdrawn October documents and the pre-amendment matrix. No model, store,
+  source, pager, trainer or broker behaviour test fails. The bookkeeping is not yet repaired.
+
+Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

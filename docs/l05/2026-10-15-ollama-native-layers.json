@@ -1,0 +1,79 @@
+{
+  "record_kind": "L05 Ollama native named-layer repair",
+  "date": "2026-10-15",
+  "status": "FIXTURE_REVIEW_AND_COMPLETE_MACHINE_PROOF_PASS_WHEEL_BUILT_NOT_INSTALLED",
+  "authority": [
+    "Q9",
+    "Q50",
+    "Q52",
+    "source_ollama_content_addressed_reimport"
+  ],
+  "failed_before": {
+    "behavior": "native .image.tensor manifest refused as model layer absent before blob GET",
+    "fixture": "tests/test_l05_ollama.py::test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires",
+    "result": "1 failed in0.74seconds"
+  },
+  "change": "Recognize tensor model media; preserve safe native names and SafeTensors suffix; separate native runtime config from named HFconfig; reuse unchanged legacyGGUF/five-operation paths",
+  "installed_ollama_version_observed": "0.40.4",
+  "official_source": {
+    "commit": "45e6011815c74acde6a346512856b69dd79dd22b",
+    "tag": "v0.40.4",
+    "url": "https://github.com/ollama/ollama/tree/45e6011815c74acde6a346512856b69dd79dd22b",
+    "scope": "pinned official source text; no install or upgrade"
+  },
+  "independent_review": {
+    "served_model": "claude-opus-5-5",
+    "session": "e35c36ff-04c1-4e63-bcbb-c6efa985c4da",
+    "Q1": "PASS_FIXTURE_PLATFORM",
+    "Q2": "PASS_FIXTURE_PLATFORM",
+    "probe_cases_per_variant": 29,
+    "variants": 8,
+    "expected_candidate_results": {
+      "PASS": 24,
+      "FAIL_instrument": 1,
+      "OBSERVE": 4
+    },
+    "fault_controls_detected": 6,
+    "base_original_defect_reproduced": true,
+    "gguf_base_parity_cases": 3,
+    "instrument_fault": "P4 aggregate name-branch reach mixes unrelated config/license entries. Correct annotated tensor output, M2 and suffix/config controls resolve precedence; originalFAIL retained.",
+    "permission_boundary": "First read-only run had one denied outside-cwd Glob. Freeze evidence supplied insidecwd; finalrun has no denials and no permission change.",
+    "frozen_files_verified_before_after": 207,
+    "limit": "Implementer/reviewer/executor share Mac/account; root executes unchanged reviewer probe and verifies full hashes; reviewer spot-checks six hashes.",
+    "optional_deferred": "Extend existing author fixture with slash-named tensor, suffix collision and GGUF stray name. Independent controls cover current behavior; deferred as optional regression improvement."
+  },
+  "complete_machine_proof": {
+    "candidate": "autonomy-candidate-17",
+    "tests_passed": 340,
+    "skipped": 0,
+    "duration_seconds": 493.01,
+    "component_controls": 14,
+    "ordinary_ledger": "PASS",
+    "J": [
+      0,
+      0,
+      15928,
+      1,
+      1,
+      9,
+      0,
+      0,
+      8425096
+    ],
+    "product_LOC_growth": 6
+  },
+  "runtime_file_join": {
+    "files": 38,
+    "current_source_review_producer_wheel": "MATCH",
+    "sources_sha256": "2bdb4dace288ad1766d34837d65e718c9570e0aed6384d46590164f2ff95870a",
+    "wheel_sha256": "26f4179f727da8fd33fb3cd3815046bd69d40ecd9a0231aa3c50c8e798629424",
+    "installed": "NOT_RUN",
+    "installed_current": "wheel13 held for ongoing unchanged-runtime profile challenge"
+  },
+  "source_entry": "NOT_RUN",
+  "required_large_downloads": "NOT_RUN",
+  "ollama_generated_manifest_and_semantic_identity": "NOT_RUN",
+  "live_registry": "NOT_RUN",
+  "independent_review_receipts": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/ollama-plan-01",
+  "preservation": "Original failure, denied review attempt, P4instrumentFAIL, raw candidates/mutants and final review retained. No original/source requirement removed."
+}

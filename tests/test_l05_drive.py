@@ -1,14 +1,20 @@
-# test_l05_drive.py — L05 mounted-APFS drive selection and store-root proof for Q44/Q49/Q53; depends on errors.py, store.py.
+# test_l05_drive.py — L05 exact native inventory, mounted-APFS selection and store-root proof (Q41/Q44/Q49/Q53); depends on errors.py, store.py.
 """Exercise the store-owned L05 drive path on a disposable macOS APFS image."""
 
 import plistlib
+import copy
+import ctypes
+import errno
+import os
 from pathlib import Path
 import platform
 import shutil
 import stat
+import struct
 import subprocess
 
 import pytest
+import store as store_module
 
 from errors import CassetteError
 from store import (
@@ -31,11 +37,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _attached_apfs_image(tmp_path: Path) -> tuple[Path, Path]:
+def _attached_apfs_image(tmp_path: Path, *, size="64m") -> tuple[Path, Path]:
     image = tmp_path / "cassette-l05.sparseimage"
     subprocess.run(
         [
-            "/usr/bin/hdiutil", "create", "-size", "64m", "-fs", "APFS",
+            "/usr/bin/hdiutil", "create", "-size", size, "-fs", "APFS",
             "-volname", "CassetteL05", "-type", "SPARSE", "-quiet", str(image),
         ],
         check=True,
@@ -175,3 +181,63 @@ def test_q41_q44_q49_q53_l05_discovers_nested_root_and_revalidates_apfs_volume(t
             shutil.rmtree(image)
         else:
             image.unlink(missing_ok=True)
+
+    # Q41: bulk attributes retain lstat semantics, exact logical bytes and bounded resume.
+    root = tmp_path / 'native-inventory-parity'
+    protected = root / 'protected'
+    protected.mkdir(parents=True)
+    for index in range(1200):
+        (protected / f'item-{index:05d}.txt').write_bytes(index.to_bytes(4, 'little'))
+    (protected / 'é-source').write_bytes(b'keep')
+    os.link(protected / 'é-source', root / 'hardlink')
+    (root / 'linked-file').symlink_to(protected / 'é-source')
+    (root / 'linked-directory').symlink_to(protected, target_is_directory=True)
+    os.mkfifo(root / 'fifo')
+    with (root / 'sparse').open('wb') as stream:
+        stream.truncate(8 * 1024 * 1024 + 17)
+    (protected / 'excluded').mkdir()
+    (protected / 'excluded/ignored').write_bytes(b'outside the declared inventory')
+    excluded = ('protected/excluded',)
+    def original_size(path):
+        relative = path.relative_to(root).as_posix()
+        if any(relative == name or relative.startswith(name + '/') for name in excluded):
+            return 0
+        value = path.lstat()
+        if stat.S_ISREG(value.st_mode):
+            return value.st_size
+        return sum(original_size(child) for child in path.iterdir()) if stat.S_ISDIR(value.st_mode) else 0
+    expected = {path.name: {'type': 'link' if path.is_symlink() else 'directory' if path.is_dir() else
+                           'file' if path.is_file() else 'special', 'logical_bytes': original_size(path)}
+                for path in root.iterdir()}
+    native, batches = store_module._LIBC.getattrlistbulk, []
+    def observed(descriptor, attributes, buffer, size, options):
+        count = native(descriptor, attributes, buffer, size, options)
+        batches.append((os.fstat(descriptor).st_ino, count))
+        return count
+    checkpoint = None
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(store_module._LIBC, 'getattrlistbulk', observed)
+        while True:
+            unchanged = copy.deepcopy(checkpoint)
+            result = inventory_step(root, excluded=excluded, checkpoint=checkpoint, limit=13)
+            assert checkpoint == unchanged
+            assert result['checkpoint']['visited'] - (0 if checkpoint is None else checkpoint['visited']) <= 13
+            if result['inventory'] is not None:
+                break
+            checkpoint = result['checkpoint']
+    assert result['inventory'] == expected
+    assert len([count for inode, count in batches if inode == protected.stat().st_ino and count > 0]) >= 2
+    assert expected['sparse']['logical_bytes'] == 8 * 1024 * 1024 + 17
+    for common, error in ((0xA0000009, errno.EACCES), (0xA0000001, 0)):
+        def incomplete(_descriptor, _attributes, buffer, _size, _options):
+            payload = struct.pack('=I5IIiIIq', 56, common, 0, 0, 0x200, 0, error, 20, 2, 1, 0) + b'x\0' + bytes(6)
+            ctypes.memmove(buffer, payload, len(payload))
+            return 1
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(store_module._LIBC, 'getattrlistbulk', incomplete)
+            with pytest.raises(PermissionError if error else CassetteError) as refused:
+                inventory_step(root)
+            if error:
+                assert refused.value.errno == errno.EACCES
+            else:
+                assert refused.value.code == 'PROVENANCE_VIOLATION'

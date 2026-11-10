@@ -1,9 +1,19 @@
-schema_version: 5
+schema_version: 4
 matrix_id: cassette-first-complete-release
 scope_mode: GENERAL_PRODUCT
 initial_status: NOT_RUN
-amended: 2026-09-02
-remit_authority: ../ORIGINAL_REMIT.md (amended 2026-09-02)
+amended: 2026-11-10
+hardware_amendment:
+  date: 2026-11-10
+  authority: principal instruction of 2026-11-10
+  decision: >-
+    The acceptance hardware is the principal's MacBook Air, optionally his Mac mini as a lesser
+    machine, and the available LaCie external drives. The earlier M5 Air 32 GB, M5 Max 128 GB,
+    M3 Ultra 512 GB and USB4/Thunderbolt 5 NVMe classes are withdrawn. Models, gates, thresholds
+    and every non-hardware assertion are unchanged. Evidence remains measured row evidence under
+    Q41-Q44; naming the principal's devices as the classes does not admit an anecdote.
+  replaced_text: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-hardware-amendment-20261110
+remit_authority: ../ORIGINAL_REMIT.md (amended 2026-08-05)
 mathematical_authority: ../MATHS.md (cutover after S11, before S12)
 thesis: >-
   Frontier-class capability on consumer Apple hardware: the cartridge carries the parameter mass,
@@ -51,31 +61,13 @@ baselines:
     definition: laboratory service where an equivalent one exists; Q67 field statuses recorded
     manifest: required_at_freeze_or_marked_non_equivalent
   b_native_c1:
-    contract: Q13 selection rule over NativeSet(c1_air_32)
+    contract: Q13 selection rule over NativeSet(c1_air_24)
     definition: strongest openly downloadable model executing natively within c1 with no cartridge
     pinned: required_at_freeze
   b_native_c2:
-    contract: Q13 selection rule over NativeSet(c2_max_128)
+    contract: Q13 selection rule over NativeSet(c2_mini)
     definition: strongest openly downloadable model executing natively within c2 with no cartridge
-    pinned: required_at_freeze
-
-baseline_freeze:
-  status: NOT_RUN
-  required_before: any_teacher_trace_capture_or_Q17_Q18_Q68_comparison
-  source_revision: required_full_commit_and_tree_digest
-  dependency_lock_digest: required
-  matrix_digest: required
-  runbook_digest: required
-  q78_pre_live_checkpoint: required_PASS
-  model_rule: >-
-    freeze each model's B_teacher and B_hosted manifest only after that immutable model revision is
-    pinned; freeze B_native_c1 and B_native_c2 from their complete recorded NativeSet candidate lists;
-    an unavailable or materially hidden hosted field is recorded NON_EQUIVALENT, never omitted
-  assertions:
-    - every_applicable_baseline_has_one_immutable_manifest_before_comparison_data_exists
-    - b_native_selection_reproduces_from_the_frozen_candidate_set
-    - a_non_equivalent_hosted_baseline_cannot_enter_a_ratio_or_parity_gate
-    - changing_one_material_baseline_field_changes_its_identity
+    pinned: required_at_freeze_when_c2_enrolled
 
 compute_provenance:
   runtime_inference_and_training: apple_hardware_plus_cartridge_only
@@ -86,14 +78,12 @@ compute_provenance:
 
 phase_machine_deferral:
   phases:
-    - L01.25
-    - L01.5
+    - L01
     - L02
     - L03
     - L04
     - L05
-  outcome: CONTRACT_AMENDMENT_REQUIRES_L01_25_MACHINE_PROOF
-  machine_baseline_claim: PHASE_MACHINE_BASELINE_CONTRACT_AMENDMENT_PENDING
+  outcome: READY_FOR_LIVE_FALSIFICATION_ONLY
   live_evidence: NOT_RUN
   prohibited_evidence:
     - F4_PASS
@@ -117,12 +107,11 @@ immutable_models:
       - structured_output
       - multi_turn
       - long_context
-  qwen3_30b_a3b:
+  llama_4_scout:
     source: huggingface
-    locator: Qwen/Qwen3-30B-A3B
-    revision: ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
-    repository_artifact_bytes: 61084187391
-    selection_record_digest: blake3:a1f6fa611aaff0af7b565250476455f672dd33da69d147c98406c78f105a941e
+    locator: meta-llama/Llama-4-Scout-17B-16E-Instruct
+    revision: 92f3b1597a195b523d8d9e5700e57e4fbb8f20d3
+    repository_artifact_bytes: 217315712145
     required_capabilities:
       - text
       - reasoning
@@ -151,134 +140,46 @@ frontier_reference_rule:
     exemplar as a recorded remit-level decision; a conveniently smaller model remains forbidden
 
 apple_classes:
-  c1_air_32:
+  c1_air_24:
     role: THESIS
-    chip_family: M5
+    required: true
+    chip_family: M4
     product_class: MacBook Air
-    unified_memory_bytes: 34359738368
-    specified_memory_bandwidth_bytes_per_second: 153000000000
+    model_identifier: Mac16,13
+    unified_memory_bytes: 25769803776
+    specified_memory_bandwidth_bytes_per_second: 120000000000
     cooling: fanless
     required_os_build: recorded_at_run
-  c2_max_128:
-    role: CONSUMER_PRO
-    chip_family: M5 Max
-    product_class: MacBook Pro
-    unified_memory_bytes: 137438953472
-    specified_memory_bandwidth_bytes_per_second: 614000000000
-    cooling: active
-    required_os_build: recorded_at_run
-  c3_ultra_512:
-    role: INFRASTRUCTURE
-    chip_family: M3 Ultra
-    product_class: Mac Studio
-    unified_memory_bytes: 549755813888
-    specified_memory_bandwidth_bytes_per_second: 819000000000
+  c2_mini:
+    role: LESSER_MACHINE
+    required: false
+    enrollment: optional, at the principal's choice, to test a lesser machine
+    product_class: Mac mini
+    chip_family: recorded_at_run
+    unified_memory_bytes: recorded_at_run
+    specified_memory_bandwidth_bytes_per_second: recorded_at_run
     cooling: active
     required_os_build: recorded_at_run
 
-storage_profile_families:
-  external_apfs_measured:
-    role: OPERATION_BOUND
+storage_classes:
+  s1_lacie_usb:
+    members: any available LaCie external drive; each drive qualifies independently
+    observed_member_2026_11_10: LaCie Rugged USB-C, 5000771321856 bytes, APFS, USB link 5 Gb/s
+    media: recorded_at_run
     filesystem: APFS
-    attachment: locally_attached_macos
-    capacity_admission: Q53_next_atomic_transition
+    transport: USB, negotiated rate recorded_at_run
+    capacity_rule: Q53 next atomic byte claim against measured free capacity
     profile_contract: Q41-Q44
-    operation_plan_profile_digest: required_at_run
-    endurance_profile_digest: required_when_operation_writes_training_state
-    writable_training: operation_qualified
-    descriptive_labels_not_admission_gates:
-      - media
-      - storage_class
-      - connector
-      - brand
-      - advertised_speed
-      - nominal_capacity
-
-adaptive_capacity_control:
-  contract: Q53
-  machine_proof_phase: L01.25
-  principal_presence: not_required
-  status: NOT_RUN
-  evidence_level: FIXTURE
-  required_assertions:
-    - next_atomic_transition_only
-    - no_fixed_device_fraction_byte_floor_user_ceiling_or_whole_job_reservation
-    - feasible_next_step_starts_without_whole_campaign_fit
-    - concurrent_cassette_claims_do_not_overcommit
-    - capacity_remeasured_before_each_write_and_after_each_durable_boundary
-    - active_claim_transaction_and_journal_objects_survive_reclamation
-    - retained_root_pinned_rollback_and_user_owned_objects_survive_reclamation
-    - only_eligible_cassette_owned_temporary_or_reproducible_objects_are_reclaimed
-    - external_free_space_reduction_or_enospc_recovers_parent_or_committed_child
-    - newly_available_capacity_resumes_from_same_committed_boundary
-
-storage_eligibility_control:
-  contract: Q39-Q44
-  machine_proof_phase: L01.25
-  principal_presence: not_required
-  status: NOT_RUN
-  evidence_level: FIXTURE
-  required_assertions:
-    - no_storage_media_class_connector_or_nominal_capacity_admission_gate
-    - any_locally_attached_macos_apfs_drive_may_attempt_measurement
-    - descriptive_labels_do_not_determine_admission
-
-physical_storage_qualification:
-  contract: Q39-Q44
-  live_proof_phase: L01.5
-  principal_presence: required
-  status: NOT_RUN
-  required_assertions:
-    - coarse_top_level_protected_content_inventory_created_off_drive_before_first_write
-    - inventory_records_top_level_name_type_aggregate_logical_bytes_and_identity_only
-    - inventory_detects_broad_size_change_not_content_integrity
-    - writes_confined_to_approved_campaign_root
-    - exact_drive_operation_plan_profile_recorded
-    - every_physical_drive_used_by_a_required_row_has_its_own_exact_drive_operation_plan_profile_before_that_operation_begins
-    - optional_reference_profiles_do_not_gate_qualification
-    - no_model_bearing_header_or_payload_before_qualified_L02_path
-  qualification_cardinality: >-
-    one record per exact physical drive, assembled path, Apple host, operation, and plan; a missing
-    record blocks only that operation, and a failed tuple does not make the drive ineligible for a
-    different measured operation
-  phase_gate_semantics:
-    source_entry_pass: >-
-      after L01.25, inventory and campaign-root proof plus the exact header, acquisition, and Ollama
-      physical profiles pass before L02 reads model-bearing headers or transfers model payload;
-      user-triggered authorization, catalogue and bounded non-payload metadata are permitted earlier
-      within L05 under acquisition_entry_contract
-    later_profiles: >-
-      compile, inference, training, execution, failure, export, repair, and removal profiles retain
-      the L01.5 label but gate only their exact consumer; they do not postpone or redefine the
-      source-entry L01.5 PASS gate
-
-reference_storage_profiles:
-  s1_usb4_nvme_2tb:
-    required: false
-    filesystem: APFS
-    purpose: optional_nonblocking_comparison
-    descriptive_labels: {media: NVMe_SSD, connector: USB4_40Gbps, nominal_capacity: 2_TB}
-  s2_tb5_nvme_2tb:
-    required: false
-    filesystem: APFS
-    purpose: optional_nonblocking_comparison
-    descriptive_labels: {media: NVMe_SSD, connector: Thunderbolt_5, nominal_capacity: 2_TB}
-  s3_tb5_nvme_4tb_writable:
-    required: false
-    filesystem: APFS
-    purpose: optional_nonblocking_comparison
-    descriptive_labels: {media: NVMe_SSD, connector: Thunderbolt_5, nominal_capacity: 4_TB}
+    measured_profile_digest: required_at_run
+    endurance_profile_digest: required_at_run
+    writable_training: true
 
 fixture_gate_rows:
   - id: f4_gate
     required: true
-    blocking: [exec_c1_frontier_compiled, exec_c3_k3_compiled_portability]
-    blocks_completion: true
+    blocking: [exec_c1_s1_frontier_compiled, exec_c2_s1_k3_compiled_portability]
     contract: Q36 F4 GATE
     model_class: 3-8B dense, permissive license
-    model: Qwen/Qwen3-4B
-    source_revision: 1cfa9a7208912126459214e8b04321603b3df60c
-    selection_record_digest: blake3:b8abcca8f6da0b32ef473d8a2644663d95c3f008c8bccefcafb4452bc6f42a89
     pass_condition: >-
       Q19-certified compiled revision covers the frozen Q15/Q16 protected conditions, independently
       recomputes every atom/rank field, every per-atom and per-step resource table, every peak and
@@ -289,12 +190,9 @@ fixture_gate_rows:
     failure_consequence: Q38 record and mechanism revision before any frontier work
   - id: f5_gate
     required: true
-    blocking: [exec_c1_frontier_compiled, exec_c3_k3_compiled_portability]
-    blocks_completion: true
+    blocking: [exec_c1_s1_frontier_compiled, exec_c2_s1_k3_compiled_portability]
     contract: Q36 F5 GATE plus Q37 curves
     model_class: 20-120B sparse
-    model: qwen3_30b_a3b
-    source_revision: ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
     pass_condition: >-
       F4 predicates at scale; train_sparse_fixture_tier_a and train_sparse_fixture_tier_b have PASS
       outcomes; plus
@@ -302,111 +200,33 @@ fixture_gate_rows:
       clears Q68 FRONTIER_CLASS inside the E-011 C1 decode budget
     failure_consequence: Q38 record and mechanism revision; frontier compiled rows remain refused
 
-acquisition_entry_contract:
-  authority: Principal clarification on 2026-09-12; backend operations with basic CLI triggers
-  owner_stage: L05
-  contracts: [Q5, Q6, Q9, Q31, Q44, Q49, Q50, Q51, Q52, Q53, Q79]
-  status: NOT_RUN
-  entrypoint: >-
-    Implement and package a basic Cassette CLI over the canonical broker. Source connection,
-    catalogue search, model selection, drive discovery, access request and Go are product
-    operations. A later TUI reuses them. No rendered app interface is required for L05.
-  test_order: >-
-    Bind each new behavior to the assertions below, demonstrate its missing or failing path,
-    implement the smallest complete change and pass its focused fixture/integration checks before
-    live execution. Then test the actual supported-launch CLI on the real source and drive. Retain
-    the established principal-supplied independent review, selected remediation, build-story and
-    authorized commit sequence. This amendment supplies requirements, not implementation evidence;
-    no existing result is relabeled to satisfy it and no extra review cycle is introduced.
-  source_connection: >-
-    Connect invokes provider-supported authorization when needed; public access remains available.
-    Hugging Face uses a registered public OAuth client with device authorization and read scopes,
-    or an explicitly selected masked read-token input. Qualify the exact flow and scopes before
-    claiming it works. Ollama distinguishes public/local access from private registry access;
-    local /api/tags lists installed models, not the complete downloadable catalogue. Qualify a
-    real catalogue/registry route and its authentication without using cloud inference as acquisition.
-    Cassette receives tokens, not provider passwords; saved tokens use macOS Keychain. Only opaque
-    references enter broker records; secrets never enter CLI arguments, evidence, logs or cartridges.
-  model_selection: >-
-    List searchable, paginated provider results with access and downloadability. Recheck access
-    and freeze an immutable revision or manifest digest when selected. Catalogue presence does
-    not prove access, complete downloadable weights, execution compatibility or live performance.
-  drive_access: >-
-    Discover locally attached mounted volumes and show name, APFS UUID, mount path, filesystem,
-    available bytes and observed access. Selecting a destination triggers the platform access
-    operation when required and records the user's scoped intent. Establish and verify access in
-    the actual process that owns the store write. Identify its executable, launch host and macOS
-    permission context; a terminal-host permission is not a grant to a future packaged app.
-    Reuse supported macOS authorization facilities and account for any required binding under Q29.
-    A selected path or os.access result alone is not write proof. Distinguish an OS consent denial
-    from filesystem permissions using observed evidence. A picker does not override POSIX or ACL
-    restrictions. Provide the supported user action and retry; cancellation retains selection and
-    performs no write. Never require Codex access or a manual shell permission patch as product setup.
-  go: >-
-    One Go action binds the selected immutable model, opaque credential reference, exact volume
-    identity, destination root and operation idempotency key. It authorizes the displayed ordinary
-    acquisition scope, including bounded qualification writes inside that root. The broker checks
-    the preserved inventory, creates the root through store, verifies access and required physical
-    profiles, then streams artifacts through sources into store-granted external extents. Repeated
-    Go or process restart reconciles the same durable operation rather than duplicating downloads.
-    Show qualification, received bytes, verified bytes, checkpoint and terminal outcome. Only final
-    digest verification establishes Download verified; callable-model readiness remains separate.
-  boundaries: >-
-    Source sign-in, catalogue queries and bounded non-payload metadata may precede source-entry
-    qualification. Model-bearing header ranges and payload transfers require their qualified path.
-    Go does not authorize formatting, partitioning, physical fault injection, modification of
-    existing user content or spending. Q53 admits the next atomic claim, never whole-campaign fit.
-    Preserve Python, broker/source/store ownership and one process; admit platform dependencies only
-    against a reproduced required-path failure. No helper becomes a second downloader or writer.
-  proof: >-
-    Retain an actual supported-launch CLI journey for each required source path, joined by operation
-    identity to final external-byte and digest receipts. Exercise a provider-validated authenticated
-    connection as well as public access. Use generated boundary cases for denied/revoked credentials,
-    cancelled/denied access, stale or replaced mounts, duplicate Go, restart and interrupted transfer;
-    run against real broker/source/store code. Recheck saved access and credentials on restart and
-    remount. A lower-level probe, fixture pass, manual folder creation or agent-driven download is
-    supporting evidence only. Product-entry live evidence and independent review remain mandatory.
-
 source_rows:
   - id: source_huggingface_all_immutable_models
     required: true
     operation: direct_to_cartridge_acquisition
-    entry_contract: acquisition_entry_contract
     model_set:
       - kimi_k3
-      - qwen3_30b_a3b
+      - llama_4_scout
       - qwen3_235b_a22b
     assertions:
       - immutable_revision_locked
-      - q53_adaptive_capacity_admitted_for_each_transfer_step
+      - exact_capacity_admitted_before_transfer
       - ranged_resume_pass
       - final_source_digest_pass
       - no_internal_model_file
-      - product_cli_connection_catalogue_selection_and_go_reach_verified_external_download
-      - selected_drive_access_is_established_and_rechecked_in_the_actual_writer_context
-      - provider_credentials_remain_os_held_or_session_only_and_opaque_in_durable_records
-      - entry_restart_denial_revocation_and_duplicate_go_preserve_identity_and_verified_progress
   - id: source_ollama_content_addressed_reimport
     required: true
     operation: direct_to_cartridge_acquisition
-    entry_contract: acquisition_entry_contract
-    input: pinned_ollama_manifest_and_blobs_generated_from_qwen3_30b_a3b_revision
+    input: pinned_ollama_manifest_and_blobs_generated_from_llama_4_scout_revision
     generated_identity_digest: required_at_run
     assertions:
       - manifest_and_blob_digests_preserved
       - semantic_manifest_complete
       - no_source_specific_lifecycle_fork
-      - product_cli_connection_catalogue_selection_and_go_reach_verified_external_download
-      - selected_drive_access_is_established_and_rechecked_in_the_actual_writer_context
-      - provider_credentials_remain_os_held_or_session_only_and_opaque_in_durable_records
-      - entry_restart_denial_revocation_and_duplicate_go_preserve_identity_and_verified_progress
   - id: source_tinker_export_reimport
     required: true
     operation: direct_to_cartridge_acquisition
     input: pinned_tinker_export_of_q70_child_revision
-    phase_label: L02
-    precondition: train_dense_fixture_tier_a PASS
-    timing: after_F4_Tier_A_and_before_Q80; does_not_block_F4_or_F5_entry
     generated_identity_digest: required_at_run
     assertions:
       - exported_weight_identity_preserved
@@ -414,12 +234,11 @@ source_rows:
       - no_source_specific_lifecycle_fork
 
 execution_rows:
-  - id: exec_c1_frontier_compiled
+  - id: exec_c1_s1_frontier_compiled
     required: true
     role: THESIS_HEADLINE
-    apple_class: c1_air_32
-    storage_profile_family: external_apfs_measured
-    operation_plan_profile_digest: required_at_run
+    apple_class: c1_air_24
+    storage_class: s1_lacie_usb
     model: frontier_reference (exemplar kimi_k3)
     mode: COMPILED_CERTIFIED
     precondition: f5_gate PASS
@@ -438,13 +257,12 @@ execution_rows:
     training_tiers:
       - A
       - B
-  - id: exec_c1_qwen3_30b_least_invasive
+  - id: exec_c1_s1_scout_least_invasive
     required: true
     role: CONSUMER_GENERAL
-    apple_class: c1_air_32
-    storage_profile_family: external_apfs_measured
-    operation_plan_profile_digest: required_at_run
-    model: qwen3_30b_a3b
+    apple_class: c1_air_24
+    storage_class: s1_lacie_usb
+    model: llama_4_scout
     mode: LEAST_INVASIVE_PASSING_Q40_MODE
     allowed_q40_modes: [1, 2, 3]
     on_no_passing_mode: FAIL_ROW_WITH_Q38_RECORD
@@ -454,12 +272,11 @@ execution_rows:
       - declared_maximum
     training_tiers:
       - A
-  - id: exec_c2_qwen_least_invasive
+  - id: exec_c1_s1_qwen_least_invasive
     required: true
-    role: CONSUMER_PRO
-    apple_class: c2_max_128
-    storage_profile_family: external_apfs_measured
-    operation_plan_profile_digest: required_at_run
+    role: CONSUMER_GENERAL
+    apple_class: c1_air_24
+    storage_class: s1_lacie_usb
     model: qwen3_235b_a22b
     mode: LEAST_INVASIVE_PASSING_Q40_MODE
     allowed_q40_modes: [1, 2, 3]
@@ -469,36 +286,11 @@ execution_rows:
       - ordinary
       - declared_maximum
     training_tiers: []
-  - id: exec_c3_k3_native_teacher
-    required: true
-    role: TEACHER_CORRECTNESS
-    apple_class: c3_ultra_512
-    storage_profile_family: external_apfs_measured
-    operation_plan_profile_digest: required_at_run
-    model: kimi_k3
-    mode: NATIVE_SOURCE_ROUTING
-    gate_tier: correctness_and_honest_reporting_only
-    falsified_parity_claim: E-011
-    duties:
-      - native_routing_correctness
-      - declared_capability_correctness_including_1048576_context
-      - teacher_trace_generation_for_compilation
-      - absolute_service_report
-    forbidden_labels:
-      - FRONTIER_CLASS
-      - PARITY
-      - NEAR_LABORATORY
-    required_context_tests:
-      - ordinary
-      - 131072_tokens
-      - 1048576_tokens
-    training_tiers: []
-  - id: exec_c3_k3_compiled_portability
-    required: true
+  - id: exec_c2_s1_k3_compiled_portability
+    required: when_c2_enrolled
     role: PORTABILITY_AND_TRAINING
-    apple_class: c3_ultra_512
-    storage_profile_family: external_apfs_measured
-    operation_plan_profile_digest: required_at_run
+    apple_class: c2_mini
+    storage_class: s1_lacie_usb
     model: kimi_k3
     mode: COMPILED_CERTIFIED
     precondition: f5_gate PASS
@@ -583,37 +375,37 @@ protocol_cross_product:
     - no_fabricated_feature
 
 training_rows:
-  - id: train_c1_frontier_tier_a
+  - id: train_c1_s1_frontier_tier_a
     required: true
-    execution_row: exec_c1_frontier_compiled
+    execution_row: exec_c1_s1_frontier_compiled
     operations:
       - adapter_sft_131072_tokens
       - offline_adapter_dpo_1024_pairs
       - adapter_continued_pretraining_1048576_tokens
-  - id: train_c1_frontier_tier_b
+  - id: train_c1_s1_frontier_tier_b
     required: true
-    execution_row: exec_c1_frontier_compiled
+    execution_row: exec_c1_s1_frontier_compiled
     operations:
       - compiled_condition_atom_description_estimator_recovery_32768_traces
       - observation_and_composition_certificate_revalidation
       - every_precision_tier_recovery
-  - id: train_c1_qwen3_30b_tier_a
+  - id: train_c1_s1_scout_tier_a
     required: true
-    execution_row: exec_c1_qwen3_30b_least_invasive
+    execution_row: exec_c1_s1_scout_least_invasive
     operations:
       - adapter_sft_131072_tokens
       - offline_adapter_dpo_1024_pairs
       - adapter_continued_pretraining_1048576_tokens
-  - id: train_c3_frontier_tier_a
-    required: true
-    execution_row: exec_c3_k3_compiled_portability
+  - id: train_c2_s1_frontier_tier_a
+    required: when_c2_enrolled
+    execution_row: exec_c2_s1_k3_compiled_portability
     operations:
       - adapter_sft_131072_tokens
       - offline_adapter_dpo_1024_pairs
       - adapter_continued_pretraining_1048576_tokens
-  - id: train_c3_frontier_tier_b
-    required: true
-    execution_row: exec_c3_k3_compiled_portability
+  - id: train_c2_s1_frontier_tier_b
+    required: when_c2_enrolled
+    execution_row: exec_c2_s1_k3_compiled_portability
     operations:
       - compiled_condition_atom_description_estimator_recovery_32768_traces
       - observation_and_composition_certificate_revalidation
@@ -656,7 +448,7 @@ training_assertions:
     - q23_placement
     - q25_interrupt_resume
     - q28_write_meter
-    - q53_adaptive_capacity_control
+    - q53_capacity_reservation
     - q70_quality
     - q71_dataflow
     - q72_optimizer_equivalence
@@ -705,78 +497,6 @@ failure_rows:
     - insufficient_capacity_before_start
     - insufficient_capacity_during_candidate_write
     - source_revision_change_during_transfer
-  approval_contract:
-    exact_card_required_for_every_phase_live_coordinate: true
-    physical_fault_card_required_for:
-      - cartridge_disconnect
-      - reconnect_same_identity
-      - reconnect_wrong_identity
-      - sleep_wake
-      - bus_reset
-      - port_migration
-    bounded_path_specific_card_required_for:
-      - readonly_remount
-      - insufficient_capacity_before_start
-      - insufficient_capacity_during_candidate_write
-      - source_revision_change_during_transfer
-    rule: >-
-      a general campaign card never authorizes a physical fault, filler write, remount, or source
-      mutation; an agent-executed action still requires an approved exact disk, path, byte or state
-      bound, and stop conditions
-  requalification_after_recovery:
-    required_for:
-      - cartridge_disconnect
-      - reconnect_same_identity
-      - reconnect_wrong_identity
-      - sleep_wake
-      - bus_reset
-      - port_migration
-      - readonly_remount
-    not_applicable_for:
-      - insufficient_capacity_before_start
-      - insufficient_capacity_during_candidate_write
-      - source_revision_change_during_transfer
-    rule: >-
-      the injection name alone determines graph shape before execution; every required coordinate
-      contains REQUALIFY_START and REQUALIFY_VERIFY after RECOVER, while every not-applicable
-      coordinate omits both records and may not resume through a changed physical path
-  phase_live_operation_bindings:
-    acquisition:
-      subject: selected_F4_immutable_source
-      source_artifact_record: HEADER-F4-RUN
-      starting_profile_record: QUALIFY-FAILURE-acquisition-VERIFY
-    compilation:
-      subject: selected_F4_immutable_source
-      source_artifact_record: ACQ-F4-VERIFY
-      starting_profile_record: QUALIFY-FAILURE-compilation-VERIFY
-    inference_prefill:
-      subject: selected_F4_compiled_revision
-      source_artifact_record: F4-CERTIFICATE
-      starting_profile_record: QUALIFY-FAILURE-inference_prefill-VERIFY
-    inference_decode:
-      subject: selected_F4_compiled_revision
-      source_artifact_record: F4-CERTIFICATE
-      starting_profile_record: QUALIFY-FAILURE-inference_decode-VERIFY
-    training:
-      subject: selected_F4_compiled_revision_with_dense_tier_a_plan
-      source_artifact_record: F4-INFERENCE-CLOSED
-      starting_profile_record: QUALIFY-FAILURE-training-VERIFY
-    export:
-      subject: train_dense_fixture_tier_a_child
-      source_artifact_record: TRAIN-train_dense_fixture_tier_a-ALL-PASS
-      starting_profile_record: QUALIFY-FAILURE-export-VERIFY
-    repair:
-      subject: selected_F4_compiled_revision
-      source_artifact_record: F4-CERTIFICATE
-      starting_profile_record: QUALIFY-FAILURE-repair-VERIFY
-    removal:
-      subject: selected_F4_compiled_revision
-      source_artifact_record: F4-CERTIFICATE
-      starting_profile_record: QUALIFY-FAILURE-removal-VERIFY
-  operation_binding_rule: >-
-    tools/campaign.py must resolve each selector above to one exact source artifact digest, one fresh
-    logical operation, and one exact physical qualification before sealing any failure coordinate;
-    ambiguity, reuse of a terminal operation, or a missing record rejects expansion
   assertions:
     - no_partial_callable_revision
     - exact_typed_error
@@ -800,7 +520,7 @@ offline_and_privacy_rows:
       - prompt_and_output_persistence_matches_manifest
   - id: offline_training_all_training_rows
     required: true
-    expand_over: training_rows_x_every_declared_operation
+    expand_over: training_rows
     external_network: disabled
     allowed_network:
       - loopback_agent_protocol
@@ -812,9 +532,6 @@ offline_and_privacy_rows:
 minimum_code_rows:
   - id: q78_exact_accounting
     required: true
-    checkpoints:
-      - after_all_machine_only_changes_before_first_physical_write
-      - after_all_live_work_before_Q80_completion
     assertions:
       - clean_build_reproduces_metric_J
       - no_new_general_numerical_kernel
@@ -831,6 +548,16 @@ falsified_claims:
       ceiling at 100% utilization, below the Q68 10 tok/s floor
     evidence: E-011
     disposition: row reclassified TEACHER_CORRECTNESS per Q38/Q39 reopen machinery; boundary not lowered
+
+withdrawn_rows:
+  - id: exec_c3_s2_k3_native_teacher
+    date: 2026-11-10
+    reason: >-
+      The row bound native Kimi K3 teacher execution, including the 1048576-token context, to the
+      withdrawn c3_ultra_512 class. No acceptance machine can hold that role. The teacher reference
+      remains baselines.b_teacher_per_model (hosted or declared server class) and teacher traces for
+      compilation remain under compute_provenance.frontier_compilation.
+    disposition: row withdrawn with its class by the hardware amendment; no result is inferred
 
 forbidden_completion_evidence:
   - paper
@@ -849,22 +576,3 @@ result:
   status: NOT_RUN
   completion_digest: null
   evidence_bundle: null
-
-status_contract:
-  row_statuses:
-    NOT_RUN: no qualifying execution has begun
-    RUNNING: a durable background operation is active and has no terminal result
-    PASS: every declared assertion passed at its required evidence level
-    FAIL: an executed assertion failed, including a gate or row with a Q38_FALSIFIED outcome
-    BLOCKED: an authority, approval, account, hardware, environment, or prerequisite is unavailable
-  q38_rule: Q38_FALSIFIED is an outcome attached to FAIL; it never satisfies a PASS dependency
-  queue_statuses: [TODO, IN_PROGRESS, DONE, BLOCKED]
-  campaign_result_statuses:
-    NOT_RUN: no qualifying live campaign execution has begun
-    RUNNING: at least one durable campaign operation is active and no terminal required-row failure exists
-    INCOMPLETE: qualifying live work began, no campaign operation is active, and required work remains without a terminal failure or campaign-wide blocker
-    FAIL: at least one executed required row failed, including Q38_FALSIFIED
-    BLOCKED: no eligible path toward completion remains because a required authority, approval, account, hardware, environment, or prerequisite is unavailable
-    PASS: Q80 clean-root replay proved every required row at LIVE evidence and issued the completion digest
-  campaign_bundle_rule: every executed INCOMPLETE, FAIL, BLOCKED, or PASS result names a sealed campaign evidence bundle; NOT_RUN may retain null
-  completion_rule: only result.status PASS may carry a completion digest

@@ -6,6 +6,8 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import threading
+from urllib.parse import urlparse
+from urllib.request import OpenerDirector, Request
 
 import pytest
 
@@ -13,7 +15,7 @@ from errors import CassetteError
 from sources import SourceAdapter
 
 
-def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires():
+def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires(monkeypatch):
     """Q9/Q52: catalogue entries resolve through a digest-pinned registry manifest and blobs."""
     config = b'{"family":"fixture"}'
     model = b"ollama-model-bytes"
@@ -36,6 +38,8 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
     manifest_digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
     blobs = {config_digest: config, model_digest: model, license_digest: license_bytes}
     requests = []
+    provider_manifest = {'bytes': manifest}
+    catalogue_html = {'suffix': ''}
 
     class Registry(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -43,6 +47,16 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
 
         def do_GET(self):
             requests.append((self.path, self.headers.get("Authorization"), self.headers.get("Range")))
+            if self.path.startswith('/search?'):
+                second = 'page=2' in self.path
+                names = ['namespace/fixture-third'] if second else ['library/fixture-model', 'library/fixture-second']
+                links = ''.join('<li><a href="/' + name + '"><h2>Model</h2></a></li>' for name in names)
+                continuation = '' if second else '<li hx-get="/search?page=2&amp;q=fixture"></li>'
+                page = ('<div data-result-count="' + str(len(names)) + '" data-has-more="'
+                        + str(not second).lower() + '"></div><ul role="list">'
+                        + links + continuation + '</ul>' + catalogue_html['suffix'])
+                self._send(200, page.encode(), {'Content-Type': 'text/html; charset=utf-8'})
+                return
             if self.path == "/api/tags":
                 self._json({"models": [
                     {"name": "fixture-model:latest", "model": "fixture-model:latest",
@@ -53,9 +67,9 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
                 return
             if self.path in {
                 "/v2/library/fixture-model/manifests/latest",
-                "/v2/library/fixture-model/manifests/" + manifest_digest,
+                "/v2/library/fixture-model/manifests/pinned",
             }:
-                self._send(200, manifest, {"Content-Type": "application/vnd.docker.distribution.manifest.v2+json"})
+                self._send(200, provider_manifest['bytes'], {"Content-Type": "application/vnd.docker.distribution.manifest.v2+json"})
                 return
             prefix = "/v2/library/fixture-model/blobs/"
             if self.path.startswith(prefix):
@@ -111,8 +125,81 @@ def test_q9_q52_ollama_catalogue_and_registry_resolution_are_separate_real_wires
         assert requirements.license_acceptance_required is False
         assert "/api/tags" in [path for path, _, _ in requests]
         assert "/v2/library/fixture-model/manifests/latest" in [path for path, _, _ in requests]
-        assert "/v2/library/fixture-model/manifests/" + manifest_digest in [path for path, _, _ in requests]
+        assert not any('/manifests/sha256:' in path for path, _, _ in requests)
         assert all(path != "/api/tags" or authorization is None for path, authorization, _ in requests)
+
+        # Route only the external HTTP boundary; exercise the actual public adapter branch.
+        original_open = OpenerDirector.open
+
+        def provider_open(opener, request, *args, **kwargs):
+            parsed = urlparse(request.full_url)
+            if parsed.hostname in {'ollama.com', 'registry.ollama.ai'}:
+                request = Request(f'http://127.0.0.1:{server.server_port}' + parsed.path
+                                  + ('?' + parsed.query if parsed.query else ''),
+                                  headers=dict(request.header_items()), method=request.method)
+            return original_open(opener, request, *args, **kwargs)
+
+        monkeypatch.setattr(OpenerDirector, 'open', provider_open)
+        public = SourceAdapter('ollama', 'https://registry.ollama.ai')
+        before = len(requests)
+        first = asyncio.run(public.discover('fixture', limit=1))
+        assert first['candidates'][0]['locator'] == 'fixture-model'
+        assert first['next_cursor'] is not None
+        second = asyncio.run(public.discover('fixture', limit=1, cursor=first['next_cursor']))
+        assert second['candidates'][0]['locator'] == 'fixture-second'
+        third = asyncio.run(public.discover('fixture', limit=1, cursor=second['next_cursor']))
+        assert third['candidates'][0]['locator'] == 'namespace/fixture-third'
+        assert third['next_cursor'] is None
+        assert all(path.startswith('/search?') and auth is None and ranged is None
+                   for path, auth, ranged in requests[before:])
+        before = len(requests)
+        with pytest.raises(CassetteError) as mismatched:
+            asyncio.run(public.discover('other', cursor=first['next_cursor']))
+        assert mismatched.value.code == 'INVALID_REQUEST' and len(requests) == before
+        catalogue_html['suffix'] = '<ul role="list"><li hx-get="https://elsewhere.invalid/search?page=2&amp;q=fixture"></li></ul>'
+        with pytest.raises(CassetteError) as unsafe:
+            asyncio.run(public.discover('fixture'))
+        assert unsafe.value.code == 'SOURCE_UNAVAILABLE'
+        catalogue_html['suffix'] = ''
+
+        alternate = asyncio.run(adapter.resolve({'kind': 'ollama', 'locator': 'fixture-model:latest', 'revision': 'pinned'}))
+        assert alternate.locator == 'fixture-model:pinned'
+        assert asyncio.run(adapter.enumerate(alternate)) == alternate.artifacts
+        provider_manifest['bytes'] = manifest + b' '
+        before = len(requests)
+        with pytest.raises(CassetteError) as changed:
+            asyncio.run(adapter.enumerate(resolved))
+        assert changed.value.code == 'SOURCE_REVISION_CHANGED'
+        assert len(requests) == before + 1 and '/manifests/' in requests[-1][0]
+        provider_manifest['bytes'] = manifest
+
+        # Q9/Q52: current Ollama publishes named SafeTensors and JSON layers.
+        native_header = json.dumps({'weight': {'dtype': 'U8', 'shape': [len(model)],
+                                              'data_offsets': [0, len(model)]}}, separators=(',', ':')).encode()
+        native_payload = len(native_header).to_bytes(8, 'little') + native_header + model
+        native_digest = 'sha256:' + hashlib.sha256(native_payload).hexdigest()
+        native_config = b'{"model_format":"safetensors","model_family":"fixture"}'
+        native_config_digest = 'sha256:' + hashlib.sha256(native_config).hexdigest()
+        blobs.update({native_digest: native_payload, native_config_digest: native_config})
+        native = json.loads(manifest)
+        native['config'].update(digest=native_config_digest, size=len(native_config))
+        native['layers'][0].update(mediaType='application/vnd.ollama.image.tensor',
+                                   digest=native_digest, size=len(native_payload), name='model.weight')
+        native['layers'].append({'mediaType': 'application/vnd.ollama.image.json',
+                                 'digest': config_digest, 'size': len(config), 'name': 'config.json'})
+        provider_manifest['bytes'] = json.dumps(native, separators=(',', ':')).encode()
+        before = len(requests)
+        native_source = asyncio.run(adapter.resolve({'kind': 'ollama', 'locator': 'fixture-model:latest'}))
+        assert len(requests) == before + 1 and '/manifests/' in requests[-1][0]
+        assert [(a.path, a.digest) for a in native_source.artifacts] == [('model.weight.safetensors', native_digest)]
+        assert [a.path for a in native_source.metadata_assets] == ['config.json', 'layer-000001', 'ollama-config.json']
+        assert asyncio.run(adapter.enumerate(native_source)) == native_source.artifacts
+        native_metadata = asyncio.run(adapter.read_metadata(native_source))
+        assert native_metadata['total_bytes']['value'] == len(native_payload)
+        assert asyncio.run(adapter.open_range(native_source, native_source.artifacts[0], 0, 8,
+                                               native_digest)) == native_payload[:8]
+        assert asyncio.run(adapter.license_and_auth(native_source)).license_digest == license_digest
+        provider_manifest['bytes'] = manifest
 
         with pytest.raises(CassetteError) as opaque_private:
             asyncio.run(adapter._validate_credential("keychain:ollama/private"))

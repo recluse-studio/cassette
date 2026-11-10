@@ -1,0 +1,220 @@
+{
+  "record_kind": "bounded_live_acquisition_receipt",
+  "date": "2026-10-10",
+  "scope": "One public Hugging Face model through the installed Cassette CLI on the selected external APFS cartridge",
+  "contracts": [
+    "Q5",
+    "Q9",
+    "Q42",
+    "Q44",
+    "Q49",
+    "Q51",
+    "research/ACCEPTANCE_MATRIX.yaml#acquisition_entry_contract"
+  ],
+  "model": "llamafactory/tiny-random-qwen3",
+  "destination": {
+    "cartridge_uuid": "501d46d0-cc5d-4821-b3aa-eee724ef0433",
+    "folder": "drewwiberg-lacie/Cassette-tiny-test-20261001"
+  },
+  "volume_uuid": "4cb76495-61cc-4acf-82bd-b84b6dd4e65d",
+  "drive_selection_operation": "op-ff54916c9e83e0b93bae033bed31e9a14c4f58223c1be175f1bd1b207bfb4726",
+  "download": {
+    "kind": "acquire",
+    "operation_id": "op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e",
+    "progress": 1,
+    "result": {
+      "immutable_revision": "git-sha1:81d6f5f5e05ed53ea8a1d19431266a486e46bbd8",
+      "verified_artifacts": [
+        {
+          "digest": "sha256:34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+          "path": ".gitattributes",
+          "size": 1570
+        },
+        {
+          "digest": "sha256:6f89ff21c692cd9e35f9f8c4e6f78fc192dd04f538085087bbe39e8182cb5780",
+          "path": "README.md",
+          "size": 319
+        },
+        {
+          "digest": "sha256:55e938aa96f5fbb6c6424f97613ced91e0875bf1cd17c3d85cb40f8c4764db2c",
+          "path": "config.json",
+          "size": 718
+        },
+        {
+          "digest": "sha256:835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48",
+          "path": "generation_config.json",
+          "size": 238
+        },
+        {
+          "digest": "sha256:599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+          "path": "merges.txt",
+          "size": 1671839
+        },
+        {
+          "digest": "sha256:124a62e63cd07a74709075a2f5999db14aa7d301f7de1e226a3b1da73b502ee2",
+          "path": "model.safetensors",
+          "size": 4881064
+        },
+        {
+          "digest": "sha256:aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "path": "tokenizer.json",
+          "size": 11422654
+        },
+        {
+          "digest": "sha256:a62ff0a2472a0fa1b8eaabcb57c59b58afa42a22831dc141400b6e0cf2b65ce3",
+          "path": "tokenizer_config.json",
+          "size": 9377
+        },
+        {
+          "digest": "sha256:ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "path": "vocab.json",
+          "size": 2776833
+        }
+      ],
+      "verified_bytes": 20764612
+    },
+    "state": "SUCCEEDED"
+  },
+  "storage_qualification": {
+    "status": "PASS",
+    "profile_digest": "blake3:02730cc941c8977dab5433e9f957822b204dc5350a6e54cf95a41f90e1df39f9",
+    "operation": "op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e",
+    "host_write_bytes": 21944656,
+    "device_write_bytes": 62660608,
+    "patterns_digest": "blake3:91f457476fc6618263690ed4ae9840c854b444854a2af388e7c70adc07f08094"
+  },
+  "cartridge_verification": {
+    "kind": "drive.remount",
+    "operation_id": "op-2af968fa0b7ab8086056f21228f8757901f8f69e34786f587fd46a29dc9d71bc",
+    "progress": 1.0,
+    "result": {
+      "campaign_digest": "blake3:1b4171bec98efd48a326c0ddc017b669697622580522530c51f794c027cde32a",
+      "go_operation_id": "op-de5c88193d53282593e09233b805db65a0f8ec12b404519c7434c84b7e453b3e",
+      "model_bytes_downloaded": 0,
+      "selection": {
+        "volume": {
+          "available_bytes": 4731793870848,
+          "device": 16777240,
+          "filesystem": "apfs",
+          "mount_path": "/Volumes/LaCie",
+          "mount_source": "/dev/disk5s1",
+          "name": "LaCie",
+          "observed_access": "POSIX_MODE_DENIED",
+          "read_only": false,
+          "volume_uuid": "4cb76495-61cc-4acf-82bd-b84b6dd4e65d"
+        },
+        "writer": {
+          "executable": "/opt/homebrew/Cellar/python@3.13/3.13.14/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+          "gid": 20,
+          "groups": [
+            12,
+            20,
+            33,
+            61,
+            79,
+            80,
+            81,
+            98,
+            100,
+            204,
+            250,
+            395,
+            398,
+            399,
+            400,
+            701
+          ],
+          "launch_host": "Mac.lan",
+          "pid": 81243,
+          "uid": 501
+        }
+      },
+      "source_qualification": "NOT_RUN"
+    },
+    "state": "SUCCEEDED"
+  },
+  "duplicate_go": "PASS",
+  "protected_inventory": {
+    "status": "PASS",
+    "before": {
+      "Arup": {
+        "logical_bytes": 220053673636,
+        "type": "directory"
+      },
+      "Writing": {
+        "logical_bytes": 3363178918,
+        "type": "directory"
+      },
+      "drewwiberg-lacie": {
+        "logical_bytes": 407731569289,
+        "type": "directory"
+      }
+    },
+    "after": {
+      "Arup": {
+        "logical_bytes": 220053673636,
+        "type": "directory"
+      },
+      "Writing": {
+        "logical_bytes": 3363178918,
+        "type": "directory"
+      },
+      "drewwiberg-lacie": {
+        "logical_bytes": 407731569289,
+        "type": "directory"
+      }
+    },
+    "comparison": "Top-level names, types and aggregate logical bytes outside the cartridge; not a whole-drive content digest"
+  },
+  "physical_reconnect": "OPERATOR_REPORTED",
+  "additional_physical_action": "NOT_REQUESTED",
+  "new_pointer_cold_remount": "NOT_PROVEN",
+  "initial_pointer_and_probe_readback": "remount-readback-and-inventory-failure.json",
+  "prior_protected_inventory_interval": "FAIL",
+  "L05": "IN_PROGRESS",
+  "model_execution": "NOT_RUN",
+  "independent_review": "NOT_RUN",
+  "evidence_root": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-10",
+  "evidence_files": [
+    {
+      "path": "result-07.json",
+      "sha256": "a24b3e291d8cd1f5cb277ce40cce0c694a24e1340f275da691fbff2a2f02db0b"
+    },
+    {
+      "path": "select-drive-07.stdout.json",
+      "sha256": "39e55374ce566ec0fd6f2f9606df48fd54e6f150ac464be75b51ae8bd1c548a4"
+    },
+    {
+      "path": "go-07-prepared.stdout.json",
+      "sha256": "36f83ce9a50f9c948b43bba349ab8f82e1fbc22c0bda2c7cbd56ef442444b920"
+    },
+    {
+      "path": "reported-remount-07.stdout.json",
+      "sha256": "8d975de8e28ae1d14e05e0082abc0bc713960d39e1584302740a018b2cdb4e39"
+    },
+    {
+      "path": "go-07-download.stdout.json",
+      "sha256": "f1c92764127b34d945a789e36a196c9803e226cf8927be8c8b2d6b7259f635ac"
+    },
+    {
+      "path": "go-07-download.stderr.log",
+      "sha256": "3d4c1857784ecd497e50c484e9c4e40348ef02d67b8418537bb6d35320a21fd8"
+    },
+    {
+      "path": "go-07-replay.stdout.json",
+      "sha256": "f1c92764127b34d945a789e36a196c9803e226cf8927be8c8b2d6b7259f635ac"
+    },
+    {
+      "path": "select-drive-07-after.stdout.json",
+      "sha256": "304007a7e8bc6586967aeabb4c1b80cd7dd17bd3b715c105b99c5316b768c194"
+    },
+    {
+      "path": "installed-source-ready-06.json",
+      "sha256": "db591cd82d2bd1d3b09e84797222a513cc43a3e6e6defd02dbcaf1d6c0a0f191"
+    },
+    {
+      "path": "reported-remount-candidate-03/result.json",
+      "sha256": "0b4f4f3fa932f78c8ca22d3c82b3ecd9545a471f4dac571688aca3e491f95823"
+    }
+  ]
+}

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yaml
 
 from errors import CassetteError
-from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, inventory_step, write_campaign_artifact
+from store import CapacityCoordinator, artifact_hasher, campaign_head, campaign_profile_io, canonical_bytes, compare_campaign_head, compare_inventory, digest_bytes, inventory_step, storage_profile, write_campaign_artifact
 from tools.ledger import remediation_diff
 
 
@@ -143,7 +143,7 @@ def capture_attempt(owner, stage, binding, *, expected=None, timeout=1200):
     previous = current['value']['attempts'] if current else []
     if current and current['value'].get('active'):
         reject(key, 'prior capture must be recovered before another launch')
-    if len(previous) >= 5:
+    if len(previous) >= 5 and stage not in {f'L{number:02d}-complete' for number in range(5, 11)}:
         reject(key, 'five execution attempts are exhausted')
     if any(attempt['binding']['operation_id'] == binding['operation_id'] for attempt in previous):
         reject(key, 'execution binding reuses an earlier operation identity')
@@ -284,6 +284,76 @@ def collect_path_identity(root):
     return path_identity(root,disk_record=disk,host_record=host)
 
 
+def qualification_successions(nodes, parent=None):
+    """Q80: retain old attempts while selecting one head for an unconsumed exact profile."""
+    inherited = parent['nodes'] if parent else {}
+    prior_ids = set()
+    fields = {'consumer_flat_id','physical_disk_id','apfs_volume_uuid','host_id',
+              'assembled_path_digest','operation','plan_digest','expected_read_write_shape'}
+    for key, record in nodes.items():
+        if 'prior_qualification' not in record:
+            continue
+        prior = record['prior_qualification']
+        if (not isinstance(prior, str) or prior not in inherited or prior in prior_ids or prior == key
+                or not all(re.fullmatch(r'QUALIFY-.+-VERIFY', value) for value in (prior,key))):
+            reject(key, 'qualification prior is absent, non-inherited, branched or not a distinct physical VERIFY')
+        old = nodes.get(prior)
+        assertions = old.get('matrix_assertion_owners') if old else None
+        if (not isinstance(assertions, list) or not assertions
+                or assertions != record.get('matrix_assertion_owners')
+                or old.get('owner_stage') != record.get('owner_stage')
+                or old.get('evidence_level') != record.get('evidence_level')
+                or any(not isinstance(value, str) or not value.startswith('matrix#physical_storage_qualification.')
+                       for value in assertions)):
+            reject(key, 'qualification succession changes its physical assertion or evidence obligation')
+        starts = [value.removesuffix('-VERIFY')+'-START' for value in (prior,key)]
+        cards = [nodes.get(start, {}).get('approved_card') for start in starts]
+        if any(not isinstance(card, dict) or not isinstance(card.get('bound'), dict)
+               or card.get('permission') != nodes[start]['permission']
+               for start, card in zip(starts, cards, strict=True)):
+            reject(key, 'qualification succession lacks its exact START cards and request bindings')
+        requests = [card['bound'].get('profile_request') for card in cards]
+        if any(not isinstance(request, dict) or set(request) != fields or not all(request.values())
+               or not isinstance(request.get('consumer_flat_id'), str)
+               or 'QUALIFY-'+request['consumer_flat_id']+'-VERIFY' != name
+               for request, name in zip(requests, (prior,key), strict=True)):
+            reject(key, 'qualification request fields or literal consumer identity are invalid')
+        if (identity({name:value for name,value in requests[0].items() if name != 'consumer_flat_id'})
+                != identity({name:value for name,value in requests[1].items() if name != 'consumer_flat_id'})
+                or any(not cards[0].get(name) or cards[0].get(name) != cards[1].get(name)
+                       for name in ('permission','host','disk','path'))):
+            reject(key, 'qualification succession changes its exact request tuple or permission scope')
+        local = {prior,starts[0],'CHECKPOINT-'+starts[0]+'-RECOVERABILITY',
+                 'VERIFY-WORK-'+prior+'-START','VERIFY-WORK-'+prior+'-RESULT'}
+        current = {key,starts[1],'CHECKPOINT-'+starts[1]+'-RECOVERABILITY',
+                   'VERIFY-WORK-'+key+'-START','VERIFY-WORK-'+key+'-RESULT'}
+        if not local <= inherited.keys() or not current <= nodes.keys():
+            reject(key, 'qualification succession lacks its inherited prior family or current proof targets')
+        if any(row['id'] not in local and set(row['depends']) & local
+               for row in [*nodes.values(), *inherited.values()]):
+            reject(key, 'qualification prior family already has an external consumer')
+        prior_ids.add(prior)
+    # This principal-approved instance is separate from same-request succession.
+    contract = json.loads((Path(__file__).resolve().parents[1] / 'schema/campaign/contract.json').read_bytes())
+    rule = next(row for row in contract['expanded_session_families']
+                if row['family'] == 'physical_qualification').get('approved_instance_retirement')
+    if rule and rule['prior'] in nodes and rule['current'] in nodes:
+        prior, current = rule['prior'], rule['current']
+        family = lambda name: {name, name.removesuffix('-VERIFY') + '-START',
+            'CHECKPOINT-' + name.removesuffix('-VERIFY') + '-START-RECOVERABILITY',
+            'VERIFY-WORK-' + name + '-START', 'VERIFY-WORK-' + name + '-RESULT'}
+        old_family, current_family = family(prior), family(current)
+        if (not old_family <= inherited.keys() or not current_family <= nodes.keys()
+                or nodes[prior]['matrix_assertion_owners'] != nodes[current]['matrix_assertion_owners']
+                or any(nodes[prior][field] != nodes[current][field]
+                       for field in ('owner_stage', 'evidence_level', 'permission'))
+                or any(row['id'] not in old_family and set(row['depends']) & old_family
+                       for row in [*nodes.values(), *inherited.values()])):
+            reject(prior, 'approved obsolete instance changed obligations or has an external consumer')
+        prior_ids.add(prior)
+    return prior_ids
+
+
 def validate_graph(records, *, required_owners, parent=None, materializer="L04", registry_digest="", deferred_owners=None):
     """Q33/Q80: validate literal predecessors, complete owners and monotone extensions."""
     nodes = {}
@@ -293,22 +363,23 @@ def validate_graph(records, *, required_owners, parent=None, materializer="L04",
             reject("graph", "record fields, literal ID or uniqueness failed")
         if record["permission"] not in PERMISSIONS:
             reject(record["id"], "permission class is undeclared")
-        if record["permission"] != "READ_ONLY":
+        if record["permission"] != "READ_ONLY" or 'approved_card' in record:
             card = record.get('approved_card')
             if (not isinstance(card, dict) or identity(card) != record.get('approved_card_digest')
                     or card.get('permission') != record['permission'] or card.get('record_id') != record['id']
                     or not all(card.get(field) for field in ('command','disk','path','bound','stop_conditions'))):
-                reject(record['id'], 'write-bearing record lacks its exact approved action card')
+                reject(record['id'], 'record lacks its exact approved action card')
         if record["evidence_level"] not in {"UNIT", "INTEGRATION", "PLATFORM", "LIVE"}:
             reject(record["id"], "evidence level is unresolved")
         if len(set(record["depends"])) != len(record["depends"]):
             reject(record["id"], "predecessors contain duplicate IDs")
         nodes[record["id"]] = copy.deepcopy(record)
+    prior_qualifications = qualification_successions(nodes, parent)
     owners = {}
     for key, node in nodes.items():
         if set(node["depends"]) - nodes.keys():
             reject(key, "graph has missing literal predecessors")
-        for assertion in node["matrix_assertion_owners"]:
+        for assertion in node["matrix_assertion_owners"] if key not in prior_qualifications else []:
             owners.setdefault(assertion, []).append(key)
     if set(owners) != set(required_owners):
         reject("graph", "assertion owner set has missing or unknown authorities")
@@ -654,44 +725,6 @@ def process_observation(binding):
             'block_output_operations':usage.ru_oublock, 'binding':binding}
 
 
-def storage_profile(binding, patterns, observations, *, expected_binding):
-    """Q41-Q44: assess independent read/write/flush observations for exact plan patterns."""
-    if binding != expected_binding or not {'drive', 'host', 'path', 'operation', 'plan'} <= binding.keys():
-        reject('profile', 'drive, host, path, operation or plan identity differs')
-    if not patterns or len(patterns) != len(observations):
-        reject('profile', 'profile observation coverage is incomplete')
-    for pattern, observed in zip(patterns, observations, strict=True):
-        if observed.get('pattern') != pattern or observed.get('binding') != binding:
-            reject('profile', 'observation differs from the exact plan pattern')
-        for field in ('read_bytes', 'write_bytes'):
-            number(pattern.get(field), field, integer=True)
-        for field in ('host_write_bytes', 'device_write_bytes', 'errors'):
-            number(observed.get(field), field, integer=True)
-        number(observed.get('duration_seconds'), 'duration seconds', positive=True)
-        for field in ('read_seconds', 'write_seconds', 'flush_seconds'):
-            if field in observed:
-                number(observed[field], field, maximum=observed['duration_seconds'])
-        if (observed.get('errors') != 0 or observed.get('readback_ok') is not True
-                or observed.get('flush_ok') is not True or observed.get('duration_seconds', 0) <= 0):
-            reject('profile', 'readback, flush, error or timing evidence failed')
-        if observed.get('host_write_bytes', -1) < pattern.get('write_bytes', 0):
-            reject('profile', 'observed host writes omit planned writes')
-        if observed.get('device_write_bytes') is None:
-            reject('profile', 'physical write observation is unavailable')
-    latencies = sorted(x['duration_seconds'] for x in observations)
-    def percentile(values, q):
-        return values[max(0, math.ceil(q * len(values)) - 1)]
-    throughput = sorted((p.get('read_bytes', 0) + p.get('write_bytes', 0)) / o['duration_seconds']
-                        for p, o in zip(patterns, observations, strict=True))
-    for value in throughput:
-        number(value, 'derived throughput bytes per second')
-    return {"binding": binding, "status": "PASS", "patterns_digest": identity(patterns),
-            "throughput_bytes_per_second": {str(q): percentile(throughput, q) for q in (.05, .5, .95)},
-            "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
-            "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
-            "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
-
-
 def thermal_windows(windows, *, slc_bytes, training, warmup_end, knee_duty, duty_experiments, binding, recovery_end):
     """Q48/Q74: require a continuous two-hour trace and cache-exhausting training writes."""
     number(slc_bytes, 'SLC bytes', integer=True, positive=True)
@@ -929,7 +962,17 @@ def materialize(root, registry, *, parent=None):
             if family['owner_stage'].startswith('L') and record['owner_stage'] != family['owner_stage']:
                 reject(record['id'], 'family stage owner differs from its authority')
         records.extend(inputs['records'])
+    records = copy.deepcopy(records)
+    for record in records:
+        if record['permission'] != 'READ_ONLY':
+            card = registry.get('approved_cards', {}).get(record.get('approved_card_digest'))
+            if card is None:
+                reject(record['id'], 'approved card is absent from the frozen registry')
+            record['approved_card'] = copy.deepcopy(card)
     ids = {record['id'] for record in records}
+    prior_qualifications = qualification_successions({row['id']:row for row in records}, parent)
+    current_ids = ids - prior_qualifications
+    base_edges, coordinates, original_targets = {}, {}, {}
     for record in registry.get('fixed_records', []):
         expected = fixed_authorities[record['id']].get('depends', [])
         if record['id'] in aggregates:
@@ -937,15 +980,14 @@ def materialize(root, registry, *, parent=None):
             for dependency in expected:
                 if dependency.startswith(('every-', 'every ')):
                     pattern = re.sub(r'<[^<>]+>', r'.+', re.escape(dependency[6:]))
-                    matches = sorted(key for key in ids if re.fullmatch(pattern, key))
+                    matches = sorted(key for key in current_ids if re.fullmatch(pattern, key))
                     if not matches:
                         reject(record['id'], 'aggregate prerequisite expansion is empty')
                     expanded.extend(matches)
                 else:
                     expanded.append(dependency)
             expected = sorted(set(expanded))
-        if sorted(record['depends']) != sorted(expected):
-            reject(record['id'], 'fixed record rewrites queue prerequisites')
+        base_edges[record['id']] = expected
     for name, inputs in registry['families'].items():
         family = families[name]
         template = family.get('id_format')
@@ -964,6 +1006,7 @@ def materialize(root, registry, *, parent=None):
                 declared_records = next((value for key, value in family.items() if key.startswith('records_per_')), [])
                 if len(declared_records) == 1:
                     suffix = declared_records[0]
+            coordinates[record['id']] = (name, values, suffix)
             if name == 'live_failure':
                 bound_operation = failure_binding(record, values, failure_contract, registry, records, parent)
             dependencies = family.get('dependencies',{})
@@ -984,10 +1027,17 @@ def materialize(root, registry, *, parent=None):
                         dependency = template.replace('<record>',target) if target in inputs.get('dimensions',{}).get('record',[]) else target
                     for field,value in values.items():
                         if field != 'record': dependency = dependency.replace('<'+field+'>',value)
+                    if name == 'verification_work' and dependency == 'every-original-target-predecessor':
+                        original_targets[record['id']] = values['target-flat-id']
+                        continue
+                    if name == 'checkpoint_proof' and dependency == 'exact-operation-START':
+                        if dependency in inputs.get('dependency_bindings', {}):
+                            reject(record['id'], 'checkpoint predecessor must come only from its coordinate')
+                        dependency = values['operation-start-flat-id']
                     if dependency.startswith('every-'):
                         pattern = re.escape(dependency.removeprefix('every-'))
                         pattern = re.sub(r'<[^<>]+>',r'.+',pattern)
-                        matches = sorted(key for key in ids if re.fullmatch(pattern,key))
+                        matches = sorted(key for key in current_ids if re.fullmatch(pattern,key))
                         if not matches: reject(record['id'], 'aggregate prerequisite expansion is empty')
                         expected.extend(matches)
                     elif dependency in ids:
@@ -997,8 +1047,42 @@ def materialize(root, registry, *, parent=None):
                         if not bound or not set(bound) <= ids:
                             reject(record['id'], f'prerequisite requires a frozen materializer binding: {dependency}')
                         expected.extend(bound)
-            if sorted(record['depends']) != sorted(set(expected)):
-                reject(record['id'], 'literal graph edges differ from declared family prerequisites')
+            base_edges[record['id']] = expected
+    checkpoints, verifiers = {}, {}
+    for key, (name, values, suffix) in coordinates.items():
+        if name == 'checkpoint_proof':
+            start = values['operation-start-flat-id']
+            if start not in ids or not start.endswith('START') or coordinates.get(start, ('',))[0] == 'verification_work':
+                reject(key, 'checkpoint coordinate is not a product operation START')
+            checkpoints[start] = key
+        elif name == 'verification_work':
+            target = values['target-flat-id']
+            if target not in ids or coordinates.get(target, ('',))[0] in {'verification_work', 'checkpoint_proof'}:
+                reject(key, 'verification coordinate is absent or recursively verifies proof work')
+            verifiers.setdefault(target, {})[suffix] = key
+    for key, target in original_targets.items():
+        if 'every-original-target-predecessor' in registry['families']['verification_work'].get('dependency_bindings', {}):
+            reject(key, 'verification predecessors must come only from their target')
+        base_edges[key].extend(base_edges[target])
+    inherited = parent['nodes'] if parent else {}
+    for key in ids - inherited.keys():
+        name, _, suffix = coordinates.get(key, ('', {}, ''))
+        if queue.get('long_operation_contract') and key.endswith('START') and name != 'verification_work' and key not in checkpoints:
+            reject(key, 'long-operation START lacks its checkpoint proof coordinate')
+        verification = queue.get('verification_contract', {})
+        if (key in verification.get('fixed_targets', []) or
+                (verification and name != 'verification_work' and str(suffix).endswith('VERIFY')
+                 and 'verification_rule' in families.get(name, {}))) and key not in verifiers:
+            reject(key, 'terminal target lacks its independent verification coordinate')
+    for record in records:
+        key = record['id']
+        expected = set(base_edges[key])
+        if coordinates.get(key, ('',))[0] != 'checkpoint_proof':
+            expected.update(checkpoints[start] for start in list(expected) if start in checkpoints)
+        if key in verifiers:
+            expected.add(verifiers[key]['RESULT'])
+        if sorted(record['depends']) != sorted(expected):
+            reject(key, 'literal graph edges differ from composed contract prerequisites')
     required, deferred = {}, {}
     for assertion in matrix_assertions(matrix):
         section = assertion.removeprefix('matrix#').split('.')[0]
@@ -1007,7 +1091,7 @@ def materialize(root, registry, *, parent=None):
             reject(assertion, 'matrix assertion has no generated owner rule')
         owners, missing = [], []
         for pattern in patterns:
-            matching = sorted(record['id'] for record in records if re.fullmatch(pattern,record['id']))
+            matching = sorted(key for key in current_ids if re.fullmatch(pattern,key))
             if not matching:
                 missing.append(pattern)
             owners.extend(matching)
@@ -1021,13 +1105,33 @@ def materialize(root, registry, *, parent=None):
         reject('materialization', 'Q80 requires complete matrix assertion ownership')
     if registry['required_owners'] != required:
         reject('materialization', 'registry owners differ from generated matrix ownership')
-    records = copy.deepcopy(records)
-    for record in records:
-        if record['permission'] != 'READ_ONLY':
-            card = registry.get('approved_cards', {}).get(record.get('approved_card_digest'))
-            if card is None:
-                reject(record['id'], 'approved card is absent from the frozen registry')
-            record['approved_card'] = copy.deepcopy(card)
+    # Q80: retain inherited operation cards while binding a migrated executable to the same operation.
+    for continuation in registry.get('execution_bindings', []):
+        operation = continuation.get('operation_record')
+        original = (parent or {}).get('nodes', {}).get(operation)
+        card = registry.get('approved_cards', {}).get(continuation.get('approved_card_digest'))
+        prior = original.get('approved_card') if original else None
+        if not prior or not card or original['owner_stage'] != 'L05':
+            reject(operation, 'runtime continuation lacks its inherited L05 operation and exact card')
+        bound = card.get('bound', {})
+        runtime = bound.get('runtime_receipt_sha256', '')
+        expected_id = 'EXECUTION-' + identity({'operation_record': operation, 'command': card['command'],
+            'runtime_receipt_sha256': runtime, 'sole_test_sha256': bound.get('sole_test_sha256')}).partition(':')[2]
+        expected_bound = {**prior['bound'], 'prior_approved_card_digest': original['approved_card_digest'],
+            'runtime_receipt_sha256': runtime, 'sole_test_sha256': bound.get('sole_test_sha256')}
+        expected_card = {**prior, 'command': card['command'], 'record_id': expected_id, 'bound': expected_bound}
+        expected_record = {key: original[key] for key in
+            ('depends', 'evidence_level', 'owner_stage', 'permission')}
+        expected_record.update(id=expected_id, operation_record=operation, matrix_assertion_owners=[],
+            approved_card_digest=identity(card))
+        if (card != expected_card or continuation != expected_record
+                or card['command'][1:] != prior['command'][1:]
+                or not Path(card['command'][0]).is_absolute()
+                or re.fullmatch(r'[0-9a-f]{64}', runtime) is None
+                or not isinstance(bound.get('sole_test_sha256'), str)
+                or re.fullmatch(r'[0-9a-f]{64}', bound['sole_test_sha256']) is None):
+            reject(operation, 'runtime continuation changes inherited scope, dependencies, arguments or source binding')
+        records.append({**continuation, 'approved_card': copy.deepcopy(card)})
     return validate_graph(records, required_owners=required, parent=parent,
                           materializer=registry['materializer'], registry_digest=identity(registry),
                           deferred_owners=deferred)

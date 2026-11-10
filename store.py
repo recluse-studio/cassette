@@ -11,23 +11,27 @@ while a separate fixed-record index owns physical placement.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import asyncio
 import copy
 import ctypes
 from dataclasses import dataclass, field, replace
 import errno
 import fcntl
+from functools import partial
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import stat
 import struct
 import sys
 import tempfile
 import threading
+import time
 import uuid
 
 from blake3 import blake3
@@ -80,7 +84,9 @@ _DARWIN_ATTR_VOL_UUID = 0x00040000
 _DRIVE_ROOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
-_SAFETENSORS_HEADER_BYTES = 100_000_000
+SAFETENSORS_HEADER_BYTES = 100_000_000
+TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
+STORAGE_PROFILER_VERSION = '7-retained-source-transfer'
 _EXPORT_MANIFEST_BYTES = 100_000_000
 _SAFETENSORS_DTYPE_BITS = {
     "F4": 4, "F6_E2M3": 6, "F6_E3M2": 6,
@@ -453,6 +459,64 @@ class TransferExtent:
     offset: int
     length: int
     operation_id: str
+    observer: Callable[[dict], None] | None = field(default=None, repr=False, compare=False)
+    observe_process_reads: bool = field(default=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        if self.observer is not None and not callable(self.observer):
+            _capacity_reject(self.operation_id, "extent observer must be callable", "INVALID_REQUEST")
+        if type(self.observe_process_reads) is not bool or (self.observe_process_reads and self.observer is None):
+            _capacity_reject(self.operation_id, "process read samples require an extent observer", "INVALID_REQUEST")
+
+
+def observe_extent_io(extent: TransferExtent, kind: str, offset: int, requested_bytes: int, action):
+    """Q42: observe this extent's actual I/O without replacing its result or exception."""
+    if extent.observer is None:
+        return action()
+    read_before = (_darwin_process_usage().values[16] if extent.observe_process_reads
+                   and kind in {'read', 'PARSER_READ'} else None)
+    started = time.monotonic_ns()
+    def emit(result, error=None):
+        row = {"kind": kind, "offset": offset, "requested_bytes": requested_bytes,
+               "returned_bytes": len(result) if isinstance(result, bytes) else result if type(result) is int else 0,
+               "started_ns": started, "duration_ns": time.monotonic_ns() - started, "success": error is None}
+        if error is not None:
+            row['error_type'] = type(error).__name__
+        if read_before is not None:
+            delta = _darwin_process_usage().values[16] - read_before
+            if delta < 0:
+                _drive_reject(extent.operation_id, 'process disk-read counter regressed', 'CAPABILITY_MISMATCH')
+            row.update(process_diskio_read_bytes=delta, counter_scope='PROCESS_NOT_PER_PATH')
+            row.update(process_read_counter_before=read_before, process_read_counter_after=read_before + delta,
+                       observer_pid=os.getpid())
+        extent.observer(row)
+    try:
+        result = action()
+    except BaseException as error:
+        try:
+            emit(None, error)
+        except BaseException as observer_error:
+            raise error from observer_error
+        raise
+    emit(result)
+    return result
+
+
+async def await_extent_io(action, *args, **kwargs):
+    """Q44/Q53: join owned blocking I/O before propagating coroutine cancellation."""
+    future = asyncio.get_running_loop().run_in_executor(None, partial(action, *args, **kwargs))
+    cancellation = None
+    while True:
+        try:
+            result = await asyncio.shield(future)
+            break
+        except asyncio.CancelledError as error:
+            if future.cancelled():
+                raise
+            cancellation = error
+    if cancellation is not None:
+        raise cancellation
+    return result
 
 
 @dataclass(frozen=True)
@@ -1158,6 +1222,149 @@ def revalidate_external_apfs_volume(selection: DriveSelection) -> DriveSelection
     return current
 
 
+def storage_counter_snapshot(nodes: list[dict]) -> dict:
+    """Q42/Q43: select the nearest block-driver authority; never add overlapping layers."""
+    if not isinstance(nodes, list) or any(not isinstance(node, dict) or type(node.get('depth')) is not int
+            or node['depth'] < 0 or not isinstance(node.get('registry_id'), str)
+            or not isinstance(node.get('registry_class'), str) for node in nodes):
+        _drive_reject('storage-counters', 'native counter candidates have an invalid identity or depth', 'CAPABILITY_MISMATCH')
+    nearest = min((node['depth'] for node in nodes), default=None)
+    selected = [node for node in nodes if node['depth'] == nearest]
+    chosen = selected[0] if len(selected) == 1 else None
+    result = {'authority': None, 'device_read_bytes': None, 'device_write_bytes': None,
+              'device_read_operations': None, 'counter_candidates': nodes}
+    if chosen is not None:
+        result['authority'] = {name: chosen[name] for name in ('depth', 'registry_id', 'registry_class')}
+        for target, field in (('device_read_bytes', 'read_bytes'), ('device_write_bytes', 'write_bytes'),
+                              ('device_read_operations', 'read_operations')):
+            value = chosen.get(field)
+            result[target] = value if type(value) is int and value >= 0 else None
+    return result
+
+
+def drive_path_observation(selection: DriveSelection) -> dict:
+    """Q43/Q49: capture the mounted device's native parent chain and physical write counter."""
+    selection = revalidate_external_apfs_volume(selection)
+    io = ctypes.CDLL('/System/Library/Frameworks/IOKit.framework/IOKit')
+    cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+    signatures = {
+        'IOBSDNameMatching': ([ctypes.c_uint, ctypes.c_uint, ctypes.c_char_p], ctypes.c_void_p),
+        'IOServiceGetMatchingService': ([ctypes.c_uint, ctypes.c_void_p], ctypes.c_uint),
+        'IORegistryEntryCreateCFProperties': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.c_uint], ctypes.c_int),
+        'IORegistryEntryGetParentEntry': ([ctypes.c_uint, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint)], ctypes.c_int),
+        'IORegistryEntryGetRegistryEntryID': ([ctypes.c_uint, ctypes.POINTER(ctypes.c_uint64)], ctypes.c_int),
+        'IOObjectGetClass': ([ctypes.c_uint, ctypes.c_void_p], ctypes.c_int),
+        'IOObjectConformsTo': ([ctypes.c_uint, ctypes.c_char_p], ctypes.c_uint),
+        'IOObjectRelease': ([ctypes.c_uint], ctypes.c_int),
+    }
+    for name, (arguments, result) in signatures.items():
+        function = getattr(io, name)
+        function.argtypes, function.restype = arguments, result
+    cf.CFPropertyListCreateData.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_ulong, ctypes.c_void_p]
+    cf.CFPropertyListCreateData.restype = ctypes.c_void_p
+    cf.CFDataGetLength.argtypes, cf.CFDataGetLength.restype = [ctypes.c_void_p], ctypes.c_long
+    cf.CFDataGetBytePtr.argtypes, cf.CFDataGetBytePtr.restype = [ctypes.c_void_p], ctypes.c_void_p
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    cf.CFRelease.restype = None
+    matching = io.IOBSDNameMatching(0, 0, Path(selection.volume.mount_source).name.encode())
+    entry = io.IOServiceGetMatchingService(0, matching) if matching else 0
+    if not entry:
+        _drive_reject(selection.volume.volume_uuid, 'mounted device has no native registry identity')
+    chain, counters = [], []
+    try:
+        while entry:
+            properties, identifier = ctypes.c_void_p(), ctypes.c_uint64()
+            if (io.IORegistryEntryCreateCFProperties(entry, ctypes.byref(properties), None, 0)
+                    or io.IORegistryEntryGetRegistryEntryID(entry, ctypes.byref(identifier))):
+                _drive_reject(selection.volume.volume_uuid, 'native device property capture failed')
+            serialized = None
+            try:
+                serialized = cf.CFPropertyListCreateData(None, properties, 200, 0, None)
+                length = cf.CFDataGetLength(serialized) if serialized else 0
+                if not 0 < length <= 4 * 1024 * 1024:
+                    _drive_reject(selection.volume.volume_uuid, 'native device properties exceed their bounded capture')
+                values = plistlib.loads(ctypes.string_at(cf.CFDataGetBytePtr(serialized), length))
+            finally:
+                if serialized:
+                    cf.CFRelease(serialized)
+                cf.CFRelease(properties)
+            fields = ('BSD Name', 'UUID', 'Content', 'Whole', 'Size', 'Preferred Block Size',
+                      'Physical Block Size', 'Device Characteristics', 'Protocol Characteristics',
+                      'USB Product Name', 'USB Serial Number', 'locationID', 'idVendor', 'idProduct',
+                      'bcdDevice', 'PortNum', 'IOClass', 'IOProviderClass', 'APFSEncrypted', 'Encrypted',
+                      'IOPlatformUUID')
+            descriptors = {key: plistlib.dumps({'value': values[key]}, fmt=plistlib.FMT_BINARY).hex()
+                           for key in fields if key in values}
+            class_name = ctypes.create_string_buffer(128)
+            if io.IOObjectGetClass(entry, class_name):
+                _drive_reject(selection.volume.volume_uuid, 'native registry class capture failed')
+            registry_class = class_name.value.decode('ascii')
+            chain.append({'registry_id': str(identifier.value), 'registry_class': registry_class,
+                          'descriptors': descriptors})
+            statistics = values.get('Statistics', {})
+            if io.IOObjectConformsTo(entry, b'IOBlockStorageDriver'):
+                counters.append({'depth': len(chain) - 1, 'registry_id': str(identifier.value),
+                    'registry_class': registry_class, 'read_bytes': statistics.get('Bytes (Read)'),
+                    'write_bytes': statistics.get('Bytes (Write)'), 'read_operations': statistics.get('Operations (Read)')})
+            parent = ctypes.c_uint()
+            status = io.IORegistryEntryGetParentEntry(entry, b'IOService', ctypes.byref(parent))
+            io.IOObjectRelease(entry)
+            entry = 0 if status else parent.value
+    finally:
+        if entry:
+            io.IOObjectRelease(entry)
+    snapshot = storage_counter_snapshot(counters)
+    authority = snapshot.pop('authority')
+    return {'path': {'volume_uuid': selection.volume.volume_uuid, 'mount_path': selection.volume.mount_path,
+                     'mount_source': selection.volume.mount_source, 'device': selection.volume.device,
+                     'filesystem': selection.volume.filesystem, 'chain': chain,
+                     'host': {'name': platform.node(), 'os': platform.platform()},
+                     'counter_authority': authority}, **snapshot}
+
+
+class _DarwinUsage(ctypes.Structure):
+    """Public sys/resource.h rusage_info_v2 ABI, shared by all process I/O observations."""
+    _fields_ = [('uuid', ctypes.c_uint8 * 16), ('values', ctypes.c_uint64 * 18)]
+
+
+def _darwin_process_usage():
+    try:
+        proc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        proc.proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+        proc.proc_pid_rusage.restype = ctypes.c_int
+        usage = _DarwinUsage()
+        if proc.proc_pid_rusage(os.getpid(), 2, ctypes.byref(usage)):
+            raise OSError(ctypes.get_errno(), 'proc_pid_rusage failed')
+        return usage
+    except (OSError, AttributeError) as error:
+        _drive_reject('storage-process-observation', f'native process I/O telemetry is unavailable: {error}', 'CAPABILITY_MISMATCH')
+
+
+def storage_host_observation() -> dict:
+    """Q42/Q47: sample public macOS process counters, physical memory and thermal state."""
+    usage = _darwin_process_usage()
+    try:
+        foundation = ctypes.CDLL('/System/Library/Frameworks/Foundation.framework/Foundation')
+        objc = ctypes.CDLL('/usr/lib/libobjc.A.dylib')
+        objc.objc_getClass.argtypes, objc.objc_getClass.restype = [ctypes.c_char_p], ctypes.c_void_p
+        objc.sel_registerName.argtypes, objc.sel_registerName.restype = [ctypes.c_char_p], ctypes.c_void_p
+        address = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value
+        send_object = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(address)
+        send_integer = ctypes.CFUNCTYPE(ctypes.c_uint64, ctypes.c_void_p, ctypes.c_void_p)(address)
+        info = send_object(objc.objc_getClass(b'NSProcessInfo'), objc.sel_registerName(b'processInfo'))
+        if not info:
+            raise OSError('NSProcessInfo is unavailable')
+        memory = send_integer(info, objc.sel_registerName(b'physicalMemory'))
+        thermal = send_integer(info, objc.sel_registerName(b'thermalState'))
+        if not memory or thermal not in range(4):
+            raise OSError('native memory or thermal sample is invalid')
+        return {'time_ns': time.monotonic_ns(), 'pid': os.getpid(), 'host_memory_bytes': memory, 'thermal_state': thermal,
+                'rss_bytes': usage.values[6], 'physical_footprint_bytes': usage.values[7],
+                'process_diskio_read_bytes': usage.values[16], 'process_diskio_written_bytes': usage.values[17]}
+    except (OSError, AttributeError) as error:
+        _drive_reject('storage-host-observation', f'native storage telemetry is unavailable: {error}', 'CAPABILITY_MISMATCH')
+
+
 def _inventory_reject(object_id: object, detail: str) -> None:
     raise CassetteError(
         "PROVENANCE_VIOLATION",
@@ -1166,6 +1373,62 @@ def _inventory_reject(object_id: object, detail: str) -> None:
         "terminal",
         detail,
     )
+
+
+def _inventory_entries(path, excluded=()):
+    """Q41: obtain the same name, type and logical data length with bounded native buffers."""
+    if sys.platform != 'darwin':
+        with os.scandir(path) as entries:
+            return [(entry.name, stat.S_IFMT(value.st_mode), value.st_size)
+                    for entry in entries if entry.name not in excluded
+                    for value in (entry.stat(follow_symlinks=False),)]
+    # attr.h: returned attributes, per-entry errno, name reference, vnode type, data length.
+    attributes = ctypes.create_string_buffer(struct.pack('=HHIIIII', 5, 0, 0xA0000009, 0, 0, 0x200, 0))
+    buffer = ctypes.create_string_buffer(65536)
+    native = getattr(_LIBC, 'getattrlistbulk', None)
+    if native is None:
+        _inventory_reject('protected-inventory', 'native directory metadata primitive is unavailable')
+    native.argtypes = (ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint64)
+    native.restype = ctypes.c_int
+    descriptor = None
+    result = []
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        while True:
+            count = native(descriptor, attributes, buffer, len(buffer), 8)  # FSOPT_PACK_INVAL_ATTRS
+            if count < 0:
+                raise OSError(ctypes.get_errno(), 'native directory metadata failed', str(path))
+            if count == 0:
+                return result
+            offset = 0
+            for _ in range(count):
+                if offset > len(buffer) - 40:
+                    _inventory_reject('protected-inventory', 'native directory metadata exceeds its bounded buffer')
+                length, common, _, _, files, _, error, relative, name_bytes, kind = struct.unpack_from(
+                    '=I5IIiII', buffer, offset)
+                start = offset + 28 + relative
+                if (length < 40 or offset + length > len(buffer) or not common & 1
+                        or start < offset + 40 or name_bytes < 2 or start + name_bytes > offset + length):
+                    _inventory_reject('protected-inventory', 'native directory name attributes are incomplete or invalid')
+                name = ctypes.string_at(ctypes.addressof(buffer) + start, name_bytes)
+                if name[-1:] != b'\0' or b'\0' in name[:-1] or b'/' in name:
+                    _inventory_reject('protected-inventory', 'native directory name is malformed')
+                decoded = os.fsdecode(name[:-1])
+                if name not in (b'.\0', b'..\0') and decoded not in excluded:
+                    if error:
+                        raise OSError(error, 'native directory entry metadata failed', str(Path(path) / decoded))
+                    # Darwin omits file-only fields for directories, even with PACK_INVAL_ATTRS.
+                    if kind == 1 and start < offset + 48:
+                        _inventory_reject('protected-inventory', 'native regular-file data length is absent')
+                    size = struct.unpack_from('=q', buffer, offset + 40)[0] if kind == 1 else 0
+                    if not common & 8 or not 1 <= kind <= 10 or kind == 1 and (not files & 0x200 or size < 0):
+                        _inventory_reject('protected-inventory', f'native directory attributes are incomplete or invalid; errno {error}')
+                    result.append((decoded, {1: stat.S_IFREG, 2: stat.S_IFDIR,
+                                   5: stat.S_IFLNK}.get(kind, 0), size if kind == 1 else 0))
+                offset += length
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def inventory_step(root, *, excluded=(), checkpoint=None, limit=1000):
@@ -1185,33 +1448,40 @@ def inventory_step(root, *, excluded=(), checkpoint=None, limit=1000):
         )
     ):
         _inventory_reject(root, "inventory bound or volatile-entry declaration is invalid")
-    top = {p.name: "directory" if p.is_dir() and not p.is_symlink() else
-           "file" if p.is_file() and not p.is_symlink() else "link" if p.is_symlink() else "special"
-           for p in sorted(root.iterdir()) if p.name not in excluded}
+    entries = sorted(_inventory_entries(root, excluded=tuple(name for name in excluded if '/' not in name)))
+    top = {name: 'directory' if kind == stat.S_IFDIR else 'file' if kind == stat.S_IFREG else
+           'link' if kind == stat.S_IFLNK else 'special' for name, kind, _ in entries}
     if checkpoint is None:
         state = {"root": str(root), "device": str(root.stat().st_dev), "excluded": sorted(excluded),
-                 "top": top, "pending": [[name, name] for name in reversed(top)],
+                 "top": top, "pending": [(name, name, kind, size) for name, kind, size in reversed(entries)],
                  "bytes": dict.fromkeys(top, 0), "visited": 0}
     else:
-        state = copy.deepcopy(checkpoint)
+        state = {**checkpoint, 'pending': list(checkpoint['pending']), 'bytes': dict(checkpoint['bytes']),
+                 'top': dict(checkpoint['top']), 'excluded': list(checkpoint['excluded'])}
         if (state["root"] != str(root) or state["device"] != str(root.stat().st_dev)
                 or state["excluded"] != sorted(excluded) or state["top"] != top):
             _inventory_reject(root, "inventory identity or top-level entries changed during traversal")
     for _ in range(limit):
         if not state["pending"]:
             break
-        relative, owner = state["pending"].pop()
+        pending = state["pending"].pop()
+        relative, owner = pending[:2]
         path = root / relative
         if Path(relative).is_absolute() or '..' in Path(relative).parts:
             _inventory_reject(root, "inventory checkpoint escapes its root")
         if any(relative == name or relative.startswith(name + "/") for name in excluded):
             continue
-        metadata = path.lstat()
-        if stat.S_ISDIR(metadata.st_mode):
-            state["pending"].extend([[p.relative_to(root).as_posix(), owner]
-                                     for p in sorted(path.iterdir(), reverse=True)])
-        elif stat.S_ISREG(metadata.st_mode):
-            state["bytes"][owner] += metadata.st_size
+        if len(pending) == 2:  # Retain existing in-process checkpoint compatibility.
+            metadata = path.lstat()
+            kind, size = stat.S_IFMT(metadata.st_mode), metadata.st_size
+        else:
+            kind, size = pending[2:]
+        if kind == stat.S_IFDIR:
+            omitted = tuple(Path(name).name for name in excluded if Path(name).parent == Path(relative))
+            state['pending'].extend(((Path(relative) / name).as_posix(), owner, child_kind, child_size)
+                for name, child_kind, child_size in sorted(_inventory_entries(path, excluded=omitted), reverse=True))
+        elif kind == stat.S_IFREG:
+            state["bytes"][owner] += size
         state["visited"] += 1
     result = None if state["pending"] else {name: {"type": kind, "logical_bytes": state["bytes"][name]}
                                            for name, kind in top.items()}
@@ -1544,8 +1814,9 @@ def grant_transfer_extent(
     length: int,
     *,
     capacity_controller: CapacityCoordinator | None = None,
+    require_existing: bool = False,
 ) -> TransferExtent:
-    """Create one sparse transfer extent without treating its logical size as reserved space."""
+    """Grant one sparse extent; saved-evidence verification requires the existing extent."""
 
     if (
         not isinstance(operation_id, str)
@@ -1554,10 +1825,11 @@ def grant_transfer_extent(
         or _TRANSACTION_ID.fullmatch(extent_id) is None
         or type(length) is not int
         or not 0 <= length <= 2**63 - 1
+        or type(require_existing) is not bool
     ):
         _capacity_reject(
             str(operation_id),
-            "transfer extent requires valid operation and extent IDs plus a signed 64-bit length",
+            "transfer extent requires valid IDs, a signed 64-bit length and boolean require_existing",
             "INVALID_REQUEST",
         )
     cartridge = Path(cartridge)
@@ -1573,6 +1845,8 @@ def grant_transfer_extent(
             try:
                 directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
             except FileNotFoundError:
+                if require_existing:
+                    _capacity_reject(operation_id, f"saved transfer directory {name!r} is missing", "IDENTITY_MISMATCH")
                 def create_directory(claim: CapacityClaim) -> None:
                     execute_claimed_write(claim, lambda: os.mkdir(name, mode=0o700, dir_fd=parent_fd))
                     os.fsync(parent_fd)
@@ -1588,6 +1862,8 @@ def grant_transfer_extent(
         try:
             descriptor = os.open(filename, flags, dir_fd=directory_fd)
         except FileNotFoundError:
+            if require_existing:
+                _capacity_reject(operation_id, f"saved transfer extent {extent_id!r} is missing", "IDENTITY_MISMATCH")
             def create(claim: CapacityClaim) -> int:
                 created = execute_claimed_write(claim, lambda: os.open(
                     filename, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd,
@@ -1615,7 +1891,8 @@ def grant_transfer_extent(
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
             _capacity_reject(operation_id, "transfer extent must be one owned regular file", "CONTAINMENT_REJECTED")
         if metadata.st_size != length:
-            _capacity_reject(operation_id, f"existing transfer extent {extent_id!r} has another shape", "INVALID_REQUEST")
+            _capacity_reject(operation_id, f"existing transfer extent {extent_id!r} has another shape",
+                             "IDENTITY_MISMATCH" if require_existing else "INVALID_REQUEST")
         extent = TransferExtent(descriptor, 0, length, operation_id)
         descriptor = None
         return extent
@@ -1836,10 +2113,12 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     return value
 
 
-def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
+def _read_exact(handle, length: int, object_id: str, description: str, io_extent=None) -> bytes:
     payload = bytearray()
     while len(payload) < length:
-        chunk = handle.read(length - len(payload))
+        count = length - len(payload)
+        chunk = (handle.read(count) if io_extent is None else
+                 observe_extent_io(io_extent, "PARSER_READ", handle.tell(), count, lambda: handle.read(count)))
         if not chunk:
             _q57_reject(object_id, f"{description} ended after {len(payload)} of {length} bytes")
         payload.extend(chunk)
@@ -1847,19 +2126,56 @@ def _read_exact(handle, length: int, object_id: str, description: str) -> bytes:
 
 
 _RESUMABLE_SHA256_STATE = struct.Struct("@64sIQ8I")
+_GIT_BLOB_TAIL_STATE = struct.Struct('<QQ20s')
+
+
+class _GitBlobTailHash:
+    """Q51: a Git blob fitting one transfer tail has only empty and complete checkpoints."""
+
+    def __init__(self, size, object_id):
+        if type(size) is not int or not 0 <= size <= TRANSFER_CHUNK_BYTES:
+            _reject('Git blob', 'resumable Git verification requires one bounded transfer tail', object_id)
+        self.size, self.object_id, self.offset = size, object_id, 0
+        self.value = artifact_hasher('git-sha1:', object_id, object_size=size).hexdigest()
+
+    def update(self, payload):
+        if type(payload) is not bytes or self.offset != 0 or len(payload) != self.size:
+            _reject('Git blob', 'one complete Git blob tail is required', self.object_id)
+        hasher = artifact_hasher('git-sha1:', self.object_id, object_size=self.size)
+        hasher.update(payload)
+        self.offset, self.value = len(payload), hasher.hexdigest()
+
+    def copy(self):
+        return copy.copy(self)
+
+    def hexdigest(self):
+        return self.value
+
+
+def _git_blob_hash_state(payload, size, offset, object_id):
+    if not isinstance(payload, bytes) or len(payload) != _GIT_BLOB_TAIL_STATE.size:
+        _reject('serialized_hash_state', 'Git blob tail state has an invalid byte shape', object_id)
+    stored_size, position, digest = _GIT_BLOB_TAIL_STATE.unpack(payload)
+    hasher = _GitBlobTailHash(size, object_id)
+    if (stored_size != size or type(offset) is not int or position != offset or offset not in {0, size}
+            or (offset == 0 and digest.hex() != hasher.hexdigest())):
+        _reject('serialized_hash_state', 'Git blob state differs from its exact tail boundary', object_id)
+    hasher.offset, hasher.value = offset, digest.hex()
+    return hasher
 
 
 def git_blob_sha256(payload: bytes, expected_blob: str, object_id: str) -> str:
     """Q9/Q51: verify a Git blob before deriving its resumable transfer digest."""
-    header = f"blob {len(payload)}\0".encode("ascii")
-    if hashlib.sha1(header + payload).hexdigest() != expected_blob:
+    hasher = artifact_hasher('git-sha1:', object_id, object_size=len(payload))
+    hasher.update(payload)
+    if hasher.hexdigest() != expected_blob:
         raise CassetteError("SOURCE_REVISION_CHANGED", object_id,
                             "Q9: Git metadata bytes must match their immutable blob", "terminal",
                             "source bytes differ from the pinned Git blob")
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def artifact_hasher(expected_digest: str, object_id: str):
+def artifact_hasher(expected_digest: str, object_id: str, *, object_size: int | None = None):
     """Return the sole whole-artifact hasher for Q1/Q51/Q57 byte verification."""
 
     algorithm = expected_digest.partition(":")[0]
@@ -1867,16 +2183,22 @@ def artifact_hasher(expected_digest: str, object_id: str):
         return blake3()
     if algorithm == "sha256":
         return hashlib.sha256()
+    if algorithm == 'git-sha1':
+        if type(object_size) is not int or object_size < 0:
+            _reject('artifacts[].size', 'Git blob hashing requires its exact byte size', object_id)
+        return hashlib.sha1(f'blob {object_size}\0'.encode('ascii'))
     _reject(
         "artifacts[].digest",
-        "artifact byte verification requires a BLAKE3 or SHA-256 digest",
+        "artifact byte verification requires a BLAKE3, SHA-256 or sized Git blob digest",
         object_id,
     )
 
 
-def resumable_artifact_hasher(expected_digest: str, object_id: str):
-    """Return Q51's pinned SHA-256 hasher whose continuation state is durable."""
+def resumable_artifact_hasher(expected_digest: str, object_id: str, *, object_size: int | None = None):
+    """Return Q51's SHA-256 continuation or one bounded Git blob tail accumulator."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        return _GitBlobTailHash(object_size, object_id)
     if expected_digest.partition(":")[0] != "sha256":
         _reject(
             "artifacts[].digest",
@@ -1887,8 +2209,14 @@ def resumable_artifact_hasher(expected_digest: str, object_id: str):
 
 
 def artifact_hash_state(hasher, expected_digest: str, offset: int, object_id: str) -> str:
-    """Serialize and structurally verify one SHA-256 continuation at an exact byte offset."""
+    """Serialize a bounded source-hash continuation at an exact durable byte boundary."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        if not isinstance(hasher, _GitBlobTailHash):
+            _reject('serialized_hash_state', 'a Git blob tail accumulator is required', object_id)
+        payload = _GIT_BLOB_TAIL_STATE.pack(hasher.size, hasher.offset, bytes.fromhex(hasher.value))
+        _git_blob_hash_state(payload, hasher.size, offset, object_id)
+        return 'git-blob-tail-v1:' + payload.hex()
     try:
         payload = hasher.__getstate__()
     except (AttributeError, TypeError, ValueError) as error:
@@ -1897,9 +2225,17 @@ def artifact_hash_state(hasher, expected_digest: str, offset: int, object_id: st
     return "sha256-state-v1:" + payload.hex()
 
 
-def resume_artifact_hasher(state: str, expected_digest: str, offset: int, object_id: str):
-    """Restore one validated Q51 SHA-256 continuation without evaluating serialized code."""
+def resume_artifact_hasher(state: str, expected_digest: str, offset: int, object_id: str,
+                          *, object_size: int | None = None):
+    """Restore one validated Q51 continuation without evaluating serialized code."""
 
+    if expected_digest.partition(':')[0] == 'git-sha1':
+        prefix = 'git-blob-tail-v1:'
+        if (not isinstance(state, str) or not state.startswith(prefix)
+                or len(state[len(prefix):]) != 2 * _GIT_BLOB_TAIL_STATE.size
+                or not set(state[len(prefix):]) <= _HEX):
+            _reject('serialized_hash_state', 'a bounded git-blob-tail-v1 state is required', object_id)
+        return _git_blob_hash_state(bytes.fromhex(state[len(prefix):]), object_size, offset, object_id)
     if not isinstance(state, str) or not state.startswith("sha256-state-v1:"):
         _reject("serialized_hash_state", "a sha256-state-v1 value is required", object_id)
     encoded = state[16:]
@@ -1929,15 +2265,15 @@ def _validate_artifact_hash_state(
 
 
 def _safetensors_header(
-    handle, object_id: str, artifact_hasher
+    handle, object_id: str, artifact_hasher, io_extent=None
 ) -> tuple[int, int, dict, tuple[tuple, ...]]:
-    prefix = _read_exact(handle, 8, object_id, "SafeTensors header length")
+    prefix = _read_exact(handle, 8, object_id, "SafeTensors header length", io_extent)
     artifact_hasher.update(prefix)
     header_length = int.from_bytes(prefix, "little")
     file_size = os.fstat(handle.fileno()).st_size
-    if not 0 < header_length <= _SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
+    if not 0 < header_length <= SAFETENSORS_HEADER_BYTES or 8 + header_length > file_size:
         _q57_reject(object_id, "SafeTensors header length is outside its file or 100 MB limit")
-    encoded = _read_exact(handle, header_length, object_id, "SafeTensors header")
+    encoded = _read_exact(handle, header_length, object_id, "SafeTensors header", io_extent)
     artifact_hasher.update(encoded)
     if encoded[:1] != b"{":
         _q57_reject(object_id, "SafeTensors header must be complete UTF-8 JSON beginning with '{'")
@@ -2684,9 +3020,14 @@ def load_root(cartridge: str | Path, root_digest: str) -> dict:
     return root
 
 
-def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
+def inspect_safetensors(source: str | Path | int, expected_digest: str, *, io_observer=None,
+                        observe_process_reads=False) -> dict:
     """Parse one bounded SafeTensors header without loading or executing repository material."""
 
+    if io_observer is not None and not callable(io_observer):
+        _q57_reject("source:observer", "SafeTensors observer must be callable", "INVALID_REQUEST")
+    if type(observe_process_reads) is not bool or (observe_process_reads and io_observer is None):
+        _q57_reject("source:observer", "process read samples require a SafeTensors observer", "INVALID_REQUEST")
     descriptor = None
     original_offset = None
     if type(source) is int:
@@ -2716,7 +3057,9 @@ def inspect_safetensors(source: str | Path | int, expected_digest: str) -> dict:
     try:
         with handle:
             data_start, data_size, metadata, tensors = _safetensors_header(
-                handle, object_id, hasher
+                handle, object_id, hasher,
+                None if io_observer is None else TransferExtent(
+                    handle.fileno(), 0, os.fstat(handle.fileno()).st_size, object_id, io_observer, observe_process_reads)
             )
     except OSError as error:
         _q57_reject(object_id, f"SafeTensors source is unavailable: {error}", "SOURCE_UNAVAILABLE")
@@ -3839,8 +4182,10 @@ def read_tensor(cartridge: str | Path, root_digest: str, semantic_tensor_id: str
         _q57_reject(root_digest, f"semantic tensor {semantic_tensor_id!r} is absent or duplicated")
     spans = matches[0]["spans"]
     size = sum(span["length"] for span in spans)
+    if type(offset) is not int:
+        _q57_reject(root_digest, "tensor byte offset must be an integer", "INVALID_REQUEST")
     length = size-offset if length is None else length
-    if type(offset) is not int or type(length) is not int or offset < 0 or length < 0 or offset+length > size:
+    if type(length) is not int or offset < 0 or length < 0 or offset+length > size:
         _q57_reject(root_digest, "tensor byte interval is outside its verified span map", "INVALID_REQUEST")
     locations = _read_index(cartridge, root_digest)
     output = bytearray()
@@ -5798,17 +6143,26 @@ def _read_envelope(path: Path, object_id: str, error_code: str) -> dict:
 
 
 def _fullsync_file(path: Path, object_id: str) -> None:
-    command = getattr(fcntl, "F_FULLFSYNC", None)
-    if command is None:
-        _transaction_reject(object_id, "macOS F_FULLFSYNC is unavailable", "DURABILITY_UNSUPPORTED")
     try:
         with path.open("rb") as handle:
-            os.fsync(handle.fileno())
-            fcntl.fcntl(handle.fileno(), command)
+            _fullsync_descriptor(handle.fileno(), object_id, path.name)
     except OSError as error:
         if error.errno == errno.ENOSPC:
             raise
         _transaction_reject(object_id, f"F_FULLFSYNC failed for {path.name!r}: {error}", "DURABILITY_UNSUPPORTED")
+
+
+def _fullsync_descriptor(descriptor: int, object_id: str, name: str) -> None:
+    command = getattr(fcntl, "F_FULLFSYNC", None)
+    if command is None:
+        _transaction_reject(object_id, "macOS F_FULLFSYNC is unavailable", "DURABILITY_UNSUPPORTED")
+    try:
+        os.fsync(descriptor)
+        fcntl.fcntl(descriptor, command)
+    except OSError as error:
+        if error.errno == errno.ENOSPC:
+            raise
+        _transaction_reject(object_id, f"F_FULLFSYNC failed for {name!r}: {error}", "DURABILITY_UNSUPPORTED")
 
 
 def _sync_directory(path: Path, object_id: str) -> None:
@@ -5990,6 +6344,9 @@ def verify_campaign_artifact(
     name: str,
     expected_digest: str,
     expected_bytes: int,
+    *,
+    maximum_bytes: int = 4096,
+    include_rows: bool = False,
 ) -> dict:
     """Q44: read one bounded campaign probe through unlinked descriptors and verify its Cassette digest."""
 
@@ -6001,8 +6358,9 @@ def verify_campaign_artifact(
         ):
             _transaction_reject(str(value), "capture name is not a bounded literal filename", "INVALID_REQUEST")
     expected_digest = _transaction_digest(expected_digest, attempt)
-    if type(expected_bytes) is not int or not 0 <= expected_bytes <= 4096:
-        _transaction_reject(attempt, "integrity probe size must be an unsigned 4096-byte bound", "INVALID_REQUEST")
+    if (type(include_rows) is not bool or type(maximum_bytes) is not int or not 0 <= maximum_bytes <= 2097152
+            or type(expected_bytes) is not int or not 0 <= expected_bytes <= maximum_bytes):
+        _transaction_reject(attempt, "capture byte count exceeds its declared verification bound", "INVALID_REQUEST")
     descriptors = []
     try:
         descriptor = os.open(cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -6032,12 +6390,23 @@ def verify_campaign_artifact(
         observed_digest = digest_bytes(payload)
         if observed_digest != expected_digest:
             _transaction_reject(attempt, "campaign artifact digest differs from the integrity probe")
-        return {
+        proof = {
             "attempt": attempt,
             "name": name,
             "digest": observed_digest,
             "bytes": expected_bytes,
         }
+        if include_rows:
+            try:
+                rows = [json.loads(line) for line in payload.splitlines()]
+                if (not payload.endswith(b'\n') or not rows
+                        or any(not isinstance(row, dict) or canonical_bytes(row) != line
+                               for row, line in zip(rows, payload.splitlines(), strict=True))):
+                    raise ValueError('trace rows are not complete canonical objects')
+            except (ValueError, UnicodeError, TypeError) as error:
+                _transaction_reject(attempt, f'campaign trace cannot be decoded: {error}')
+            proof['rows'] = rows
+        return proof
     except OSError as error:
         _transaction_reject(attempt, f"campaign artifact is absent or unavailable: {error}")
     finally:
@@ -6046,30 +6415,1337 @@ def verify_campaign_artifact(
 
 
 def campaign_profile_io(owner: CapacityCoordinator, operation_id: str, pattern: dict) -> dict:
-    """Q42/Q44/Q53: perform one measured scratch write, readback and full-sync boundary."""
+    """Q42/Q44/Q53: measure one claimed, unlinked temporary extent; closing or process exit frees it."""
     import time
-    if set(pattern) != {"write_bytes", "read_bytes", "payload_digest"}:
+    if set(pattern) not in ({"write_bytes", "read_bytes", "payload_digest"},
+                            {"write_bytes", "read_bytes", "payload_digest", "offset_bytes"}):
         _transaction_reject(operation_id, "profile pattern requires exact write/read bytes and payload digest")
     write_bytes, read_bytes = pattern["write_bytes"], pattern["read_bytes"]
+    offset = pattern.get('offset_bytes', 0)
+    if type(offset) is not int or not 0 <= offset < SAFETENSORS_HEADER_BYTES + 8:
+        _transaction_reject(operation_id, 'profile offset exceeds the bounded file-offset range', 'INVALID_REQUEST')
     if type(write_bytes) is not int or type(read_bytes) is not int or not 0 < read_bytes <= write_bytes <= 16 * 1024 * 1024:
         _transaction_reject(operation_id, "profile atom exceeds its bounded positive extent", "INVALID_REQUEST")
     payload = bytes(write_bytes)
     if digest_bytes(payload) != pattern["payload_digest"]:
         _transaction_reject(operation_id, "profile payload digest differs from its planned atom")
-    started = time.monotonic_ns()
-    path = write_campaign_artifact(owner, operation_id, "profile.bin", payload)
-    written = time.monotonic_ns()
-    with path.open("rb") as handle:
-        observed = handle.read(read_bytes)
-    read_done = time.monotonic_ns()
-    _fullsync_file(path, operation_id)
-    finished = time.monotonic_ns()
-    if observed != payload[:read_bytes]:
-        _transaction_reject(operation_id, "profile readback differs from written bytes")
-    return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
-            "read_seconds": (read_done-written)/1e9, "flush_seconds": (finished-read_done)/1e9,
-            "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
-            "physical_write_bytes": None, "path": str(path)}
+    def measure(claim):
+        started = time.monotonic_ns()
+        with execute_claimed_write(claim, lambda: tempfile.TemporaryFile(dir=owner.cartridge)) as handle:
+            handle.seek(offset)
+            count = execute_claimed_write(claim, lambda: handle.write(payload))
+            if count != write_bytes:
+                raise OSError(errno.ENOSPC, "profile scratch write was incomplete")
+            handle.flush()
+            handle.seek(offset)
+            if digest_bytes(handle.read(write_bytes)) != pattern["payload_digest"]:
+                _transaction_reject(operation_id, "profile full-extent readback digest differs")
+            written = time.monotonic_ns()
+            _fullsync_descriptor(handle.fileno(), operation_id, "temporary profile extent")
+            flushed = time.monotonic_ns()
+            handle.seek(offset)
+            observed = handle.read(read_bytes)
+            read_done = time.monotonic_ns()
+            finished = read_done
+            if observed != payload[:read_bytes]:
+                _transaction_reject(operation_id, "profile readback differs from written bytes")
+        return {"duration_seconds": (finished-started)/1e9, "write_seconds": (written-started)/1e9,
+                "read_seconds": (read_done-flushed)/1e9, "flush_seconds": (flushed-written)/1e9,
+                "readback_ok": True, "flush_ok": True, "errors": 0, "host_write_bytes": write_bytes,
+                "physical_write_bytes": None, "path": str(owner.cartridge), "scratch_retention": "TEMPORARY_UNLINKED"}
+    return _run_claimed_writes(owner, CapacityTransition(operation_id, "profile-atom", payload_bytes=write_bytes,
+                               declared_writes=2, write_bytes=(0, write_bytes)), measure)
+
+
+def _profile_extent_manifest(value, key):
+    """Q6/Q60: reject malformed immutable lifecycle records before using their fields."""
+    if not isinstance(value, dict):
+        _transaction_reject(key, "profile extent manifest must be an object")
+    status = value.get('status')
+    if not isinstance(status, str):
+        _transaction_reject(key, "profile extent lifecycle status must be text")
+    fields = {'status', 'binding', 'lengths', 'operation_id', 'retention'}
+    if status in {'RETAINED', 'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        fields.add('identities')
+    if status in {'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        fields.update({'evidence_key', 'evidence_digest'})
+    if status in {'RECLAIMING', 'RECLAIMED'}:
+        fields.add('seal_digest')
+    lengths = value.get('lengths')
+    if (status not in {'PREPARED', 'RETAINED', 'SEALED', 'RECLAIMING', 'RECLAIMED'} or set(value) != fields
+            or not isinstance(value.get('binding'), dict) or not isinstance(lengths, dict) or not lengths
+            or any(role not in {'data', 'state'} or type(length) is not int or not 0 <= length < 2**63
+                   for role, length in lengths.items()) or value.get('retention') != 'TEMPORARY'
+            or not isinstance(value.get('operation_id'), str)
+            or re.fullmatch(r'profile-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value['operation_id']) is None):
+        _transaction_reject(key, "profile extent manifest fields, identity or retention are invalid")
+    if 'identities' in fields:
+        identities = value['identities']
+        if (not isinstance(identities, dict) or set(identities) != set(lengths)
+                or any(not isinstance(identity, dict) or set(identity) != {'inode', 'bytes'}
+                       or type(identity['inode']) is not int or identity['inode'] <= 0
+                       or type(identity['bytes']) is not int or identity['bytes'] != lengths[role]
+                       for role, identity in identities.items())):
+            _transaction_reject(key, "profile extent identities differ from their declared lengths")
+    for field in fields & {'evidence_digest', 'seal_digest'}:
+        _digest(field, value[field], key)
+    if 'evidence_key' in fields and (not isinstance(value['evidence_key'], str)
+            or re.fullmatch(r'[A-Za-z0-9_-]{1,160}', value['evidence_key']) is None):
+        _transaction_reject(key, "profile evidence key is invalid")
+    return value
+
+
+def grant_profile_extents(owner: CapacityCoordinator, key: str, binding: dict, lengths: dict):
+    """Q42/Q53/Q60: retain a declared synthetic working set and reopen its exact files."""
+    if (not isinstance(binding, dict) or not isinstance(lengths, dict) or not lengths
+            or any(role not in {"data", "state"} or type(length) is not int or not 0 <= length < 2**63
+                   for role, length in lengths.items())):
+        _transaction_reject(key, "profile extents require an exact binding and data/state lengths", "INVALID_REQUEST")
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        operation = "profile-" + str(uuid.uuid4())
+        directory = owner.cartridge / "transfers" / operation
+        if directory.exists() or directory.is_symlink():
+            _transaction_reject(key, "new profile namespace already exists", "IDEMPOTENCY_CONFLICT")
+        head = compare_campaign_head(owner, key, None, {
+            "status": "PREPARED", "binding": binding, "lengths": lengths,
+            "operation_id": operation, "retention": "TEMPORARY"})
+    value = _profile_extent_manifest(head['value'], key)
+    if value['binding'] != binding or value['lengths'] != lengths:
+        _transaction_reject(key, "saved profile extent binding or lengths differ")
+    if value['status'] in {'SEALED', 'RECLAIMING', 'RECLAIMED'}:
+        evidence = campaign_head(owner.cartridge, value['evidence_key'])
+        if (evidence is None or evidence['digest'] != value['evidence_digest']
+                or not isinstance(evidence['value'], dict) or evidence['value'].get('disposition') != 'ABANDONED'):
+            _transaction_reject(key, "completed profile extents cannot start another measurement generation")
+        if value['status'] != 'RECLAIMED':
+            head = reclaim_profile_extents(owner, key, head['digest'] if value['status'] == 'SEALED' else value['seal_digest'])
+        head = compare_campaign_head(owner, key, head['digest'], {
+            'status': 'PREPARED', 'binding': binding, 'lengths': lengths,
+            'operation_id': 'profile-' + str(uuid.uuid4()), 'retention': 'TEMPORARY'})
+        value = _profile_extent_manifest(head['value'], key)
+    if (value.get("binding") != binding or value.get("lengths") != lengths
+            or value.get("retention") != "TEMPORARY" or value.get("status") not in {"PREPARED", "RETAINED"}
+            or not isinstance(value.get("operation_id"), str)
+            or re.fullmatch(r"profile-[0-9a-f-]{36}", value["operation_id"]) is None):
+        _transaction_reject(key, "saved profile extent binding, retention or lifecycle differs")
+    prepared_directory = owner.cartridge / 'transfers' / value['operation_id']
+    if value['status'] == 'PREPARED' and (prepared_directory.exists() or prepared_directory.is_symlink()):
+        # A crash before RETAINED leaves no inode proof. Preserve that namespace and start a fresh one.
+        value = {**value, 'operation_id': 'profile-' + str(uuid.uuid4())}
+        head = compare_campaign_head(owner, key, head['digest'], value)
+    extents = {}
+    try:
+        for role, length in sorted(lengths.items()):
+            extents[role] = grant_transfer_extent(owner.cartridge, value["operation_id"], role, length,
+                capacity_controller=owner, require_existing=value["status"] == "RETAINED")
+            try:
+                fcntl.flock(extents[role].fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                _capacity_reject(key, "profile extent reclamation currently owns the file", "CAPACITY_EXCEEDED", "retryable")
+        identities = {role: {"inode": os.fstat(extent.fd).st_ino, "bytes": extent.length}
+                      for role, extent in extents.items()}
+        if value["status"] == "PREPARED":
+            head = compare_campaign_head(owner, key, head["digest"],
+                {**value, "status": "RETAINED", "identities": identities})
+        elif value.get("identities") != identities:
+            _transaction_reject(key, "retained profile file identity changed", "IDENTITY_MISMATCH")
+        return head, extents
+    except BaseException:
+        for extent in extents.values():
+            os.close(extent.fd)
+        raise
+
+
+def seal_profile_extents(owner: CapacityCoordinator, key: str, expected: str, evidence_key: str, evidence_digest: str):
+    """Q44/Q60: release temporary working files only after their evidence has a durable identity."""
+    _digest("profile evidence", evidence_digest, key)
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        _transaction_reject(key, "profile extent manifest is missing")
+    value = _profile_extent_manifest(head['value'], key)
+    evidence = campaign_head(owner.cartridge, evidence_key)
+    if evidence is None or evidence['digest'] != evidence_digest:
+        _transaction_reject(key, 'profile evidence is absent or differs from its durable campaign record')
+    references = evidence['value'].get('retained_manifests') if isinstance(evidence['value'], dict) else None
+    if (not isinstance(references, list)
+            or {'key': key, 'retained_digest': expected} not in references):
+        _transaction_reject(key, 'profile evidence does not reference this exact retained manifest')
+    if head["digest"] != expected or value['status'] != "RETAINED":
+        _transaction_reject(key, "profile seal requires its exact retained predecessor", "IDEMPOTENCY_CONFLICT")
+    if any(operation == head["value"]["operation_id"] for operation, _, _ in owner.active_claims()):
+        _capacity_reject(key, "profile has an active next-transition claim", "CAPACITY_EXCEEDED", "retryable")
+    return compare_campaign_head(owner, key, expected,
+        {**value, "status": "SEALED", "evidence_key": evidence_key, "evidence_digest": evidence_digest})
+
+
+def reclaim_profile_extents(owner: CapacityCoordinator, key: str, seal_digest: str):
+    """Q53: remove only sealed synthetic extents whose exact identity remains recorded."""
+    head = campaign_head(owner.cartridge, key)
+    if head is None:
+        _transaction_reject(key, "profile extent manifest is missing")
+    value = _profile_extent_manifest(head['value'], key)
+    if value.get("status") == "SEALED":
+        if head["digest"] != seal_digest:
+            _transaction_reject(key, "profile seal differs from the expected evidence", "IDEMPOTENCY_CONFLICT")
+    elif value.get("status") in {"RECLAIMING", "RECLAIMED"}:
+        if value.get("seal_digest") != seal_digest:
+            _transaction_reject(key, "profile reclamation has another seal", "IDEMPOTENCY_CONFLICT")
+    else:
+        _transaction_reject(key, "unsealed profile extents remain retained", "INVALID_REQUEST")
+    operation = value.get("operation_id")
+    if (not isinstance(operation, str) or re.fullmatch(r"profile-[0-9a-f-]{36}", operation) is None
+            or value.get("retention") != "TEMPORARY" or set(value.get("lengths", {})) - {"data", "state"}
+            or set(value.get("identities", {})) != set(value.get("lengths", {}))):
+        _transaction_reject(key, "profile reclamation manifest is malformed")
+    if value["status"] == "RECLAIMED":
+        return head
+    # Root, generation and pin schemas name content objects, never transfer paths. Q25 journals
+    # are the remaining durable authority that could retain this exact operation namespace.
+    journals = [_load_transaction(owner.cartridge, path.stem)
+                for path in sorted(_transactions_path(owner.cartridge).glob("*.json"))]
+    referenced = any(operation.encode() in canonical_bytes(record) for record in journals)
+    candidate = ReclaimableObject(operation, True, False, False, False, "TEMPORARY",
+        bool(owner.active_claims()), referenced, referenced)
+    if not is_reclaimable_object(candidate):
+        _capacity_reject(key, "profile extents still have active claims or journal references",
+                         "CAPACITY_EXCEEDED", "retryable")
+    descriptors = []
+    try:
+        descriptors.append(os.open(owner.cartridge, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+        for name in ("transfers", operation):
+            descriptors.append(os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptors[-1]))
+        directory_fd = descriptors[-1]
+        for role, identity in value["identities"].items():
+            try:
+                descriptor = os.open(role + ".extent", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+            except FileNotFoundError:
+                if value["status"] == "RECLAIMING":
+                    continue
+                _transaction_reject(key, "sealed profile extent disappeared", "IDENTITY_MISMATCH")
+            descriptors.append(descriptor)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                _capacity_reject(key, "profile extent still has an open reader or executor", "CAPACITY_EXCEEDED", "retryable")
+            metadata = os.fstat(descriptor)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                    or metadata.st_ino != identity["inode"] or metadata.st_size != identity["bytes"]):
+                _transaction_reject(key, "sealed profile extent identity changed", "IDENTITY_MISMATCH")
+        if value["status"] == "SEALED":
+            head = compare_campaign_head(owner, key, head["digest"],
+                {**value, "status": "RECLAIMING", "seal_digest": seal_digest})
+            value = head["value"]
+        def remove(claim):
+            for role in sorted(value["identities"]):
+                def unlink():
+                    try:
+                        metadata = os.stat(role + ".extent", dir_fd=directory_fd, follow_symlinks=False)
+                        identity = value["identities"][role]
+                        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                                or metadata.st_ino != identity["inode"] or metadata.st_size != identity["bytes"]):
+                            _transaction_reject(key, "profile extent changed before unlink", "IDENTITY_MISMATCH")
+                        os.unlink(role + ".extent", dir_fd=directory_fd)
+                    except FileNotFoundError:
+                        pass
+                execute_claimed_write(claim, unlink)
+            execute_claimed_write(claim, lambda: os.fsync(directory_fd))
+        _run_claimed_writes(owner, CapacityTransition(operation, "profile-reclamation",
+            declared_writes=len(value["identities"]) + 1, write_bytes=(0,) * (len(value["identities"]) + 1)), remove)
+        return compare_campaign_head(owner, key, head["digest"], {**value, "status": "RECLAIMED"})
+    except OSError as error:
+        _capacity_reject(key, f"profile extent reclamation failed: {error}", "CARTRIDGE_DISCONNECTED", "retryable")
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def _profile_tails(values, points, scale=1):
+    ordered = sorted(values)
+    return {'samples': len(ordered), 'minimum': ordered[0] / scale if ordered else None,
+            'maximum': ordered[-1] / scale if ordered else None,
+            'empirical_percentiles': {str(q): ordered[max(0, math.ceil(q * len(ordered)) - 1)] / scale
+                for q in points} if ordered else {}, 'scope': 'EXACT_EMPIRICAL_ORDER_STATISTICS'}
+
+
+def _profile_rates(intervals):
+    result = _profile_tails([count * 1e9 / duration for count, duration in intervals], (.05, .5, .95))
+    if result['samples'] < 20:
+        result['empirical_percentiles'] = {}
+        result['scope'] = 'MINIMUM_ONLY_CONSERVATIVE_BOUND; FEWER_THAN_20_INTERVALS'
+    return result
+
+
+def source_profile_trace(cartridge, traces, *, expected_data_writes, expected_data_reads, revalidation, data_offset=0,
+                         has_state=True, record_base=0, expected_path=None,
+                         expected_source_reads=0, source_state_bytes=0):
+    """Q42/Q44/Q51: recompute source coverage, call tails and durable intervals from raw rows."""
+    def reject(detail):
+        _transaction_reject('source-profile', detail)
+    def natural(value):
+        return type(value) is int and value >= 0
+    if (not isinstance(traces, list) or not traces or not natural(expected_data_writes) or not natural(expected_data_reads)
+            or type(revalidation) is not bool or type(has_state) is not bool
+            or not natural(data_offset) or not natural(record_base)
+            or not natural(expected_source_reads) or not natural(source_state_bytes)):
+        reject('source trace coverage request is malformed')
+    phases = {name: {'calls': {}, 'transitions': [], 'source_transitions': [], 'verified_ranges': []} for name in
+              ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')}
+    windows, active, pending_write, pending_read = [], None, None, None
+    data_writes = host_writes = data_reads = native_reads = parser_reads = io_calls = process_reads = 0
+    source_reads = source_state_reads = source_process_reads = source_ranges = request_state_bytes = 0
+    source_started, pending_source, source_starts, source_offsets = None, None, {}, set()
+    def finish_read(ended):
+        nonlocal pending_read
+        if pending_read is not None:
+            if ended <= pending_read['started']:
+                reject('verified source read has no positive interval')
+            phases[pending_read['phase']]['verified_ranges'].append(
+                (pending_read['bytes'], ended - pending_read['started']))
+            pending_read = None
+    for reference in traces:
+        if not isinstance(reference, dict) or set(reference) != {'attempt', 'name', 'bytes', 'digest'}:
+            reject('source trace reference is malformed')
+        rows = verify_campaign_artifact(cartridge, reference['attempt'], reference['name'], reference['digest'],
+            reference['bytes'], maximum_bytes=2097152, include_rows=True)['rows']
+        for row in rows:
+            kind = row.get('kind')
+            if not isinstance(kind, str):
+                reject('source trace record kind must be text')
+            if kind == 'WINDOW_OPEN':
+                if (active is not None or not natural(row.get('started_ns'))
+                        or type(row.get('observer_pid')) is not int or row['observer_pid'] <= 0):
+                    reject('source trace opens an overlapping or malformed window')
+                active = {'started_ns': row['started_ns'], 'observer_pid': row['observer_pid'],
+                          'before': row.get('device'), 'samples': [row.get('host')], 'max_io_end': row['started_ns']}
+                continue
+            if kind == 'HOST_SAMPLE':
+                if active is not None:
+                    active['samples'].append(row)
+                continue
+            if active is None:
+                reject('source I/O or window end occurs outside an active window')
+            if kind == 'WINDOW_CLOSE':
+                ended = row.get('ended_ns')
+                if (not natural(ended) or ended <= active['started_ns'] or ended < active['max_io_end']
+                        or row.get('observer_pid') != active['observer_pid']):
+                    reject('source trace closes an invalid process or time window')
+                if pending_write is not None:
+                    reject('source window ends before its data reaches a durable checkpoint')
+                if pending_read is not None or pending_source is not None or source_started is not None:
+                    reject('source window ends before its range verification boundary')
+                before, after = active['before'], row.get('device')
+                if (not isinstance(before, dict) or not isinstance(after, dict)
+                        or before.get('path') != after.get('path')
+                        or (expected_path is not None and before.get('path') != expected_path)):
+                    reject('raw source window changed its bound physical path')
+                counters = {}
+                for field in ('device_read_bytes', 'device_write_bytes', 'device_read_operations'):
+                    start_value, end_value = before.get(field), after.get(field)
+                    if start_value is None or end_value is None:
+                        counters[field] = None
+                    elif not natural(start_value) or not natural(end_value) or end_value < start_value:
+                        reject('raw source device counter is malformed or regressed')
+                    else:
+                        counters[field] = end_value - start_value
+                samples = [sample for sample in active['samples'] + [row.get('host')] if isinstance(sample, dict)]
+                if not samples or any(not natural(sample.get('time_ns')) or sample.get('pid') != active['observer_pid']
+                                      or type(sample.get('thermal_state')) is not int
+                                      or not 0 <= sample['thermal_state'] <= 3 for sample in samples):
+                    reject('raw source host samples lack their process or time identity')
+                times = sorted({max(active['started_ns'], min(ended, sample['time_ns'])) for sample in samples})
+                gaps = [times[0] - active['started_ns'], ended - times[-1],
+                        *(right - left for left, right in zip(times, times[1:]))]
+                gap_before = 0 if not windows else active['started_ns'] - windows[-1]['ended_ns']
+                if gap_before < 0:
+                    reject('source windows overlap or use different monotonic clocks')
+                windows.append({'started_ns': active['started_ns'], 'ended_ns': ended,
+                    'observer_pid': active['observer_pid'], 'active_seconds': (ended - active['started_ns']) / 1e9,
+                    'downtime_before_seconds': gap_before / 1e9, 'max_sampling_gap_seconds': max(gaps) / 1e9,
+                    'thermal_states': sorted({sample['thermal_state'] for sample in samples}),
+                    'device_counters': {'before': {key: before.get(key) for key in counters},
+                                        'after': {key: after.get(key) for key in counters}}, 'counter_deltas': counters})
+                active = None
+                continue
+            if kind == 'VERIFIED_PREFIX':
+                if row.get('role') == 'source_data':
+                    if (pending_source is None or row.get('offset') != pending_source['offset']
+                            or row.get('length') != pending_source['bytes']
+                            or row['length'] != min(TRANSFER_CHUNK_BYTES, expected_source_reads - row['offset'])
+                            or not natural(row.get('time_ns')) or row['time_ns'] <= pending_source['started']):
+                        reject('retained source verification does not cover its exact chunk reads')
+                    if source_starts.get(row['offset'], -1) >= active['started_ns']:
+                        reject('retained source chunk is duplicated within one measured window')
+                    source_starts[row['offset']] = source_started
+                    source_offsets.add(row['offset'])
+                    source_ranges += 1
+                    pending_source, source_started, request_state_bytes = None, None, 0
+                    continue
+                if (pending_read is None or row.get('offset') != pending_read['offset']
+                        or row.get('length') != pending_read['bytes'] or not natural(row.get('time_ns'))):
+                    reject('verified prefix does not cover its observed range reads')
+                finish_read(row['time_ns'])
+                continue
+            if kind == 'SOURCE_BOUNDARY':
+                boundary = row.get('source_boundary')
+                if not isinstance(boundary, dict) or not natural(row.get('time_ns')):
+                    reject('source checkpoint boundary is malformed')
+                if 'offset' in boundary and not revalidation and boundary['offset'] != data_writes:
+                    reject('source checkpoint includes unobserved data writes')
+                if pending_write is not None:
+                    reject('source checkpoint precedes its data durability fence')
+                finish_read(row['time_ns'])
+                continue
+            phase, role = row.get('phase'), row.get('role')
+            if (not isinstance(phase, str) or phase not in phases or not isinstance(role, str)
+                    or role not in {'data', 'state', 'source_data', 'source_state'}
+                    or (role == 'state' and not has_state)
+                    or (revalidation and phase != 'RETAINED_REVALIDATION')
+                    or (role.startswith('source_') and (revalidation or kind != 'read'))
+                    or kind not in {'read', 'write', 'PARSER_READ', 'fsync', 'F_FULLFSYNC'}
+                    or any(not natural(row.get(key)) for key in ('offset', 'requested_bytes', 'returned_bytes', 'started_ns', 'duration_ns'))
+                    or row['returned_bytes'] > row['requested_bytes'] or row.get('success') is not True):
+                reject('source trace contains malformed or failed I/O')
+            io_calls += 1
+            if row['started_ns'] < active['started_ns']:
+                reject('source I/O starts before its measured window')
+            active['max_io_end'] = max(active['max_io_end'], row['started_ns'] + row['duration_ns'])
+            label = role + '.' + kind
+            if role == 'state' and kind == 'write':
+                label = ('state.record.write' if row['offset'] >= record_base else 'state.header.write')
+            phases[phase]['calls'].setdefault(label, []).append(row['duration_ns'])
+            if role == 'source_state':
+                if row['offset'] == 0:
+                    if source_started is not None or pending_source is not None:
+                        reject('retained source checkpoint reads overlap another range')
+                    source_started = row['started_ns']
+                if source_started is None or row['offset'] != request_state_bytes:
+                    reject('retained source checkpoint reads omit or reorder their bytes')
+                request_state_bytes += row['returned_bytes']
+                source_state_reads += row['returned_bytes']
+            if role == 'source_data':
+                if source_started is None or request_state_bytes != source_state_bytes:
+                    reject('retained source read lacks its complete checkpoint observation')
+                if pending_source is None:
+                    if row['offset'] % TRANSFER_CHUNK_BYTES or not 0 <= row['offset'] < expected_source_reads:
+                        reject('retained source read does not begin at a planned chunk')
+                    pending_source = {'offset': row['offset'], 'bytes': 0, 'started': row['started_ns']}
+                if row['offset'] != pending_source['offset'] + pending_source['bytes']:
+                    reject('retained source chunk reads are discontinuous')
+                pending_source['bytes'] += row['returned_bytes']
+                source_reads += row['returned_bytes']
+                count = row.get('process_diskio_read_bytes')
+                if not natural(count):
+                    reject('retained source read lacks its process counter observation')
+                source_process_reads += count
+            if kind == 'write':
+                host_writes += row['returned_bytes']
+                if role == 'data':
+                    if revalidation or phase != 'FRESH_WRITE_READBACK' or row['offset'] != data_offset + data_writes:
+                        reject('source data write coverage is discontinuous or occurs in a read-only phase')
+                    data_writes += row['returned_bytes']
+                    if pending_write is None:
+                        pending_write = {'started': row['started_ns'], 'bytes': 0, 'phase': phase,
+                                         'offset': row['offset'], 'read_bytes': 0}
+                        if expected_source_reads:
+                            source_start = source_starts.pop(row['offset'] - data_offset, None)
+                            if source_start is None or source_start < active['started_ns']:
+                                reject('destination write lacks its verified same-window source chunk')
+                            pending_write['source_started'] = source_start
+                    pending_write['bytes'] += row['returned_bytes']
+            if role == 'data' and kind in {'read', 'PARSER_READ'}:
+                data_reads += row['returned_bytes']
+                if kind == 'read':
+                    native_reads += row['returned_bytes']
+                    if pending_write is not None:
+                        if row['offset'] != pending_write['offset'] + pending_write['read_bytes']:
+                            reject('source readback does not cover its pending write')
+                        pending_write['read_bytes'] += row['returned_bytes']
+                else:
+                    if has_state:
+                        reject('whole-source transfer contains an unexpected header parser read')
+                    parser_reads += row['returned_bytes']
+                if revalidation:
+                    count = row.get('process_diskio_read_bytes')
+                    if not natural(count):
+                        reject('retained source read lacks its process counter sample')
+                    process_reads += count
+                if kind == 'read' and phase != 'FRESH_WRITE_READBACK':
+                    if pending_read is None:
+                        pending_read = {'started': row['started_ns'], 'offset': row['offset'], 'bytes': 0, 'phase': phase}
+                    if row['offset'] != pending_read['offset'] + pending_read['bytes']:
+                        reject('source verification range reads are discontinuous')
+                    pending_read['bytes'] += row['returned_bytes']
+            if kind == 'F_FULLFSYNC' and pending_write is not None and role == ('state' if has_state else 'data'):
+                elapsed = row['started_ns'] + row['duration_ns'] - pending_write['started']
+                if elapsed <= 0 or pending_write['read_bytes'] != pending_write['bytes']:
+                    reject('durable source transition has no positive elapsed time')
+                phases[pending_write['phase']]['transitions'].append((pending_write['bytes'], elapsed))
+                if 'source_started' in pending_write:
+                    elapsed = row['started_ns'] + row['duration_ns'] - pending_write['source_started']
+                    if elapsed <= 0:
+                        reject('source-to-durable transition has no positive interval')
+                    phases[pending_write['phase']]['source_transitions'].append((pending_write['bytes'], elapsed))
+                pending_write = None
+    if (active is not None or not windows or pending_write is not None or data_writes != expected_data_writes
+            or native_reads < expected_data_reads or (not has_state and parser_reads < expected_data_reads)):
+        reject('source trace omits its complete windows or exact data writes')
+    if (pending_source is not None or source_started is not None or source_starts
+            or source_offsets != set(range(0, expected_source_reads, TRANSFER_CHUNK_BYTES))
+            or source_state_reads != source_ranges * source_state_bytes):
+        reject('source trace omits its exact retained-source working set or checkpoint reads')
+    return {'data_write_bytes': data_writes, 'host_write_bytes': host_writes, 'data_read_bytes': data_reads,
+        'source_read_bytes': source_reads, 'source_state_read_bytes': source_state_reads,
+        'source_range_reads': source_ranges, 'process_source_read_bytes': source_process_reads,
+        'process_data_read_bytes': process_reads, 'io_calls': io_calls,
+        'diagnostic_call_union': _profile_tails((value for phase in phases.values() for values in phase['calls'].values()
+                                        for value in values), (.5, .95, .99, 1.), 1e9),
+        'diagnostic_flush_union': _profile_tails((value for phase in phases.values() for name, values in phase['calls'].items()
+                                         if name.endswith(('.fsync', '.F_FULLFSYNC')) for value in values),
+                                        (.5, .95, .99, 1.), 1e9),
+        'phases': {name: {'calls': {kind: _profile_tails(values, (.5, .95, .99, 1.), 1e9)
+                                   for kind, values in phase['calls'].items()},
+                         'durable_chunk_bytes_per_second': _profile_rates(phase['transitions']),
+                         'source_to_durable_chunk_bytes_per_second': _profile_rates(phase['source_transitions']),
+                         'verified_range_bytes_per_second': _profile_rates(phase['verified_ranges'])}
+                   for name, phase in phases.items()},
+        'windows': windows, 'active_seconds': sum(window['active_seconds'] for window in windows),
+        'downtime_seconds': sum(window['downtime_before_seconds'] for window in windows),
+        'continuous': len(windows) == 1, 'interrupted_windows': len(windows) - 1,
+        'max_in_window_sampling_gap_seconds': max(window['max_sampling_gap_seconds'] for window in windows)}
+
+
+def composition_trace(cartridge, capture_key, *, expected_context, expected_result, range_plans,
+                      source_sizes, checkpoint_shape, expected_contract):
+    """Q42/Q60: assess sealed observations while preserving incomplete frontiers and unknowns."""
+    def reject(detail):
+        _transaction_reject(capture_key, detail)
+    def natural(value):
+        return type(value) is int and value >= 0
+    head = campaign_head(cartridge, capture_key)
+    capture = None if head is None else head['value']
+    if not isinstance(capture, dict) or capture.get('context') != expected_context:
+        reject('composition capture differs from its exact context')
+    mode = capture.get('execution_mode')
+    complete = capture.get('status') == 'CAPTURED'
+    if (capture.get('status') not in {'CAPTURED', 'INCOMPLETE'} or mode not in {'FRESH', 'RESUME', None}
+            or (complete and mode is None)):
+        reject('composition statistics require sealed complete or explicitly incomplete evidence')
+    if expected_context.get('capture_version') != '2-source-composition':
+        reject('composition statistics require the capture version with every broker hold observed')
+    operation_id = expected_context.get('operation_id')
+    if not isinstance(operation_id, str) or re.fullmatch(r'op-[0-9a-f]{64}', operation_id) is None:
+        reject('composition context lacks its canonical operation identity')
+    owner = campaign_head(cartridge, 'source-compose-' + operation_id[3:])
+    final = campaign_head(cartridge, 'source-compose-' + operation_id[3:] + '-complete')
+    if complete and (owner is None or final is None or capture.get('ownership_digest') != owner['digest']
+            or capture.get('composition_head') != final['digest']
+            or expected_result != {**final['value'], 'composition_head': final['digest']}
+            or capture.get('operation_result_digest') != digest_bytes(canonical_bytes(expected_result))):
+        reject('composition capture differs from its committed owner or canonical result')
+    binding, plan, recipe = (expected_contract[name] for name in ('binding', 'io_plan', 'recipe'))
+    if (binding.get('operation_id') != operation_id
+            or binding.get('recipe_digest') != digest_bytes(canonical_bytes(recipe))
+            or binding.get('io_plan_digest') != digest_bytes(canonical_bytes(plan))
+            or (owner is not None and any(owner['value'].get(name) != expected_contract[name]
+                                         for name in ('binding', 'recipe', 'io_plan')))
+            or (capture.get('owner_binding') is not None and capture['owner_binding'] != binding)
+            or set(range_plans) != {'PREPASS', 'COMPOSE_WRITE'}):
+        reject('composition capture or expected ranges lost their owner and plan binding')
+    required = {segment['path'] for output in recipe['artifacts']
+                for segment in output['segments'] if 'path' in segment}
+    if (not isinstance(source_sizes, dict) or set(source_sizes) != required
+            or any(not natural(size) for size in source_sizes.values())
+            or not isinstance(checkpoint_shape, dict) or set(checkpoint_shape) != {'header_bytes', 'record_bytes'}
+            or any(not natural(count) or count == 0 for count in checkpoint_shape.values())):
+        reject('composition extent expectations lack their exact source and checkpoint geometry')
+    def checkpoint_bytes(size):
+        return checkpoint_shape['header_bytes'] + checkpoint_shape['record_bytes'] * ((size + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES)
+    output_sizes = {item['path']: item['size'] for item in plan['outputs']}
+    phases = {name: {'calls': {}, 'failed_calls': {}, 'failed_ranges': 0,
+                    'ranges': [], 'durable': [], 'io_bytes': {}, 'count': 0, 'peak': 0}
+              for name in ('PREPASS', 'COMPOSE_WRITE')}
+    expected = {name: iter(values) for name, values in range_plans.items()}
+    waiting = {name: {} for name in phases}
+    extents, active_ranges, fetched, pending, written, state_writes, retained, durable = {}, {}, {}, {}, {}, {}, {}, {}
+    closed_outputs = set()
+    markers, references, holds, hold_open, window, close, claim_count = {}, set(), [], None, None, None, None
+    claims, max_io_end, samples, interruption = 0, 0, [], None
+    def retained_range(item):
+        return item['range_offset'] + item['range_length'] <= retained.get(item['output'], {}).get('verified', 0)
+    def interval(start, end, count):
+        if not natural(start) or not natural(end) or end <= start:
+            reject('composition interval lacks positive monotonic duration')
+        return (start, end, count)
+    for reference in capture.get('traces', []):
+        if (not isinstance(reference, dict) or set(reference) != {'attempt', 'name', 'bytes', 'digest'}
+                or reference['attempt'] != capture_key or reference['name'] in references):
+            reject('composition trace reference is malformed or repeated')
+        references.add(reference['name'])
+        rows = verify_campaign_artifact(cartridge, reference['attempt'], reference['name'], reference['digest'],
+            reference['bytes'], maximum_bytes=2097152, include_rows=True)['rows']
+        for row in rows:
+            kind, phase = row.get('kind'), row.get('phase')
+            if window is None:
+                if kind != 'WINDOW_OPEN' or not natural(row.get('started_ns')):
+                    reject('composition trace lacks its first exact window')
+                window = row
+                max_io_end = row['started_ns']
+                samples.append(row.get('host'))
+                continue
+            if kind == 'WINDOW_INTERRUPTED' and any(row.get(field) is not None for field in ('device', 'host')):
+                reject('interrupted composition invents unavailable native or host endpoints')
+            if close is not None:
+                if (not complete and kind == 'WINDOW_INTERRUPTED' and interruption is None
+                        and close['kind'] == 'WINDOW_CLOSE' and row.get('error') == capture.get('error')
+                        and isinstance(row.get('error'), dict) and natural(row.get('ended_ns'))
+                        and row['ended_ns'] >= close['ended_ns']):
+                    interruption = row
+                    continue
+                if close['kind'] == 'WINDOW_INTERRUPTED' or interruption is not None:
+                    reject('composition trace contains execution after its interrupted window')
+                if kind == 'CLAIM_ACCOUNTING_BOUNDARY' and claim_count is None and natural(row.get('claim_count')):
+                    claim_count = row['claim_count']
+                elif kind == 'CAPACITY_CLAIM' and claim_count is not None:
+                    claims += 1
+                else:
+                    reject('composition trace contains execution after its native window')
+                if not natural(row.get('time_ns')) or row['time_ns'] < close['ended_ns']:
+                    reject('composition claim accounting precedes its closed native window')
+                continue
+            if kind in {'WINDOW_CLOSE', 'WINDOW_INTERRUPTED'}:
+                if kind == 'WINDOW_INTERRUPTED':
+                    if complete or not isinstance(row.get('error'), dict) or row['error'] != capture.get('error'):
+                        reject('composition interruption differs from its incomplete capture')
+                    interruption = row
+                if complete and (active_ranges or pending or hold_open is not None):
+                    reject('composition window ends before a range, hold or durable output boundary')
+                interval(window['started_ns'], row.get('ended_ns'), 0)
+                if row['ended_ns'] < max_io_end:
+                    reject('composition native window ends before its observed execution')
+                if kind == 'WINDOW_CLOSE':
+                    samples.append(row.get('host'))
+                close = row
+                continue
+            if kind == 'HOST_SAMPLE':
+                samples.append(row)
+                continue
+            if kind == 'PHASE':
+                if not natural(row.get('time_ns')) or row['time_ns'] < window['started_ns']:
+                    reject('composition phase lacks its in-window monotonic observation')
+                max_io_end = max(max_io_end, row['time_ns'])
+                if phase == 'OUTPUT_COMMIT':
+                    path = row.get('output')
+                    initial = state_writes.get(path)
+                    if (path not in output_sizes or path in closed_outputs or path in pending
+                            or written.get(path, 0) != output_sizes[path]
+                            or any(output == path for output, _ in fetched)
+                            or (path not in written and (initial is None or initial['bytes'] <= 0
+                                or initial['readback'] != initial['bytes'] or not initial['fenced']))):
+                        reject('composition output commit differs from its exact durable frontier')
+                    closed_outputs.add(path)
+                if phase == 'COMPLETE':
+                    if (final is None or 'complete' in markers or row.get('composition_head') != final['digest']
+                            or closed_outputs != set(output_sizes)):
+                        reject('composition completion marker differs from its committed final record')
+                    markers['complete'] = row
+                continue
+            if kind in {'COMPOSITION_BINDING', 'OWNERSHIP'}:
+                key = 'binding' if kind == 'COMPOSITION_BINDING' else 'ownership'
+                if key in markers or (row.get('binding') != binding if key == 'binding' else
+                        owner is None or row.get('digest') != owner['digest']
+                        or row.get('mode') not in {'FRESH', 'RESUME'} or (mode is not None and row.get('mode') != mode)):
+                    reject('composition trace owner marker differs or repeats')
+                if key == 'ownership':
+                    mode = row['mode']
+                markers[key] = row
+                continue
+            if kind == 'EXTENT_BOUND':
+                role, path = row.get('role'), row.get('path')
+                key = (role, path)
+                if (role not in {'source_data', 'source_state', 'output_data', 'output_state'} or key in extents
+                        or not isinstance(path, str) or any(not natural(row.get(field)) for field in
+                            ('offset', 'length', 'device', 'inode', 'allocated_bytes'))
+                        or row.get('operation_id') != (binding['acquisition_operation_id'] if role.startswith('source_') else operation_id)):
+                    reject('composition extent binding differs or repeats')
+                size = (source_sizes if role.startswith('source_') else output_sizes).get(path)
+                if size is None or row['length'] != (checkpoint_bytes(size) if role.endswith('_state') else size):
+                    reject('composition extent differs from its admitted byte geometry')
+                extents[key] = row
+                continue
+            if kind in {'HOLD_OPEN', 'HOLD_CLOSE'}:
+                if not natural(row.get('time_ns')):
+                    reject('composition hold lacks its monotonic observation')
+                if kind == 'HOLD_OPEN':
+                    if hold_open is not None:
+                        reject('composition holds overlap')
+                    hold_open = row
+                else:
+                    if (hold_open is None or hold_open.get('output') != row.get('output')
+                            or hold_open.get('boundary') != row.get('boundary')):
+                        reject('composition hold closes another output')
+                    interval(hold_open['time_ns'], row['time_ns'], 0)
+                    holds.append((hold_open['time_ns'], row['time_ns']))
+                    hold_open = None
+                continue
+            if kind in {'RANGE_OPEN', 'RANGE_CLOSE'}:
+                if phase not in phases or any(not natural(row.get(field)) for field in
+                        ('range_offset', 'range_length', 'range_started_ns')) or not isinstance(row.get('output'), str):
+                    reject('composition range identity is malformed')
+                key = (phase, row['output'], row['range_offset'], row['range_started_ns'])
+                coordinate = (row['output'], row['range_offset'])
+                if kind == 'RANGE_OPEN':
+                    if row['range_started_ns'] < window['started_ns']:
+                        reject('composition range starts before its native window')
+                    max_io_end = max(max_io_end, row['range_started_ns'])
+                    limit = plan['prepass' if phase == 'PREPASS' else 'write']['range_concurrency']
+                    while len(waiting[phase]) < limit:
+                        item = next(expected[phase], None)
+                        if item is None:
+                            break
+                        if mode == 'RESUME' and phase == 'COMPOSE_WRITE' and retained_range(item):
+                            continue
+                        point = (item['output'], item['range_offset'])
+                        if point in waiting[phase]:
+                            reject('expected composition ranges repeat an output coordinate')
+                        waiting[phase][point] = item
+                    item = waiting[phase].pop(coordinate, None)
+                    if item is None or item['range_length'] != row['range_length'] or key in active_ranges:
+                        reject('composition range differs from its exact recipe traversal')
+                    spans = {}
+                    for index, segment in enumerate(item['segments']):
+                        if 'path' in segment:
+                            data = extents.get(('source_data', segment['path']))
+                            state = extents.get(('source_state', segment['path']))
+                            if data is None or state is None:
+                                reject('composition range lacks its bound original source extents')
+                            start = segment['offset'] // TRANSFER_CHUNK_BYTES * TRANSFER_CHUNK_BYTES
+                            end = min(data['length'], ((segment['offset'] + segment['length'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES) * TRANSFER_CHUNK_BYTES)
+                            spans[index] = {'expected': segment, 'state_bytes': 0, 'cursor': start,
+                                            'verified': start, 'end': end, 'io_end': row['range_started_ns']}
+                    active_ranges[key] = {'contract': item, 'spans': spans}
+                    count = sum(point[0] == phase for point in active_ranges)
+                    if count > limit:
+                        reject('composition ranges exceed their declared concurrency')
+                    phases[phase]['peak'] = max(phases[phase]['peak'], count)
+                else:
+                    opened = active_ranges.pop(key, None)
+                    if (not complete and opened is not None and row.get('success') is False
+                            and isinstance(row.get('error_type'), str) and row['error_type']):
+                        interval(row['range_started_ns'], row.get('ended_ns'), 0)
+                        if any(row['ended_ns'] < span['io_end'] for span in opened['spans'].values()):
+                            reject('failed composition range closes before its observed I/O')
+                        max_io_end = max(max_io_end, row['ended_ns'])
+                        phases[phase]['failed_ranges'] += 1
+                        continue
+                    if (opened is None or row.get('success') is not True or row.get('returned_bytes') != row['range_length']
+                            or any(span['verified'] != span['end'] or span['state_bytes'] != extents[
+                                ('source_state', span['expected']['path'])]['length'] or row.get('ended_ns', -1) < span['io_end']
+                                for span in opened['spans'].values())):
+                        reject('composition range closes before its exact source verification')
+                    phases[phase]['ranges'].append(interval(row['range_started_ns'], row.get('ended_ns'), row['range_length']))
+                    max_io_end = max(max_io_end, row['ended_ns'])
+                    phases[phase]['count'] += 1
+                    if phase == 'COMPOSE_WRITE':
+                        if coordinate in fetched:
+                            reject('composition repeats an unwritten fetched range')
+                        fetched[coordinate] = row
+                continue
+            if kind == 'OUTPUT_BOUNDARY':
+                path = row.get('output')
+                item = pending.pop(path, None)
+                if (mode == 'RESUME' and item is None and path not in written
+                        and phase == 'COMPOSE_WRITE' and path in output_sizes):
+                    prefix = retained.get(path)
+                    if (prefix is None or path in state_writes
+                            or (prefix['verified'] == 0 and output_sizes[path] != 0)
+                            or row.get('offset') != prefix['verified'] or prefix['read'] != prefix['verified']
+                            or prefix['state_bytes'] != checkpoint_bytes(prefix['verified'])
+                            or prefix.get('checkpoint_before_data', prefix['state_bytes']) != checkpoint_bytes(prefix['verified'])
+                            or row.get('generation') != (prefix['verified'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES
+                            or not natural(row.get('generation')) or not isinstance(row.get('hash_state_digest'), str)
+                            or re.fullmatch(r'blake3:[0-9a-f]{64}', row['hash_state_digest']) is None):
+                        reject('resumed output boundary lacks its exact verified prefix and checkpoint')
+                    if not natural(row.get('time_ns')) or row['time_ns'] < prefix['io_end']:
+                        reject('resumed output boundary precedes its observed prefix verification')
+                    prefix['ended_ns'] = row['time_ns']
+                    max_io_end = max(max_io_end, row['time_ns'])
+                    written[path] = prefix['verified']
+                    durable[path] = prefix['verified']
+                    continue
+                source = None if item is None else fetched.pop((path, item['offset']), None)
+                if (phase != 'COMPOSE_WRITE' or item is None or source is None
+                        or row.get('offset') != written.get(path) or source['range_length'] != item['bytes']
+                        or item['readback'] != item['bytes'] or not item['data_sync'] or not item['state_sync']
+                        or not natural(row.get('generation')) or not isinstance(row.get('hash_state_digest'), str)
+                        or re.fullmatch(r'blake3:[0-9a-f]{64}', row['hash_state_digest']) is None):
+                    reject('composition output checkpoint lacks its exact fetched, readback and synchronized range')
+                if not natural(row.get('time_ns')) or row['time_ns'] < item['io_end']:
+                    reject('composition output checkpoint precedes its observed I/O')
+                if item['io_start'] < source['range_started_ns']:
+                    reject('composition output I/O starts before its fetched range')
+                max_io_end = max(max_io_end, row['time_ns'])
+                durable[path] = row['offset']
+                phases['COMPOSE_WRITE']['durable'].append(interval(source['range_started_ns'], row['time_ns'], item['bytes']))
+                continue
+            role = row.get('role')
+            if role == 'output_data' and kind == 'VERIFIED_PREFIX':
+                path = row.get('path')
+                prefix = retained.get(path)
+                extent = extents.get((role, path))
+                count = 0 if prefix is None or extent is None else min(TRANSFER_CHUNK_BYTES, extent['length'] - prefix['verified'])
+                if (mode != 'RESUME' or prefix is None or path in written or count <= 0 or phase != 'COMPOSE_WRITE'
+                        or row.get('offset') != extent['offset'] + prefix['verified'] or row.get('length') != count
+                        or prefix['read'] != prefix['verified'] + count or not natural(row.get('time_ns'))
+                        or row['time_ns'] < prefix['io_end']):
+                    reject('resumed output prefix lacks its exact preceding chunk read')
+                prefix['verified'] += count
+                prefix['io_end'] = row['time_ns']
+                max_io_end = max(max_io_end, row['time_ns'])
+                continue
+            if role in {'source_data', 'source_state'} and kind in {'read', 'VERIFIED_PREFIX'}:
+                key = (phase, row.get('output'), row.get('range_offset'), row.get('range_started_ns'))
+                opened = active_ranges.get(key)
+                span = None if opened is None else opened['spans'].get(row.get('span'))
+                if (span is None or row.get('range_length') != opened['contract']['range_length']
+                        or (row.get('input'), row.get('source_offset'), row.get('source_length')) !=
+                           (span['expected']['path'], span['expected']['offset'], span['expected']['length'])):
+                    reject('composition source span differs from the exact recipe traversal')
+                extent = extents[(role, row['input'])]
+                if kind == 'VERIFIED_PREFIX':
+                    count = min(TRANSFER_CHUNK_BYTES, span['end'] - span['verified'])
+                    if (role != 'source_data' or count <= 0 or row.get('offset') != extent['offset'] + span['verified']
+                            or row.get('length') != count or span['cursor'] != span['verified'] + count
+                            or not natural(row.get('time_ns')) or row['time_ns'] < span['io_end']):
+                        reject('composition source prefix lacks its exact chunk read')
+                    span['verified'] += count
+                    span['io_end'] = row['time_ns']
+                    continue
+            elif role not in {'output_data', 'output_state'} or kind not in {'read', 'write', 'fsync', 'F_FULLFSYNC'}:
+                reject('composition trace has an unknown execution observation')
+            if (phase not in phases or kind not in {'read', 'write', 'fsync', 'F_FULLFSYNC'}
+                    or type(row.get('success')) is not bool or (complete and not row['success'])
+                    or any(not natural(row.get(field)) for field in
+                        ('offset', 'requested_bytes', 'returned_bytes', 'started_ns', 'duration_ns'))
+                    or row['returned_bytes'] > row['requested_bytes'] or row['started_ns'] < window['started_ns']):
+                reject('composition I/O is malformed, failed or outside its exact window')
+            max_io_end = max(max_io_end, row['started_ns'] + row['duration_ns'])
+            label = role + '.' + kind
+            if role.startswith('source_'):
+                if kind != 'read' or row['started_ns'] < key[3]:
+                    reject('composition source I/O starts before its observed range or writes an original')
+            else:
+                path = row.get('path')
+                extent = extents.get((role, path))
+                if (extent is None or phase != 'COMPOSE_WRITE' or row['offset'] < extent['offset']
+                        or row['offset'] + row['returned_bytes'] > extent['offset'] + extent['length']):
+                    reject('composition output I/O differs from its bound extent')
+                if path in closed_outputs:
+                    reject('composition output I/O follows its committed output')
+            if not row['success']:
+                if row['returned_bytes'] != 0 or not isinstance(row.get('error_type'), str) or not row['error_type']:
+                    reject('failed composition I/O reports bytes or lacks its observed exception')
+                phases[phase]['failed_calls'].setdefault(label + ':' + row['error_type'], []).append(row['duration_ns'])
+                if role.startswith('source_'):
+                    span['io_end'] = max(span['io_end'], row['started_ns'] + row['duration_ns'])
+                continue
+            phases[phase]['calls'].setdefault(label, []).append(row['duration_ns'])
+            phases[phase]['io_bytes'][label] = phases[phase]['io_bytes'].get(label, 0) + row['returned_bytes']
+            if role.startswith('source_'):
+                if role == 'source_state':
+                    if row['offset'] != extent['offset'] + span['state_bytes'] or span['cursor'] != span['verified']:
+                        reject('composition source checkpoint read is discontinuous')
+                    span['state_bytes'] += row['returned_bytes']
+                else:
+                    if (span['state_bytes'] != extents[('source_state', row['input'])]['length']
+                            or row['offset'] != extent['offset'] + span['cursor']
+                            or span['cursor'] + row['returned_bytes'] > min(span['end'], span['verified'] + TRANSFER_CHUNK_BYTES)):
+                        reject('composition source chunk lacks its complete checkpoint or contiguous read')
+                    span['cursor'] += row['returned_bytes']
+                span['io_end'] = max(span['io_end'], row['started_ns'] + row['duration_ns'])
+                continue
+            if role == 'output_data' and kind == 'write':
+                offset = written.get(path, 0)
+                if row['offset'] != extent['offset'] + offset:
+                    reject('composition output writes are discontinuous')
+                item = pending.setdefault(path, {'offset': offset, 'bytes': 0, 'readback': 0, 'data_sync': False, 'state_sync': False,
+                                                 'io_start': row['started_ns'], 'io_end': 0})
+                item['data_sync'] = item['state_sync'] = False
+                item['checkpoint_parts'] = set()
+                item['bytes'] += row['returned_bytes']
+                written[path] = offset + row['returned_bytes']
+            elif role == 'output_data' and kind == 'read':
+                item = pending.get(path)
+                if mode == 'RESUME' and item is None and path not in written:
+                    prefix = retained.get(path)
+                    if (prefix is None or prefix['state_bytes'] < checkpoint_shape['header_bytes']
+                            or row['offset'] != extent['offset'] + prefix['read']
+                            or prefix['read'] + row['returned_bytes'] > min(extent['length'], prefix['verified'] + TRANSFER_CHUNK_BYTES)
+                            or row['started_ns'] < prefix['io_end']):
+                        reject('resumed output read lacks its preceding checkpoint and contiguous prefix')
+                    prefix.setdefault('checkpoint_before_data', prefix['state_bytes'])
+                    prefix['read'] += row['returned_bytes']
+                    prefix['io_end'] = row['started_ns'] + row['duration_ns']
+                    continue
+                if (item is None or row['offset'] != extent['offset'] + item['offset'] + item['readback']
+                        or item['readback'] + row['returned_bytes'] > item['bytes']):
+                    reject('composition output readback lacks its observed write')
+                item['readback'] += row['returned_bytes']
+            elif role == 'output_state' and kind == 'write':
+                previous = state_writes.get(path)
+                if path not in pending and (path in written
+                        or row['offset'] + row['returned_bytes'] > extent['offset'] + checkpoint_shape['header_bytes']
+                        or (previous is None and row['offset'] != extent['offset'])
+                        or (previous is not None and (previous['readback']
+                            or row['offset'] != previous['offset'] + previous['bytes']))):
+                    reject('composition checkpoint write lacks its initializing header or synchronized output range')
+                if previous is not None and previous['readback'] != previous['bytes']:
+                    if previous['readback'] or row['offset'] != previous['offset'] + previous['bytes']:
+                        reject('composition checkpoint write precedes its earlier readback')
+                    previous['bytes'] += row['returned_bytes']
+                else:
+                    state_writes[path] = {'offset': row['offset'], 'bytes': row['returned_bytes'], 'readback': 0}
+                state_writes[path]['fenced'] = False
+                if path in pending:
+                    pending[path]['state_sync'] = False
+                    if not pending[path]['data_sync']:
+                        reject('composition checkpoint write precedes its synchronized output data')
+                    if row['returned_bytes']:
+                        pending[path]['checkpoint_parts'].add('header' if row['offset'] <
+                            extent['offset'] + checkpoint_shape['header_bytes'] else 'record')
+            elif role == 'output_state' and kind == 'read' and path in state_writes:
+                previous = state_writes[path]
+                if row['offset'] != previous['offset'] + previous['readback']:
+                    reject('composition checkpoint readback is discontinuous')
+                previous['readback'] += row['returned_bytes']
+            elif role == 'output_state' and kind == 'read' and mode == 'RESUME' and path not in written:
+                prefix = retained.setdefault(path, {'state_bytes': 0, 'read': 0, 'verified': 0,
+                    'started_ns': row['started_ns'], 'io_end': 0})
+                if row['offset'] != extent['offset'] + prefix['state_bytes'] or row['started_ns'] < prefix['io_end']:
+                    reject('resumed output checkpoint prefix is discontinuous')
+                prefix['state_bytes'] += row['returned_bytes']
+                prefix['io_end'] = row['started_ns'] + row['duration_ns']
+            elif role == 'output_state' and kind == 'F_FULLFSYNC':
+                previous = state_writes.get(path)
+                if previous is None or previous['readback'] != previous['bytes']:
+                    reject('composition checkpoint sync lacks its exact write and readback')
+                if path in pending:
+                    if not pending[path]['data_sync'] or pending[path]['checkpoint_parts'] != {'header', 'record'}:
+                        reject('composition checkpoint sync lacks data durability or a later checkpoint write')
+                    pending[path]['state_sync'] = True
+                previous['fenced'] = True
+            elif kind == 'F_FULLFSYNC' and path in pending:
+                item = pending[path]
+                item['data_sync'] = item['readback'] == item['bytes']
+            if path in pending:
+                pending[path]['io_start'] = min(pending[path]['io_start'], row['started_ns'])
+                pending[path]['io_end'] = max(pending[path]['io_end'], row['started_ns'] + row['duration_ns'])
+    if close is None or not references or (complete and (active_ranges or pending or fetched
+            or claim_count != claims or set(markers) != {'binding', 'ownership', 'complete'})):
+        reject('composition trace omits its complete window, owner, claims or output frontier')
+    if not complete:
+        if (capture.get('operation_state') == 'SUCCEEDED'
+                or ((extents or 'ownership' in markers or 'complete' in markers) and 'binding' not in markers)
+                or (('complete' in markers or any(role.startswith('output_') for role, _ in extents)
+                     or capture.get('execution_mode') is not None) and 'ownership' not in markers)
+                or (capture.get('owner_binding') is not None and 'binding' not in markers)
+                or (capture.get('ownership_digest') is not None and ('ownership' not in markers
+                    or capture['ownership_digest'] != markers['ownership']['digest']))
+                or (capture.get('composition_head') is not None and ('complete' not in markers
+                    or capture['composition_head'] != markers['complete']['composition_head']))
+                or (claim_count is not None and claims > claim_count)
+                or (close['kind'] == 'WINDOW_CLOSE' and interruption is None and claim_count != claims)):
+            reject('incomplete composition metadata differs from its observed owner, completion or claims')
+    for phase, name in (('PREPASS', 'prepass'), ('COMPOSE_WRITE', 'write')):
+        if not complete:
+            continue
+        if mode == 'FRESH':
+            if waiting[phase] or next(expected[phase], None) is not None or phases[phase]['count'] != plan[name]['range_calls']:
+                reject('composition trace omits exact fresh recipe ranges')
+            for role in ('source_data', 'source_state'):
+                if phases[phase]['io_bytes'].get(role + '.read', 0) != plan[name][role + '_read_bytes']:
+                    reject('composition source reads differ from the complete fresh plan')
+        elif phase == 'PREPASS':
+            if phases[phase]['count'] or phases[phase]['io_bytes']:
+                reject('resumed ownership unexpectedly repeats its original prepass')
+        elif any(not retained_range(item) for group in (waiting[phase].values(), expected[phase]) for item in group):
+            reject('resumed composition omits an unverified recipe suffix')
+    for item in plan['outputs']:
+        if complete and written.get(item['path'], 0) != item['size']:
+            reject('composition output frontier omits its exact output shape')
+    before, after = window.get('device'), close.get('device')
+    first, last = window.get('host'), close.get('host')
+    if not isinstance(before, dict) or before.get('path') != expected_context.get('path') or not isinstance(first, dict):
+        reject('composition opening native or host identity differs from its capture')
+    if close['kind'] == 'WINDOW_CLOSE':
+        observed_windows = {'native_window': {'before': before, 'after': after},
+                            'host_window': {'before': first, 'after': last},
+                            'duration_seconds': (close['ended_ns'] - window['started_ns']) / 1e9}
+        if (not isinstance(after, dict) or before.get('path') != after.get('path') or not isinstance(last, dict)
+                or any(capture.get(field) != value for field, value in observed_windows.items()
+                       if interruption is None or capture.get(field) is not None)):
+            reject('composition native or host window differs from its retained capture')
+    if close['kind'] == 'WINDOW_INTERRUPTED' and any(capture.get(field) is not None
+            for field in ('native_window', 'host_window', 'duration_seconds')):
+        reject('interrupted composition invents unavailable native or host endpoints')
+    if type(first.get('pid')) is not int or first['pid'] <= 0:
+        reject('composition host window lacks its positive process identity')
+    if any(not isinstance(sample, dict) or not natural(sample.get('time_ns')) or sample.get('pid') != first.get('pid')
+            or type(sample.get('thermal_state')) is not int or not 0 <= sample['thermal_state'] <= 3 for sample in samples):
+        reject('composition host samples lost their process, thermal or monotonic identity')
+    counters = {}
+    for label, start, end in [('device', before, after), ('process', first, last)]:
+        fields = ('device_read_bytes', 'device_write_bytes', 'device_read_operations') if label == 'device' else (
+            'process_diskio_read_bytes', 'process_diskio_written_bytes')
+        for field in fields:
+            left, right = start.get(field), None if end is None else end.get(field)
+            if left is None or right is None:
+                counters[field] = None
+            elif not natural(left) or not natural(right) or right < left:
+                reject('composition global device or process counters regress')
+            else:
+                counters[field] = right - left
+    times = sorted({max(window['started_ns'], min(close['ended_ns'], sample['time_ns'])) for sample in samples})
+    gaps = [times[0] - window['started_ns'], close['ended_ns'] - times[-1],
+            *(right - left for left, right in zip(times, times[1:]))]
+    if any(left < window['started_ns'] or right > close['ended_ns'] for left, right in holds):
+        reject('composition hold exceeds its measured native window')
+    if hold_open is not None and not window['started_ns'] <= hold_open['time_ns'] <= close['ended_ns']:
+        reject('unfinished composition hold exceeds its observed window')
+    def active_intervals(intervals):
+        result = []
+        for start, end, count in intervals:
+            duration = end - start - sum(max(0, min(end, right) - max(start, left)) for left, right in holds)
+            if duration <= 0:
+                reject('composition interval has no active duration after observed holds')
+            if count:
+                result.append((count, duration))
+        return result
+    reports = {phase: {'io_bytes': values['io_bytes'], 'range_calls': values['count'], 'peak_open_ranges': values['peak'],
+        'failed_ranges': values['failed_ranges'],
+        'failed_calls': {label: _profile_tails(durations, (.5, .95, .99, 1.), 1e9) for label, durations in values['failed_calls'].items()},
+        'calls': {label: _profile_tails(durations, (.5, .95, .99, 1.), 1e9) for label, durations in values['calls'].items()},
+        'range_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals(values['ranges'])),
+        'source_to_durable_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals(values['durable']))}
+        for phase, values in phases.items()}
+    retained = {path: prefix for path, prefix in retained.items() if 'ended_ns' in prefix}
+    return {'status': 'RECOMPUTED_RAW' if complete else 'RECOMPUTED_INCOMPLETE_RAW',
+        'capture_status': capture['status'], 'captured_operation_state': capture.get('operation_state'),
+        'capture_digest': head['digest'], 'ownership_digest': markers.get('ownership', {}).get('digest'),
+        'completion_record_observed': 'complete' in markers, 'execution_mode': mode,
+        'scope': (('FRESH' if mode == 'FRESH' else 'RESUMED') if complete else 'INCOMPLETE') + '_OBSERVATIONS_ONLY; QUALIFICATION_NOT_RUN', 'phases': reports,
+        'frontiers': {'durable_output': durable, 'written_output': written, 'fetched_ranges': len(fetched),
+            'open_ranges': len(active_ranges), 'pending_output_bytes': sum(item['bytes'] for item in pending.values()),
+            'unfenced_checkpoints': sum(not item['fenced'] for item in state_writes.values())},
+        'retained_output': {'verified_bytes': sum(prefix['verified'] for prefix in retained.values()),
+            'checkpoint_read_bytes': sum(prefix['state_bytes'] for prefix in retained.values()),
+            'output_frontiers': {path: prefix['verified'] for path, prefix in retained.items()},
+            'verification_bytes_per_active_second': None if hold_open is not None else _profile_rates(active_intervals([
+                interval(prefix['started_ns'], prefix['ended_ns'], prefix['verified']) for prefix in retained.values()
+                if prefix['verified'] and 'ended_ns' in prefix]))},
+        'wall_seconds': (close['ended_ns'] - window['started_ns']) / 1e9,
+        'hold_seconds': sum(right - left for left, right in holds) / 1e9,
+        'active_seconds': None if hold_open is not None else (close['ended_ns'] - window['started_ns'] - sum(right - left for left, right in holds)) / 1e9,
+        'open_hold': hold_open, 'hold_scope': 'CLOSED_OBSERVED_HOLDS_ONLY',
+        'max_sampling_gap_seconds': max(gaps) / 1e9, 'thermal_states': sorted({sample['thermal_state'] for sample in samples}),
+        'global_counter_deltas': counters, 'counter_scope': 'PROCESS_AND_SHARED_DEVICE; NOT_PER_RANGE_OR_PATH',
+        'cache_classification': 'UNCONTROLLED; NOT_COLD_PROOF',
+        'claim_scope': capture.get('claim_scope'), 'issued_claim_count': claim_count if claim_count == claims else None,
+        'claim_accounting': {'declared_count': claim_count, 'recorded_count': claims,
+                             'complete': claim_count is not None and claim_count == claims},
+        'profile_inputs': {'context': expected_context, 'composition': binding, 'io_plan': plan,
+            'host_memory_bytes': first.get('host_memory_bytes'),
+            'source_extents': {path: {field: value.get(field) for field in ('length', 'allocated_bytes',
+                'uncached_request', 'cache_flags_before', 'cache_flags_after')}
+                for (role, path), value in extents.items() if role == 'source_data'}},
+        'instrumentation_scope': capture.get('instrumentation_scope')}
+
+
+def storage_profile(binding, patterns, observations, *, expected_binding, revalidations=None):
+    """Q41-Q44: assess independent read/write/flush observations for exact plan patterns."""
+    def reject(object_id, detail):
+        raise CassetteError('PROVENANCE_VIOLATION', str(object_id), 'Q41-Q44: exact storage profile', 'terminal', detail)
+    def number(value, field, *, integer=False, positive=False, maximum=None):
+        if (type(value) not in ({int} if integer else {int, float})
+                or not math.isfinite(value) or value < 0 or (positive and value == 0)
+                or (maximum is not None and value > maximum)):
+            reject(field, 'measurement has an invalid type, unit count or range')
+        return value
+    if binding != expected_binding or not {'drive', 'host', 'path', 'operation', 'plan'} <= binding.keys():
+        reject('profile', 'drive, host, path, operation or plan identity differs')
+    plan = binding['plan'] if isinstance(binding['plan'], dict) else {}
+    if plan.get('executor') == 'SOURCE_BYTE_COMPOSITION':
+        if len(patterns) != 1 or len(observations) != 1:
+            reject('composition', 'one exact composition capture and plan are required')
+        observed, pattern = observations[0], patterns[0]
+        if not isinstance(observed, dict) or not isinstance(pattern, dict) or not isinstance(binding['path'], dict):
+            reject('composition', 'composition observations, plan and native path must be objects')
+        inputs = observed.get('profile_inputs', {})
+        if not isinstance(inputs, dict) or not isinstance(inputs.get('context'), dict) or not isinstance(inputs.get('composition'), dict):
+            reject('composition', 'composition profile lacks its decoded native and original-proof inputs')
+        context = inputs.get('context', {})
+        if (observed.get('status') != 'RECOMPUTED_RAW' or observed.get('capture_status') != 'CAPTURED'
+                or observed.get('canonical_operation_state') != 'SUCCEEDED' or observed.get('execution_mode') != 'FRESH'
+                or observed.get('completion_record_observed') is not True or observed.get('open_hold') is not None):
+            reject('composition', 'qualification requires a complete fresh canonical composition')
+        if (pattern != plan.get('io_plan') or pattern != inputs.get('io_plan')
+                or plan.get('composition') != inputs.get('composition')
+                or inputs['composition'].get('io_plan_digest') != digest_bytes(canonical_bytes(pattern))
+                or inputs['composition'].get('operation_id') != binding['operation']
+                or context.get('operation_id') != binding['operation'] or context.get('path') != binding['path']
+                or binding['drive'] != binding['path'].get('volume_uuid')
+                or binding['host'] != binding['path'].get('host')):
+            reject('composition', 'capture, original proof, operation or plan binding differs')
+        memory = number(inputs.get('host_memory_bytes'), 'composition host memory bytes', integer=True, positive=True)
+        if plan.get('host_memory_bytes') != memory:
+            reject('cache', 'host memory differs from the captured native observation')
+        working_set = pattern.get('source_working_set', {})
+        if not isinstance(working_set, dict):
+            reject('cache', 'composition source working set must be an object')
+        source_bytes = number(working_set.get('data_bytes'), 'distinct composition source bytes', integer=True)
+        number(working_set.get('state_bytes'), 'distinct composition checkpoint bytes', integer=True)
+        extents = inputs.get('source_extents', {})
+        if not isinstance(extents, dict):
+            reject('cache', 'composition source extent observations must be an object')
+        for extent in extents.values():
+            if (not isinstance(extent, dict) or context.get('source_data_cache_policy') != 'UNCACHED_REQUESTED'
+                    or extent.get('uncached_request') is not True
+                    or any(type(extent.get(field)) is not int or extent[field] < 0
+                           for field in ('cache_flags_before', 'cache_flags_after'))
+                    or extent['cache_flags_before'] == extent['cache_flags_after']):
+                reject('cache', 'composition lacks its observed uncached source descriptor request')
+        if source_bytes and not extents:
+            reject('cache', 'composition source working set lacks its bound extents')
+        if sum(number(extent.get('length'), 'composition source extent length', integer=True)
+               for extent in extents.values()) < source_bytes:
+            reject('cache', 'composition source extents omit the distinct working set')
+        counters = observed.get('global_counter_deltas', {})
+        if not isinstance(counters, dict):
+            reject('composition', 'composition global counters must be an object')
+        for field in ('process_diskio_written_bytes', 'device_write_bytes'):
+            number(counters.get(field), field, integer=True)
+        cache = {'classification': 'WITHIN_HOST_MEMORY', 'source_bytes': source_bytes,
+                 'host_memory_bytes': memory, 'checkpoint_bytes': working_set['state_bytes'],
+                 'counter_scope': 'PROCESS_AND_SHARED_DEVICE; NOT_PER_RANGE_OR_PATH',
+                 'per_read_attribution': 'NOT_ESTABLISHED',
+                 'descriptor_policy': 'UNCACHED_REQUEST_OBSERVED' if source_bytes else 'NOT_APPLICABLE_NO_SOURCE_DATA'}
+        if source_bytes > memory:
+            minimum = source_bytes - memory
+            allocated = sum(number(extent.get('allocated_bytes'), 'allocated composition source bytes', integer=True)
+                            for extent in extents.values())
+            if (allocated < source_bytes or min(number(counters.get(field), field, integer=True)
+                    for field in ('process_diskio_read_bytes', 'device_read_bytes')) < minimum):
+                reject('cache', 'composition lacks its distinct cache-crossing and physical I/O observations')
+            cache.update(classification='MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO',
+                minimum_bytes_beyond_host_memory=minimum, retained_allocated_source_bytes=allocated,
+                process_accounted_read_bytes=counters['process_diskio_read_bytes'],
+                shared_device_read_bytes=counters['device_read_bytes'])
+        reports = {}
+        if not isinstance(observed.get('phases'), dict) or set(observed['phases']) != {'PREPASS', 'COMPOSE_WRITE'}:
+            reject('composition', 'composition phase coverage differs from its executor')
+        for name, values in observed['phases'].items():
+            field = 'source_to_durable_bytes_per_active_second' if name == 'COMPOSE_WRITE' else 'range_bytes_per_active_second'
+            if (not isinstance(values, dict) or not isinstance(values.get('calls'), dict)
+                    or not isinstance(values.get(field), dict)
+                    or not isinstance(values[field].get('empirical_percentiles'), dict)):
+                reject('composition', 'composition phase calls or interval statistics are malformed')
+            rate = values[field]
+            calls = values['calls']
+            samples = number(rate.get('samples'), 'composition interval samples', integer=True)
+            lower = (number(rate['empirical_percentiles'].get('0.05', rate.get('minimum')),
+                            'composition phase throughput lower bound') if samples else None)
+            latencies, count = [], 0
+            for call in calls.values():
+                if not isinstance(call, dict) or not isinstance(call.get('empirical_percentiles'), dict):
+                    reject('composition', 'composition call statistics are malformed')
+                count += number(call.get('samples'), 'composition I/O call samples', integer=True, positive=True)
+                latencies.append(number(call['empirical_percentiles'].get('0.99', call.get('maximum')),
+                                        'composition call latency upper bound'))
+            reports[name] = {'observations': values, 'io_calls': count,
+                'operation_bounds': {'scope': 'OBSERVED_EXECUTOR_PHASE; CONSERVATIVE_LOW_SAMPLE_BOUNDS',
+                    'throughput_p05_lower_bound_bytes_per_second': lower,
+                    'io_latency_p99_upper_bound_seconds': max(latencies) if latencies else None}}
+        wall = number(observed.get('wall_seconds'), 'composition wall seconds', positive=True)
+        hold = number(observed.get('hold_seconds'), 'composition hold seconds', maximum=wall)
+        thermal = observed.get('thermal_states')
+        if not isinstance(thermal, list) or not thermal or any(type(value) is not int or value not in range(4) for value in thermal):
+            reject('composition', 'composition thermal states are unavailable or invalid')
+        return {'binding': binding, 'status': 'PASS', 'patterns_digest': digest_bytes(canonical_bytes(patterns)),
+            'capture_digest': _digest('composition capture', observed.get('capture_digest'), 'composition'),
+            'source_phases': reports, 'cache': cache,
+            'active_seconds': number(observed.get('active_seconds'), 'composition active seconds', positive=True, maximum=wall),
+            'wall_seconds': wall, 'hold_seconds': hold, 'thermal_states': thermal,
+            'max_sampling_gap_seconds': number(observed.get('max_sampling_gap_seconds'), 'composition sampling gap', maximum=wall),
+            'global_counter_deltas': counters,
+            'statistic_scope': 'EXACT_CAPTURED_COMPOSITION; NO_PHASE_RELABELING_OR_PER_PATH_COUNTER_ATTRIBUTION'}
+    if not patterns or len(patterns) != len(observations):
+        reject('profile', 'profile observation coverage is incomplete')
+    for pattern, observed in zip(patterns, observations, strict=True):
+        if observed.get('pattern') != pattern or observed.get('binding') != binding:
+            reject('profile', 'observation differs from the exact plan pattern')
+        for field in ('read_bytes', 'write_bytes'):
+            number(pattern.get(field), field, integer=True)
+        for field in ('host_write_bytes', 'device_write_bytes', 'errors'):
+            number(observed.get(field), field, integer=True)
+        number(observed.get('duration_seconds'), 'duration seconds', positive=True)
+        for field in ('read_seconds', 'write_seconds', 'flush_seconds'):
+            number(observed.get(field), field, maximum=observed['duration_seconds'])
+        if (observed.get('errors') != 0 or observed.get('readback_ok') is not True
+                or observed.get('flush_ok') is not True or observed.get('duration_seconds', 0) <= 0):
+            reject('profile', 'readback, flush, error or timing evidence failed')
+        if observed.get('host_write_bytes', -1) < pattern.get('write_bytes', 0):
+            reject('profile', 'observed host writes omit planned writes')
+        if observed.get('device_write_bytes') is None:
+            reject('profile', 'physical write observation is unavailable')
+    latencies = sorted(x['duration_seconds'] for x in observations)
+    def percentile(values, q):
+        return values[max(0, math.ceil(q * len(values)) - 1)]
+    throughput = sorted((p.get('read_bytes', 0) + p.get('write_bytes', 0)) / o['duration_seconds']
+                        for p, o in zip(patterns, observations, strict=True))
+    for value in throughput:
+        number(value, 'derived throughput bytes per second')
+    result = {"binding": binding, "status": "PASS", "patterns_digest": digest_bytes(canonical_bytes(patterns)),
+            "throughput_bytes_per_second": {str(q): percentile(throughput, q) for q in (.05, .5, .95)},
+            "latency_seconds": {str(q): percentile(latencies, q) for q in (.5, .95, .99, 1.)},
+            "host_write_bytes": sum(x['host_write_bytes'] for x in observations),
+            "device_write_bytes": sum(x['device_write_bytes'] for x in observations)}
+    if 'cache_crossing_required' not in plan:
+        return result
+    for pattern, observed in zip(patterns, observations, strict=True):
+        if number(observed.get('observed_data_write_bytes'), 'source data writes', integer=True) != pattern['write_bytes']:
+            reject('profile', 'source data writes do not cover the exact plan; state writes cannot replace them')
+    retained_source = plan.get('source_storage') == 'CARTRIDGE_RETAINED'
+    if retained_source:
+        for pattern, observed in zip(patterns, observations, strict=True):
+            if (number(pattern.get('source_read_bytes'), 'planned retained-source bytes', integer=True) != pattern['write_bytes']
+                    or number(observed.get('observed_source_read_bytes'), 'retained-source reads', integer=True) < pattern['source_read_bytes']
+                    or number(observed.get('source_allocated_bytes'), 'retained-source allocated bytes', integer=True) < pattern['source_read_bytes']):
+                reject('profile', 'same-cartridge source reads or allocation omit the exact artifact')
+            statistics = observed.get('trace_statistics', {})
+            number(observed.get('observed_source_state_read_bytes'), 'retained-source checkpoint reads', integer=True)
+            intervals = sum(number(phase.get('source_to_durable_chunk_bytes_per_second', {}).get('samples'),
+                                   'source-to-durable intervals', integer=True)
+                            for phase in statistics.get('phases', {}).values())
+            if intervals != (pattern['write_bytes'] + TRANSFER_CHUNK_BYTES - 1) // TRANSFER_CHUNK_BYTES:
+                reject('profile', 'source-to-durable intervals omit the exact destination chunks')
+    required = plan['cache_crossing_required']
+    if type(required) is not bool:
+        reject('cache', 'cache-crossing applicability must be a boolean')
+    memory = number(plan.get('host_memory_bytes'), 'host memory bytes', integer=True, positive=True)
+    source_bytes = sum(pattern['read_bytes'] for pattern in patterns)
+    if required != (source_bytes > memory):
+        reject('cache', 'cache-crossing applicability differs from the exact source working set')
+    if not isinstance(revalidations, list) or len(revalidations) != len(patterns):
+        reject('cache', 'retained source revalidation coverage is incomplete')
+    for pattern, observed in zip(patterns, revalidations, strict=True):
+        if observed.get('pattern') != pattern or observed.get('binding') != binding:
+            reject('cache', 'retained read differs from the bound source pattern')
+        for field in ('host_write_bytes', 'observed_data_read_bytes', 'process_data_read_bytes',
+                      'data_reads_with_process_io', 'data_reads_without_process_io', 'errors'):
+            number(observed.get(field), field, integer=True)
+        if (observed['host_write_bytes'] or observed['observed_data_read_bytes'] < pattern['read_bytes']
+                or observed.get('errors') != 0 or observed.get('readback_ok') is not True):
+            reject('cache', 'retained source bytes were not completely verified without writing')
+    cache = {'classification': 'WITHIN_HOST_MEMORY_RETAINED_SOURCE_WINDOW', 'source_bytes': source_bytes,
+             'host_memory_bytes': memory, 'counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA',
+             'per_read_attribution': 'NOT_ESTABLISHED'}
+    if required:
+        if type(plan.get('uncached_read_request_available')) is not bool:
+            reject('cache', 'uncached descriptor capability is missing from the bound plan')
+        if plan['uncached_read_request_available'] and any(observed.get('uncached_request') is not True
+                                                         for observed in revalidations):
+            reject('cache', 'a supported uncached descriptor request was omitted')
+        minimum = source_bytes - memory
+        allocated = sum(number(observed.get('data_allocated_bytes'), 'retained allocated source bytes', integer=True)
+                        for observed in observations)
+        process_reads = sum(observed['process_data_read_bytes'] for observed in revalidations)
+        device_reads = sum(number(observed.get('device_read_bytes'), 'retained device read bytes', integer=True)
+                           for observed in revalidations)
+        samples = sum(observed['data_reads_with_process_io'] for observed in revalidations)
+        if allocated < source_bytes or min(process_reads, device_reads) < minimum or not samples:
+            reject('cache', 'retained working set lacks the required cache-crossing and physical I/O observations')
+        cache.update(classification='MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO',
+                     minimum_bytes_beyond_host_memory=minimum, retained_allocated_source_bytes=allocated,
+                     process_accounted_read_bytes=process_reads, shared_device_read_bytes=device_reads,
+                     read_samples_with_process_io=samples)
+    result['cache'] = cache
+    if retained_source:
+        source_io = sum(number(x.get('process_source_read_bytes'), 'source process-accounted reads', integer=True)
+                        for x in observations)
+        device_io = (None if any(x.get('device_read_bytes') is None for x in observations) else
+                     sum(number(x['device_read_bytes'], 'source shared-device reads', integer=True) for x in observations))
+        minimum = max(0, source_bytes - memory)
+        if minimum and (source_io < minimum or device_io is None or device_io < minimum):
+            reject('cache', 'retained input lacks its own cache-crossing process and shared-device observations')
+        result['retained_source'] = {'source_bytes': source_bytes, 'minimum_bytes_beyond_host_memory': minimum,
+            'observed_source_read_bytes': sum(x['observed_source_read_bytes'] for x in observations),
+            'observed_source_state_read_bytes': sum(x['observed_source_state_read_bytes'] for x in observations),
+            'process_accounted_read_bytes': source_io, 'shared_device_read_bytes': device_io,
+            'classification': 'MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO' if minimum else 'WITHIN_HOST_MEMORY',
+            'counter_scope': 'PROCESS_AND_SHARED_DEVICE_NOT_PER_PATH_OR_MEDIA', 'per_read_attribution': 'NOT_ESTABLISHED'}
+    phase_names = ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')
+    phase_patterns = {name: [] for name in phase_names}
+    observed_windows, recovery_history = [], []
+    for collection in (observations, revalidations):
+        for observed in collection:
+            statistics = observed.get('trace_statistics')
+            if (not isinstance(statistics, dict) or not isinstance(statistics.get('phases'), dict)
+                    or set(statistics['phases']) != set(phase_names) or not isinstance(statistics.get('windows'), list)
+                    or not statistics['windows']
+                    or not isinstance(observed.get('recovery_history', []), list)):
+                reject('statistics', 'source profile lacks recomputed phase and window statistics')
+            for window in statistics['windows']:
+                if not isinstance(window, dict):
+                    reject('statistics', 'source measurement window must be an object')
+                number(window.get('active_seconds'), 'active source seconds', positive=True)
+                number(window.get('downtime_before_seconds'), 'source downtime seconds')
+                observed_windows.append({'artifact': observed['pattern'].get('artifact'), **window})
+            recovery_history.extend(observed.get('recovery_history', []))
+            captured_calls = 0
+            for name, values in statistics['phases'].items():
+                if (not isinstance(values, dict) or not isinstance(values.get('calls'), dict)
+                        or any(not isinstance(values.get(field), dict) for field in
+                               ('durable_chunk_bytes_per_second', 'verified_range_bytes_per_second'))):
+                    reject('statistics', 'source phase statistics are malformed')
+                for call in values['calls'].values():
+                    if not isinstance(call, dict):
+                        reject('statistics', 'source call statistics must be objects')
+                    captured_calls += number(call.get('samples'), 'captured I/O call count', integer=True)
+                phase_patterns[name].append({'artifact': observed['pattern'].get('artifact'), **values})
+            if captured_calls <= 0:
+                reject('statistics', 'source phase statistics omit all observed I/O calls')
+    phase_reports = {}
+    for name, entries in phase_patterns.items():
+        rates, latencies, count = [], [], 0
+        for entry in entries:
+            rate = entry[('source_to_durable_chunk_bytes_per_second' if retained_source else 'durable_chunk_bytes_per_second')
+                         if name == 'FRESH_WRITE_READBACK' else 'verified_range_bytes_per_second']
+            if not isinstance(rate.get('empirical_percentiles'), dict):
+                reject('statistics', 'source interval percentiles must be an object')
+            samples = number(rate.get('samples'), 'interval sample count', integer=True)
+            if samples:
+                rates.append(number(rate.get('empirical_percentiles', {}).get('0.05', rate.get('minimum')),
+                                    'observed interval throughput lower bound'))
+            for call in entry['calls'].values():
+                if not isinstance(call, dict):
+                    reject('statistics', 'source call statistics must be objects')
+                if not isinstance(call.get('empirical_percentiles'), dict):
+                    reject('statistics', 'source call percentiles must be an object')
+                count += number(call.get('samples'), 'I/O call sample count', integer=True)
+                latencies.append(number(call.get('empirical_percentiles', {}).get('0.99', call.get('maximum')),
+                                        'observed call latency upper bound'))
+        phase_reports[name] = {'patterns': entries, 'io_calls': count,
+            'operation_bounds': {'scope': 'CONSERVATIVE_ACROSS_PATTERNS; NOT_GLOBAL_PERCENTILES',
+                'throughput_p05_lower_bound_bytes_per_second': min(rates) if rates else None,
+                'io_latency_p99_upper_bound_seconds': max(latencies) if latencies else None}}
+    result.pop('throughput_bytes_per_second')
+    result.pop('latency_seconds')
+    result.update(source_phases=phase_reports, measurement_windows=observed_windows,
+        active_seconds=sum(window['active_seconds'] for window in observed_windows),
+        downtime_seconds=sum(window['downtime_before_seconds'] for window in observed_windows),
+        continuous=len(observed_windows) == 1, recovery_history=recovery_history,
+        statistic_scope='RECORDED_CALLS_AND_EXECUTOR_TRANSITIONS; NO_ARTIFACT_AVERAGE_PERCENTILES')
+    return result
 
 
 def _journal_path(cartridge: Path, transaction_id: str) -> Path:

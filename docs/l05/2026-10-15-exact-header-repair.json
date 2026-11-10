@@ -1,0 +1,192 @@
+{
+  "record_kind": "bounded_L05_exact_header_plan_repair",
+  "status": "PASS_BOUNDED",
+  "date": "2026-10-15",
+  "observed_at": "2026-10-15T18:29:11.114186+00:00",
+  "stage": "L05",
+  "stage_status": "IN_PROGRESS",
+  "source_base_commit": "d76becbd0b717e3a3dbdac30e0820a55689ba14e",
+  "authority": [
+    "Q6",
+    "Q42",
+    "Q43",
+    "Q44",
+    "Q50",
+    "Q53"
+  ],
+  "change": "Bind exact SafeTensors JSON byte declarations, prefix/body offsets and profiler version; reject a mismatched prefix before body reads; retain same-operation Go and complete source verification separately",
+  "independent_review": {
+    "status": "PASS_BOUNDED_FIXTURE_PLATFORM",
+    "served_model": "claude-opus-5-5",
+    "session_id": "b4ddfab7-47c9-4bbe-a2e6-78aabc13ae86",
+    "questions": {
+      "Q1": "PASS_FIXTURE_PLATFORM",
+      "Q2": "PASS_PLATFORM"
+    },
+    "original_target": "FAIL_D1_RAW_EFBIG",
+    "repair": "Reject offsets outside the current header plan before any claim; rejected broad terminal catch absent",
+    "successor_probe": {
+      "passed": 104,
+      "total": 104
+    },
+    "offset_case": {
+      "passed": 6,
+      "total": 6,
+      "original_control_failed": [
+        "first_rejected_offset",
+        "prior_escape_offset"
+      ]
+    },
+    "controls": {
+      "C1": {
+        "passed": 96,
+        "total": 104,
+        "failed": [
+          "P2.error",
+          "P2.ranges_prefix_only",
+          "P2.a_prefix_persisted",
+          "P3.error",
+          "P3.ranges",
+          "P3.extents",
+          "P5.wrong_refused",
+          "P6.prefix_length"
+        ]
+      },
+      "C2": {
+        "passed": 94,
+        "total": 104,
+        "failed": [
+          "P0.decl.extra_path",
+          "P1.extra_path",
+          "P1.no_ranges",
+          "P1.record_unchanged",
+          "P1.no_new_heads",
+          "P2.a_prefix_persisted",
+          "P2.b_extent_absent",
+          "P2.no_header_records",
+          "P3.extents",
+          "P3.header_records"
+        ]
+      },
+      "C3": {
+        "passed": 100,
+        "total": 104,
+        "failed": [
+          "P3.ranges",
+          "P4.ranges",
+          "P7b.ranges",
+          "P7b.pwrites_prefix_once"
+        ]
+      },
+      "C4": {
+        "passed": 92,
+        "total": 99,
+        "failed": [
+          "P4.version_bound",
+          "P7b.new_profile_heads",
+          "P7b.new_version_bound",
+          "P7b.ranges",
+          "P7b.pwrites_prefix_once",
+          "P7b.traced_atoms",
+          "P9.tampered_atom_refused"
+        ]
+      },
+      "C5": {
+        "passed": 95,
+        "total": 104,
+        "failed": [
+          "P7b.atom0.0",
+          "P7b.atom1.8",
+          "P7b.atom2.4194312",
+          "P7b.atom3.0",
+          "P7b.atom4.8",
+          "P10.atom0.4194312",
+          "P10.atom1.0",
+          "P10.atom2.8",
+          "P10.atom3.0"
+        ]
+      },
+      "C6": {
+        "passed": 50,
+        "total": 80,
+        "failed": [
+          "P2.paused_same_op",
+          "P2.error",
+          "P2.ranges_prefix_only",
+          "P2.a_prefix_persisted",
+          "P2.qualified_before_refusal",
+          "P3.error",
+          "P3.ranges",
+          "P3.extents",
+          "P3.header_records",
+          "P4.saved",
+          "P4.ranges",
+          "P4.extents",
+          "P4.summary",
+          "P4.no_verified_claim",
+          "P4.one_plan",
+          "P4.completed",
+          "P5.wrong_refused",
+          "P5.saved_reused",
+          "P6.completed",
+          "P7a.unchanged_reuse",
+          "P7b.state",
+          "P7b.new_profile_heads",
+          "P7b.new_version_bound",
+          "P7b.ranges",
+          "P7b.pwrites_prefix_once",
+          "P7b.traced_atoms",
+          "P8.full_go",
+          "P9.setup_headers",
+          "P9.completed",
+          "P10.completed"
+        ]
+      }
+    },
+    "limits": [
+      "C5 retains derived trace predicates, not raw calls",
+      "C6 stops at nonzero-offset readback; later cases not reached"
+    ],
+    "environment": "Separate Opus reviewer; Codex implementer/executor; same Mac/account"
+  },
+  "proof": {
+    "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-14",
+    "tests_passed": 340,
+    "seconds": 658.49,
+    "skipped": 0,
+    "component_controls": 14,
+    "ordinary_ledger_violations": 0,
+    "j": {
+      "authored_executable_LOC": 15908,
+      "direct_dependencies": 9,
+      "duplicate_authorities": 0,
+      "failed_acceptance_rows": 0,
+      "independent_processes": 1,
+      "language_runtimes": 1,
+      "model_specific_branches": 0,
+      "new_numerical_kernels": 0,
+      "shipped_binary_bytes": 8425096
+    },
+    "product_loc_growth": 36
+  },
+  "package": {
+    "wheel": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/wheel-11/cassette-0.0.1-py3-none-any.whl",
+    "wheel_sha256": "4a3079a15767f9846cf4d9052c380c360f62abff150f6606726fb34aad444355",
+    "runtime_files": 38,
+    "source_review_tested_wheel_installed_match": true,
+    "status": "INSTALLED_VERIFIED",
+    "interpreter": "Python3.13.14",
+    "entrypoint": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/installed-01/environment/bin/cassette"
+  },
+  "not_run": [
+    "real provider artifact headers",
+    "required model/dataset payloads",
+    "live source physical profiles",
+    "SOURCE_ENTRY_PASS",
+    "full acquisition checkpoint profile repair",
+    "large acquisition operation-record scaling repair"
+  ],
+  "optional_preexisting_improvement": "inspect_safetensors expected_digest is unused; no failure in this reviewed path was proved",
+  "superseded": "wheel10 matched original target, never installed; broad-catch successor rejected; every attempt retained",
+  "private_evidence": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/exact-header-01"
+}

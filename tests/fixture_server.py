@@ -167,14 +167,14 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         authorized = self.headers.get("Authorization") == f"Bearer {_SECRET}"
-        self.server.requests.append({"path": urlparse(self.path).path, "query": {}, "range": None,
+        self.server.requests.append({"method": "HEAD", "path": urlparse(self.path).path, "query": {}, "range": None,
             "if_match": self.headers.get("If-Match"), "authorized": authorized,
             "license_ref_present": self.headers.get("X-Cassette-License-Acceptance") is not None})
         if not authorized:
             self.send_error(401)
             return
         fixture = _FIXTURES["huggingface"]
-        prefix = f"/{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
+        prefix = f"/{'datasets/' if self.path.startswith('/datasets/') else ''}{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
         if not self.path.startswith(prefix):
             self.send_error(404)
             return
@@ -197,6 +197,7 @@ class _Handler(BaseHTTPRequestHandler):
         parts = parsed.path.strip("/").split("/")
         authorized = self.headers.get("Authorization") == f"Bearer {_SECRET}"
         self.server.requests.append({
+            "method": "GET",
             "path": parsed.path,
             "query": parse_qs(parsed.query),
             "range": self.headers.get("Range"),
@@ -242,10 +243,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(206, payload[start:end + 1], {"Content-Range": f"bytes {start}-{end}/{len(payload)}"})
             return
         fixture = _FIXTURES["huggingface"]
-        hub_prefix = f"/api/models/{fixture['locator']}/revision/"
+        hub_prefix = f"/api/{'datasets' if parsed.path.startswith('/api/datasets/') else 'models'}/{fixture['locator']}/revision/"
         hub_files = (*self.server.artifact_overrides.get("huggingface", (fixture["artifact"],)),
                      *self.server.semantic_overrides.get("huggingface", (fixture["asset"],)),
-                     ("LICENSE", b"hf-license", '"license"'))
+                     *self.server.hub_license_files)
         if parsed.path.startswith(hub_prefix):
             revision = unquote(parsed.path[len(hub_prefix):])
             if revision not in {fixture["alias"], fixture["revision"][9:]}:
@@ -265,9 +266,10 @@ class _Handler(BaseHTTPRequestHandler):
                 siblings[0]["size"] = self.server.artifact_size_override
                 siblings[0]["lfs"]["size"] = self.server.artifact_size_override
             self._json({"id": fixture["locator"], "sha": (self.server.revision_override or fixture["revision"])[9:],
-                        "private": False, "gated": "manual", "siblings": siblings})
+                        "private": False, "gated": "manual", "siblings": siblings,
+                        "cardData": {"license": self.server.hub_card_license}})
             return
-        file_prefix = f"/{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
+        file_prefix = f"/{'datasets/' if parsed.path.startswith('/datasets/') else ''}{fixture['locator']}/resolve/{fixture['revision'][9:]}/"
         if parsed.path.startswith(file_prefix):
             name = unquote(parsed.path[len(file_prefix):])
             matches = [item for item in hub_files if item[0] == name]
@@ -409,6 +411,8 @@ def source_fixture_server(*, artifact_overrides=None, semantic_overrides=None, i
     server.control_redirect_target = None
     server.range_redirect_target = None
     server.linked_validator_override = None
+    server.hub_license_files = (("LICENSE", b"hf-license", '"license"'),)
+    server.hub_card_license = None
     server.artifact_overrides = artifact_overrides or {}
     server.semantic_overrides = semantic_overrides or {}
     server.identity_overrides = identity_overrides or {}

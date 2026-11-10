@@ -3876,6 +3876,8 @@ def select_hardware_plan(
     )
 
 _NATIVE_VERSION = "native-v1"
+# Stored bytes per weight element; both widen exactly to the float32 the native dispatch computes in.
+_NATIVE_WEIGHT_BYTES = {"F32": 4, "BF16": 2}
 _NATIVE_ASSETS = frozenset({
     "config.json", "model.safetensors.index.json", "tokenizer.json",
     "tokenizer_config.json", "preprocessor_config.json",
@@ -3920,8 +3922,8 @@ def _native_graph(config: dict, tensors: list[dict], processor: dict | None) -> 
 
     def weight(name: str, shape: list[int]) -> str:
         row = inventory.get(name)
-        if row is None or row["shape"] != shape or row["dtype"] != "F32":
-            _reject("UNSUPPORTED_OPERATOR", name, f"native source requires float32 weight shape {shape}")
+        if row is None or row["shape"] != shape or row["dtype"] not in _NATIVE_WEIGHT_BYTES:
+            _reject("UNSUPPORTED_OPERATOR", name, f"native source requires float32 or bfloat16 weight shape {shape}")
         used.add(name)
         return name
 
@@ -4020,7 +4022,9 @@ def _native_manifest(source: dict, descriptors: dict[str, int], tensors: list[di
     expected_map = {row["semantic_tensor_id"]: row["artifact_path"] for row in tensors}
     if (len(shards) > 1 and index is None) or (index is not None and index.get("weight_map") != expected_map):
         _reject("METADATA_INSUFFICIENT", source["identity"], "shard index must map every verified tensor to its exact source shard")
-    if index is not None and index.get("metadata", {}).get("total_size") != sum(math.prod(row["shape"]) * 4 for row in tensors):
+    # Published indexes may omit the advisory byte total; a declared total must still be exact.
+    if index is not None and index.get("metadata", {}).get("total_size") not in (
+            None, sum(math.prod(row["shape"]) * _NATIVE_WEIGHT_BYTES.get(row["dtype"], 4) for row in tensors)):
         _reject("METADATA_INSUFFICIENT", source["identity"], "shard index total_size differs from the tensor bytes")
     graph = _native_graph(config, tensors, assets.get("preprocessor_config.json"))
     architecture = config.get("architectures")
@@ -4028,7 +4032,8 @@ def _native_manifest(source: dict, descriptors: dict[str, int], tensors: list[di
         _reject("METADATA_INSUFFICIENT", source["identity"], "source architecture descriptors are absent")
     digests = {row["path"]: row["digest"] for row in source["artifacts"]}
     model = {"architecture": ",".join(architecture), "config": config,
-             "format_versions": [["safetensors", "1"], ["json", "1"]], "precision_scheme": "f32",
+             "format_versions": [["safetensors", "1"], ["json", "1"]],
+             "precision_scheme": "+".join(sorted({row["dtype"].lower() for row in tensors})),
              "tokenizer_digest": digests["tokenizer.json"], "template_digest": digests["tokenizer_config.json"],
              "processor_digest": digests.get("preprocessor_config.json", _digest({}))}
     return {"version": _NATIVE_VERSION, "model": model, "graph": graph,
@@ -4090,12 +4095,20 @@ def _native_template(source: object):
             _reject("CONTAINMENT_REJECTED", "chat-template", "JSON filter output exceeds 64 KiB")
         return result
 
+    def bounded_add(context, operator, left, right):
+        # Ordinary chat templates join role and content text with +; the result keeps the template byte bound.
+        if not isinstance(left, str) or not isinstance(right, str) or len(left.encode()) + len(right.encode()) > 65536:
+            _reject("CONTAINMENT_REJECTED", "chat-template", "template addition accepts bounded text only")
+        return left + right
+
     environment.filters["tojson"] = bounded_json
     environment.globals["_cassette_tick"] = tick
+    environment.intercepted_binops = frozenset({"+"})
+    environment.call_binop = bounded_add
     try:
         syntax = environment.parse(source)
         forbidden = (nodes.Call, nodes.Getattr, nodes.Import, nodes.FromImport, nodes.Include,
-                     nodes.Extends, nodes.Macro, nodes.CallBlock, nodes.Mul, nodes.Pow, nodes.Add, nodes.Concat)
+                     nodes.Extends, nodes.Macro, nodes.CallBlock, nodes.Mul, nodes.Pow, nodes.Concat)
         if any(True for _ in syntax.find_all(forbidden)) or sum(1 for _ in syntax.find_all(nodes.Node)) > 1024:
             _reject("CONTAINMENT_REJECTED", "chat-template", "source template requests an unadmitted operation")
         if any(node.name == "_cassette_tick" for node in syntax.find_all(nodes.Name)):
@@ -4317,6 +4330,8 @@ def _native_head_windows(cartridge, source_root: str, observations: dict, horizo
     tensor_id = graph["nodes"][-1]["weights"][0]
     tensor = next(item for item in root["tensor_maps"] if item["semantic_tensor_id"] == tensor_id)
     rows, columns = tensor["shape"]
+    if tensor["dtype"] != "F32":
+        _reject("UNSUPPORTED_OPERATOR", tensor_id, "compiled output windows read float32 source elements only")
     effective_bytes = None
     if effective_target is not None:
         if (set(effective_target) != {"tensor_id", "shape", "page_digest", "adapter_catalog_digest"}

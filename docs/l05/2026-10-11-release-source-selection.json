@@ -1,0 +1,2074 @@
+{
+  "agent_probe_interruption": {
+    "operation_resumed_with_same_key": true,
+    "source_failure_inferred": false,
+    "timeout_seconds": 120
+  },
+  "authority": "Q9/Q52 and acquisition_entry_contract.model_selection",
+  "boundary": "Selection verifies metadata, source validators, license digests and immutable revisions. Complete model bytes and datasets remain to be acquired and verified.",
+  "connection": {
+    "kind": "source.connect",
+    "operation_id": "op-fae8255b3bac4d5ae1caf9351f650b55119566ed8a1eaa4127d6c457937768bf",
+    "progress": 1.0,
+    "result": {
+      "authentication": {
+        "authenticated": false,
+        "scope": "public"
+      },
+      "credential_ref": null,
+      "endpoint": "https://huggingface.co",
+      "source": "huggingface"
+    },
+    "state": "SUCCEEDED"
+  },
+  "date": "2026-10-11",
+  "models": {
+    "kimi_k3": {
+      "artifact_count": 96,
+      "metadata_bytes": 62892942,
+      "model_bytes": 1560936091448,
+      "record": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/release-kimi_k3-selection.json",
+      "record_sha256": "98dde6d72d75b3bcdd07fe6d4f85735b58f97610eed407cf9e0bebed069908ab",
+      "selection": {
+        "kind": "source.select",
+        "operation_id": "op-22c319c271d8a69e21343e27fe6bb464bea6099d7e3db2cc8ce4dbe0171669bb",
+        "progress": 1.0,
+        "result": {
+          "connection_id": "op-fae8255b3bac4d5ae1caf9351f650b55119566ed8a1eaa4127d6c457937768bf",
+          "descriptor": {
+            "kind": "huggingface",
+            "locator": "moonshotai/Kimi-K3",
+            "revision": "git-sha1:9f62e4e9fffbd0a83ddd60e1c209d828994b3569"
+          },
+          "downloaded_bytes": 0,
+          "endpoint": "https://huggingface.co",
+          "execution_compatibility": "NOT_VERIFIED",
+          "requirements": {
+            "auth_scope": "hf:read",
+            "credential_required": false,
+            "license_acceptance_required": false,
+            "license_digest": "sha256:20c797ce19af0c17de52c6afb144644768a591c521655f5ebf5712c9850f2887"
+          },
+          "source_lock": {
+            "artifacts": [
+              {
+                "digest": "sha256:975584c00f85a95fce8ae0f840af8cef69c2ef4db00d34cab3e2cbdfc60f6e51",
+                "path": "model-00001-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00001-of-000096.safetensors",
+                "size": 2341216112,
+                "validator": "\"975584c00f85a95fce8ae0f840af8cef69c2ef4db00d34cab3e2cbdfc60f6e51\""
+              },
+              {
+                "digest": "sha256:26a3284e1d2cb567934ebef002e6a1813551d646739e8bcb1e9e3fe7f878e0f5",
+                "path": "model-00002-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00002-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"26a3284e1d2cb567934ebef002e6a1813551d646739e8bcb1e9e3fe7f878e0f5\""
+              },
+              {
+                "digest": "sha256:e54af9de4c554956082364010f732443bcd5097390f0121a33fb35e37280b5a9",
+                "path": "model-00003-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00003-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"e54af9de4c554956082364010f732443bcd5097390f0121a33fb35e37280b5a9\""
+              },
+              {
+                "digest": "sha256:5955fd8feda89b1af8400c25e885e7177d47edff155f54b318beb8dd1cec5c05",
+                "path": "model-00004-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00004-of-000096.safetensors",
+                "size": 16567501776,
+                "validator": "\"5955fd8feda89b1af8400c25e885e7177d47edff155f54b318beb8dd1cec5c05\""
+              },
+              {
+                "digest": "sha256:d60d68ad0381ffd2d8716d5991a65993cc81837455bf05d1c76ea3a75662e268",
+                "path": "model-00005-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00005-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"d60d68ad0381ffd2d8716d5991a65993cc81837455bf05d1c76ea3a75662e268\""
+              },
+              {
+                "digest": "sha256:b1d4805767471a9721cd087d2047843ab9262d4f9bbe0d4a306e72c07179f939",
+                "path": "model-00006-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00006-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"b1d4805767471a9721cd087d2047843ab9262d4f9bbe0d4a306e72c07179f939\""
+              },
+              {
+                "digest": "sha256:fb1120fef34c0416e73a3259ae6114b9a82b6081871b368a199e0b265cac7df7",
+                "path": "model-00007-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00007-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"fb1120fef34c0416e73a3259ae6114b9a82b6081871b368a199e0b265cac7df7\""
+              },
+              {
+                "digest": "sha256:2318dda54fc1985b63d6068de54fbe312ac87317c902666c9075aa5e10e8a1c9",
+                "path": "model-00008-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00008-of-000096.safetensors",
+                "size": 16567501776,
+                "validator": "\"2318dda54fc1985b63d6068de54fbe312ac87317c902666c9075aa5e10e8a1c9\""
+              },
+              {
+                "digest": "sha256:8b66cdde34f5130cf4f99ec35b16f1f6d33bf0ec946cf2a5612004f5d399f998",
+                "path": "model-00009-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00009-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"8b66cdde34f5130cf4f99ec35b16f1f6d33bf0ec946cf2a5612004f5d399f998\""
+              },
+              {
+                "digest": "sha256:d34f55f7b734a1eaecc986fc7f92bcaa1b7d18fad90a33befd3fae4f1b2771a9",
+                "path": "model-00010-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00010-of-000096.safetensors",
+                "size": 16990911504,
+                "validator": "\"d34f55f7b734a1eaecc986fc7f92bcaa1b7d18fad90a33befd3fae4f1b2771a9\""
+              },
+              {
+                "digest": "sha256:1738856a4cca2e356510892de4accf3c3f94b9f598b0394a87e7951740ba4a21",
+                "path": "model-00011-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00011-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1738856a4cca2e356510892de4accf3c3f94b9f598b0394a87e7951740ba4a21\""
+              },
+              {
+                "digest": "sha256:c6b9bef38415f509898fa7b5c04d20c6fee84b0e02c05d74259d201fe6f3868b",
+                "path": "model-00012-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00012-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"c6b9bef38415f509898fa7b5c04d20c6fee84b0e02c05d74259d201fe6f3868b\""
+              },
+              {
+                "digest": "sha256:3cbf43d56d9c80be0f848a4866e290741c697e09d885dc2351b0a11de514d9c8",
+                "path": "model-00013-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00013-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"3cbf43d56d9c80be0f848a4866e290741c697e09d885dc2351b0a11de514d9c8\""
+              },
+              {
+                "digest": "sha256:ce5f343f07d408c64fb247bbe8691edb84d54e3976d3ff586ebcf5929fd143ad",
+                "path": "model-00014-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00014-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"ce5f343f07d408c64fb247bbe8691edb84d54e3976d3ff586ebcf5929fd143ad\""
+              },
+              {
+                "digest": "sha256:b55caa8013348498525eef2b1416a657f0c28264ada9b245df19d2eea168b4c1",
+                "path": "model-00015-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00015-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"b55caa8013348498525eef2b1416a657f0c28264ada9b245df19d2eea168b4c1\""
+              },
+              {
+                "digest": "sha256:5a63e63ced659c1996b02ccabdea977546a39ecce025af1e54552de3bfc0489e",
+                "path": "model-00016-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00016-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"5a63e63ced659c1996b02ccabdea977546a39ecce025af1e54552de3bfc0489e\""
+              },
+              {
+                "digest": "sha256:622bfa605205f4ef65e44dac07246bea79e18123ae8b84ab33eec89b6364c3a9",
+                "path": "model-00017-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00017-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"622bfa605205f4ef65e44dac07246bea79e18123ae8b84ab33eec89b6364c3a9\""
+              },
+              {
+                "digest": "sha256:838b265ebb86a1320e589685779125d224663160823873b9e5930cf63fafe796",
+                "path": "model-00018-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00018-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"838b265ebb86a1320e589685779125d224663160823873b9e5930cf63fafe796\""
+              },
+              {
+                "digest": "sha256:599a8ecf88f21d4c91295b4160e7564e501807535e522195ee45050a04f17ded",
+                "path": "model-00019-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00019-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"599a8ecf88f21d4c91295b4160e7564e501807535e522195ee45050a04f17ded\""
+              },
+              {
+                "digest": "sha256:8e01b61ab76655ca0c5bd6645303a00c05fb58da94e00f978a9ef1e8114a6f0f",
+                "path": "model-00020-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00020-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"8e01b61ab76655ca0c5bd6645303a00c05fb58da94e00f978a9ef1e8114a6f0f\""
+              },
+              {
+                "digest": "sha256:1944265bd024ea6caa23796326e420260a801e5c52e6253155f22ce97e9578d0",
+                "path": "model-00021-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00021-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1944265bd024ea6caa23796326e420260a801e5c52e6253155f22ce97e9578d0\""
+              },
+              {
+                "digest": "sha256:2d32d3e3c8da0764f73830289c6a22224f755c0cf058df0262fb0f83b3777029",
+                "path": "model-00022-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00022-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"2d32d3e3c8da0764f73830289c6a22224f755c0cf058df0262fb0f83b3777029\""
+              },
+              {
+                "digest": "sha256:c291f2ec15788cb24cdf791c6d68dbf8803b26d01415cff3fab367cba581a169",
+                "path": "model-00023-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00023-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"c291f2ec15788cb24cdf791c6d68dbf8803b26d01415cff3fab367cba581a169\""
+              },
+              {
+                "digest": "sha256:278855ab81d42337e2a1857f136d740911fe3f5b1813dc21ce2cb03dc5c3cde3",
+                "path": "model-00024-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00024-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"278855ab81d42337e2a1857f136d740911fe3f5b1813dc21ce2cb03dc5c3cde3\""
+              },
+              {
+                "digest": "sha256:6e3ae6ad868f5b38fa7ddface520796ea251568b07447deee3d164a0a32d862b",
+                "path": "model-00025-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00025-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"6e3ae6ad868f5b38fa7ddface520796ea251568b07447deee3d164a0a32d862b\""
+              },
+              {
+                "digest": "sha256:cdd79fb52c7a3350926c4b947ae82cccd0af17fa3fb537c5694a4cedf2b59811",
+                "path": "model-00026-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00026-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"cdd79fb52c7a3350926c4b947ae82cccd0af17fa3fb537c5694a4cedf2b59811\""
+              },
+              {
+                "digest": "sha256:1d974b40c4aeb5cc0adeba6f9fbad25fc99f8cd39f9dd3513aeb2fb30a9c4188",
+                "path": "model-00027-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00027-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1d974b40c4aeb5cc0adeba6f9fbad25fc99f8cd39f9dd3513aeb2fb30a9c4188\""
+              },
+              {
+                "digest": "sha256:1bec58e89ab7835d3ca40e581cc6f047cb93de47fda804eaea4e2407e01c3ed3",
+                "path": "model-00028-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00028-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"1bec58e89ab7835d3ca40e581cc6f047cb93de47fda804eaea4e2407e01c3ed3\""
+              },
+              {
+                "digest": "sha256:c3bf0e738aa5fbd6ca3ecad982aba8d09efffd58b40cd8fb62d02fe0492f5ceb",
+                "path": "model-00029-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00029-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"c3bf0e738aa5fbd6ca3ecad982aba8d09efffd58b40cd8fb62d02fe0492f5ceb\""
+              },
+              {
+                "digest": "sha256:7b996410482ad3c21700ed35d3f2b36282540db92b5631a31aeda1c5e90d6343",
+                "path": "model-00030-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00030-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"7b996410482ad3c21700ed35d3f2b36282540db92b5631a31aeda1c5e90d6343\""
+              },
+              {
+                "digest": "sha256:c26689540a2471fe690c441a6cf9bec8f00471930e3131962206fd992e0d377c",
+                "path": "model-00031-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00031-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"c26689540a2471fe690c441a6cf9bec8f00471930e3131962206fd992e0d377c\""
+              },
+              {
+                "digest": "sha256:f7dc9e726d46d5c7c2c35af2eea4860cc89dd38a52b60591358a5ca7899c5159",
+                "path": "model-00032-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00032-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"f7dc9e726d46d5c7c2c35af2eea4860cc89dd38a52b60591358a5ca7899c5159\""
+              },
+              {
+                "digest": "sha256:615afa33b69cbaa42122bb3bcce92e40d6de86713a301c43c5d1bc2ac4342c1b",
+                "path": "model-00033-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00033-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"615afa33b69cbaa42122bb3bcce92e40d6de86713a301c43c5d1bc2ac4342c1b\""
+              },
+              {
+                "digest": "sha256:a53b27fe92df11e77aec7c5de93ac148b9e2a7bac95020535f68854a7977bde7",
+                "path": "model-00034-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00034-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"a53b27fe92df11e77aec7c5de93ac148b9e2a7bac95020535f68854a7977bde7\""
+              },
+              {
+                "digest": "sha256:9f4b44c89e4965a973f4fa71eaa0f8ada110f588065541e83bf52692feaa886d",
+                "path": "model-00035-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00035-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"9f4b44c89e4965a973f4fa71eaa0f8ada110f588065541e83bf52692feaa886d\""
+              },
+              {
+                "digest": "sha256:55aef33fab36df93731289ba38d0ce516d9880c100be5f69f933d0af80bf3c6e",
+                "path": "model-00036-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00036-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"55aef33fab36df93731289ba38d0ce516d9880c100be5f69f933d0af80bf3c6e\""
+              },
+              {
+                "digest": "sha256:e95dd3599d6918f5a22bc7b1256aaee9147f40aa05f43135d083d511eb5cbd80",
+                "path": "model-00037-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00037-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"e95dd3599d6918f5a22bc7b1256aaee9147f40aa05f43135d083d511eb5cbd80\""
+              },
+              {
+                "digest": "sha256:1ce472771309248fd1155313dc3f72daa6fcc4793fba86d6c5d6a758ff6254ae",
+                "path": "model-00038-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00038-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1ce472771309248fd1155313dc3f72daa6fcc4793fba86d6c5d6a758ff6254ae\""
+              },
+              {
+                "digest": "sha256:9c75b18c0d3a5088e13973dde519e74ead5c7b1df216dcd623b7ee561f378057",
+                "path": "model-00039-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00039-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"9c75b18c0d3a5088e13973dde519e74ead5c7b1df216dcd623b7ee561f378057\""
+              },
+              {
+                "digest": "sha256:6f664598c00aee095174db1f860182652ff9b808f53c7764f70e071c6f8a4893",
+                "path": "model-00040-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00040-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"6f664598c00aee095174db1f860182652ff9b808f53c7764f70e071c6f8a4893\""
+              },
+              {
+                "digest": "sha256:375f05f94a59d1509bef0976269fceb8f28d40e161d4903e64f735b1ede405c2",
+                "path": "model-00041-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00041-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"375f05f94a59d1509bef0976269fceb8f28d40e161d4903e64f735b1ede405c2\""
+              },
+              {
+                "digest": "sha256:b65947611d6c150394955f4637d4b05007f20a9b1c0f0f02bcf45d0ae2a428ba",
+                "path": "model-00042-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00042-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"b65947611d6c150394955f4637d4b05007f20a9b1c0f0f02bcf45d0ae2a428ba\""
+              },
+              {
+                "digest": "sha256:b5a425f100bbfaf804ac2dcca197ccf8fb3a910b6aa79d93e3a103b0146a8309",
+                "path": "model-00043-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00043-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"b5a425f100bbfaf804ac2dcca197ccf8fb3a910b6aa79d93e3a103b0146a8309\""
+              },
+              {
+                "digest": "sha256:113ee012044206e9156dd683cb97ee5f27b07d0a4f936cbda457cd0bcf8ca336",
+                "path": "model-00044-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00044-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"113ee012044206e9156dd683cb97ee5f27b07d0a4f936cbda457cd0bcf8ca336\""
+              },
+              {
+                "digest": "sha256:eb0698659da59c469020a03b3aa8d9ef847fc6359b2513b6720746a44da6f4de",
+                "path": "model-00045-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00045-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"eb0698659da59c469020a03b3aa8d9ef847fc6359b2513b6720746a44da6f4de\""
+              },
+              {
+                "digest": "sha256:0270727a399c553a602360b04bc1b5feaf09b22e12e3bb7eea5261801d4a1024",
+                "path": "model-00046-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00046-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"0270727a399c553a602360b04bc1b5feaf09b22e12e3bb7eea5261801d4a1024\""
+              },
+              {
+                "digest": "sha256:b38f63eb08036cdf766a078c93ee037630d6481ded26065150915b8deaf03bb8",
+                "path": "model-00047-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00047-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"b38f63eb08036cdf766a078c93ee037630d6481ded26065150915b8deaf03bb8\""
+              },
+              {
+                "digest": "sha256:131e243c02cf2dc713de108edb8bfdb01c7ee28ce59d0a6615a630fb7cf0e4ae",
+                "path": "model-00048-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00048-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"131e243c02cf2dc713de108edb8bfdb01c7ee28ce59d0a6615a630fb7cf0e4ae\""
+              },
+              {
+                "digest": "sha256:72c91dcf2909ead55b6b5234e725227effbcd59fa5ce9f552e91c48d423cef0f",
+                "path": "model-00049-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00049-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"72c91dcf2909ead55b6b5234e725227effbcd59fa5ce9f552e91c48d423cef0f\""
+              },
+              {
+                "digest": "sha256:0a627a082cd39ee7d55f7440a5012c1fe084313f970e7d4351bb08d8ac7f5f2a",
+                "path": "model-00050-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00050-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"0a627a082cd39ee7d55f7440a5012c1fe084313f970e7d4351bb08d8ac7f5f2a\""
+              },
+              {
+                "digest": "sha256:38a37bcec20abe1ddfaf68a636cd61cd291b71d554419a57736fd97d08a8cbff",
+                "path": "model-00051-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00051-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"38a37bcec20abe1ddfaf68a636cd61cd291b71d554419a57736fd97d08a8cbff\""
+              },
+              {
+                "digest": "sha256:9703b632174112ea051aaa2ca8b67558ffbf41a4699d042580ff11f26ec28e0a",
+                "path": "model-00052-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00052-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"9703b632174112ea051aaa2ca8b67558ffbf41a4699d042580ff11f26ec28e0a\""
+              },
+              {
+                "digest": "sha256:413ec9ea0b693161c5e8a393a7a6be40a9f3c27114a919e1302fe94daeeee621",
+                "path": "model-00053-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00053-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"413ec9ea0b693161c5e8a393a7a6be40a9f3c27114a919e1302fe94daeeee621\""
+              },
+              {
+                "digest": "sha256:0e3da201b765929787e40c2fb8cd0cfb3476bfb9b95d7eb59b7d1066960606a2",
+                "path": "model-00054-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00054-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"0e3da201b765929787e40c2fb8cd0cfb3476bfb9b95d7eb59b7d1066960606a2\""
+              },
+              {
+                "digest": "sha256:e7c9f4e44f8ac95f73048078c406781fb0418831089fd2f7c55459887606204b",
+                "path": "model-00055-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00055-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"e7c9f4e44f8ac95f73048078c406781fb0418831089fd2f7c55459887606204b\""
+              },
+              {
+                "digest": "sha256:efd6176016b9fab27cca7710dce7ed599f06bbba1a8b126cfc76781b42c0e880",
+                "path": "model-00056-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00056-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"efd6176016b9fab27cca7710dce7ed599f06bbba1a8b126cfc76781b42c0e880\""
+              },
+              {
+                "digest": "sha256:e6982c96ac9101b75ab32c56568f5740ddae771acad29d92750b95aeeb3a7a30",
+                "path": "model-00057-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00057-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"e6982c96ac9101b75ab32c56568f5740ddae771acad29d92750b95aeeb3a7a30\""
+              },
+              {
+                "digest": "sha256:c93a23cbd6530391dcd9ce5617d24fb759e380f5ca676f83d00c8d6a9cda896f",
+                "path": "model-00058-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00058-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"c93a23cbd6530391dcd9ce5617d24fb759e380f5ca676f83d00c8d6a9cda896f\""
+              },
+              {
+                "digest": "sha256:a62eb822071036421fa4aab662dafe3a3873b1b926378ebf489cddfd48a4d5de",
+                "path": "model-00059-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00059-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"a62eb822071036421fa4aab662dafe3a3873b1b926378ebf489cddfd48a4d5de\""
+              },
+              {
+                "digest": "sha256:9bccbaa71b98f8526ca4c6cb091a489063ec4734c84bb5f6d11eeb0512360b5f",
+                "path": "model-00060-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00060-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"9bccbaa71b98f8526ca4c6cb091a489063ec4734c84bb5f6d11eeb0512360b5f\""
+              },
+              {
+                "digest": "sha256:1ae3969540fc676480804c37adc54df77e5ebb923952abb46d398b3a2d612e9d",
+                "path": "model-00061-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00061-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1ae3969540fc676480804c37adc54df77e5ebb923952abb46d398b3a2d612e9d\""
+              },
+              {
+                "digest": "sha256:96babdc24f2203eed68bd88f8534546696ab35bb1d0db7a5f15aaee295deee68",
+                "path": "model-00062-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00062-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"96babdc24f2203eed68bd88f8534546696ab35bb1d0db7a5f15aaee295deee68\""
+              },
+              {
+                "digest": "sha256:8a81caa697a7baf491393d83e3b85e14a0d025f5ee2ca91561528e8aec5c63ea",
+                "path": "model-00063-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00063-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"8a81caa697a7baf491393d83e3b85e14a0d025f5ee2ca91561528e8aec5c63ea\""
+              },
+              {
+                "digest": "sha256:325c72d6ca5aaefd020da647ac317621903c8576a97d1de664b93638b7172f39",
+                "path": "model-00064-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00064-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"325c72d6ca5aaefd020da647ac317621903c8576a97d1de664b93638b7172f39\""
+              },
+              {
+                "digest": "sha256:276d1cce1d8d494526938d878d4afb713ca379f98064dcd3c505325c954639db",
+                "path": "model-00065-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00065-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"276d1cce1d8d494526938d878d4afb713ca379f98064dcd3c505325c954639db\""
+              },
+              {
+                "digest": "sha256:2ebd83fea628d8cf7496a936f66a8a7f1b430bc8438644ae6ac9761ac056194e",
+                "path": "model-00066-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00066-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"2ebd83fea628d8cf7496a936f66a8a7f1b430bc8438644ae6ac9761ac056194e\""
+              },
+              {
+                "digest": "sha256:f0228892f8199c29c5053e7e5388a60dacf1458b53eb6f471e1f548f02478dd1",
+                "path": "model-00067-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00067-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"f0228892f8199c29c5053e7e5388a60dacf1458b53eb6f471e1f548f02478dd1\""
+              },
+              {
+                "digest": "sha256:fa75764056d16855c42baffd474bcc01045deda7ed5f773d88ff8887ea8458b6",
+                "path": "model-00068-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00068-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"fa75764056d16855c42baffd474bcc01045deda7ed5f773d88ff8887ea8458b6\""
+              },
+              {
+                "digest": "sha256:9375584663bd3073cd95df18c3dc99fd4346c0c71dfdeec686a4891b7768a738",
+                "path": "model-00069-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00069-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"9375584663bd3073cd95df18c3dc99fd4346c0c71dfdeec686a4891b7768a738\""
+              },
+              {
+                "digest": "sha256:ab53464148721a209d4941dc3ab6f698574f913179e729726d00ed6232144893",
+                "path": "model-00070-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00070-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"ab53464148721a209d4941dc3ab6f698574f913179e729726d00ed6232144893\""
+              },
+              {
+                "digest": "sha256:28ac0d3286ffc5c8567cc3b265500777ba2b75a0a5c6a273c87a5c9cfd8a8a5b",
+                "path": "model-00071-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00071-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"28ac0d3286ffc5c8567cc3b265500777ba2b75a0a5c6a273c87a5c9cfd8a8a5b\""
+              },
+              {
+                "digest": "sha256:0a269faaf8ea2daccef499e7c1501089ea05386ca7c6a5a9d4150fd38e37673b",
+                "path": "model-00072-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00072-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"0a269faaf8ea2daccef499e7c1501089ea05386ca7c6a5a9d4150fd38e37673b\""
+              },
+              {
+                "digest": "sha256:a1b2e79e1bb7c9e0ade3f0825b748024a5207317589fc57f91dc2540443d716a",
+                "path": "model-00073-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00073-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"a1b2e79e1bb7c9e0ade3f0825b748024a5207317589fc57f91dc2540443d716a\""
+              },
+              {
+                "digest": "sha256:df945022b493373bdcacc3903cc406978342dff2c1b3ace5278b1909fb1d2479",
+                "path": "model-00074-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00074-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"df945022b493373bdcacc3903cc406978342dff2c1b3ace5278b1909fb1d2479\""
+              },
+              {
+                "digest": "sha256:8c6d7cb12f7c51aa88207c5b9410fccfa44e4a9022efc75d73c06054c1296c05",
+                "path": "model-00075-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00075-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"8c6d7cb12f7c51aa88207c5b9410fccfa44e4a9022efc75d73c06054c1296c05\""
+              },
+              {
+                "digest": "sha256:d5174eb5de19274b0fe62d466bfb21bac3b03d6d9676b801c6fea1ed57657998",
+                "path": "model-00076-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00076-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"d5174eb5de19274b0fe62d466bfb21bac3b03d6d9676b801c6fea1ed57657998\""
+              },
+              {
+                "digest": "sha256:8707eacfd69e8be65c7052551834e7ac26945b9ddf915939e08f5eb813c6a262",
+                "path": "model-00077-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00077-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"8707eacfd69e8be65c7052551834e7ac26945b9ddf915939e08f5eb813c6a262\""
+              },
+              {
+                "digest": "sha256:2773d41de168c7373bf2f7f9994cbbb2712c379503578d8462aa783db7cba128",
+                "path": "model-00078-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00078-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"2773d41de168c7373bf2f7f9994cbbb2712c379503578d8462aa783db7cba128\""
+              },
+              {
+                "digest": "sha256:da02c8a46b81f42a64330e0e31478dcd7b020633a65251b535817431bba1d96b",
+                "path": "model-00079-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00079-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"da02c8a46b81f42a64330e0e31478dcd7b020633a65251b535817431bba1d96b\""
+              },
+              {
+                "digest": "sha256:96b5accdf3bc2b4651979361fa7f6191197b8573c36ab6a58effce487402b177",
+                "path": "model-00080-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00080-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"96b5accdf3bc2b4651979361fa7f6191197b8573c36ab6a58effce487402b177\""
+              },
+              {
+                "digest": "sha256:01562aa616ea3dc398a7c40b4d9c3c4700885541efeaed6dbd1ba8076cae9c4b",
+                "path": "model-00081-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00081-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"01562aa616ea3dc398a7c40b4d9c3c4700885541efeaed6dbd1ba8076cae9c4b\""
+              },
+              {
+                "digest": "sha256:8cba090734d9a3900276cca442bd6fa60f5206ce0c70884f7b2df3df877485bd",
+                "path": "model-00082-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00082-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"8cba090734d9a3900276cca442bd6fa60f5206ce0c70884f7b2df3df877485bd\""
+              },
+              {
+                "digest": "sha256:6ceebf8ce621712dd3185943224ca83a45f5bc310c272df7dee4b69e3dfc87fe",
+                "path": "model-00083-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00083-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"6ceebf8ce621712dd3185943224ca83a45f5bc310c272df7dee4b69e3dfc87fe\""
+              },
+              {
+                "digest": "sha256:c3f1318e7e1cc6893230a14c229a0c9ec0037cb1d0912a395f9222a3e8a8bc2d",
+                "path": "model-00084-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00084-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"c3f1318e7e1cc6893230a14c229a0c9ec0037cb1d0912a395f9222a3e8a8bc2d\""
+              },
+              {
+                "digest": "sha256:633b2e3b86ec35f87fa4216b14bba49fc4058a1296433bc22b0576925118b6ad",
+                "path": "model-00085-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00085-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"633b2e3b86ec35f87fa4216b14bba49fc4058a1296433bc22b0576925118b6ad\""
+              },
+              {
+                "digest": "sha256:add4056ab3ecaa7befdac2e00280d294ce470d541917ac90df8fc50497df7fb0",
+                "path": "model-00086-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00086-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"add4056ab3ecaa7befdac2e00280d294ce470d541917ac90df8fc50497df7fb0\""
+              },
+              {
+                "digest": "sha256:f6d608f2c40b584b775db184013e37740d4710abad414c584408e0ad09fb486b",
+                "path": "model-00087-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00087-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"f6d608f2c40b584b775db184013e37740d4710abad414c584408e0ad09fb486b\""
+              },
+              {
+                "digest": "sha256:87afe43b8a71d2cc56787a976f52f8c35bcfbe85df7d0c445194bc1f4d7e0c4a",
+                "path": "model-00088-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00088-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"87afe43b8a71d2cc56787a976f52f8c35bcfbe85df7d0c445194bc1f4d7e0c4a\""
+              },
+              {
+                "digest": "sha256:24016b28cfdf9420ae2f411145ef919cf2e1ec667830aded439bfb761c61755f",
+                "path": "model-00089-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00089-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"24016b28cfdf9420ae2f411145ef919cf2e1ec667830aded439bfb761c61755f\""
+              },
+              {
+                "digest": "sha256:1ecd85dbd77ce081f6238b894f8a7da2ff40346da7042c427a52d83562dbb5ea",
+                "path": "model-00090-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00090-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"1ecd85dbd77ce081f6238b894f8a7da2ff40346da7042c427a52d83562dbb5ea\""
+              },
+              {
+                "digest": "sha256:a4e666132aed052b4bf174f56853b70cbb2ada898fe568f60e0cdf3ad46a0a4a",
+                "path": "model-00091-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00091-of-000096.safetensors",
+                "size": 16990916912,
+                "validator": "\"a4e666132aed052b4bf174f56853b70cbb2ada898fe568f60e0cdf3ad46a0a4a\""
+              },
+              {
+                "digest": "sha256:359848294be55e1c8949f0a4c92098bc73276895289fd1123f10769ba685e248",
+                "path": "model-00092-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00092-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"359848294be55e1c8949f0a4c92098bc73276895289fd1123f10769ba685e248\""
+              },
+              {
+                "digest": "sha256:d31d58d1bd3fcb8c350ef497d2acd23e0fe768ab5c0621e60f20b03d611f64e6",
+                "path": "model-00093-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00093-of-000096.safetensors",
+                "size": 16567507176,
+                "validator": "\"d31d58d1bd3fcb8c350ef497d2acd23e0fe768ab5c0621e60f20b03d611f64e6\""
+              },
+              {
+                "digest": "sha256:ad66e1cb96b86963e63d6a0a466b6a407b13c9815cb480fe612480cc6bb3b6e1",
+                "path": "model-00094-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00094-of-000096.safetensors",
+                "size": 4697664072,
+                "validator": "\"ad66e1cb96b86963e63d6a0a466b6a407b13c9815cb480fe612480cc6bb3b6e1\""
+              },
+              {
+                "digest": "sha256:01d41139abb8cf3b5288a97318cc4ab92676671b4eb141031cd80d7c3ced6122",
+                "path": "model-00095-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00095-of-000096.safetensors",
+                "size": 92289328,
+                "validator": "\"01d41139abb8cf3b5288a97318cc4ab92676671b4eb141031cd80d7c3ced6122\""
+              },
+              {
+                "digest": "sha256:9d10c74fc10161bef9463a8541a634a97f521f43c99368ea7243ce0c79cdbf7c",
+                "path": "model-00096-of-000096.safetensors",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model-00096-of-000096.safetensors",
+                "size": 802448352,
+                "validator": "\"9d10c74fc10161bef9463a8541a634a97f521f43c99368ea7243ce0c79cdbf7c\""
+              }
+            ],
+            "auth_scope": "hf:read",
+            "credential_ref": null,
+            "identity": null,
+            "immutable_revision": "git-sha1:9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+            "license_acceptance_ref": null,
+            "license_digest": "sha256:20c797ce19af0c17de52c6afb144644768a591c521655f5ebf5712c9850f2887",
+            "locator": "moonshotai/Kimi-K3",
+            "metadata_assets": [
+              {
+                "digest": "sha256:576ccc93fc22aeffcf0bb7346a864b931d75894f0897119ce1d66de671021072",
+                "path": ".eval_results/apex-agents.yaml",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/.eval_results/apex-agents.yaml",
+                "size": 157,
+                "validator": "\"bc4f27631a8da7e36ff6fc19906a759627627c57\""
+              },
+              {
+                "digest": "sha256:59728f597c5bc12bf87513b905508bcd0ddc5689d819972007610f43bfc533b3",
+                "path": ".eval_results/deep-swe.yaml",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/.eval_results/deep-swe.yaml",
+                "size": 156,
+                "validator": "\"1a85439360bfda9807159f61eef5810eeaa4ca7d\""
+              },
+              {
+                "digest": "sha256:65870556e2ef9004d72a966cfba1ca9639b99f1825d9812060a13d3809dbfe6e",
+                "path": ".eval_results/gpqa.yaml",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/.eval_results/gpqa.yaml",
+                "size": 152,
+                "validator": "\"9d85a8b366b3f83c95c5b23890ef25601dfbbeb9\""
+              },
+              {
+                "digest": "sha256:2b6c92d5f91476d1ebcbebd7f7e77a1ce042e5d77a544ccab1cc42dec149e703",
+                "path": ".eval_results/hle.yaml",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/.eval_results/hle.yaml",
+                "size": 139,
+                "validator": "\"5583f56cad45958f9dcb39274bc507fc51258530\""
+              },
+              {
+                "digest": "sha256:a2279e56e2c16d0648ab43dc60517acfaf219c682c58d21eebfe180df99d4e6f",
+                "path": ".gitattributes",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/.gitattributes",
+                "size": 1639,
+                "validator": "\"62375aaf6f0f97fad2b39e33dbc99fee014c7d8d\""
+              },
+              {
+                "digest": "sha256:20c797ce19af0c17de52c6afb144644768a591c521655f5ebf5712c9850f2887",
+                "path": "LICENSE",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/LICENSE",
+                "size": 3065,
+                "validator": "\"97c0111bba229b0981b1d74e34bacef723ca8f7b\""
+              },
+              {
+                "digest": "sha256:57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+                "path": "README.md",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/README.md",
+                "size": 45261,
+                "validator": "\"10466db3bd36b1eb9b14a099d9d8d77130247712\""
+              },
+              {
+                "digest": "sha256:4a80f64242bf907940765adc7bcf340c28dd83334b07c5503792a26495d1933b",
+                "path": "assets/kimi-logo.png",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/assets/kimi-logo.png",
+                "size": 87988,
+                "validator": "\"870b8be6e07cc2c46f7173e800fbaff8af0af5d1\""
+              },
+              {
+                "digest": "sha256:9710e121a58d03ac92c8d6da287a19541994319afbbe6d6202af001ffd379213",
+                "path": "config.json",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/config.json",
+                "size": 7006,
+                "validator": "\"d7f26ead420b1d967f2759679dbebc65edfcff93\""
+              },
+              {
+                "digest": "sha256:735eb9ebe593e17d231e08e1df7f7be9b5ee0e079f511aa201f9572077b416ae",
+                "path": "configuration_kimi_k3.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/configuration_kimi_k3.py",
+                "size": 11343,
+                "validator": "\"b38c4f8fcab1ce295aea236772ea1cba57f978c9\""
+              },
+              {
+                "digest": "sha256:b9cb7ae100fed34b9337f80dacee5abbf7e261fe9b74bc0e76366701d46f5333",
+                "path": "encoding_k3.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/encoding_k3.py",
+                "size": 22827,
+                "validator": "\"44a56b7371fab32513da0eaed6b9a8a7c56499a2\""
+              },
+              {
+                "digest": "sha256:c6648c25e9705af7fba8847e243840d21b5cc63ddeb6297f750a7ddbb6a02836",
+                "path": "generation_config.json",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/generation_config.json",
+                "size": 53,
+                "validator": "\"3908a4a5477122aa4b09386acab760fb7887c0fc\""
+              },
+              {
+                "digest": "sha256:ec9f7e86d2ab0eee07a8e7e7c037046e77ac3c25a710ad1298ec13be3b585b54",
+                "path": "kimi_k3_processor.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/kimi_k3_processor.py",
+                "size": 7660,
+                "validator": "\"033a5773885c144509788e89a445217b76d6c046\""
+              },
+              {
+                "digest": "sha256:d122b30bfd3a51a6f05d4bfcfda1e657827322b1353f7caefeebc2835d7736b5",
+                "path": "kimi_k3_vision_processing.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/kimi_k3_vision_processing.py",
+                "size": 6686,
+                "validator": "\"58154424ff951289570c8fb5578e7372bfbfaa8b\""
+              },
+              {
+                "digest": "sha256:78403540328f9847d6b7ebc5c44eb2e6a752863de0afb7d0710728bb161dc60d",
+                "path": "media_utils.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/media_utils.py",
+                "size": 13844,
+                "validator": "\"e8b2ae127e254e364e6b568b1093a7e12ac576e0\""
+              },
+              {
+                "digest": "sha256:a1c5210650ce71d2d3ae9ec5a101ac4afd3cf4b10091be589853437eb967febd",
+                "path": "model.safetensors.index.json",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model.safetensors.index.json",
+                "size": 59764096,
+                "validator": "\"a1c5210650ce71d2d3ae9ec5a101ac4afd3cf4b10091be589853437eb967febd\""
+              },
+              {
+                "digest": "sha256:b9171c96726eda55234c92ac8dfae7e24c512fda68968ae8f2c3782b42665ea2",
+                "path": "modeling_kimi_k3.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/modeling_kimi_k3.py",
+                "size": 53444,
+                "validator": "\"be85612710534c2e41065b67933a9639e7817d7f\""
+              },
+              {
+                "digest": "sha256:9e3564c70ac21854ce5a090cc946c5dc76b70d1050ef50840449181a20fff44a",
+                "path": "modeling_kimi_linear.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/modeling_kimi_linear.py",
+                "size": 51506,
+                "validator": "\"b8c41e8bfce768d74d8da3a37e693f5ee43876a0\""
+              },
+              {
+                "digest": "sha256:4be333605990c53a816e586dee9d5dd545afb7a59947c17f8f7ef26b4782668e",
+                "path": "preprocessor_config.json",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/preprocessor_config.json",
+                "size": 1011,
+                "validator": "\"8be28c13c93fb8982f81928d3f4fe80568102286\""
+              },
+              {
+                "digest": "sha256:b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
+                "path": "tiktoken.model",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/tiktoken.model",
+                "size": 2795286,
+                "validator": "\"b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103\""
+              },
+              {
+                "digest": "sha256:f28ea66e2d862a2a5814970b2ce40c2f7d8296ff09aed90a7e7def689b906944",
+                "path": "tokenization_kimi.py",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/tokenization_kimi.py",
+                "size": 16145,
+                "validator": "\"5df9d462b43295245084fbab46fd956020d4b84e\""
+              },
+              {
+                "digest": "sha256:5d0803c94db9cd78763499e0956c95fd5a225c14a727e5a6cf5db3f96f010a6e",
+                "path": "tokenizer_config.json",
+                "range_uri": "https://huggingface.co/moonshotai/Kimi-K3/resolve/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/tokenizer_config.json",
+                "size": 3478,
+                "validator": "\"418aaacbd996a6674efa89d26be06dae11433e1c\""
+              }
+            ],
+            "source_kind": "huggingface"
+          }
+        },
+        "state": "SUCCEEDED"
+      }
+    },
+    "qwen3_235b_a22b": {
+      "artifact_count": 118,
+      "metadata_bytes": 19622013,
+      "model_bytes": 470191875040,
+      "record": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/release-qwen3_235b_a22b-selection.json",
+      "record_sha256": "69e7c2336269d2c8eb62d56899ac6027a6f6f6d86dffe213836b648d9fd6d72a",
+      "selection": {
+        "kind": "source.select",
+        "operation_id": "op-79254d22c0eb5573a99bd88a8bbcc3687815dfdf86974bc1f33b6829bd199870",
+        "progress": 1.0,
+        "result": {
+          "connection_id": "op-fae8255b3bac4d5ae1caf9351f650b55119566ed8a1eaa4127d6c457937768bf",
+          "descriptor": {
+            "kind": "huggingface",
+            "locator": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            "revision": "git-sha1:ac9c66cc9b46af7306746a9250f23d47083d689e"
+          },
+          "downloaded_bytes": 0,
+          "endpoint": "https://huggingface.co",
+          "execution_compatibility": "NOT_VERIFIED",
+          "requirements": {
+            "auth_scope": "hf:read",
+            "credential_required": false,
+            "license_acceptance_required": false,
+            "license_digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+          },
+          "source_lock": {
+            "artifacts": [
+              {
+                "digest": "sha256:447f8fbf68721a2d5cecffaa61a4526ba084b1c9de0283cca8984bc14fdbf3ab",
+                "path": "model-00001-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00001-of-00118.safetensors",
+                "size": 3991955880,
+                "validator": "\"447f8fbf68721a2d5cecffaa61a4526ba084b1c9de0283cca8984bc14fdbf3ab\""
+              },
+              {
+                "digest": "sha256:72af83e8f0d43e54e33cd2714a977510cf9dab3c06d90500a7f23dc785a97cd9",
+                "path": "model-00002-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00002-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"72af83e8f0d43e54e33cd2714a977510cf9dab3c06d90500a7f23dc785a97cd9\""
+              },
+              {
+                "digest": "sha256:7f9ec818fea58d6598e8bc0973ca2fbdddb52d26588901005366a6617e138fb2",
+                "path": "model-00003-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00003-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"7f9ec818fea58d6598e8bc0973ca2fbdddb52d26588901005366a6617e138fb2\""
+              },
+              {
+                "digest": "sha256:01e5c196c6f83ef050524ce9da26f22c026cefa4513b31cff06039e70a7bf40a",
+                "path": "model-00004-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00004-of-00118.safetensors",
+                "size": 3988822448,
+                "validator": "\"01e5c196c6f83ef050524ce9da26f22c026cefa4513b31cff06039e70a7bf40a\""
+              },
+              {
+                "digest": "sha256:c22789b4759a7935ca9dbb51dc44b9dd71656793fa9882c7320a43daee4d98a8",
+                "path": "model-00005-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00005-of-00118.safetensors",
+                "size": 3994081784,
+                "validator": "\"c22789b4759a7935ca9dbb51dc44b9dd71656793fa9882c7320a43daee4d98a8\""
+              },
+              {
+                "digest": "sha256:2e563083b775a29aee5bcb867d4a422d9e72a3b410b2432d04776b9928b5a97b",
+                "path": "model-00006-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00006-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"2e563083b775a29aee5bcb867d4a422d9e72a3b410b2432d04776b9928b5a97b\""
+              },
+              {
+                "digest": "sha256:c76ad1a70056019ee0dfc8e51ce4fb6f0850abad3c230f305ca2bf67998cb829",
+                "path": "model-00007-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00007-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"c76ad1a70056019ee0dfc8e51ce4fb6f0850abad3c230f305ca2bf67998cb829\""
+              },
+              {
+                "digest": "sha256:a459ca3ff449a4a75d4aa380cad0af895a92e1a063ec457f4dc27a8e92ae81cb",
+                "path": "model-00008-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00008-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"a459ca3ff449a4a75d4aa380cad0af895a92e1a063ec457f4dc27a8e92ae81cb\""
+              },
+              {
+                "digest": "sha256:1b16606cedcc0f7a0fc15629231a30a07b5637d47da90ca43681ee2057ec65b8",
+                "path": "model-00009-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00009-of-00118.safetensors",
+                "size": 3988822456,
+                "validator": "\"1b16606cedcc0f7a0fc15629231a30a07b5637d47da90ca43681ee2057ec65b8\""
+              },
+              {
+                "digest": "sha256:bf7a8fbcf4ada6f67c351ae294ca34487bb7c2089571c058c46b31fce2101fc2",
+                "path": "model-00010-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00010-of-00118.safetensors",
+                "size": 3994081784,
+                "validator": "\"bf7a8fbcf4ada6f67c351ae294ca34487bb7c2089571c058c46b31fce2101fc2\""
+              },
+              {
+                "digest": "sha256:7025ba6dd9370fe368ea782b5c28d03695d97bc2dd148c1f4e19059cdb213aab",
+                "path": "model-00011-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00011-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"7025ba6dd9370fe368ea782b5c28d03695d97bc2dd148c1f4e19059cdb213aab\""
+              },
+              {
+                "digest": "sha256:5bd59b7c8516fcfe29de641d9cc5fee5c1651504c0cbd251049145c04d6f6a07",
+                "path": "model-00012-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00012-of-00118.safetensors",
+                "size": 3994081856,
+                "validator": "\"5bd59b7c8516fcfe29de641d9cc5fee5c1651504c0cbd251049145c04d6f6a07\""
+              },
+              {
+                "digest": "sha256:8e713c4dc7bbd3318181370e5541811264cf3695937e509e14d8ccaa910029cc",
+                "path": "model-00013-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00013-of-00118.safetensors",
+                "size": 3994081944,
+                "validator": "\"8e713c4dc7bbd3318181370e5541811264cf3695937e509e14d8ccaa910029cc\""
+              },
+              {
+                "digest": "sha256:b30e3a053e0d944f968a8f260b15f5bb2bd85ae6672f56aac30040d296cf8ba5",
+                "path": "model-00014-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00014-of-00118.safetensors",
+                "size": 3988822776,
+                "validator": "\"b30e3a053e0d944f968a8f260b15f5bb2bd85ae6672f56aac30040d296cf8ba5\""
+              },
+              {
+                "digest": "sha256:062424a25df6b24be8841882eb5d2abb957148cf09f2e9d29f865b73568834e7",
+                "path": "model-00015-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00015-of-00118.safetensors",
+                "size": 3994082088,
+                "validator": "\"062424a25df6b24be8841882eb5d2abb957148cf09f2e9d29f865b73568834e7\""
+              },
+              {
+                "digest": "sha256:df7b88e1c2d5ea7289af8a0880d239563f62b6ecb5e4dc0a34b20d5700a0bf48",
+                "path": "model-00016-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00016-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"df7b88e1c2d5ea7289af8a0880d239563f62b6ecb5e4dc0a34b20d5700a0bf48\""
+              },
+              {
+                "digest": "sha256:410fd5557ce7eec0c40a15d09ad256680d65e28128ab0a180bd69049fbe05c2c",
+                "path": "model-00017-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00017-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"410fd5557ce7eec0c40a15d09ad256680d65e28128ab0a180bd69049fbe05c2c\""
+              },
+              {
+                "digest": "sha256:ccfcd2bfce65451b4fabfac37aba72ec0d4ba9f16cf77705320091fc72de9a56",
+                "path": "model-00018-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00018-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"ccfcd2bfce65451b4fabfac37aba72ec0d4ba9f16cf77705320091fc72de9a56\""
+              },
+              {
+                "digest": "sha256:18cbd01dc37c03e793922128a23d44f04b80e1b5bd29c3eefbe068d8cc6155d8",
+                "path": "model-00019-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00019-of-00118.safetensors",
+                "size": 3988822776,
+                "validator": "\"18cbd01dc37c03e793922128a23d44f04b80e1b5bd29c3eefbe068d8cc6155d8\""
+              },
+              {
+                "digest": "sha256:cd40c113b9e6870c9f941f0efae194fc224a689133106e7d53ad48526d11cc47",
+                "path": "model-00020-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00020-of-00118.safetensors",
+                "size": 3994082088,
+                "validator": "\"cd40c113b9e6870c9f941f0efae194fc224a689133106e7d53ad48526d11cc47\""
+              },
+              {
+                "digest": "sha256:82bfeab2fd2d5a1e678a2d659ec0b8d0e1a231690e159ed7bd943b59a667ea33",
+                "path": "model-00021-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00021-of-00118.safetensors",
+                "size": 3994082160,
+                "validator": "\"82bfeab2fd2d5a1e678a2d659ec0b8d0e1a231690e159ed7bd943b59a667ea33\""
+              },
+              {
+                "digest": "sha256:40d92f95fc073f1d46ac9f089669417d1eb44e9e4046e91ec5213a10286a34ff",
+                "path": "model-00022-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00022-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"40d92f95fc073f1d46ac9f089669417d1eb44e9e4046e91ec5213a10286a34ff\""
+              },
+              {
+                "digest": "sha256:b5a74d161c35daabd49d90c7e2d9a73f049ab51575a244ffa90fb869e0f31dee",
+                "path": "model-00023-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00023-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"b5a74d161c35daabd49d90c7e2d9a73f049ab51575a244ffa90fb869e0f31dee\""
+              },
+              {
+                "digest": "sha256:6d75e33a85b5bfd8de1ad5b61b0e54c5f04bed8b5782c79ee03fd22f8744abb3",
+                "path": "model-00024-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00024-of-00118.safetensors",
+                "size": 3939555920,
+                "validator": "\"6d75e33a85b5bfd8de1ad5b61b0e54c5f04bed8b5782c79ee03fd22f8744abb3\""
+              },
+              {
+                "digest": "sha256:6d8acb27ac1bac598ba35f97831945dcf07557e0da30fdca8443259d7aacca42",
+                "path": "model-00025-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00025-of-00118.safetensors",
+                "size": 3993016808,
+                "validator": "\"6d8acb27ac1bac598ba35f97831945dcf07557e0da30fdca8443259d7aacca42\""
+              },
+              {
+                "digest": "sha256:ea263fc399e9473aea8cc42adb4280bdc9cd4a763c2362a37e61040f149131bd",
+                "path": "model-00026-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00026-of-00118.safetensors",
+                "size": 3994082160,
+                "validator": "\"ea263fc399e9473aea8cc42adb4280bdc9cd4a763c2362a37e61040f149131bd\""
+              },
+              {
+                "digest": "sha256:5e4f3de86d634b02aeee58382dcff68f405abf4afbe0617c4a56bf070c9f3c7f",
+                "path": "model-00027-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00027-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"5e4f3de86d634b02aeee58382dcff68f405abf4afbe0617c4a56bf070c9f3c7f\""
+              },
+              {
+                "digest": "sha256:fb1ea120c42c761084f05988c5955980bfaa5aafe3339ac0b141b09529aaa4d1",
+                "path": "model-00028-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00028-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"fb1ea120c42c761084f05988c5955980bfaa5aafe3339ac0b141b09529aaa4d1\""
+              },
+              {
+                "digest": "sha256:189ce7c5d4ca21450bc2964225b74180b8ad772c1e828fc45c0cfcc779287c60",
+                "path": "model-00029-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00029-of-00118.safetensors",
+                "size": 3998276288,
+                "validator": "\"189ce7c5d4ca21450bc2964225b74180b8ad772c1e828fc45c0cfcc779287c60\""
+              },
+              {
+                "digest": "sha256:03da01a0f239b5325e0fcf253813de2e9507faff036525df197c3634e8ea24f9",
+                "path": "model-00030-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00030-of-00118.safetensors",
+                "size": 3997211632,
+                "validator": "\"03da01a0f239b5325e0fcf253813de2e9507faff036525df197c3634e8ea24f9\""
+              },
+              {
+                "digest": "sha256:09667e2b0f389c0481780da715b5951e873f717f0bf03da61341c6a2475611d7",
+                "path": "model-00031-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00031-of-00118.safetensors",
+                "size": 3994082160,
+                "validator": "\"09667e2b0f389c0481780da715b5951e873f717f0bf03da61341c6a2475611d7\""
+              },
+              {
+                "digest": "sha256:799b6ed83c23e2706a3bcdfd700c7a2f552f70bacb891ce58cf9d109fedaf0a8",
+                "path": "model-00032-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00032-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"799b6ed83c23e2706a3bcdfd700c7a2f552f70bacb891ce58cf9d109fedaf0a8\""
+              },
+              {
+                "digest": "sha256:50e7c2b84d772958111cd115066605aa55db550365423cd57f61b9bb3bb88cd6",
+                "path": "model-00033-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00033-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"50e7c2b84d772958111cd115066605aa55db550365423cd57f61b9bb3bb88cd6\""
+              },
+              {
+                "digest": "sha256:36a4ffe48ee7b4a5d8f2fbba2eebbedd3f61f5450b0a22cff03222b4b29f8550",
+                "path": "model-00034-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00034-of-00118.safetensors",
+                "size": 3994082200,
+                "validator": "\"36a4ffe48ee7b4a5d8f2fbba2eebbedd3f61f5450b0a22cff03222b4b29f8550\""
+              },
+              {
+                "digest": "sha256:5b077a58a27872786ffff22bf0aeb58de25d372c3206bf7b214f1bdb60b45201",
+                "path": "model-00035-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00035-of-00118.safetensors",
+                "size": 3988822680,
+                "validator": "\"5b077a58a27872786ffff22bf0aeb58de25d372c3206bf7b214f1bdb60b45201\""
+              },
+              {
+                "digest": "sha256:674872e3bb982c32268f4c237469f9dc93bac314d1de941729c0dbc6ec88a0e1",
+                "path": "model-00036-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00036-of-00118.safetensors",
+                "size": 3994082152,
+                "validator": "\"674872e3bb982c32268f4c237469f9dc93bac314d1de941729c0dbc6ec88a0e1\""
+              },
+              {
+                "digest": "sha256:a94df010405f7936b1576306496be65ecd4dce223a621a42d0331b79d65b7480",
+                "path": "model-00037-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00037-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"a94df010405f7936b1576306496be65ecd4dce223a621a42d0331b79d65b7480\""
+              },
+              {
+                "digest": "sha256:11104df709a30e6a35b70a781ba88e8411f58dac0d2be1615edb1f6e4c450c38",
+                "path": "model-00038-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00038-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"11104df709a30e6a35b70a781ba88e8411f58dac0d2be1615edb1f6e4c450c38\""
+              },
+              {
+                "digest": "sha256:c98c5bcbcbf22f7aefb99d9ae19d972ac55e9f247047b5b9435209a1ed18d3ed",
+                "path": "model-00039-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00039-of-00118.safetensors",
+                "size": 3994082200,
+                "validator": "\"c98c5bcbcbf22f7aefb99d9ae19d972ac55e9f247047b5b9435209a1ed18d3ed\""
+              },
+              {
+                "digest": "sha256:c315d4d6cfdfcabe880be7eaa3da9ccb43f1089a6ac142f3cfbba7b383cf822e",
+                "path": "model-00040-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00040-of-00118.safetensors",
+                "size": 3988822696,
+                "validator": "\"c315d4d6cfdfcabe880be7eaa3da9ccb43f1089a6ac142f3cfbba7b383cf822e\""
+              },
+              {
+                "digest": "sha256:7ff05deb8ae1d9f2895d36231eb48cd715efef7be62b7fb14d9b35756e5742fb",
+                "path": "model-00041-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00041-of-00118.safetensors",
+                "size": 3994082144,
+                "validator": "\"7ff05deb8ae1d9f2895d36231eb48cd715efef7be62b7fb14d9b35756e5742fb\""
+              },
+              {
+                "digest": "sha256:0d4dba05f7e8166b8d3077624686d07dd0ea7ed8746edaa29253eba8904842dc",
+                "path": "model-00042-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00042-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"0d4dba05f7e8166b8d3077624686d07dd0ea7ed8746edaa29253eba8904842dc\""
+              },
+              {
+                "digest": "sha256:eb33237fe4d891d551dadc8b02fc042191a604bca177fe7eaa42cd74b45a1641",
+                "path": "model-00043-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00043-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"eb33237fe4d891d551dadc8b02fc042191a604bca177fe7eaa42cd74b45a1641\""
+              },
+              {
+                "digest": "sha256:27fb5f22dfaab7fa781fb4ae665c24449938c07e85c425a8d0606182c568f990",
+                "path": "model-00044-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00044-of-00118.safetensors",
+                "size": 3994082192,
+                "validator": "\"27fb5f22dfaab7fa781fb4ae665c24449938c07e85c425a8d0606182c568f990\""
+              },
+              {
+                "digest": "sha256:0fa9dcbbffd6844c319cdc0ee9a4d07d3dc54cb6f5fbf79263d798a07d424122",
+                "path": "model-00045-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00045-of-00118.safetensors",
+                "size": 3988822704,
+                "validator": "\"0fa9dcbbffd6844c319cdc0ee9a4d07d3dc54cb6f5fbf79263d798a07d424122\""
+              },
+              {
+                "digest": "sha256:2551b9bb6fc850aa7b92a59d6c272b525d80ec4f40efd4d7a1f52344712eb973",
+                "path": "model-00046-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00046-of-00118.safetensors",
+                "size": 3994082144,
+                "validator": "\"2551b9bb6fc850aa7b92a59d6c272b525d80ec4f40efd4d7a1f52344712eb973\""
+              },
+              {
+                "digest": "sha256:d61a6b2e8a26a4c6ad63e6ac507d2013353fe8db1b53bd9122ef72dd7bf08e49",
+                "path": "model-00047-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00047-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"d61a6b2e8a26a4c6ad63e6ac507d2013353fe8db1b53bd9122ef72dd7bf08e49\""
+              },
+              {
+                "digest": "sha256:2e1e74ea566aa1991d8a6d3b618c0ee80705e8cbdba3f4f8ccb72ff6059ad038",
+                "path": "model-00048-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00048-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"2e1e74ea566aa1991d8a6d3b618c0ee80705e8cbdba3f4f8ccb72ff6059ad038\""
+              },
+              {
+                "digest": "sha256:704a2c932391e9499874e4bf87e7b4a5717600c4b309f5c88df36ad2d75dd1ef",
+                "path": "model-00049-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00049-of-00118.safetensors",
+                "size": 3994082184,
+                "validator": "\"704a2c932391e9499874e4bf87e7b4a5717600c4b309f5c88df36ad2d75dd1ef\""
+              },
+              {
+                "digest": "sha256:5fd77e0e3a0802f878921802f078aaca004a8a12401528a391c219fa4a2d6b2d",
+                "path": "model-00050-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00050-of-00118.safetensors",
+                "size": 3988822712,
+                "validator": "\"5fd77e0e3a0802f878921802f078aaca004a8a12401528a391c219fa4a2d6b2d\""
+              },
+              {
+                "digest": "sha256:b6f58268376f23fe96ed63e083f880b0a09a92687553b1708532a2d3ba6e00c5",
+                "path": "model-00051-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00051-of-00118.safetensors",
+                "size": 3994082136,
+                "validator": "\"b6f58268376f23fe96ed63e083f880b0a09a92687553b1708532a2d3ba6e00c5\""
+              },
+              {
+                "digest": "sha256:0e69650c43785dadda187673e3bcd5d0bb5c04eb33ec23f0a79a401629864ec2",
+                "path": "model-00052-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00052-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"0e69650c43785dadda187673e3bcd5d0bb5c04eb33ec23f0a79a401629864ec2\""
+              },
+              {
+                "digest": "sha256:674f0ad2e72a4e53dc4383ddc7f22fff8a8effa7185bdf4f178ad6df28c6dc52",
+                "path": "model-00053-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00053-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"674f0ad2e72a4e53dc4383ddc7f22fff8a8effa7185bdf4f178ad6df28c6dc52\""
+              },
+              {
+                "digest": "sha256:5891aa04b855b84d739f64173c92394b5a7f714be7ea89957c17c7e578f97473",
+                "path": "model-00054-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00054-of-00118.safetensors",
+                "size": 3994082184,
+                "validator": "\"5891aa04b855b84d739f64173c92394b5a7f714be7ea89957c17c7e578f97473\""
+              },
+              {
+                "digest": "sha256:26122a3ca914c160c3297ca1cb217e286520972e779b7a015a0f0c33c933fe27",
+                "path": "model-00055-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00055-of-00118.safetensors",
+                "size": 3988822720,
+                "validator": "\"26122a3ca914c160c3297ca1cb217e286520972e779b7a015a0f0c33c933fe27\""
+              },
+              {
+                "digest": "sha256:0176da7e69047270eb02002bc5bda382b9ece009b2485d9ec0da5420625e3c07",
+                "path": "model-00056-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00056-of-00118.safetensors",
+                "size": 3994082128,
+                "validator": "\"0176da7e69047270eb02002bc5bda382b9ece009b2485d9ec0da5420625e3c07\""
+              },
+              {
+                "digest": "sha256:afe781b649867013643ddffca9de6e1855388e673a47c7e333d3a8c1cb80919b",
+                "path": "model-00057-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00057-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"afe781b649867013643ddffca9de6e1855388e673a47c7e333d3a8c1cb80919b\""
+              },
+              {
+                "digest": "sha256:9d5600a18075493108fd8667d800dc21a8e00ff2545da96b6fe9482db33e0633",
+                "path": "model-00058-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00058-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"9d5600a18075493108fd8667d800dc21a8e00ff2545da96b6fe9482db33e0633\""
+              },
+              {
+                "digest": "sha256:9aee2021a40e85188399af11251f0225424dfdfb14a67fbd4fd1f0f48efb211f",
+                "path": "model-00059-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00059-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"9aee2021a40e85188399af11251f0225424dfdfb14a67fbd4fd1f0f48efb211f\""
+              },
+              {
+                "digest": "sha256:099a4d321d51342a89de842cfba991ed527142a90fc65a4adc798ac537b0a6fc",
+                "path": "model-00060-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00060-of-00118.safetensors",
+                "size": 3988822736,
+                "validator": "\"099a4d321d51342a89de842cfba991ed527142a90fc65a4adc798ac537b0a6fc\""
+              },
+              {
+                "digest": "sha256:a3370ec5e12b72f42ad085bfbb9033686192aad5a33dd8508b079405acc933aa",
+                "path": "model-00061-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00061-of-00118.safetensors",
+                "size": 3994082128,
+                "validator": "\"a3370ec5e12b72f42ad085bfbb9033686192aad5a33dd8508b079405acc933aa\""
+              },
+              {
+                "digest": "sha256:20dda7da352efa495f3f6d8679b2b4ed0149539d31e419f938c640389ff41c17",
+                "path": "model-00062-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00062-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"20dda7da352efa495f3f6d8679b2b4ed0149539d31e419f938c640389ff41c17\""
+              },
+              {
+                "digest": "sha256:d9b174c1a4e0ad2061051658f4c253d7279afe07aca023fa3a041616514513d9",
+                "path": "model-00063-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00063-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"d9b174c1a4e0ad2061051658f4c253d7279afe07aca023fa3a041616514513d9\""
+              },
+              {
+                "digest": "sha256:015430bc00f0b42cb74fc18701a2a4d6a47139d2121298736908bf21a028b576",
+                "path": "model-00064-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00064-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"015430bc00f0b42cb74fc18701a2a4d6a47139d2121298736908bf21a028b576\""
+              },
+              {
+                "digest": "sha256:b0611c668acd08a4ba7b2f89e17d1cff6bf2328f80cdf3da2b9cd9b667fe7e8d",
+                "path": "model-00065-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00065-of-00118.safetensors",
+                "size": 3988822744,
+                "validator": "\"b0611c668acd08a4ba7b2f89e17d1cff6bf2328f80cdf3da2b9cd9b667fe7e8d\""
+              },
+              {
+                "digest": "sha256:f63f53989b4228e6ad3ee1e86f719263ddbfea90f15fab638892742d78f6f511",
+                "path": "model-00066-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00066-of-00118.safetensors",
+                "size": 3994082120,
+                "validator": "\"f63f53989b4228e6ad3ee1e86f719263ddbfea90f15fab638892742d78f6f511\""
+              },
+              {
+                "digest": "sha256:f919e17a92ab3029e7e2e415e755e199ab346369b574d8ddef60f1d5dadfa3b0",
+                "path": "model-00067-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00067-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"f919e17a92ab3029e7e2e415e755e199ab346369b574d8ddef60f1d5dadfa3b0\""
+              },
+              {
+                "digest": "sha256:9d66a803c641226cfb1ac1e8e1be4e65963cb483ffd5f953df366fac37500950",
+                "path": "model-00068-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00068-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"9d66a803c641226cfb1ac1e8e1be4e65963cb483ffd5f953df366fac37500950\""
+              },
+              {
+                "digest": "sha256:90add3fd4b84119c5ba31dadeeeed5de1540d2010a125079e6decd34efe86049",
+                "path": "model-00069-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00069-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"90add3fd4b84119c5ba31dadeeeed5de1540d2010a125079e6decd34efe86049\""
+              },
+              {
+                "digest": "sha256:4e935c9e21e676183c7e6573717761096139ac98f9ed2cb9381ac83ce2ac4a0a",
+                "path": "model-00070-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00070-of-00118.safetensors",
+                "size": 3988822752,
+                "validator": "\"4e935c9e21e676183c7e6573717761096139ac98f9ed2cb9381ac83ce2ac4a0a\""
+              },
+              {
+                "digest": "sha256:d1965f53353c54d0cd39c32030067c2237287e1d4d364c7fb0dccc3062b0a592",
+                "path": "model-00071-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00071-of-00118.safetensors",
+                "size": 3994082120,
+                "validator": "\"d1965f53353c54d0cd39c32030067c2237287e1d4d364c7fb0dccc3062b0a592\""
+              },
+              {
+                "digest": "sha256:c3f072e339ee962bc7c55a257a758a6af02ea7c90c6f85d329d20d53e1e72571",
+                "path": "model-00072-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00072-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"c3f072e339ee962bc7c55a257a758a6af02ea7c90c6f85d329d20d53e1e72571\""
+              },
+              {
+                "digest": "sha256:d2cffb9dc403ef68b0743095a7fd7cef275542560f9da409880c2c83ccad2194",
+                "path": "model-00073-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00073-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"d2cffb9dc403ef68b0743095a7fd7cef275542560f9da409880c2c83ccad2194\""
+              },
+              {
+                "digest": "sha256:300d27dc2be0385e279fbcd6f3abc01f64c75300bcde2d3502d534c5a24f6f8b",
+                "path": "model-00074-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00074-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"300d27dc2be0385e279fbcd6f3abc01f64c75300bcde2d3502d534c5a24f6f8b\""
+              },
+              {
+                "digest": "sha256:9197a1e288418a449dd26d97f6b4c6319de670b918d96b99af74b6fecba7708e",
+                "path": "model-00075-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00075-of-00118.safetensors",
+                "size": 3988822752,
+                "validator": "\"9197a1e288418a449dd26d97f6b4c6319de670b918d96b99af74b6fecba7708e\""
+              },
+              {
+                "digest": "sha256:4901d48965fe59721e32d37b1dd2ad67dfc36c81445138e87264f7571ef68746",
+                "path": "model-00076-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00076-of-00118.safetensors",
+                "size": 3994082112,
+                "validator": "\"4901d48965fe59721e32d37b1dd2ad67dfc36c81445138e87264f7571ef68746\""
+              },
+              {
+                "digest": "sha256:f99e19f51ed1a7581dfe39ab7b3d61ed719619faf2bcc52b9152383499ed8de9",
+                "path": "model-00077-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00077-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"f99e19f51ed1a7581dfe39ab7b3d61ed719619faf2bcc52b9152383499ed8de9\""
+              },
+              {
+                "digest": "sha256:84a887d19788de69f5a5d6cab0be90e9342b28736c635c4f8f89f07f4d7a2715",
+                "path": "model-00078-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00078-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"84a887d19788de69f5a5d6cab0be90e9342b28736c635c4f8f89f07f4d7a2715\""
+              },
+              {
+                "digest": "sha256:7f04665427b4243716dd2158fa238c14b5e151466d4b83f78fc1d1635f2320ed",
+                "path": "model-00079-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00079-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"7f04665427b4243716dd2158fa238c14b5e151466d4b83f78fc1d1635f2320ed\""
+              },
+              {
+                "digest": "sha256:70e58c8948ea6094b0c98bea04a47beeea5d2bd7a034bc64af1ed3d162d818ab",
+                "path": "model-00080-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00080-of-00118.safetensors",
+                "size": 3988822760,
+                "validator": "\"70e58c8948ea6094b0c98bea04a47beeea5d2bd7a034bc64af1ed3d162d818ab\""
+              },
+              {
+                "digest": "sha256:467c3328647101b73bb373824b2ac914b7e062afd8ac6740bbe36c6741115d1c",
+                "path": "model-00081-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00081-of-00118.safetensors",
+                "size": 3994082104,
+                "validator": "\"467c3328647101b73bb373824b2ac914b7e062afd8ac6740bbe36c6741115d1c\""
+              },
+              {
+                "digest": "sha256:f0db8b06596c7c04f2d3b3ac9eea2c81dec6bb0ce0f359a1478c56eb60532d64",
+                "path": "model-00082-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00082-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"f0db8b06596c7c04f2d3b3ac9eea2c81dec6bb0ce0f359a1478c56eb60532d64\""
+              },
+              {
+                "digest": "sha256:33cf257ae85e243497e0cb906c76bd1063dbab2f5221321d6ea577151e367e10",
+                "path": "model-00083-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00083-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"33cf257ae85e243497e0cb906c76bd1063dbab2f5221321d6ea577151e367e10\""
+              },
+              {
+                "digest": "sha256:895a4ea5cbb7462685a94280bd2c5d1aac49b6efad3122f821b7150c7107dc48",
+                "path": "model-00084-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00084-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"895a4ea5cbb7462685a94280bd2c5d1aac49b6efad3122f821b7150c7107dc48\""
+              },
+              {
+                "digest": "sha256:15ca688c9a83244c1acc455ee13bb42885a2436777d98a87d620009b4f387032",
+                "path": "model-00085-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00085-of-00118.safetensors",
+                "size": 3988822760,
+                "validator": "\"15ca688c9a83244c1acc455ee13bb42885a2436777d98a87d620009b4f387032\""
+              },
+              {
+                "digest": "sha256:636823c37ba8b4b74351a0612688c1d884d9b1ac94838f7ecea38ef9c00bd7b6",
+                "path": "model-00086-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00086-of-00118.safetensors",
+                "size": 3994082104,
+                "validator": "\"636823c37ba8b4b74351a0612688c1d884d9b1ac94838f7ecea38ef9c00bd7b6\""
+              },
+              {
+                "digest": "sha256:776a16538eac6e6c6496421887c3d67b38df90455bf25deed3d45e9fa78d6305",
+                "path": "model-00087-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00087-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"776a16538eac6e6c6496421887c3d67b38df90455bf25deed3d45e9fa78d6305\""
+              },
+              {
+                "digest": "sha256:bcab6c38183f10f1a3be10a1ea8822eeb2c538cde566b4d274640283e896ea98",
+                "path": "model-00088-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00088-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"bcab6c38183f10f1a3be10a1ea8822eeb2c538cde566b4d274640283e896ea98\""
+              },
+              {
+                "digest": "sha256:76bf5857ba8dd576a22b4aa659b6c1bcd3b7694c9e7be4804848b4a4b67f0fb0",
+                "path": "model-00089-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00089-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"76bf5857ba8dd576a22b4aa659b6c1bcd3b7694c9e7be4804848b4a4b67f0fb0\""
+              },
+              {
+                "digest": "sha256:a90e6ed91ebf7c6ff178b4a9226182c4a4598cc44aa8ff09762adff179143a7d",
+                "path": "model-00090-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00090-of-00118.safetensors",
+                "size": 3988822768,
+                "validator": "\"a90e6ed91ebf7c6ff178b4a9226182c4a4598cc44aa8ff09762adff179143a7d\""
+              },
+              {
+                "digest": "sha256:a27d892593373dfa83d18fdba5bb5505c23e2cee51152b50aa3179910cd39a91",
+                "path": "model-00091-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00091-of-00118.safetensors",
+                "size": 3994082096,
+                "validator": "\"a27d892593373dfa83d18fdba5bb5505c23e2cee51152b50aa3179910cd39a91\""
+              },
+              {
+                "digest": "sha256:29b4271ea6e9cc38eb46fa67bf91fe205aa1d87097f959cfb5842c784e6ec755",
+                "path": "model-00092-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00092-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"29b4271ea6e9cc38eb46fa67bf91fe205aa1d87097f959cfb5842c784e6ec755\""
+              },
+              {
+                "digest": "sha256:df7c0869f973a1f9527cfd1476cf634133026af066677aea3fae8e361bcfe384",
+                "path": "model-00093-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00093-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"df7c0869f973a1f9527cfd1476cf634133026af066677aea3fae8e361bcfe384\""
+              },
+              {
+                "digest": "sha256:1f95e873881fc7532d4b82ee41e82f355d57441d8cefa3c7a1901594f1da7e4a",
+                "path": "model-00094-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00094-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"1f95e873881fc7532d4b82ee41e82f355d57441d8cefa3c7a1901594f1da7e4a\""
+              },
+              {
+                "digest": "sha256:440ed9d0a75050ee532a4cd67580e5631ddfc3cfd319bc27bd413ceca2d10c68",
+                "path": "model-00095-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00095-of-00118.safetensors",
+                "size": 3988822776,
+                "validator": "\"440ed9d0a75050ee532a4cd67580e5631ddfc3cfd319bc27bd413ceca2d10c68\""
+              },
+              {
+                "digest": "sha256:9348202fecfa80d4925dda7f10b1a1170a218db92995e78b4dfbe6a67ab7bf53",
+                "path": "model-00096-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00096-of-00118.safetensors",
+                "size": 3994082088,
+                "validator": "\"9348202fecfa80d4925dda7f10b1a1170a218db92995e78b4dfbe6a67ab7bf53\""
+              },
+              {
+                "digest": "sha256:92850096e907a1394e11f94348fbd42d5c2a8b7b14b4736015ab4d7708542b21",
+                "path": "model-00097-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00097-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"92850096e907a1394e11f94348fbd42d5c2a8b7b14b4736015ab4d7708542b21\""
+              },
+              {
+                "digest": "sha256:6fdbe53fcc9990fb4f65e97093f287a0d73348d240cec8ddf37fd5ac5c40bced",
+                "path": "model-00098-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00098-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"6fdbe53fcc9990fb4f65e97093f287a0d73348d240cec8ddf37fd5ac5c40bced\""
+              },
+              {
+                "digest": "sha256:637e231454db1584e69c30daca5a3eaa2ffc913975b6cd9e17ff7df3d37f8c12",
+                "path": "model-00099-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00099-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"637e231454db1584e69c30daca5a3eaa2ffc913975b6cd9e17ff7df3d37f8c12\""
+              },
+              {
+                "digest": "sha256:6b5d7084666735e13ba4a83296987f082f6a860ee879acbf093086c57d958df8",
+                "path": "model-00100-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00100-of-00118.safetensors",
+                "size": 3988822776,
+                "validator": "\"6b5d7084666735e13ba4a83296987f082f6a860ee879acbf093086c57d958df8\""
+              },
+              {
+                "digest": "sha256:b3afa8c7227ebf188b84641e01b1aa5e28f2bdec70bdeef9d58c2376a9690237",
+                "path": "model-00101-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00101-of-00118.safetensors",
+                "size": 3994082088,
+                "validator": "\"b3afa8c7227ebf188b84641e01b1aa5e28f2bdec70bdeef9d58c2376a9690237\""
+              },
+              {
+                "digest": "sha256:b50d8e8f7bb596a1e1f4bf53d743a9d61cd2c75895ddbc7a415090b9e4182096",
+                "path": "model-00102-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00102-of-00118.safetensors",
+                "size": 3994082168,
+                "validator": "\"b50d8e8f7bb596a1e1f4bf53d743a9d61cd2c75895ddbc7a415090b9e4182096\""
+              },
+              {
+                "digest": "sha256:e220618eb92189333699b496fda8d6663751f83774f6105946819e1df21cabd0",
+                "path": "model-00103-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00103-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"e220618eb92189333699b496fda8d6663751f83774f6105946819e1df21cabd0\""
+              },
+              {
+                "digest": "sha256:de0ce7d1462df0b98f2fcafd15c7c25174354421df3c9010cd9d42e6a76b199e",
+                "path": "model-00104-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00104-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"de0ce7d1462df0b98f2fcafd15c7c25174354421df3c9010cd9d42e6a76b199e\""
+              },
+              {
+                "digest": "sha256:2ad2f38725266fc667325e25d693d242dcaab1213a3271d7aea53398927d2b35",
+                "path": "model-00105-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00105-of-00118.safetensors",
+                "size": 3952138960,
+                "validator": "\"2ad2f38725266fc667325e25d693d242dcaab1213a3271d7aea53398927d2b35\""
+              },
+              {
+                "digest": "sha256:78f1e8cf255ed0a83b84bfd3d2d6e61717921f1de377a6972254748ecbb5eaeb",
+                "path": "model-00106-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00106-of-00118.safetensors",
+                "size": 3993016808,
+                "validator": "\"78f1e8cf255ed0a83b84bfd3d2d6e61717921f1de377a6972254748ecbb5eaeb\""
+              },
+              {
+                "digest": "sha256:66d511c8b5ee4f1bc05d7b410aa1245c4b4a91df8c8eff793a6be909d10b87db",
+                "path": "model-00107-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00107-of-00118.safetensors",
+                "size": 3994082160,
+                "validator": "\"66d511c8b5ee4f1bc05d7b410aa1245c4b4a91df8c8eff793a6be909d10b87db\""
+              },
+              {
+                "digest": "sha256:15b4f6c32eb3e0c8c6c1dd48c4249ff209d64a0b91ba647dbdc115b17149af81",
+                "path": "model-00108-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00108-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"15b4f6c32eb3e0c8c6c1dd48c4249ff209d64a0b91ba647dbdc115b17149af81\""
+              },
+              {
+                "digest": "sha256:834089fcc023b5cffe4ecdb875b529ecc415c59f79b9193af653d7a733032c17",
+                "path": "model-00109-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00109-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"834089fcc023b5cffe4ecdb875b529ecc415c59f79b9193af653d7a733032c17\""
+              },
+              {
+                "digest": "sha256:37d71c0eb98564da5e7be62ecc65d07487e42d6ddf01b55d084412495f2cae12",
+                "path": "model-00110-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00110-of-00118.safetensors",
+                "size": 3998276288,
+                "validator": "\"37d71c0eb98564da5e7be62ecc65d07487e42d6ddf01b55d084412495f2cae12\""
+              },
+              {
+                "digest": "sha256:95a386781af33015f5dbeb7d9e8b968963a3004a625e6c72bfa8faf59f5d3b24",
+                "path": "model-00111-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00111-of-00118.safetensors",
+                "size": 3997211632,
+                "validator": "\"95a386781af33015f5dbeb7d9e8b968963a3004a625e6c72bfa8faf59f5d3b24\""
+              },
+              {
+                "digest": "sha256:429ea6fd5ce25ec573da325f94f919b2c83e8049ffec59413a57b18fa7ae984f",
+                "path": "model-00112-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00112-of-00118.safetensors",
+                "size": 3994082160,
+                "validator": "\"429ea6fd5ce25ec573da325f94f919b2c83e8049ffec59413a57b18fa7ae984f\""
+              },
+              {
+                "digest": "sha256:476da98f0d771d5590522f0959785c71a5993dd60f20a0dbfaffbd5517029614",
+                "path": "model-00113-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00113-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"476da98f0d771d5590522f0959785c71a5993dd60f20a0dbfaffbd5517029614\""
+              },
+              {
+                "digest": "sha256:2ab19ad5aaa985aa5aae87022632772587cdf79e25ee2484d4d9604bd05ba7df",
+                "path": "model-00114-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00114-of-00118.safetensors",
+                "size": 3994082176,
+                "validator": "\"2ab19ad5aaa985aa5aae87022632772587cdf79e25ee2484d4d9604bd05ba7df\""
+              },
+              {
+                "digest": "sha256:4270d4da96eb040681984be3a578ad4faef4d29ee5616704b9944aa6e0b31cdb",
+                "path": "model-00115-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00115-of-00118.safetensors",
+                "size": 3994082200,
+                "validator": "\"4270d4da96eb040681984be3a578ad4faef4d29ee5616704b9944aa6e0b31cdb\""
+              },
+              {
+                "digest": "sha256:c38f7d32efec1a3be466bc879427e36cede850273867602ddf2a30933f2ea2ef",
+                "path": "model-00116-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00116-of-00118.safetensors",
+                "size": 3988822680,
+                "validator": "\"c38f7d32efec1a3be466bc879427e36cede850273867602ddf2a30933f2ea2ef\""
+              },
+              {
+                "digest": "sha256:43dab6a95708193413dd27803666ba8e4d77837760694c3010cb9bc628870628",
+                "path": "model-00117-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00117-of-00118.safetensors",
+                "size": 3994082152,
+                "validator": "\"43dab6a95708193413dd27803666ba8e4d77837760694c3010cb9bc628870628\""
+              },
+              {
+                "digest": "sha256:51768e50545117b2ef6b2a72eee8a58974e02711241bcc390392b907b3fa7618",
+                "path": "model-00118-of-00118.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model-00118-of-00118.safetensors",
+                "size": 3070273928,
+                "validator": "\"51768e50545117b2ef6b2a72eee8a58974e02711241bcc390392b907b3fa7618\""
+              }
+            ],
+            "auth_scope": "hf:read",
+            "credential_ref": null,
+            "identity": null,
+            "immutable_revision": "git-sha1:ac9c66cc9b46af7306746a9250f23d47083d689e",
+            "license_acceptance_ref": null,
+            "license_digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+            "locator": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            "metadata_assets": [
+              {
+                "digest": "sha256:34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+                "path": ".gitattributes",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/.gitattributes",
+                "size": 1570,
+                "validator": "\"52373fe24473b1aa44333d318f578ae6bf04b49b\""
+              },
+              {
+                "digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "path": "LICENSE",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/LICENSE",
+                "size": 11343,
+                "validator": "\"6634c8cc3133b3848ec74b9f275acaaa1ea618ab\""
+              },
+              {
+                "digest": "sha256:af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+                "path": "README.md",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/README.md",
+                "size": 16212,
+                "validator": "\"fdad9ae4b76bf763122a3c7947abcb6f5b568250\""
+              },
+              {
+                "digest": "sha256:ad59a339665ee1c68cbff06ac72c9e59f5183ebfaf3698c98737e003a870e9e2",
+                "path": "config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/config.json",
+                "size": 964,
+                "validator": "\"38dd117fc9a3231d3b14b1e43a05f7461daee2a5\""
+              },
+              {
+                "digest": "sha256:f6a5aed219e3be8e914f6fbe36d854218ae4503a0d9795fa5b766dc0504dc31c",
+                "path": "config_1m.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/config_1m.json",
+                "size": 378776,
+                "validator": "\"a50603e95c5b0f30ba218f912103a3409273ed3a\""
+              },
+              {
+                "digest": "sha256:835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48",
+                "path": "generation_config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/generation_config.json",
+                "size": 238,
+                "validator": "\"432531a002c181a19de338313d2375e9d7494d7e\""
+              },
+              {
+                "digest": "sha256:599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+                "path": "merges.txt",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/merges.txt",
+                "size": 1671839,
+                "validator": "\"20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0\""
+              },
+              {
+                "digest": "sha256:821d06bca7fdd15b787dfd5ac169815ecaf0fa0b6952e143fff472df26072f03",
+                "path": "model.safetensors.index.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/model.safetensors.index.json",
+                "size": 3332207,
+                "validator": "\"8fae9bdd32f01c29c804d57f7628ec09c39c18c6\""
+              },
+              {
+                "digest": "sha256:aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+                "path": "tokenizer.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/tokenizer.json",
+                "size": 11422654,
+                "validator": "\"aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4\""
+              },
+              {
+                "digest": "sha256:a62ff0a2472a0fa1b8eaabcb57c59b58afa42a22831dc141400b6e0cf2b65ce3",
+                "path": "tokenizer_config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/tokenizer_config.json",
+                "size": 9377,
+                "validator": "\"51c1be0d9192e7f6e6596de71d0f07d58fbc32ac\""
+              },
+              {
+                "digest": "sha256:ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+                "path": "vocab.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507/resolve/ac9c66cc9b46af7306746a9250f23d47083d689e/vocab.json",
+                "size": 2776833,
+                "validator": "\"4783fe10ac3adce15ac8f358ef5462739852c569\""
+              }
+            ],
+            "source_kind": "huggingface"
+          }
+        },
+        "state": "SUCCEEDED"
+      }
+    },
+    "qwen3_30b_a3b": {
+      "artifact_count": 16,
+      "metadata_bytes": 17611743,
+      "model_bytes": 61066575648,
+      "record": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/release-qwen3_30b_a3b-selection.json",
+      "record_sha256": "27a1a87d5627c90eb772b292ec86b9a8ee8e3e64080c0baba90a592b8e1eec69",
+      "selection": {
+        "kind": "source.select",
+        "operation_id": "op-1ccd0eb60260a5c8b0328a9dd05602c9783381a25e6fe81591537ac63c19860e",
+        "progress": 1.0,
+        "result": {
+          "connection_id": "op-fae8255b3bac4d5ae1caf9351f650b55119566ed8a1eaa4127d6c457937768bf",
+          "descriptor": {
+            "kind": "huggingface",
+            "locator": "Qwen/Qwen3-30B-A3B",
+            "revision": "git-sha1:ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
+          },
+          "downloaded_bytes": 0,
+          "endpoint": "https://huggingface.co",
+          "execution_compatibility": "NOT_VERIFIED",
+          "requirements": {
+            "auth_scope": "hf:read",
+            "credential_required": false,
+            "license_acceptance_required": false,
+            "license_digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+          },
+          "source_lock": {
+            "artifacts": [
+              {
+                "digest": "sha256:454e77b346a61bfb201d54df60e15158838cf930617ee135113556204f2802b5",
+                "path": "model-00001-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00001-of-00016.safetensors",
+                "size": 3999417504,
+                "validator": "\"454e77b346a61bfb201d54df60e15158838cf930617ee135113556204f2802b5\""
+              },
+              {
+                "digest": "sha256:47f015d6e5bb1782a834d75c06113c5e8c77ddca1cb7daf89686a4ec0deda19e",
+                "path": "model-00002-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00002-of-00016.safetensors",
+                "size": 3999974192,
+                "validator": "\"47f015d6e5bb1782a834d75c06113c5e8c77ddca1cb7daf89686a4ec0deda19e\""
+              },
+              {
+                "digest": "sha256:ac0bf5990f2da995c1e8b77a3149dee71900b4fe1b8a614231dea9647193d96b",
+                "path": "model-00003-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00003-of-00016.safetensors",
+                "size": 3997360832,
+                "validator": "\"ac0bf5990f2da995c1e8b77a3149dee71900b4fe1b8a614231dea9647193d96b\""
+              },
+              {
+                "digest": "sha256:89b01fd34a683c70fdb7f22c2e7090538d65063335ba0db46f3654642b17d1e5",
+                "path": "model-00004-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00004-of-00016.safetensors",
+                "size": 3999975056,
+                "validator": "\"89b01fd34a683c70fdb7f22c2e7090538d65063335ba0db46f3654642b17d1e5\""
+              },
+              {
+                "digest": "sha256:9849eb3584d928e35bf5956ccfd91b64207467e1fad8304aae68dc4d92d6d6d9",
+                "path": "model-00005-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00005-of-00016.safetensors",
+                "size": 3999975400,
+                "validator": "\"9849eb3584d928e35bf5956ccfd91b64207467e1fad8304aae68dc4d92d6d6d9\""
+              },
+              {
+                "digest": "sha256:f7a0f1525557d740158fb692986ad43506e1b5901e7406ae65808c6457bc53ad",
+                "path": "model-00006-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00006-of-00016.safetensors",
+                "size": 3999975400,
+                "validator": "\"f7a0f1525557d740158fb692986ad43506e1b5901e7406ae65808c6457bc53ad\""
+              },
+              {
+                "digest": "sha256:920702a50f27a009e5f676da3b02978dbd794f6ad7854f301d709136154c1a84",
+                "path": "model-00007-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00007-of-00016.safetensors",
+                "size": 3999975472,
+                "validator": "\"920702a50f27a009e5f676da3b02978dbd794f6ad7854f301d709136154c1a84\""
+              },
+              {
+                "digest": "sha256:a85bf0cc8a8047c116172d4c08cf4792eb59d4375032708ba3e1a7ffca0f708a",
+                "path": "model-00008-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00008-of-00016.safetensors",
+                "size": 3997362064,
+                "validator": "\"a85bf0cc8a8047c116172d4c08cf4792eb59d4375032708ba3e1a7ffca0f708a\""
+              },
+              {
+                "digest": "sha256:25cd8aaed86b8e17685efb152912f92448ea3fffb1bdc247f257f04d05907604",
+                "path": "model-00009-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00009-of-00016.safetensors",
+                "size": 3999975408,
+                "validator": "\"25cd8aaed86b8e17685efb152912f92448ea3fffb1bdc247f257f04d05907604\""
+              },
+              {
+                "digest": "sha256:7c3307ee214797c4bc61c0994f81d690e768150df5f14d18edf84e53ba4810dc",
+                "path": "model-00010-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00010-of-00016.safetensors",
+                "size": 3999975400,
+                "validator": "\"7c3307ee214797c4bc61c0994f81d690e768150df5f14d18edf84e53ba4810dc\""
+              },
+              {
+                "digest": "sha256:c658cad2842d36fa4c7c7f726f8515dc5670a3d80c94e13257d4e322ffe61988",
+                "path": "model-00011-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00011-of-00016.safetensors",
+                "size": 3999975408,
+                "validator": "\"c658cad2842d36fa4c7c7f726f8515dc5670a3d80c94e13257d4e322ffe61988\""
+              },
+              {
+                "digest": "sha256:8cb898bc5e78492600053d1105c9ff61d7a719f5cc2802df63e41535a652cc26",
+                "path": "model-00012-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00012-of-00016.safetensors",
+                "size": 3987400496,
+                "validator": "\"8cb898bc5e78492600053d1105c9ff61d7a719f5cc2802df63e41535a652cc26\""
+              },
+              {
+                "digest": "sha256:599594421f314cb8e8ab4474db0eb490cc6310585067e82d73821254b93319ce",
+                "path": "model-00013-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00013-of-00016.safetensors",
+                "size": 3997353632,
+                "validator": "\"599594421f314cb8e8ab4474db0eb490cc6310585067e82d73821254b93319ce\""
+              },
+              {
+                "digest": "sha256:66d3294e9976b5f01d117a0a0bed768f128a8898eb6937e224d051de2961d363",
+                "path": "model-00014-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00014-of-00016.safetensors",
+                "size": 3999975400,
+                "validator": "\"66d3294e9976b5f01d117a0a0bed768f128a8898eb6937e224d051de2961d363\""
+              },
+              {
+                "digest": "sha256:2fe000da4fc7399ff6303bb0daec8c415a5d850f5ea53863392758c77fc37664",
+                "path": "model-00015-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00015-of-00016.safetensors",
+                "size": 3999975400,
+                "validator": "\"2fe000da4fc7399ff6303bb0daec8c415a5d850f5ea53863392758c77fc37664\""
+              },
+              {
+                "digest": "sha256:0c979e314faf06e94a5e1841abd285d4e26e763c79c1abe7710d543192d9da48",
+                "path": "model-00016-of-00016.safetensors",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model-00016-of-00016.safetensors",
+                "size": 1087928584,
+                "validator": "\"0c979e314faf06e94a5e1841abd285d4e26e763c79c1abe7710d543192d9da48\""
+              }
+            ],
+            "auth_scope": "hf:read",
+            "credential_ref": null,
+            "identity": null,
+            "immutable_revision": "git-sha1:ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+            "license_acceptance_ref": null,
+            "license_digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+            "locator": "Qwen/Qwen3-30B-A3B",
+            "metadata_assets": [
+              {
+                "digest": "sha256:34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+                "path": ".gitattributes",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/.gitattributes",
+                "size": 1570,
+                "validator": "\"52373fe24473b1aa44333d318f578ae6bf04b49b\""
+              },
+              {
+                "digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "path": "LICENSE",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/LICENSE",
+                "size": 11343,
+                "validator": "\"6634c8cc3133b3848ec74b9f275acaaa1ea618ab\""
+              },
+              {
+                "digest": "sha256:1897b7cdf7b5f45ae847b87f9b416d4635fe73228e0daac669a4e1f3e5948858",
+                "path": "README.md",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/README.md",
+                "size": 16798,
+                "validator": "\"244f89a345bb18c4ddd4bd52f1cc3cda5a467270\""
+              },
+              {
+                "digest": "sha256:2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
+                "path": "config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json",
+                "size": 963,
+                "validator": "\"2703739b9cfc422a3a0a6c932140db18533a8d1a\""
+              },
+              {
+                "digest": "sha256:2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+                "path": "generation_config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/generation_config.json",
+                "size": 239,
+                "validator": "\"20a8a9156fc8c3f25295ca067f61fdf120d517c5\""
+              },
+              {
+                "digest": "sha256:8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+                "path": "merges.txt",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/merges.txt",
+                "size": 1671853,
+                "validator": "\"31349551d90c7606f325fe0f11bbb8bd5fa0d7c7\""
+              },
+              {
+                "digest": "sha256:df0d481ec595c55a0ba58426d517390c6214a566ec4ff1c8fc4bbce9f57b3c24",
+                "path": "model.safetensors.index.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/model.safetensors.index.json",
+                "size": 1699758,
+                "validator": "\"9c1f15f44d45f6a4108ceb239ecec7b22f5c18a4\""
+              },
+              {
+                "digest": "sha256:aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+                "path": "tokenizer.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/tokenizer.json",
+                "size": 11422654,
+                "validator": "\"aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4\""
+              },
+              {
+                "digest": "sha256:d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+                "path": "tokenizer_config.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/tokenizer_config.json",
+                "size": 9732,
+                "validator": "\"417d038a63fa3de29cfde265caedae14d1a58d92\""
+              },
+              {
+                "digest": "sha256:ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+                "path": "vocab.json",
+                "range_uri": "https://huggingface.co/Qwen/Qwen3-30B-A3B/resolve/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/vocab.json",
+                "size": 2776833,
+                "validator": "\"4783fe10ac3adce15ac8f358ef5462739852c569\""
+              }
+            ],
+            "source_kind": "huggingface"
+          }
+        },
+        "state": "SUCCEEDED"
+      }
+    }
+  },
+  "payload_acquisition": "NOT_RUN",
+  "principal_keyboard_input_required": false,
+  "scope": "Exact release-plan model source selections through the installed Cassette CLI",
+  "source_selection": "PASS"
+}

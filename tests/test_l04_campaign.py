@@ -8,11 +8,25 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
 from errors import CassetteError
-from store import CapacityCoordinator, campaign_head, compare_campaign_head
+from store import (
+    CapacityCoordinator,
+    CapacityTransition,
+    await_extent_io,
+    campaign_head,
+    compare_campaign_head,
+    complete_capacity_claim,
+    digest_bytes,
+    execute_claimed_write,
+    grant_profile_extents,
+    reclaim_profile_extents,
+    seal_profile_extents,
+    storage_counter_snapshot,
+)
 from broker import CanonicalBroker
 import tools.campaign as campaign
 
@@ -136,13 +150,15 @@ def test_q41_q43_q47_q48_q74_q79_inventory_and_measurements(tmp_path):
     binding = dict.fromkeys(['drive','host','path','operation','plan'], 'exact')
     patterns = [{'read_bytes':100,'write_bytes':100},{'read_bytes':200,'write_bytes':0}]
     observations = [{'binding':binding,'pattern':p,'duration_seconds':t,'errors':0,'readback_ok':True,
-                     'flush_ok':True,'host_write_bytes':p['write_bytes'],'device_write_bytes':p['write_bytes']}
+                     'flush_ok':True,'host_write_bytes':p['write_bytes'],'device_write_bytes':p['write_bytes'],
+                     'read_seconds':t/3,'write_seconds':t/3,'flush_seconds':t/3}
                     for p,t in zip(patterns,[1,2])]
     profile = campaign.storage_profile(binding,patterns,observations,expected_binding=binding)
     assert profile['latency_seconds']['0.5'] == 1
     assert profile['throughput_bytes_per_second']['0.05'] == 100
     for field, value in [('duration_seconds',True),('duration_seconds',float('nan')),('duration_seconds',5e-324),
                          ('device_write_bytes',-1),('device_write_bytes',.5),('host_write_bytes',True),
+                         ('read_seconds',None),('write_seconds',None),('flush_seconds',None),
                          ('errors',False),('readback_ok',1),('flush_ok',1)]:
         changed = copy.deepcopy(observations); changed[0][field] = value
         with pytest.raises(CassetteError): campaign.storage_profile(binding,patterns,changed,expected_binding=binding)
@@ -301,8 +317,57 @@ asyncio.run(main())
 
 
 def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
-    """Q33/Q42/Q44/Q53/Q80: count launches, retain command bytes and resume exact measured atoms."""
+    """Q5/Q6/Q25/Q33/Q42/Q44/Q53/Q80: resume exact measurements and retain durable boundaries."""
     owner = CapacityCoordinator(tmp_path)
+    with closing(CanonicalBroker(tmp_path / 'profile-holds')) as broker:
+        operation = broker.issue({'protocol_version': '1', 'operation': 'run',
+            'idempotency_key': 'ordered-profile-holds', 'target': 'blake3:' + '0' * 64,
+            'arguments': {}})['operation_id']
+        async def hold_and_release(boundary):
+            broker.request_hold(operation, boundary)
+            with pytest.raises(CassetteError):
+                broker.request_hold(operation, 'competing-boundary')
+            waiter = asyncio.create_task(broker.hold_boundary(operation, boundary))
+            try:
+                await asyncio.sleep(0)
+                assert broker.events(operation)[-1]['payload'] == {'hold': 'ACKNOWLEDGED', 'boundary': boundary}
+                with pytest.raises(CassetteError):
+                    broker.release_hold(operation, 'wrong-boundary')
+                broker.release_hold(operation, boundary)
+                await waiter
+            finally:
+                if not waiter.done():
+                    waiter.cancel()
+                    await asyncio.gather(waiter, return_exceptions=True)
+        asyncio.run(hold_and_release('CARTRIDGE-DURABILITY'))
+        asyncio.run(hold_and_release('profile-checkpoint'))
+        assert [event['payload']['hold'] for event in broker.events(operation)
+                if 'hold' in event['payload']] == ['REQUESTED', 'ACKNOWLEDGED', 'RELEASED'] * 2
+    # Q44/Q53: cancellation cannot release an extent while its owned I/O still runs.
+    started, release = threading.Event(), threading.Event()
+    finished = []
+    descriptor = os.open(tmp_path / 'cancelled-io-proof', os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+    def delayed_write():
+        started.set()
+        assert release.wait(3)
+        os.pwrite(descriptor, b'joined', 0)
+        finished.append(True)
+    async def cancel_during_io():
+        task = asyncio.create_task(await_extent_io(delayed_write))
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            task.cancel()
+            await asyncio.sleep(.02)
+            assert not task.done()
+        finally:
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    try:
+        asyncio.run(cancel_during_io())
+        assert finished == [True] and os.pread(descriptor, 6, 0) == b'joined'
+    finally:
+        os.close(descriptor)
     template = {'command':[sys.executable,'-c','import json,os; b=json.loads(os.environ["CASSETTE_EXECUTION_BINDING"]); print(json.dumps({"binding_digest":b["digest"],"result":b["inputs"]["operand"]*2}))'], 'cwd':str(tmp_path),
                 'permission':'CAMPAIGN_DIRECTORY_WRITE','host':'fixture','disk':'scratch','path':str(tmp_path),
                 'stop_conditions':['timeout'],'next_byte_claim':10000}
@@ -326,7 +391,6 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     with pytest.raises(CassetteError):
         campaign.verify_capture(tmp_path/'captures'/unused['operation_id'],ignored_attempt,lambda bound: 2*bound['inputs']['operand'])
     campaign.verify_namespace(root,attempt['seal'])
-    from store import digest_bytes
     patterns = [{'write_bytes':256,'read_bytes':128,'payload_digest':digest_bytes(bytes(256))},
                 {'write_bytes':512,'read_bytes':256,'payload_digest':digest_bytes(bytes(512))}]
     binding = dict.fromkeys(['drive','host','path','operation','plan'],'fixture')
@@ -339,7 +403,227 @@ def test_q33_q42_q44_q53_capture_and_profile_resume(tmp_path):
     profile = campaign.storage_profile(binding,patterns,second['value']['observations'],expected_binding=binding)
     assert profile['device_write_bytes'] == 8192
     assert profile['host_write_bytes'] == 768
+    # Q42: recorded hardware observations classify a complete cache-crossing window.
+    # Flags alone never satisfy the predicate; no large/live transfer is implied by this fixture.
+    source_binding = {**binding, 'plan': {'host_memory_bytes': 128, 'cache_crossing_required': True,
+                                        'uncached_read_request_available': True}}
+    source_observations = [{**row, 'binding': source_binding, 'data_allocated_bytes': pattern['write_bytes'],
+                            'observed_data_write_bytes': pattern['write_bytes']}
+        for pattern, row in zip(patterns, second['value']['observations'], strict=True)]
+    resumed = [{'binding': source_binding, 'pattern': pattern, 'host_write_bytes': 0,
+        'observed_data_read_bytes': pattern['read_bytes'], 'process_data_read_bytes': 256,
+        'device_read_bytes': 256, 'data_reads_with_process_io': 1, 'data_reads_without_process_io': 0,
+        'errors': 0, 'readback_ok': True, 'uncached_request': True} for pattern in patterns]
+    # These rows are recorded-hardware classifier fixtures, not live source captures.
+    empty_rate = {'samples': 0, 'minimum': None, 'maximum': None, 'empirical_percentiles': {}}
+    def classifier_statistics(row, phase):
+        seconds = row.get('duration_seconds', .001)
+        call = {'samples': 1, 'minimum': seconds, 'maximum': seconds,
+                'empirical_percentiles': {'0.5': seconds, '0.95': seconds, '0.99': seconds, '1.0': seconds}}
+        return {'phases': {name: {'calls': {'data.read': call} if name == phase else {},
+            'durable_chunk_bytes_per_second': empty_rate, 'verified_range_bytes_per_second': empty_rate}
+            for name in ('FRESH_WRITE_READBACK', 'RESUME_VERIFY', 'RETAINED_REVALIDATION')},
+            'windows': [{'active_seconds': seconds, 'downtime_before_seconds': 0}]}
+    source_observations = [{**row, 'trace_statistics': classifier_statistics(row, 'FRESH_WRITE_READBACK')}
+                           for row in source_observations]
+    resumed = [{**row, 'trace_statistics': classifier_statistics(row, 'RETAINED_REVALIDATION')} for row in resumed]
+    crossed = campaign.storage_profile(source_binding, patterns, source_observations,
+                                      expected_binding=source_binding, revalidations=resumed)
+    assert crossed['cache']['classification'] == 'MIXED_CACHE_SOURCE_WINDOW_WITH_PHYSICAL_IO'
+    assert crossed['cache']['per_read_attribution'] == 'NOT_ESTABLISHED'
+    # Q42/Q51: arbitrarily many state writes cannot conceal missing source data writes.
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns,
+            [{**row, 'host_write_bytes': 1 << 40, 'observed_data_write_bytes': pattern['write_bytes'] - 1}
+             for pattern, row in zip(patterns, source_observations, strict=True)],
+            expected_binding=source_binding, revalidations=resumed)
+    overlapping = [{'depth': 2, 'registry_id': 'near-driver', 'registry_class': 'IOBlockStorageDriver',
+                    'read_bytes': 100, 'write_bytes': 200, 'read_operations': 1},
+                   {'depth': 7, 'registry_id': 'ancestor-driver', 'registry_class': 'IOBlockStorageDriver',
+                    'read_bytes': 100, 'write_bytes': 200, 'read_operations': 1}]
+    selected_counter = storage_counter_snapshot(overlapping)
+    assert selected_counter['authority']['registry_id'] == 'near-driver'
+    assert selected_counter['device_read_bytes'] == 100
+    assert selected_counter['device_write_bytes'] == 200
+    assert selected_counter['counter_candidates'] == overlapping
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns, source_observations, expected_binding=source_binding,
+            revalidations=[{**row, 'device_read_bytes': selected_counter['device_read_bytes']} for row in resumed])
+    # The rejected old sum would falsely cross this same recorded minimum.
+    falsely_summed = campaign.storage_profile(source_binding, patterns, source_observations,
+        expected_binding=source_binding, revalidations=[{**row, 'device_read_bytes': 200} for row in resumed])
+    assert falsely_summed['status'] == 'PASS'
+    ambiguous = storage_counter_snapshot([overlapping[0], {**overlapping[1], 'depth': 2}])
+    assert ambiguous['authority'] is None and ambiguous['device_read_bytes'] is None
+    assert storage_counter_snapshot([])['device_write_bytes'] is None
+    for field, bad in [('process_data_read_bytes', 0), ('device_read_bytes', 0),
+                       ('data_reads_with_process_io', 0), ('observed_data_read_bytes', 0),
+                       ('host_write_bytes', 1), ('uncached_request', False)]:
+        changed = [{**row, field: bad} for row in resumed]
+        with pytest.raises(CassetteError):
+            campaign.storage_profile(source_binding, patterns, source_observations,
+                                     expected_binding=source_binding, revalidations=changed)
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns,
+            [{**row, 'data_allocated_bytes': 0} for row in source_observations],
+            expected_binding=source_binding, revalidations=resumed)
+    with pytest.raises(CassetteError):
+        campaign.storage_profile(source_binding, patterns, source_observations,
+                                 expected_binding=source_binding, revalidations=[])
+    assert not list(tmp_path.rglob('profile.bin'))
+    assert all(observation['scratch_retention'] == 'TEMPORARY_UNLINKED'
+               for observation in second['value']['observations'])
     assert campaign.measure_profile(owner,binding,patterns,collector,expected=second['digest']) == second
+    for offset in (100_000_008, (1 << 63)-1-16*1024*1024):
+        claims_before = len(owner.claims())
+        with pytest.raises(CassetteError) as unsupported:
+            campaign.campaign_profile_io(owner, str(campaign.uuid.uuid4()), {
+                'write_bytes':1, 'read_bytes':1, 'payload_digest':digest_bytes(bytes(1)), 'offset_bytes':offset})
+        assert unsupported.value.code == 'INVALID_REQUEST'
+        assert len(owner.claims()) == claims_before
+
+    # Q42/Q53/Q60: a named synthetic working set survives descriptor close and process restart.
+    profile_key = 'q42-profile-extents'
+    profile_binding = {'drive': 'fixture', 'host': 'fixture-host', 'operation': 'q42', 'plan': 'synthetic'}
+    profile_lengths = {'data': 32, 'state': 24}
+    data_bytes = b'profile-data-' + bytes(range(19))
+    state_bytes = b'profile-state-' + bytes(range(10))
+    prepared, extents = grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    assert prepared['value']['status'] == 'RETAINED'
+    operation = prepared['value']['operation_id']
+    transfer_dir = tmp_path / 'transfers' / operation
+    data_path = transfer_dir / 'data.extent'
+    state_path = transfer_dir / 'state.extent'
+    user_path = transfer_dir / 'user.txt'
+    user_path.write_text('preserve this unrelated file')
+    try:
+        assert os.pwrite(extents['data'].fd, data_bytes, 0) == len(data_bytes)
+        assert os.pwrite(extents['state'].fd, state_bytes, 0) == len(state_bytes)
+        os.fsync(extents['data'].fd)
+        os.fsync(extents['state'].fd)
+        original_inodes = {role: os.fstat(extent.fd).st_ino for role, extent in extents.items()}
+    finally:
+        for extent in extents.values():
+            os.close(extent.fd)
+
+    restart_script = (
+        'import json, os, sys; '
+        'from store import CapacityCoordinator, grant_profile_extents; '
+        'owner = CapacityCoordinator(sys.argv[1]); '
+        'head, extents = grant_profile_extents(owner, sys.argv[2], json.loads(sys.argv[3]), json.loads(sys.argv[4])); '
+        'assert os.pread(extents["data"].fd, len(bytes.fromhex(sys.argv[5])), 0) == bytes.fromhex(sys.argv[5]); '
+        'print(json.dumps({"status": head["value"]["status"], "inodes": {role: os.fstat(extent.fd).st_ino for role, extent in extents.items()}})); '
+        '[os.close(extent.fd) for extent in extents.values()]'
+    )
+    restarted = subprocess.run(
+        [sys.executable, '-c', restart_script, str(tmp_path), profile_key,
+         json.dumps(profile_binding), json.dumps(profile_lengths), data_bytes.hex()],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=True,
+    )
+    restart_result = json.loads(restarted.stdout)
+    assert restart_result['status'] == 'RETAINED'
+    assert restart_result['inodes'] == {role: prepared['value']['identities'][role]['inode']
+                                        for role in profile_lengths}
+    assert restart_result['inodes'] == original_inodes
+
+    with pytest.raises(CassetteError):
+        grant_profile_extents(owner, profile_key, {**profile_binding, 'plan': 'changed'}, profile_lengths)
+    with pytest.raises(CassetteError):
+        grant_profile_extents(owner, profile_key, profile_binding, {**profile_lengths, 'state': 25})
+
+    missing_path = transfer_dir / 'state.missing'
+    state_path.rename(missing_path)
+    try:
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    finally:
+        missing_path.rename(state_path)
+
+    replacement_path = transfer_dir / 'data.replaced'
+    data_path.rename(replacement_path)
+    data_path.write_bytes(data_bytes)
+    try:
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    finally:
+        data_path.unlink()
+        replacement_path.rename(data_path)
+
+    evidence_key = 'q42-profile-evidence'
+    invented_evidence_digest = digest_bytes(b'q42-invented-evidence')
+    with pytest.raises(CassetteError):
+        reclaim_profile_extents(owner, profile_key, invented_evidence_digest)
+
+    retained, locked_extents = grant_profile_extents(owner, profile_key, profile_binding, profile_lengths)
+    with pytest.raises(CassetteError):
+        seal_profile_extents(owner, profile_key, retained['digest'], evidence_key, invented_evidence_digest)
+    wrong_evidence_key = 'q42-profile-evidence-wrong'
+    wrong_evidence = compare_campaign_head(owner, wrong_evidence_key, None, {
+        'retained_manifests': [{'key': 'q42-other-profile', 'retained_digest': retained['digest']}],
+    })
+    with pytest.raises(CassetteError):
+        seal_profile_extents(owner, profile_key, retained['digest'], wrong_evidence_key, wrong_evidence['digest'])
+    evidence = compare_campaign_head(owner, evidence_key, None, {
+        'retained_manifests': [{'key': profile_key, 'retained_digest': retained['digest']}],
+    })
+    sealed = seal_profile_extents(owner, profile_key, retained['digest'], evidence_key, evidence['digest'])
+    assert sealed['value']['status'] == 'SEALED'
+    try:
+        with pytest.raises(CassetteError):
+            reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    finally:
+        for extent in locked_extents.values():
+            os.close(extent.fd)
+
+    active = owner(CapacityTransition('q42-profile-active', 'hold', write_bytes=(0,)))
+    try:
+        with pytest.raises(CassetteError):
+            reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    finally:
+        execute_claimed_write(active, lambda: None)
+        complete_capacity_claim(active)
+
+    reclaimed = reclaim_profile_extents(owner, profile_key, sealed['digest'])
+    assert reclaimed['value']['status'] == 'RECLAIMED'
+    assert not data_path.exists() and not state_path.exists()
+    assert user_path.read_text() == 'preserve this unrelated file'
+    assert reclaim_profile_extents(owner, profile_key, sealed['digest']) == reclaimed
+
+    # Q6/Q60: malformed immutable values fail through Cassette's typed error boundary.
+    malformed_values = {
+        'scalar': 'not-a-manifest',
+        'list': [],
+        'status': {'status': 'UNKNOWN', 'binding': profile_binding, 'lengths': profile_lengths,
+                   'operation_id': 'profile-22222222-2222-2222-2222-222222222222',
+                   'retention': 'TEMPORARY'},
+    }
+    for suffix, value in malformed_values.items():
+        malformed_key = f'q42-profile-malformed-{suffix}'
+        compare_campaign_head(owner, malformed_key, None, value)
+        with pytest.raises(CassetteError):
+            grant_profile_extents(owner, malformed_key, profile_binding, profile_lengths)
+
+    # Q42/Q53/Q60: an interrupted PREPARED namespace is preserved; a fresh namespace is used.
+    prepared_key = 'q42-profile-prepared-recovery'
+    old_operation = 'profile-11111111-1111-1111-1111-111111111111'
+    old_directory = tmp_path / 'transfers' / old_operation
+    old_directory.mkdir(parents=True)
+    old_data = old_directory / 'data.extent'
+    old_data_bytes = b'unknown-old-inode'.ljust(profile_lengths['data'], b'!')
+    old_data.write_bytes(old_data_bytes)
+    compare_campaign_head(owner, prepared_key, None, {
+        'status': 'PREPARED', 'binding': profile_binding, 'lengths': profile_lengths,
+        'operation_id': old_operation, 'retention': 'TEMPORARY',
+    })
+    recovered, recovered_extents = grant_profile_extents(owner, prepared_key, profile_binding, profile_lengths)
+    try:
+        assert recovered['value']['status'] == 'RETAINED'
+        assert recovered['value']['operation_id'] != old_operation
+        assert old_data.read_bytes() == old_data_bytes
+        assert (tmp_path / 'transfers' / recovered['value']['operation_id'] / 'data.extent').is_file()
+    finally:
+        for extent in recovered_extents.values():
+            os.close(extent.fd)
     assert campaign.expand_coordinates('X-<row>-<record>',{'row':['a','b'],'record':['START','VERIFY']}) == [
         'X-a-START','X-b-START','X-a-VERIFY','X-b-VERIFY']
     with pytest.raises(CassetteError): campaign.expand_coordinates('X-<row>',{'row':['a','a']})
@@ -548,6 +832,304 @@ steps:
                          ('evidence_level', 'LIVE'), ('depends', ['unknown'])]:
         bad = copy.deepcopy(anchored); bad['fixed_records'][-1][field] = value
         with pytest.raises(CassetteError): campaign.materialize(tmp_path, bad)
+
+    # Q80 composes existing recovery and verification rules before one monotone publication.
+    edge_root = tmp_path/'proof-edges'
+    (edge_root/'research').mkdir(parents=True)
+    (edge_root/'schema/campaign').mkdir(parents=True)
+    actual_contract = json.loads((Path(__file__).resolve().parents[1]/'schema/campaign/contract.json').read_text())
+    proof_families = [copy.deepcopy(row) for row in actual_contract['expanded_session_families']
+                      if row['family'] in {'physical_qualification','checkpoint_proof','verification_work'}]
+    proof_contract = {'materialized_record_contract': {'family_evidence_levels': {
+        row['family']: actual_contract['materialized_record_contract']['family_evidence_levels'][row['family']]
+        for row in proof_families}}, 'dependency_graph_revision_contract': {},
+        'expanded_session_families': proof_families}
+    terminals = ['QUALIFY-'+key+'-VERIFY' for key in ('ACQ-F4-c1','ACQ-F4-c10')]
+    proof_queue = {**proof_contract, 'fixed_steps': [{'id':'L04','depends':[]}],
+                   'operation_records':[{'id':'F4-GATE','depends':terminals}],
+                   'long_operation_contract': {'checkpoint_proof':'Every product START requires its exact RECOVERABILITY coordinate'},
+                   'verification_contract': {'fixed_targets':['F4-GATE']}}
+    (edge_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':proof_queue},sort_keys=False)+'```\n')
+    (edge_root/'research/ACCEPTANCE_MATRIX.yaml').write_text(campaign.yaml.safe_dump(
+        {'fixture_gate_rows':[{'id':'f4_gate','pass_condition':'exact independent comparison'}],
+         'physical_storage_qualification':{'required_assertions':['exact_drive_operation_plan_profile_recorded']}}))
+    (edge_root/'schema/campaign/contract.json').write_text(json.dumps({**proof_contract,
+        'matrix_axes':{},'assertion_owner_patterns':{'fixture_gate_rows[id=f4_gate]':['F4-GATE'],
+            'physical_storage_qualification':actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}))
+    physical_authority = 'matrix#physical_storage_qualification.required_assertions[0]'
+    checkpoint_records = [node('CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                               ['QUALIFY-'+key+'-START']) for key in ('ACQ-F4-c1','ACQ-F4-c10')]
+    verification_records = []
+    for target in [*terminals,'F4-GATE']:
+        predecessors = (terminals if target == 'F4-GATE' else [target.removesuffix('-VERIFY')+'-START',
+            'CHECKPOINT-'+target.removesuffix('-VERIFY')+'-START-RECOVERABILITY'])
+        verification_records.extend([node('VERIFY-WORK-'+target+'-START',list(predecessors)),
+            node('VERIFY-WORK-'+target+'-RESULT',['VERIFY-WORK-'+target+'-START'])])
+    physical_records = []
+    for key, terminal in zip(('ACQ-F4-c1','ACQ-F4-c10'),terminals,strict=True):
+        physical_records.extend([node('QUALIFY-'+key+'-START',['L04']),
+            node(terminal,['QUALIFY-'+key+'-START','CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                           'VERIFY-WORK-'+terminal+'-RESULT'],[physical_authority])])
+    proof_registry = {'matrix_digest':campaign.file_digest(edge_root/'research/ACCEPTANCE_MATRIX.yaml'),
+        'materializer':'L04','required_owners':{authority:['F4-GATE'],physical_authority:terminals},
+        'fixed_records':[node('L04',[],level='INTEGRATION'),
+            node('F4-GATE',[*terminals,'VERIFY-WORK-F4-GATE-RESULT'],[authority])],
+        'families':{
+            'physical_qualification':{'dimensions':{'consumer-flat-id':['ACQ-F4-c1','ACQ-F4-c10'],'record':['START','VERIFY']},
+                'dependency_bindings':{'literal_consumer_prerequisites_that_do_not_depend_on_this_profile':['L04']},
+                'records':physical_records},
+            'checkpoint_proof':{'dimensions':{'operation-start-flat-id':['QUALIFY-ACQ-F4-c1-START','QUALIFY-ACQ-F4-c10-START']},
+                'records':checkpoint_records},
+            'verification_work':{'dimensions':{'target-flat-id':[*terminals,'F4-GATE'],'record':['START','RESULT']},
+                'records':verification_records}}}
+    proof_early = {**proof_registry,'fixed_records':proof_registry['fixed_records'][:1],'families':{},
+                   'required_owners':{},'deferred_assertion_owners':{authority:['F4-GATE'],
+                       physical_authority:actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}
+    proof_parent = campaign.materialize(edge_root,proof_early)
+    proof_graph = campaign.materialize(edge_root,proof_registry,parent=proof_parent)
+    assert proof_graph['nodes']['L04'] == proof_parent['nodes']['L04']
+    for key, terminal in zip(('ACQ-F4-c1','ACQ-F4-c10'),terminals,strict=True):
+        start = 'QUALIFY-'+key+'-START'
+        checkpoint = 'CHECKPOINT-'+start+'-RECOVERABILITY'
+        assert proof_graph['nodes'][checkpoint]['depends'] == [start]
+        assert set(proof_graph['nodes'][terminal]['depends']) == {
+            start,checkpoint,'VERIFY-WORK-'+terminal+'-RESULT'}
+        assert set(proof_graph['nodes']['VERIFY-WORK-'+terminal+'-START']['depends']) == {start,checkpoint}
+        assert terminal not in proof_graph['nodes']['VERIFY-WORK-'+terminal+'-START']['depends']
+        assert not any(name.startswith('CHECKPOINT-VERIFY-WORK-') for name in proof_graph['nodes'])
+    assert set(proof_graph['nodes']['F4-GATE']['depends']) == {*terminals,'VERIFY-WORK-F4-GATE-RESULT'}
+    assert proof_graph['nodes']['VERIFY-WORK-F4-GATE-START']['depends'] == terminals
+    assert proof_graph['required_owners'][physical_authority] == terminals
+    for key in ('ACQ-F4-c1','ACQ-F4-c10'):
+        chain = ['QUALIFY-'+key+'-START','CHECKPOINT-QUALIFY-'+key+'-START-RECOVERABILITY',
+                 'VERIFY-WORK-QUALIFY-'+key+'-VERIFY-START','VERIFY-WORK-QUALIFY-'+key+'-VERIFY-RESULT',
+                 'QUALIFY-'+key+'-VERIFY']
+        assert [proof_graph['order'].index(name) for name in chain] == sorted(proof_graph['order'].index(name) for name in chain)
+    first, second = terminals
+    start_a, start_b = [target.removesuffix('-VERIFY')+'-START' for target in terminals]
+    cp_a, cp_b = ['CHECKPOINT-'+start+'-RECOVERABILITY' for start in (start_a,start_b)]
+    vs_a, vs_b = ['VERIFY-WORK-'+target+'-START' for target in terminals]
+    vr_a = 'VERIFY-WORK-'+first+'-RESULT'
+    mismatch = 'literal graph edges differ from composed contract prerequisites'
+    observations = []
+    faults = ['omitted_checkpoint','missing_checkpoint_edge','crosswired_checkpoint','union_checkpoint',
+              'foreign_checkpoint_edge','omitted_verification','target_cycle','verifier_missing_checkpoint',
+              'verifier_missing_start','missing_original_edge','recursive_checkpoint','verify_checkpoint',
+              'verify_verifier','stale_checkpoint_binding','stale_verifier_binding','crosswired_result']
+    for fault in faults:
+        bad = copy.deepcopy(proof_registry)
+        indexed = {row['id']:row for family in bad['families'].values() for row in family['records']}
+        expected_key, expected_detail = first, mismatch
+        if fault == 'omitted_checkpoint':
+            bad['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].remove(start_a)
+            bad['families']['checkpoint_proof']['records'].remove(indexed[cp_a])
+            indexed[first]['depends'].remove(cp_a); indexed[vs_a]['depends'].remove(cp_a)
+            expected_key, expected_detail = start_a, 'long-operation START lacks its checkpoint proof coordinate'
+        elif fault == 'missing_checkpoint_edge': indexed[first]['depends'].remove(cp_a)
+        elif fault in {'crosswired_checkpoint','union_checkpoint'}:
+            indexed[cp_a]['depends'] = [start_b] if fault == 'crosswired_checkpoint' else [start_a,start_b]
+            expected_key = cp_a
+        elif fault == 'foreign_checkpoint_edge': indexed[first]['depends'][1] = cp_b
+        elif fault == 'omitted_verification':
+            bad['families']['verification_work']['dimensions']['target-flat-id'].remove(second)
+            bad['families']['verification_work']['records'] = [row for row in bad['families']['verification_work']['records']
+                if row['id'] not in {'VERIFY-WORK-'+second+'-START','VERIFY-WORK-'+second+'-RESULT'}]
+            indexed[second]['depends'].remove('VERIFY-WORK-'+second+'-RESULT')
+            expected_key, expected_detail = second, 'terminal target lacks its independent verification coordinate'
+        elif fault in {'target_cycle','verifier_missing_checkpoint','verifier_missing_start'}:
+            if fault == 'target_cycle': indexed[vs_a]['depends'].append(first)
+            else: indexed[vs_a]['depends'].remove(cp_a if fault == 'verifier_missing_checkpoint' else start_a)
+            expected_key = vs_a
+        elif fault == 'missing_original_edge': indexed[first]['depends'].remove(start_a)
+        elif fault == 'recursive_checkpoint':
+            key = 'CHECKPOINT-'+vs_a+'-RECOVERABILITY'
+            bad['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].append(vs_a)
+            bad['families']['checkpoint_proof']['records'].append(node(key,[vs_a]))
+            expected_key, expected_detail = key, 'checkpoint coordinate is not a product operation START'
+        elif fault in {'verify_checkpoint','verify_verifier'}:
+            target = cp_a if fault == 'verify_checkpoint' else vr_a
+            bad['families']['verification_work']['dimensions']['target-flat-id'].append(target)
+            bad['families']['verification_work']['records'].extend([
+                node('VERIFY-WORK-'+target+'-START',[start_a]),
+                node('VERIFY-WORK-'+target+'-RESULT',['VERIFY-WORK-'+target+'-START'])])
+            expected_key = 'VERIFY-WORK-'+target+'-START'
+            expected_detail = 'verification coordinate is absent or recursively verifies proof work'
+        elif fault == 'stale_checkpoint_binding':
+            bad['families']['checkpoint_proof']['dependency_bindings'] = {'exact-operation-START':[start_a]}
+            expected_key, expected_detail = cp_a, 'checkpoint predecessor must come only from its coordinate'
+        elif fault == 'stale_verifier_binding':
+            bad['families']['verification_work']['dependency_bindings'] = {'every-original-target-predecessor':[start_a]}
+            expected_key, expected_detail = vs_a, 'verification predecessors must come only from their target'
+        else:
+            indexed[vr_a]['depends'] = [vs_b]
+            expected_key = vr_a
+        with pytest.raises(CassetteError) as rejected:
+            campaign.materialize(edge_root,bad,parent=proof_parent)
+        assert (rejected.value.object_id,rejected.value.detail) == (expected_key,expected_detail), fault
+        observations.append({'fault':fault,'error':rejected.value.payload()})
+    legacy_nodes = [*proof_parent['nodes'].values(),
+        node(start_a,['L04']),node(first,[start_a],[physical_authority]),
+        node(start_b,['L04']),node(second,[start_b],[physical_authority])]
+    legacy = campaign.validate_graph(legacy_nodes,required_owners={physical_authority:terminals},parent=proof_parent,
+        materializer='L04',deferred_owners={authority:['F4-GATE']})
+    with pytest.raises(CassetteError) as sealed:
+        campaign.materialize(edge_root,proof_registry,parent=legacy)
+    assert (sealed.value.object_id,sealed.value.detail) == (first,'successor rewrites or removes an inherited record or edge')
+    assert {key:value for key,value in legacy['nodes'][first].items() if key != 'depends'} == {
+        key:value for key,value in proof_graph['nodes'][first].items() if key != 'depends'}
+    observations.append({'fault':'sealed_target_edges','error':sealed.value.payload()})
+
+    # Q80: a failed attempt does not create a second required tuple or erase its history.
+    succession_root = tmp_path/'same-profile-attempts'
+    (succession_root/'research').mkdir(parents=True)
+    (succession_root/'schema/campaign').mkdir(parents=True)
+    succession_contract = copy.deepcopy(proof_contract)
+    succession_contract['materialized_record_contract']['family_evidence_levels']['source_profile_group'] = 'LIVE'
+    succession_contract['expanded_session_families'].append({'family':'source_profile_group',
+        'records':['SOURCE-PROFILES-ALL-PASS'],'owner_stage':'L07',
+        'dependencies':['every-QUALIFY-<consumer-flat-id>-VERIFY']})
+    succession_queue = {**succession_contract,'fixed_steps':[{'id':'L04','depends':[]}],
+        'operation_records':[],'long_operation_contract':proof_queue['long_operation_contract'],
+        'verification_contract':{'fixed_targets':[]}}
+    (succession_root/'IMPLEMENTATION.md').write_text('```yaml\n'+campaign.yaml.safe_dump(
+        {'phase_live_queue':succession_queue},sort_keys=False)+'```\n')
+    (succession_root/'research/ACCEPTANCE_MATRIX.yaml').write_text(campaign.yaml.safe_dump(
+        {'physical_storage_qualification':{'required_assertions':['exact_drive_operation_plan_profile_recorded']}}))
+    (succession_root/'schema/campaign/contract.json').write_text(json.dumps({**succession_contract,
+        'matrix_axes':{},'assertion_owner_patterns':{
+            'physical_storage_qualification':actual_contract['assertion_owner_patterns']['physical_storage_qualification']}}))
+    attempt_registry = copy.deepcopy(proof_registry)
+    attempt_registry.update(matrix_digest=campaign.file_digest(succession_root/'research/ACCEPTANCE_MATRIX.yaml'),
+        fixed_records=attempt_registry['fixed_records'][:1],required_owners={physical_authority:terminals},approved_cards={})
+    attempt_registry['families']['verification_work']['dimensions']['target-flat-id'].remove('F4-GATE')
+    attempt_registry['families']['verification_work']['records'] = [row for row in
+        attempt_registry['families']['verification_work']['records'] if not row['id'].startswith('VERIFY-WORK-F4-GATE-')]
+    def approve_start(reg, key, plan):
+        start = next(row for row in reg['families']['physical_qualification']['records'] if row['id']==key)
+        request = {'consumer_flat_id':key.removeprefix('QUALIFY-').removesuffix('-START'),
+            'physical_disk_id':['fixture'],'apfs_volume_uuid':'fixture','host_id':campaign.identity('host'),
+            'assembled_path_digest':campaign.identity('path'),'operation':'acquire-qualification-only',
+            'plan_digest':campaign.identity(plan),'expected_read_write_shape':[{'artifact':'fixture','read_bytes':256,'write_bytes':256}]}
+        card = {'record_id':key,'permission':'CAMPAIGN_DIRECTORY_WRITE','command':['fixture',key],
+            'host':'fixture','disk':'scratch','path':str(succession_root),'stop_conditions':['first-boundary'],
+            'bound':{'profile_request':request}}
+        digest = campaign.identity(card);reg['approved_cards'][digest] = card
+        start.update(permission=card['permission'],approved_card_digest=digest)
+    for start, plan in ((start_a,'c1'),(start_b,'c10')): approve_start(attempt_registry,start,plan)
+    prior_registry_bytes = campaign.canonical_bytes(attempt_registry)
+    attempt_parent = campaign.materialize(succession_root,attempt_registry)
+    assert campaign.canonical_bytes(attempt_registry) == prior_registry_bytes
+    local = {start_a,first,cp_a,vs_a,vr_a}
+    def append_attempt(reg, consumer, prior):
+        for family, inputs in reg['families'].items():
+            inputs['records'].extend(json.loads(json.dumps(row).replace('ACQ-F4-c1',consumer))
+                for row in list(inputs['records']) if row['id'] in local)
+        terminal = 'QUALIFY-'+consumer+'-VERIFY'
+        reg['families']['physical_qualification']['dimensions']['consumer-flat-id'].append(consumer)
+        reg['families']['checkpoint_proof']['dimensions']['operation-start-flat-id'].append('QUALIFY-'+consumer+'-START')
+        reg['families']['verification_work']['dimensions']['target-flat-id'].append(terminal)
+        next(row for row in reg['families']['physical_qualification']['records']
+             if row['id']==terminal)['prior_qualification'] = prior
+        approve_start(reg,'QUALIFY-'+consumer+'-START','c1')
+        return terminal
+    successor_registry = copy.deepcopy(attempt_registry)
+    current = append_attempt(successor_registry,'ACQ-F4-c2',first)
+    successor_registry['required_owners'][physical_authority] = sorted([second,current])
+    successor_registry['families']['source_profile_group'] = {
+        'records':[node('SOURCE-PROFILES-ALL-PASS',sorted([second,current]))]}
+    successor_registry_bytes = campaign.canonical_bytes(successor_registry)
+    successor = campaign.materialize(succession_root,successor_registry,parent=attempt_parent)
+    assert campaign.canonical_bytes(successor_registry) == successor_registry_bytes
+    assert successor['required_owners'] == {physical_authority:sorted([second,current])}
+    assert all(successor['nodes'][key]==value for key,value in attempt_parent['nodes'].items())
+    assert successor['nodes']['SOURCE-PROFILES-ALL-PASS']['depends'] == sorted([second,current])
+    assert successor['parent_graph_digest'] == attempt_parent['revision_digest']
+    attempt_control = succession_root/'control';attempt_control.mkdir()
+    attempt_owner = CapacityCoordinator(attempt_control)
+    old_head = campaign.publish_graph(attempt_owner,attempt_parent)
+    next_head = campaign.publish_graph(attempt_owner,successor,old_head['digest'])
+    assert next_head['value']['ancestors'] == [attempt_parent['revision_digest']]
+    readonly_start = copy.deepcopy(list(successor['nodes'].values()))
+    next(row for row in readonly_start if row['id']==current.removesuffix('-VERIFY')+'-START')['permission'] = 'READ_ONLY'
+    with pytest.raises(CassetteError,match='approved action card'):
+        campaign.validate_graph(readonly_start,required_owners=successor['required_owners'],parent=attempt_parent,
+            materializer=successor['materializer_record_id'],registry_digest=successor['expansion_registry_digest'])
+    readonly_prior = copy.deepcopy(list(attempt_parent['nodes'].values()))
+    prior_start = next(row for row in readonly_prior if row['id']==start_a)
+    prior_start['permission'] = prior_start['approved_card']['permission'] = 'READ_ONLY'
+    prior_start['approved_card_digest'] = campaign.identity(prior_start['approved_card'])
+    readonly_parent = campaign.validate_graph(readonly_prior,required_owners=attempt_parent['required_owners'])
+    readonly_child = [copy.deepcopy(row) for row in successor['nodes'].values()
+                      if row['id'] not in attempt_parent['nodes']]
+    next_start = next(row for row in readonly_child if row['id']==current.removesuffix('-VERIFY')+'-START')
+    next_start['permission'] = next_start['approved_card']['permission'] = 'READ_ONLY'
+    next_start['approved_card_digest'] = campaign.identity(next_start['approved_card'])
+    campaign.validate_graph([*readonly_prior,*readonly_child],required_owners=successor['required_owners'],
+                            parent=readonly_parent)
+    for fault in ('missing_digest','foreign_record','missing_command'):
+        bad_child = copy.deepcopy(readonly_child)
+        bad_start = next(row for row in bad_child if row['id']==next_start['id'])
+        if fault=='missing_digest': del bad_start['approved_card_digest']
+        else:
+            if fault=='foreign_record': bad_start['approved_card']['record_id'] = start_a
+            else: del bad_start['approved_card']['command']
+            bad_start['approved_card_digest'] = campaign.identity(bad_start['approved_card'])
+        with pytest.raises(CassetteError,match='approved action card'):
+            campaign.validate_graph([*readonly_prior,*bad_child],required_owners=successor['required_owners'],
+                                    parent=readonly_parent)
+    for missing in local - {first}:
+        prior_records = [{**copy.deepcopy(row),'depends':[key for key in row['depends'] if key!=missing]}
+                         for row in attempt_parent['nodes'].values() if row['id']!=missing]
+        incomplete_parent = campaign.validate_graph(prior_records,required_owners=attempt_parent['required_owners'])
+        child_records = [copy.deepcopy(row) for row in successor['nodes'].values()
+                         if row['id'] not in attempt_parent['nodes']]
+        with pytest.raises(CassetteError):
+            campaign.validate_graph([*prior_records,*child_records],required_owners=successor['required_owners'],
+                                    parent=incomplete_parent)
+    for missing in ('CHECKPOINT-'+current.removesuffix('-VERIFY')+'-START-RECOVERABILITY',
+                    'VERIFY-WORK-'+current+'-START','VERIFY-WORK-'+current+'-RESULT'):
+        incomplete = [{**copy.deepcopy(row),'depends':[key for key in row['depends'] if key!=missing]}
+                      for row in successor['nodes'].values() if row['id']!=missing]
+        with pytest.raises(CassetteError,match='proof targets'):
+            campaign.validate_graph(incomplete,required_owners=successor['required_owners'],parent=attempt_parent)
+    for fault in ('missing_link','unknown_prior','self_prior','malformed_prior','branch','wrong_plan','wrong_drive',
+                  'wrong_shape','wrong_host','wrong_disk','wrong_path','wrong_permission','consumer_mismatch',
+                  'malformed_consumer','malformed_request','owner_loss'):
+        bad = copy.deepcopy(successor_registry)
+        target = next(row for row in bad['families']['physical_qualification']['records'] if row['id']==current)
+        start = next(row for row in bad['families']['physical_qualification']['records']
+                     if row['id']==current.removesuffix('-VERIFY')+'-START')
+        card = bad['approved_cards'][start['approved_card_digest']]
+        if fault == 'missing_link': del target['prior_qualification']
+        elif fault == 'unknown_prior': target['prior_qualification'] = 'QUALIFY-absent-VERIFY'
+        elif fault == 'self_prior': target['prior_qualification'] = current
+        elif fault == 'malformed_prior': target['prior_qualification'] = 1
+        elif fault == 'branch':
+            extra = append_attempt(bad,'ACQ-F4-c3',first)
+            bad['required_owners'][physical_authority].append(extra)
+        elif fault == 'owner_loss': target['matrix_assertion_owners'] = []
+        else:
+            request = card['bound']['profile_request']
+            if fault == 'wrong_plan': request['plan_digest'] = campaign.identity('foreign')
+            elif fault == 'wrong_drive': request['apfs_volume_uuid'] = 'foreign'
+            elif fault == 'wrong_shape': request['expected_read_write_shape'][0]['write_bytes'] += 1
+            elif fault == 'consumer_mismatch': request['consumer_flat_id'] = 'foreign'
+            elif fault == 'malformed_consumer': request['consumer_flat_id'] = 1
+            elif fault == 'malformed_request': card['bound']['profile_request'] = []
+            elif fault == 'wrong_permission': card['permission'] = start['permission'] = 'PHYSICAL_FAULT'
+            else: card[fault.removeprefix('wrong_')] = 'foreign'
+            digest = campaign.identity(card);bad['approved_cards'][digest] = card;start['approved_card_digest'] = digest
+        with pytest.raises(CassetteError): campaign.materialize(succession_root,bad,parent=attempt_parent)
+    consumed_registry = copy.deepcopy(attempt_registry)
+    consumed_registry['families']['source_profile_group'] = {
+        'records':[node('SOURCE-PROFILES-ALL-PASS',terminals)]}
+    consumed = campaign.materialize(succession_root,consumed_registry)
+    with pytest.raises(CassetteError,match='consum'):
+        campaign.materialize(succession_root,successor_registry,parent=consumed)
+    for name,value in [('registry.json',proof_registry),('parent.json',proof_parent),('graph.json',proof_graph),
+                       ('observations.json',observations)]:
+        (edge_root/name).write_text(json.dumps(value,sort_keys=True))
 
     # The actual failure authority expands all 80 coordinates and 432 records before publication.
     source_root = Path(__file__).resolve().parent.parent

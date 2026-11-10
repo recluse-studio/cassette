@@ -1,0 +1,6 @@
+{
+  "source_query_cases": 373248,
+  "old_candidate_rows": 640440,
+  "new_candidate_rows": 515958,
+  "strictly_smaller_cases": 90438
+}

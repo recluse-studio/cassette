@@ -1,0 +1,40 @@
+{
+  "seed": 2026092103,
+  "actual_source_checks": 81000,
+  "exhaustive_relaxation_checks": 4050,
+  "strict_witness_difference_bounds": [
+    0,
+    1,
+    0
+  ],
+  "original_record_replays": [
+    {
+      "gate_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "gate_bytes": 24,
+      "payload_bytes": 18,
+      "output": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "gate_indices": [
+        0,
+        2
+      ],
+      "gate_bytes": 12,
+      "payload_bytes": 18,
+      "output": [
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

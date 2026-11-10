@@ -1,0 +1,94 @@
+{
+  "record_kind": "L05_SOURCE_PREPARATION",
+  "date": "2026-10-15",
+  "status": "PASS_BOUNDED_FIXTURE_PLATFORM",
+  "source_reference": "The commit containing this receipt; exact runtime and test bytes are joined to the producer and frozen independent review.",
+  "source_base_commit": "bf4d49a18425a0e7d0478dcca0eb997215e5adc3",
+  "matrix_digest": "blake3:63a45472b787beddef056bf5a77ae9aeb80bee899e685f03a803cba9e32ee712",
+  "claims": {
+    "header_preparation": "Qualification pauses without header payload; inspection lands only exact prefix/header, reuses the store parser, keeps whole-payload proof NOT_RUN and preserves same-key Go after header-only refusal or local loss.",
+    "dataset_preparation": "Exact immutable Hugging Face file subsets; no selected payload read during selection or qualification; Git blobs up to one 4 MiB tail and LFS files use existing acquired extents and checkpoint lifecycle.",
+    "compatibility": "Legacy complete model and Go paths, canonical request identity, single source-byte writer/parser/digest/lifecycle and source-selection alias preserved."
+  },
+  "original_findings": {
+    "D1": "Header refusal or saved-header failure terminalized the shared acquire.",
+    "D2": "Missing or zeroed saved evidence was blamed on the source and missing evidence was recreated.",
+    "D3": "Git-stored SafeTensors header failed after ranges arrived."
+  },
+  "repairs": {
+    "D1": "Refuse unsupported modes before issue and pause inspection-only failures.",
+    "D2": "Require existing saved extents/directories and name invalid local prefix evidence.",
+    "D3": "Pass the local header digest to the existing parser."
+  },
+  "review": {
+    "status": "PASS",
+    "evidence_levels": [
+      "STATIC",
+      "FIXTURE",
+      "PLATFORM"
+    ],
+    "model": "claude-opus-5-5",
+    "route": "Existing Claude Code subscription; one reviewer session across three stopped launcher runs, native success and no permission denials.",
+    "roles": "Opus authored questions/probes and judged results; Codex implemented and executed unchanged probes on same Mac/account.",
+    "report": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01/review-final.md",
+    "frozen_source_manifest": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01/source/_review/final-manifest.json",
+    "frozen_files_matched": 199,
+    "original_probe_sha256": "3405f6d243b00e7cf0e40496163b5327bde0732042b8be426991026b003cfb64",
+    "corrected_probe_sha256": "d250d905af0d174ff49a7db5451c686ef4df52b3463f1559a6c3bb2b38b46e91",
+    "final_baseline": {
+      "matched": 30,
+      "different": 0
+    },
+    "final_mutant": {
+      "matched": 29,
+      "different": 1,
+      "disposition": "One combined M1b/M7 expectation was defective. Its row is not counted as a pass. The independent reviewer used operation creation, the later error boundary and prior-record mutation to confirm M1b sensitivity; no additional replay required."
+    },
+    "instrument_history": "Original late pause observer corrected by Opus; both incomplete reports, original results and all mutations retained.",
+    "remaining": "Live Q42 header-envelope acceptance and actual provider Range/acquisition proof are outside this verdict."
+  },
+  "machine_proof": {
+    "status": "PASS",
+    "producer": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-09",
+    "tests_passed": 340,
+    "tests_skipped": 0,
+    "suite_seconds": 519.0,
+    "component_controls": 14,
+    "ordinary_ledger_violations": [],
+    "j": {
+      "authored_executable_LOC": 15855,
+      "direct_dependencies": 9,
+      "duplicate_authorities": 0,
+      "failed_acceptance_rows": 0,
+      "independent_processes": 1,
+      "language_runtimes": 1,
+      "model_specific_branches": 0,
+      "new_numerical_kernels": 0,
+      "shipped_binary_bytes": 8425096
+    },
+    "j_change": "194 added product lines from bf4d49a; no kernel, process, runtime, dependency, model branch, duplicate authority or shipped binary added.",
+    "join": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01/proof-source-join.json",
+    "declared_manifest_difference": "Producer-owned regenerated tools/generated/s27_j_report.json only; runtime and tests match review."
+  },
+  "installation": {
+    "status": "INSTALLED_VERIFIED",
+    "wheel": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/wheel-07/cassette-0.0.1-py3-none-any.whl",
+    "wheel_sha256": "ddcafe7a9edcdf8fe5c5cc89332b8ebc42d2941463f80ea1c76c3f97c95aa69a",
+    "runtime_files_matched": 38,
+    "executable": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/installed-01/environment/bin/cassette",
+    "receipt": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01/wheel-07-verification.json",
+    "attempts": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01/installation-attempts.json",
+    "preserved_predecessor": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/installed-current-before-wheel07.json"
+  },
+  "evidence_root": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/source-preparation-01",
+  "remaining": {
+    "L05": "IN_PROGRESS",
+    "L06_L10": "TODO with existing dependencies",
+    "physical_profiles": "NOT_RUN",
+    "live_model_headers": "NOT_RUN",
+    "required_large_model_and_dataset_acquisitions": "NOT_RUN",
+    "dataset_transport_header_materialization": "OPEN",
+    "source_entry_aggregate": "NOT_RUN",
+    "next": "Freeze exact dataset selections through the installed CLI, then finish exact source/header/acquisition qualification records and run eligible live work. Preserve required pins and completed one-model test."
+  }
+}

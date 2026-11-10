@@ -1,7 +1,9 @@
-# test_l05_credentials.py — macOS Keychain credential lifecycle proof (Q9/Q52); depends on broker.py, errors.py.
-"""Exercise disposable Keychain credentials through macOS and a loopback source boundary."""
+# test_l05_credentials.py — source credential lifecycle proof (Q9/Q52); depends on broker.py, errors.py.
+"""Exercise disposable source credentials through macOS and loopback provider boundaries."""
 
 import errno
+import base64
+import hashlib
 import fcntl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -10,16 +12,188 @@ from pathlib import Path
 import pty
 import select
 import subprocess
+import shutil
 import sys
 import termios
 import threading
 import time
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from broker import MacOSKeychainCredentialProvider
+from broker import MacOSSourceCredentialProvider
 from errors import CassetteError
+
+
+def test_q9_q52_cli_existing_ollama_login_signs_account_and_pull_grants_across_processes(tmp_path):
+    """Q9/Q52 acquisition entry: existing account, bound key, revocation and same-origin pull authorization."""
+    home = tmp_path / 'home'
+    key = home / '.ollama/id_ed25519'
+    key.parent.mkdir(parents=True)
+    subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key)], check=True)
+    original_key = key.read_bytes()
+    public = base64.b64decode(key.with_suffix('.pub').read_text().split()[1])
+    public_der = tmp_path / 'public.der'
+    public_der.write_bytes(bytes.fromhex('302a300506032b6570032100') + public[-32:])
+    openssl = shutil.which('openssl')
+    assert openssl is not None, 'the source-boundary fixture requires the installed OpenSSL verifier'
+    state = tmp_path / 'state'
+    controls = {'revoked': False, 'challenge': 'valid', 'name_field': 'Name'}
+    requests = []
+    grants = []
+    token = 'fixture-ephemeral-registry-grant'
+    config = b'{}'
+    config_digest = 'sha256:' + hashlib.sha256(config).hexdigest()
+    manifest = json.dumps({'schemaVersion': 2, 'config': {
+        'mediaType': 'application/vnd.docker.container.image.v1+json', 'digest': config_digest, 'size': len(config)},
+        'layers': [{'mediaType': 'application/vnd.ollama.image.model',
+                    'digest': 'sha256:' + 'a' * 64, 'size': 16},
+                   {'mediaType': 'application/vnd.ollama.image.license',
+                    'digest': 'sha256:' + 'b' * 64, 'size': 7}]}).encode()
+
+    def signature_matches(header, challenge):
+        if not isinstance(header, str) or ':' not in header:
+            return False
+        encoded_public, encoded_signature = header.split(':', 1)
+        try:
+            if base64.b64decode(encoded_public, validate=True) != public:
+                return False
+            signature = base64.b64decode(encoded_signature, validate=True)
+        except ValueError:
+            return False
+        message_file, signature_file = tmp_path / 'message', tmp_path / 'signature'
+        message_file.write_bytes(challenge)
+        signature_file.write_bytes(signature)
+        checked = subprocess.run([openssl, 'pkeyutl', '-verify', '-pubin', '-keyform', 'DER',
+            '-inkey', str(public_der), '-rawin', '-in', str(message_file), '-sigfile', str(signature_file)],
+            capture_output=True)
+        return checked.returncode == 0
+
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            return
+
+        def _send(self, status, record, headers=None):
+            payload = record if isinstance(record, bytes) else json.dumps(record).encode()
+            self.send_response(status)
+            self.send_header('Content-Length', str(len(payload)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_POST(self):
+            requests.append(self.path)
+            parsed = urlparse(self.path)
+            valid = (parsed.path == '/api/me' and set(parse_qs(parsed.query)) == {'ts'}
+                and signature_matches(self.headers.get('Authorization'), ('POST,' + self.path).encode()))
+            self._send(200 if valid and not controls['revoked'] else 401,
+                       {controls['name_field']: 'fixture-user'})
+
+        def do_GET(self):
+            requests.append(self.path)
+            parsed = urlparse(self.path)
+            if parsed.path == '/api/tags':
+                self._send(200, {'models': [{'name': 'fixture:latest'}]})
+            elif parsed.path == '/token':
+                query = parse_qs(parsed.query)
+                expected = b'GET,' + (endpoint + self.path).encode() + b',' + base64.b64encode(hashlib.sha256(b'').hexdigest().encode())
+                valid = (set(query) == {'service', 'scope', 'ts', 'nonce'}
+                    and query['scope'] == ['repository:library/fixture:pull']
+                    and len(base64.urlsafe_b64decode(query['nonce'][0] + '==')) == 16
+                    and signature_matches(self.headers.get('Authorization'), expected))
+                grants.append(valid)
+                self._send(200 if valid and not controls['revoked'] else 401, {'token': token})
+            elif parsed.path.startswith('/v2/library/fixture/manifests/'):
+                if self.headers.get('Authorization') == 'Bearer ' + token:
+                    self._send(200, manifest)
+                    return
+                realm = 'http://127.0.0.1:1/token' if controls['challenge'] == 'other-origin' else endpoint + '/token'
+                scope = 'repository:library/fixture:push' if controls['challenge'] == 'push' else 'repository:library/fixture:pull'
+                challenge = f'Bearer realm="{realm}",service="fixture-registry",scope="{scope}"'
+                if controls['challenge'] == 'malformed':
+                    challenge = 'Bearer realm'
+                self._send(401, {}, {'WWW-Authenticate': challenge})
+            else:
+                self._send(404, {})
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Provider)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f'http://127.0.0.1:{server.server_port}'
+    environment = {**os.environ, 'HOME': str(home), 'PYTHONDONTWRITEBYTECODE': '1'}
+
+    def cli(*arguments):
+        result = subprocess.run([sys.executable, '-B', '-m', 'cli', '--state', str(state), *arguments],
+            cwd=Path(__file__).resolve().parents[1], env=environment, capture_output=True, text=True, timeout=30)
+        assert '-----BEGIN OPENSSH' not in result.stdout + result.stderr
+        assert token not in result.stdout + result.stderr
+        return result.returncode, json.loads(result.stdout)
+
+    try:
+        code, connection = cli('connect', '--source', 'ollama', '--endpoint', endpoint,
+                               '--existing-login', '--key', 'account')
+        assert code == 0
+        assert connection['result']['authentication'] == {
+            'account': 'fixture-user', 'authenticated': True, 'provider': 'ollama', 'scope': 'NOT_VERIFIED'}
+        reference = connection['result']['credential_ref']
+        assert reference.startswith('ollama-key:v1:blake3:')
+        assert len(requests) == 1
+        code, unsupported = cli('connect', '--source', 'huggingface', '--endpoint', endpoint,
+                                '--existing-login', '--key', 'unsupported-existing-login')
+        assert code == 1 and unsupported['error']['code'] == 'CAPABILITY_MISMATCH'
+        assert len(requests) == 1
+        assert cli('connect', '--source', 'ollama', '--endpoint', endpoint,
+                   '--existing-login', '--key', 'account') == (0, connection)
+        assert len(requests) == 1  # Replay returns the canonical receipt without another sign-in.
+        account = connection['operation_id']
+        controls['name_field'] = 'name'
+        assert cli('models', '--connection', account, '--key', 'catalogue')[0] == 0
+        code, selection = cli('select-model', '--connection', account, '--model', 'fixture:latest', '--key', 'selection')
+        assert code == 0
+        assert selection['result']['descriptor']['credential_ref'] == reference
+        assert grants and all(grants)
+        assert not any('/blobs/' in path for path in requests)
+        for case in ('other-origin', 'push', 'malformed'):
+            controls['challenge'] = case
+            grants_before = len(grants)
+            code, failed = cli('select-model', '--connection', account, '--model', 'fixture:latest', '--key', case)
+            assert code == 1 and failed['error']['code'] == 'AUTH_REQUIRED'
+            assert len(grants) == grants_before
+        controls['challenge'] = 'valid'
+        controls['revoked'] = True
+        requests_before = len(requests)
+        code, failed = cli('models', '--connection', account, '--key', 'revoked')
+        assert code == 1 and failed['error']['code'] == 'AUTH_REQUIRED'
+        assert len(requests) == requests_before + 1
+        controls['revoked'] = False
+        for label, contents in [('missing', None), ('invalid', b'invalid-key'), ('restored', original_key)]:
+            if contents is None:
+                key.unlink()
+            else:
+                key.write_bytes(contents)
+                key.chmod(0o600)
+            requests_before = len(requests)
+            code, record = cli('models', '--connection', account, '--key', label)
+            if label == 'restored':
+                assert code == 0
+            else:
+                assert code == 1 and record['error']['code'] == 'AUTH_REQUIRED'
+                assert len(requests) == requests_before
+        key.unlink()
+        key.with_suffix('.pub').unlink()
+        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key)], check=True)
+        requests_before = len(requests)
+        code, failed = cli('models', '--connection', account, '--key', 'replaced')
+        assert code == 1 and failed['error']['code'] == 'AUTH_REQUIRED'
+        assert len(requests) == requests_before
+        for secret in (original_key, key.read_bytes(), token.encode(), base64.b64encode(public)):
+            assert all(secret not in path.read_bytes() for path in state.rglob('*') if path.is_file())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def _token_cli(state: Path, endpoint: str, token: str) -> tuple[int, str]:
@@ -80,7 +254,7 @@ def _files_do_not_contain(root: Path, secret: str) -> None:
 
 def test_q9_acquisition_entry_keychain_reference_is_bound_opaque_and_revocable():
     """Q9 acceptance: source tokens stay in Keychain while broker paths receive only opaque references."""
-    provider = MacOSKeychainCredentialProvider()
+    provider = MacOSSourceCredentialProvider()
     source = "huggingface"
     endpoint = "https://huggingface.co"
     token = "test-" + uuid.uuid4().hex
@@ -195,7 +369,7 @@ def test_q9_q52_cli_token_connection_uses_keychain_across_processes_and_revocati
         assert token not in revoked_provider.stdout + revoked_provider.stderr
         _files_do_not_contain(state, token)
 
-        MacOSKeychainCredentialProvider().revoke(reference, "huggingface", endpoint)
+        MacOSSourceCredentialProvider().revoke(reference, "huggingface", endpoint)
         reference = None
         requests_before = len(requests)
         missing_keychain = subprocess.run(
@@ -212,7 +386,7 @@ def test_q9_q52_cli_token_connection_uses_keychain_across_processes_and_revocati
     finally:
         if reference is not None:
             try:
-                MacOSKeychainCredentialProvider().revoke(reference, "huggingface", endpoint)
+                MacOSSourceCredentialProvider().revoke(reference, "huggingface", endpoint)
             except CassetteError as error:
                 assert error.code == "AUTH_REQUIRED"
         server.shutdown()

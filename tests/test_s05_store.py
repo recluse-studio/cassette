@@ -218,6 +218,14 @@ def test_q57_safetensors_import_relocation_and_span_resolution(tmp_path):
     assert read_tensor(cartridge, root_digest, "crossing") == crossing
     assert read_tensor(cartridge, root_digest, "tail") == tail
 
+    # Q6/Q57: malformed byte intervals fail with the canonical request error.
+    for offset in ("0", None, True, 0.5, -1, len(crossing) + 1):
+        with pytest.raises(CassetteError) as invalid_offset:
+            read_tensor(cartridge, root_digest, "crossing", offset=offset)
+        assert invalid_offset.value.code == "INVALID_REQUEST"
+    assert read_tensor(cartridge, root_digest, "crossing", offset=2) == crossing[2:]
+    assert read_tensor(cartridge, root_digest, "crossing", offset=len(crossing)) == b""
+
     gguf_source = tmp_path / "model.gguf"
     gguf_cartridge = tmp_path / "gguf-cartridge"
     _write_gguf(

@@ -3682,6 +3682,7 @@ class NativeTransformer:
         if self.compiled and root["provenance"]["revision_kind"] == "tuned":
             raise _error("CAPABILITY_MISMATCH", root_digest, "Q70/Q75: compiled training invalidation", "trained compiled parent requires certificate regeneration before inference")
         self.training = []
+        self._weights = {}
         for delta in root["deltas"]:
             manifest = json.loads(read_training_page(cartridge, root_digest, delta["manifest_digest"]))
             if validate("native_training_manifest", manifest) or manifest.get("complete") is not True:
@@ -3778,9 +3779,12 @@ class NativeTransformer:
 
     def _weight(self, name: str, *, exact_source: bool = False):
         row = self.maps[name]
-        if row["dtype"] != "F32":
+        if row["dtype"] not in ("F32", "BF16"):
             raise _error("UNSUPPORTED_OPERATOR", name, "Q30: native weight representation", "native float32 dispatch cannot consume this source dtype")
         prepared = self.compiled and not exact_source
+        # Q47 admission already charges every native weight to memory, so one verified read serves the whole operation.
+        if not prepared and name in self._weights:
+            return self._weights[name]
         if prepared:
             pages = getattr(self, "compiled_exact_payloads", {})
             if any(span["page_digest"] not in pages for span in row["spans"]):
@@ -3788,7 +3792,9 @@ class NativeTransformer:
             payload = b"".join(pages[span["page_digest"]][span["offset"]:span["offset"]+span["length"]] for span in row["spans"])
         else:
             payload = read_tensor(self.cartridge, self.root_digest, name)
-        value = self.mx.array(memoryview(payload).cast("f")).reshape(row["shape"])
+        # bfloat16 widens exactly to float32; the dispatch computes in float32 either way.
+        value = (self.mx.array(memoryview(payload).cast("f")) if row["dtype"] == "F32"
+                 else self.mx.array(memoryview(payload).cast("H")).view(self.mx.bfloat16).astype(self.mx.float32)).reshape(row["shape"])
         for manifest in self.training:
             matches = [item for item in manifest["adapters"] if item["tensor_id"] == name]
             if matches:
@@ -3801,6 +3807,8 @@ class NativeTransformer:
                 self._factor_shape(name, factors)
                 a, b = self.mx.array(factors["a"], dtype=self.mx.float32), self.mx.array(factors["b"], dtype=self.mx.float32)
                 value = value + factors["scale"] * self.mx.matmul(b, a)
+        if not prepared:
+            self._weights[name] = value
         return value
 
     def effective_tensor(self, tensor_id: str) -> bytes:
@@ -4199,12 +4207,16 @@ class NativeTransformer:
             header = canonical_bytes(state)
             payload = len(header).to_bytes(8, "little") + header + b"".join(
                 memoryview(value).tobytes() for layer in range(self.graph["layers"]) for value in pending_kv[layer])
-            return {"token": token, "logits": plain_logits, "state": state, "payload": payload,
+            return {"token": token, "logits": plain_logits, "state": state, "payload": payload, "kv": pending_kv,
                     "executed_nodes": usage, "routes": routes, "declared_peak_bytes": self.declared_peak_bytes + self.image_peak_bytes}
         except CassetteError:
             raise
         except Exception as error:
             raise _error("CAPABILITY_MISMATCH", self.session_id, "Q20/Q30: native graph execution", f"{type(error).__name__}: {error}") from error
+
+    def adopt(self, candidate: dict) -> None:
+        """Q63: continue from one produced step in memory; the store commit remains the durable context."""
+        self.state, self.kv = candidate["state"], dict(candidate["kv"])
 
     def _image(self, pixels: object, names: list[str], parameters: dict, *, weight=None):
         mx = self.mx

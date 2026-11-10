@@ -1,0 +1,326 @@
+{
+  "authentication": {
+    "account": "drewwiberg",
+    "authenticated": true,
+    "provider": "ollama",
+    "scope": "NOT_VERIFIED"
+  },
+  "authority": "Q9/Q52 and acquisition_entry_contract.source_connection/proof",
+  "builder_proof": {
+    "candidate_directory": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05",
+    "component_controls_passed": 14,
+    "j": {
+      "labels": [
+        "failed_acceptance_rows",
+        "new_numerical_kernels",
+        "authored_executable_LOC",
+        "independent_processes",
+        "language_runtimes",
+        "direct_dependencies",
+        "model_specific_branches",
+        "duplicate_authorities",
+        "shipped_binary_bytes"
+      ],
+      "values": [
+        0,
+        0,
+        15588,
+        1,
+        1,
+        9,
+        0,
+        0,
+        8425096
+      ]
+    },
+    "retained_records": [
+      {
+        "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05/source-manifest.json",
+        "sha256": "d54adea8a2caf49eb7253985e4fe89fb7131daf370bf2dbee3ca24885b973b51"
+      },
+      {
+        "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05/complete-j-report.json",
+        "sha256": "aa4646a60fa1630c2e087cc5de77579a9bd5faaeb612d71f40634e5d60e7256e"
+      },
+      {
+        "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05/result.json",
+        "sha256": "39644a3d2a42b25db759cfaecf7d0f69445d037565995edb6ffc22062f27d5b7"
+      },
+      {
+        "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05/suite.log",
+        "sha256": "1340fb2a4d0fc53776080f88ab72f8c8e9ca3fa110de38a47f72069885af9c63"
+      },
+      {
+        "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-candidate-05/ledger.json",
+        "sha256": "9cd4b8463968853527c091630cb5332c1ad1c444e3cdcc4a44d42b6babcfd3ce"
+      }
+    ],
+    "source_comparison": {
+      "documentary_or_produced_deltas": [
+        "IMPLEMENTATION.md",
+        "docs/l05/2026-10-11-ollama-existing-login.json",
+        "tools/generated/s27_j_report.json"
+      ],
+      "matched_files": 190
+    },
+    "status": "PASS",
+    "suite_seconds": 337.86,
+    "tests_passed": 340,
+    "tests_skipped": 0
+  },
+  "catalogue": {
+    "kind": "source.discover",
+    "operation_id": "op-a1ba73bc52785c3e3b433a26fcc5740ca5f3d066e0ef3d278bf028c7e482a777",
+    "progress": 1.0,
+    "result": {
+      "candidates": [
+        {
+          "downloadability": "NOT_VERIFIED",
+          "gated": null,
+          "kind": "ollama",
+          "locator": "kimi-k2.6",
+          "private": null,
+          "revision": null
+        }
+      ],
+      "next_cursor": null
+    },
+    "state": "SUCCEEDED"
+  },
+  "catalogue_query_without_match": {
+    "kind": "source.discover",
+    "operation_id": "op-c5cfd4940813b343bdbac922e424a3e88cc3913b9ce8954c567b9456693a64e7",
+    "progress": 1.0,
+    "result": {
+      "candidates": [],
+      "next_cursor": null
+    },
+    "state": "SUCCEEDED"
+  },
+  "connect_replay_matches": true,
+  "connection": {
+    "kind": "source.connect",
+    "operation_id": "op-ce33559b6182dc05d5141bc6b7de9827fc8a321d781157f060272e74385250df",
+    "progress": 1.0,
+    "result": {
+      "authentication": {
+        "account": "drewwiberg",
+        "authenticated": true,
+        "provider": "ollama",
+        "scope": "NOT_VERIFIED"
+      },
+      "credential_ref": "ollama-key:v1:blake3:6096f889e5876132dc244babe284009ce35ba15e3eca7dabb0f3956805738860",
+      "endpoint": "https://registry.ollama.ai",
+      "source": "ollama"
+    },
+    "state": "SUCCEEDED"
+  },
+  "date": "2026-10-11",
+  "model_payload_bytes_transferred": 0,
+  "model_selection": {
+    "kind": "source.select",
+    "operation_id": "op-80580a42a751477123c54555658616c0a2f674707500611e511c93fcdcdaac5d",
+    "progress": 1.0,
+    "result": {
+      "connection_id": "op-ce33559b6182dc05d5141bc6b7de9827fc8a321d781157f060272e74385250df",
+      "descriptor": {
+        "credential_ref": "ollama-key:v1:blake3:6096f889e5876132dc244babe284009ce35ba15e3eca7dabb0f3956805738860",
+        "kind": "ollama",
+        "locator": "qwen3:30b",
+        "revision": "sha256:ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226"
+      },
+      "downloaded_bytes": 0,
+      "endpoint": "https://registry.ollama.ai",
+      "execution_compatibility": "NOT_VERIFIED",
+      "requirements": {
+        "auth_scope": "ollama:registry:pull",
+        "credential_required": false,
+        "license_acceptance_required": false,
+        "license_digest": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12"
+      },
+      "source_lock": {
+        "artifacts": [
+          {
+            "digest": "sha256:58574f2e94b99fb9e4391408b57e5aeaaaec10f6384e9a699fc2cb43a5c8eabf",
+            "path": "layer-000000.gguf",
+            "range_uri": "https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:58574f2e94b99fb9e4391408b57e5aeaaaec10f6384e9a699fc2cb43a5c8eabf",
+            "size": 18556685856,
+            "validator": "sha256:58574f2e94b99fb9e4391408b57e5aeaaaec10f6384e9a699fc2cb43a5c8eabf"
+          }
+        ],
+        "auth_scope": "ollama:registry:pull",
+        "credential_ref": "ollama-key:v1:blake3:6096f889e5876132dc244babe284009ce35ba15e3eca7dabb0f3956805738860",
+        "identity": null,
+        "immutable_revision": "sha256:ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226",
+        "license_acceptance_ref": null,
+        "license_digest": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12",
+        "locator": "qwen3:30b",
+        "metadata_assets": [
+          {
+            "digest": "sha256:3cdc64c2b371af88ae18b4cdac63d1097f76a8f6fd23d785aaaaa02c59450d61",
+            "path": "config.json",
+            "range_uri": "https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:3cdc64c2b371af88ae18b4cdac63d1097f76a8f6fd23d785aaaaa02c59450d61",
+            "size": 494,
+            "validator": "sha256:3cdc64c2b371af88ae18b4cdac63d1097f76a8f6fd23d785aaaaa02c59450d61"
+          },
+          {
+            "digest": "sha256:2d54db2b9bb29ce7db54fea63a891f5859603813c555b1f88b5e0994652897f9",
+            "path": "layer-000001",
+            "range_uri": "https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:2d54db2b9bb29ce7db54fea63a891f5859603813c555b1f88b5e0994652897f9",
+            "size": 1506,
+            "validator": "sha256:2d54db2b9bb29ce7db54fea63a891f5859603813c555b1f88b5e0994652897f9"
+          },
+          {
+            "digest": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12",
+            "path": "layer-000002",
+            "range_uri": "https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12",
+            "size": 11338,
+            "validator": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12"
+          },
+          {
+            "digest": "sha256:cff3f395ef3756ab63e58b0ad1b32bb6f802905cae1472e6a12034e4246fbbdb",
+            "path": "layer-000003",
+            "range_uri": "https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:cff3f395ef3756ab63e58b0ad1b32bb6f802905cae1472e6a12034e4246fbbdb",
+            "size": 120,
+            "validator": "sha256:cff3f395ef3756ab63e58b0ad1b32bb6f802905cae1472e6a12034e4246fbbdb"
+          }
+        ],
+        "source_kind": "ollama"
+      }
+    },
+    "state": "SUCCEEDED"
+  },
+  "package_binding": {
+    "entrypoint": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-installed-final/environment/bin/cassette",
+    "installed_modules": {
+      "broker": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-installed-final/environment/lib/python3.13/site-packages/broker.py",
+      "cli": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-installed-final/environment/lib/python3.13/site-packages/cli.py",
+      "sources": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-installed-final/environment/lib/python3.13/site-packages/sources.py",
+      "store": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-installed-final/environment/lib/python3.13/site-packages/store.py"
+    },
+    "matched_installed_files": 38,
+    "openssl": "OpenSSL 3.6.2 7 Apr 2026",
+    "python": "3.13.14",
+    "wheel": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/existing-login-wheel-05/cassette-0.0.1-py3-none-any.whl"
+  },
+  "preserved_initial_selection_failure": {
+    "error": {
+      "code": "SOURCE_UNAVAILABLE",
+      "detail": "source returned HTTP 404",
+      "failed_invariant": "Q52: source operation must complete",
+      "object_id": "qwen3:30b",
+      "retryability": "retryable"
+    },
+    "kind": "source.select",
+    "operation_id": "op-343305b0c4d2e453e44773d1dbbacf66d398e46ce51c7e86f846440a6cb35494",
+    "progress": 0,
+    "state": "FAILED"
+  },
+  "proof_boundary": {
+    "advertised_catalogue_access": "PASS",
+    "authenticated_account": "PASS",
+    "independent_review": "NOT_RUN",
+    "named_public_manifest_selection": "PASS",
+    "ollama_payload_download": "NOT_RUN",
+    "private_model_access": "NOT_RUN",
+    "release_input_acquisition": "NOT_RUN",
+    "source_ollama_content_addressed_reimport": "NOT_RUN"
+  },
+  "retained_records": [
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-connect-01.json",
+      "sha256": "0d7b48a3ea9945a7cb7ff78859a308701c8d05c85e4493c04ff798ab37f62b37"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-connect-replay-01.json",
+      "sha256": "8d0d5244450ed6f7f5ad887fa37099944bc24007cbc2e7e08a46dc8d2d89da68"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-catalogue-01.json",
+      "sha256": "ddc5e02b73bb0efb80bfdb3b272c0ac528b90b91d9183bdacf05a7b900a01ad8"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-catalogue-02.json",
+      "sha256": "41bcc8cff27e70c7d254d1171f314033ca0c3af737123c7ef6629126d5c647bf"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-selection-01.json",
+      "sha256": "d9f8db4a89273b57e5ba9c3f10d8352fcf8eb7600b0829a439a82f585c9f2946"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-selection-02.json",
+      "sha256": "296c193962b6a8146789288c4f7e99f39733bb14f62a3791b7eea963ebd723cb"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-package-binding.json",
+      "sha256": "eb82cf112468f60e7ec06d1de798c348b89d1cfb3cdd9a65d1678c98155d58d6"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-connect-03.json",
+      "sha256": "267a970d0c95895a087fcd52aa04ea293f8944dc5f4c4c285a0656377dac0e2d"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-connect-replay-03.json",
+      "sha256": "a14ccebac9e9035a69e34e8a5856cbe678314eca2a6f58e785f945fd94f0084d"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-catalogue-03.json",
+      "sha256": "a404ff7f51ad28c92691b386ca0f2d1ba777b0deaad32bfc8dd844868543cd9e"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-selection-03.json",
+      "sha256": "16de69f50398e64125c96ebadccec51b7cebd256bb5754382906e85546c0cf82"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-installed-package-binding-03.json",
+      "sha256": "ab871ffe9aedcb855d966034492d13f424d59023a45d9684fd6b21bf4fa63820"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-final-connect.json",
+      "sha256": "20dbe8aa9528424c5547d8e2016c0ade17092ed04f1c0e2526f22c79d1d40e08"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-final-connect-replay.json",
+      "sha256": "6c93ef8b7c5dde8f7eec7fed15797865d1698e3e2725f8ddf14751f8e8cc0d6e"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-final-catalogue.json",
+      "sha256": "50c520b18d5e140b452a12c78a3b3822ba49f0126eb29bba4e66c7189a78a41f"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-final-selection.json",
+      "sha256": "50ccdac4d4034a74ebd026eab67a27b7eeb3d7d981f1165900ceeedfe1f09803"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-final-package-binding.json",
+      "sha256": "4b9dce777eb497e263d888bb50be65a47113a619125f8b2f4cada82562ddc646"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-publish-connect.json",
+      "sha256": "10bbbaebe2a6c17a2d6d36da6c66a27eb0fe3c555c5648842921650b41998336"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-publish-connect-replay.json",
+      "sha256": "71a7601cf7823772d76514dc0bc156904a41dae240a2f01da8e9004b962596ea"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-publish-catalogue.json",
+      "sha256": "6262100ac0ffa1b492a4ded8561b24151ecb66a7fd2ea0c59c0aa3d22ce1bc83"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-publish-selection.json",
+      "sha256": "008a2f44a34e6476671b9d045b97e95f6f534be919d952a17410f069676f4b01"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-11/ollama-publish-package-binding.json",
+      "sha256": "2e2eca7d00b71981a5f5275f0e0e74a63899a714978265d15e26a6bf30a925e9"
+    }
+  ],
+  "scope": "Existing Ollama account and registry metadata through the installed Cassette CLI",
+  "source_protocols": [
+    "https://github.com/ollama/ollama/blob/v0.40.1/auth/auth.go",
+    "https://github.com/ollama/ollama/blob/v0.40.1/api/client.go",
+    "https://github.com/ollama/ollama/blob/v0.40.1/server/auth.go"
+  ],
+  "status": "PASS"
+}

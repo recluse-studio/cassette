@@ -326,8 +326,8 @@ def test_q1_q9_q10_q20_q30_q33_q47_q55_q58_q63_q66_l02_native_source_and_state(t
                 async def interrupt(broker):
                     task = asyncio.create_task(broker.generate_native(request, cartridge, PROFILE, owner))
                     operation_id = broker.operation_id(request)
-                    for _ in range(30000):
-                        await asyncio.sleep(.002)
+                    for _ in range(3_000_000):
+                        await asyncio.sleep(0)  # yield at every worker boundary; generation no longer waits on a per-token commit
                         if task.done():
                             pytest.fail('generation completed before the pause observer saw a committed token')
                         if any('token_index' in event['payload'] for event in broker.events(operation_id)):

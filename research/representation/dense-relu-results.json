@@ -1,0 +1,243 @@
+{
+  "seed": 2026092121,
+  "source_sha256": "13fa0aa7fcabcb863ebded687fa1f6109948abc597210acc65160a668d01d060",
+  "inputs": 129,
+  "rows": 48,
+  "dimensions": 12,
+  "layers": 3,
+  "scope": "generated dense integer ReLU; original source bytes; no trained-model or drive-speed claim",
+  "results": [
+    {
+      "method": "streamed",
+      "step_bits": 0,
+      "moments": false,
+      "guide_bytes": 171,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 442368,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 18432,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 75497472,
+        "down": 39350272
+      },
+      "calculations": {
+        "layers": 387,
+        "hidden_rows": 18576,
+        "certified_inactive": 144,
+        "source_up_terms": 221184,
+        "source_down_terms": 114540,
+        "refined_inactive": 8887
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 4,
+      "moments": false,
+      "guide_bytes": 2679,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 229824,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 9576,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 39223296,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 119587,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 9000,
+        "layers": 387,
+        "source_up_terms": 114912,
+        "source_down_terms": 114540,
+        "refined_inactive": 31
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 4,
+      "moments": true,
+      "guide_bytes": 2895,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 229704,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 9571,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 39202816,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 119587,
+        "integer_square_roots": 18576,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 9005,
+        "layers": 387,
+        "source_up_terms": 114852,
+        "source_down_terms": 114540,
+        "refined_inactive": 26
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 8,
+      "moments": false,
+      "guide_bytes": 1911,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 238920,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 9955,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 40775680,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 121144,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 8621,
+        "layers": 387,
+        "source_up_terms": 119460,
+        "source_down_terms": 114540,
+        "refined_inactive": 410
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 8,
+      "moments": true,
+      "guide_bytes": 2271,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 235128,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 9797,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 40128512,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 121144,
+        "integer_square_roots": 18576,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 8779,
+        "layers": 387,
+        "source_up_terms": 117564,
+        "source_down_terms": 114540,
+        "refined_inactive": 252
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 12,
+      "moments": false,
+      "guide_bytes": 1311,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 385536,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 16064,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 65798144,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 121124,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 2512,
+        "layers": 387,
+        "source_up_terms": 192768,
+        "source_down_terms": 114540,
+        "refined_inactive": 6519
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    },
+    {
+      "method": "represented",
+      "step_bits": 12,
+      "moments": true,
+      "guide_bytes": 1815,
+      "source_model_bytes": 6912,
+      "read_bytes": {
+        "embedding": 117696,
+        "up": 347904,
+        "down": 229080
+      },
+      "requests": {
+        "embedding": 4904,
+        "up": 14496,
+        "down": 9545
+      },
+      "rounded_bytes_per_request": {
+        "embedding": 20086784,
+        "up": 59375616,
+        "down": 39350272
+      },
+      "calculations": {
+        "support_coordinates": 121124,
+        "integer_square_roots": 18576,
+        "coarse_terms": 222912,
+        "hidden_rows": 18576,
+        "certified_inactive": 4080,
+        "layers": 387,
+        "source_up_terms": 173952,
+        "source_down_terms": 114540,
+        "refined_inactive": 4951
+      },
+      "output_sha256": "ff77a33073c4181072d91ce9b39e82c3bb9a89c4d0c559a0e41ad8c3f1569f90"
+    }
+  ]
+}

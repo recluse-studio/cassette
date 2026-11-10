@@ -1,0 +1,314 @@
+{
+  "record_kind": "bounded_L05_dataset_license_repair",
+  "status": "PASS_BOUNDED",
+  "date": "2026-10-15",
+  "observed_at": "2026-10-15T17:04:08.420341+00:00",
+  "stage": "L05",
+  "stage_status": "IN_PROGRESS",
+  "source_base_commit": "7321ecfc81bcf1364fd0ea34547c32eb15e441b8",
+  "authority": [
+    "Q6",
+    "Q9",
+    "Q50",
+    "Q52"
+  ],
+  "change": "Reuse pinned PyYAML representation composition for one exact scalar/list license declaration; refuse malformed metadata canonically; preserve Git/SHA256 README identity and source selection gates",
+  "independent_review": {
+    "status": "PASS",
+    "served_model": "claude-opus-5-5",
+    "questions": 2,
+    "session_id": "15c29e0d-b545-49c3-b2db-47e27f099a5c",
+    "original_target": "FAIL_Q1_PROVED_RAW_VALUEERROR",
+    "successor_sha256": "8076003e10c38d0059dcf80b90faaf43afc6bb391dcfca4a8ff7ab10aaae449b",
+    "baseline_challenges": 50,
+    "guard_controls": 4,
+    "control_observations": {
+      "duplicate_keys": "FLIP",
+      "unsafe_tags": "FLIP",
+      "root_license_precedence": "FLIP",
+      "premature_payload_gets": 44
+    },
+    "environment": "Separate reviewer and Codex implementer/executor on same Mac/account",
+    "review_instrument_fault": "Hardcoded size-stop wording contradicted the completed 8 MiB row; raw observations were used without extrapolation"
+  },
+  "proof": {
+    "path": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/autonomy-candidate-12",
+    "tests_passed": 340,
+    "seconds": 450.9,
+    "skipped": 0,
+    "component_controls": 14,
+    "ordinary_ledger_violations": 0,
+    "j": {
+      "authored_executable_LOC": 15872,
+      "direct_dependencies": 9,
+      "duplicate_authorities": 0,
+      "failed_acceptance_rows": 0,
+      "independent_processes": 1,
+      "language_runtimes": 1,
+      "model_specific_branches": 0,
+      "new_numerical_kernels": 0,
+      "shipped_binary_bytes": 8425096
+    },
+    "product_loc_growth": 17
+  },
+  "package": {
+    "wheel": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/wheel-09/cassette-0.0.1-py3-none-any.whl",
+    "wheel_sha256": "9e2d04ceef033cc0eabc4f803b5b05ecd2fc479c6827c3bbc9a4d315b120c4e9",
+    "runtime_files": 38,
+    "source_review_tested_wheel_installed_match": true,
+    "status": "INSTALLED_VERIFIED",
+    "interpreter": "Python3.13.14",
+    "entrypoint": "/Volumes/LaCie/drewwiberg-lacie/Cassette-build-20261015/installed-01/environment/bin/cassette"
+  },
+  "dataset_selections": {
+    "status": "ALL_SELECTED_METADATA_ONLY",
+    "scope": "Exact frozen dataset metadata selections through installed CLI; not downloads",
+    "selections": [
+      {
+        "instance": "dataset_bfcl_data",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-a04116573f085c26ec0508dea43b80c3515108250e1a5eb26535f10066704a61",
+        "observed_at": "2026-10-15T16:16:15.370350+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 13,
+        "payload_bytes": 1066789,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_fineweb_edu",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-cac551781ee07eb6a9bd96a8b3d9cc4e0b27f5f2978b4bb0e87f2baae722e1d7",
+        "observed_at": "2026-10-15T16:16:24.278334+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 1,
+        "payload_bytes": 2369456837,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_human_eval",
+        "operation_id": "op-6033f789acd633aafeaaf3dd946e85e5ea2f0e780517b521ed413c65f613bcab",
+        "state": "SUCCEEDED",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 1,
+        "payload_bytes": 83920,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN",
+        "observed_at": "2026-10-15T17:01:16.503378+00:00",
+        "wheel_sha256": "9e2d04ceef033cc0eabc4f803b5b05ecd2fc479c6827c3bbc9a4d315b120c4e9",
+        "prior_failed_operation": "op-fca2acd1509eba9a4f9b78291ea89ddec72e5dd0bf12a6d7cbceab996a45ec24"
+      },
+      {
+        "instance": "dataset_ifeval",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-bf3a15fe4d3060ee9b3e2d1db6285cbdcab0983e29d30457da274f9465e4bfd7",
+        "observed_at": "2026-10-15T16:16:27.666469+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 1,
+        "payload_bytes": 207111,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_jsonschema_data",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-cb9f94ff845daff086d6f49030976a73fff21e29e13a342e79f16de93154ec8a",
+        "observed_at": "2026-10-15T16:16:32.040441+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 3,
+        "payload_bytes": 1543656,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_longbench",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-7fe69800c0f5f87914bedf112d11c6f491428bf1f61e6c82e4781906540100bf",
+        "observed_at": "2026-10-15T16:16:34.484822+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 1,
+        "payload_bytes": 465490535,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_mmlu_pro",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-aa9b65ee2cf49f0d81b94662a6de581ed73c5c62dfc7724ca0bea2420365ffb0",
+        "observed_at": "2026-10-15T16:16:37.917787+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 2,
+        "payload_bytes": 4187042,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_mmmu_pro",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-13ee759747438cdd4fd329460b69a5242b43459d62072edd7264286e135ad96d",
+        "observed_at": "2026-10-15T16:16:45.377691+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 6,
+        "payload_bytes": 2310218917,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_ultrachat",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-93321a0d87b06c424a214e0879afed9c3682cf5b6a613a38a4a8e5748fb165ba",
+        "observed_at": "2026-10-15T16:16:51.030276+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 4,
+        "payload_bytes": 649223040,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      },
+      {
+        "instance": "dataset_ultrafeedback",
+        "returncode": 0,
+        "state": "SUCCEEDED",
+        "operation_id": "op-051ffd0b547e98d93da0d101ea9522be57416b9f4fe32404e574eae30ca77cef",
+        "observed_at": "2026-10-15T16:16:54.389287+00:00",
+        "status": "SELECTED_METADATA_ONLY",
+        "files": 2,
+        "payload_bytes": 233182996,
+        "selector_verified": true,
+        "digests_verified_against_frozen_metadata": true,
+        "source_control_assets": 1,
+        "payload_acquisition": "NOT_RUN",
+        "headers": "NOT_RUN",
+        "physical_profile": "NOT_RUN"
+      }
+    ],
+    "files": 34,
+    "payload_bytes": 6034660843,
+    "failed_attempt_preserved": {
+      "instance": "dataset_human_eval",
+      "returncode": 1,
+      "state": "FAILED",
+      "operation_id": "op-fca2acd1509eba9a4f9b78291ea89ddec72e5dd0bf12a6d7cbceab996a45ec24",
+      "observed_at": "2026-10-15T16:16:25.397159+00:00",
+      "status": "FAILED",
+      "error": {
+        "code": "METADATA_INSUFFICIENT",
+        "detail": "one root license file or a verified model-card license declaration is required",
+        "failed_invariant": "Q9: source license must have one exact byte identity",
+        "object_id": "openai/openai_humaneval",
+        "retryability": "terminal"
+      }
+    },
+    "observed_at": "2026-10-15T17:01:16.503614+00:00",
+    "qualification": "NOT_RUN",
+    "headers": "NOT_RUN",
+    "payload_acquisition": "NOT_RUN"
+  },
+  "known_parser_cost": {
+    "scope": "Pathological bounded metadata, not an execution/training resource certificate",
+    "bytes": 8388604,
+    "seconds": 42.33,
+    "extra_peak_rss_mib": 2090.2
+  },
+  "history": {
+    "candidate10": "INCOMPLETE_STORAGE_CLONE_STALL",
+    "candidate11": "INCOMPLETE_SUPERSEDED_AFTER_PROVED_DEFECT",
+    "wheel08": "OBSOLETE_NEVER_INSTALLED",
+    "packaging_recovery": "Existing pinned backend and interpreter using documented UV_NO_BUILD_ISOLATION, UV_PYTHON and copy mode; focused check passed in 21.82 seconds",
+    "raw_metadata_capture": "Shared filename fault preserved; eight lost model-info bodies recaptured once with unique names; every raw SHA-256 equals its prior recorded hash"
+  },
+  "boundaries": {
+    "physical_source_profiles": "NOT_RUN",
+    "artifact_headers": "NOT_RUN",
+    "dataset_payload_acquisition": "NOT_RUN",
+    "required_large_model_acquisition": "NOT_RUN",
+    "source_entry_aggregate": "NOT_RUN",
+    "L06_L10": "DEPENDENCIES_RETAINED"
+  },
+  "retained_evidence": [
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/review-initial.md",
+      "sha256": "8182feb6d7679e02c5ef308f41b6bbbdd362573fa3b52e7c0ccb148f7085b415"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/review-final.md",
+      "sha256": "c78addac325faac9dfc26fbfdc8c6e44d7459a0d289e43b3f5c8a43450babb49"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/source-manifest.json",
+      "sha256": "20dcf4a33f6e4b46b9fbd4e2541a9b64f4960c963cab5a7cd7a6f74eaeee3897"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/proof-source-join.json",
+      "sha256": "82c01e68a0067d0f387ee20e200938facedeb1cf15b27eeca54390511053bb75"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/wheel-09-verification.json",
+      "sha256": "fb0c59b2766f74f6baa5bcf224175c27ba251ed57e3c036815330f240e59a3e1"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/dataset-selections-complete.json",
+      "sha256": "77f42aade4838d284aa891dcc8389e925b2ad0ac90fcfbf00937eb6c4bfde367"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/human-eval-successor-stdout.json",
+      "sha256": "3629423b2c399cfa9984485bdf01e88de31340bd44dc75aa7a9c95efb9926170"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/candidate10-stall.json",
+      "sha256": "9ca3193fdeabc8a55ad7332b072896fb3ec5bd82d9c7e8ea4a98424ec22e17ab"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/candidate11-stopped.json",
+      "sha256": "3ee81bde162eaf6fd70b3be7b964a10923f46aeaf67fe1320f0566197200e73c"
+    },
+    {
+      "path": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/license-list-01/subscription-after.json",
+      "sha256": "9785b93cf180e9ba6be1c0d40daf91e4917375c49592bb9ea215f262f98afb23"
+    }
+  ]
+}

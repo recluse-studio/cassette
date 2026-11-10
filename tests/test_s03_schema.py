@@ -36,6 +36,7 @@ EXPECTED_KINDS = {
     "native_training_manifest",
     "native_workload",
     "operation",
+    "operation_geometry",
     "operator_dispatch",
     "remote_metadata",
     "remote_metadata_field",
@@ -45,6 +46,7 @@ EXPECTED_KINDS = {
     "run_request",
     "source_descriptor",
     "source_catalogue",
+    "source_byte_recipe",
     "tensor_map",
     "tensor_span",
 }
@@ -72,6 +74,8 @@ REMOTE_FIELDS = {
     "source_validators",
 }
 EXPECTED_FIELDS = {
+    "source_byte_recipe": {"source_record_digest", "artifacts"},
+    "operation_geometry": {"source_lock", "source_kind", "revision_algorithm", "provenance", "artifacts", "source_storage"},
     "source_catalogue": {"candidates", "next_cursor"},
     "native_adapter_factors": {"a", "b", "scale"},
     "native_training_manifest": {
@@ -146,6 +150,7 @@ EXPECTED_FIELDS = {
     },
 }
 EXPECTED_OPTIONAL = {
+    "operation_geometry": {"source_storage"},
     "request": {"target"},
     "operation": {"result", "error"},
     "capability_profile": {"extensions"},
@@ -603,6 +608,18 @@ ROOT_IDENTITY_MATERIAL = {
     "transform_manifest_digest": None,
 }
 GOLDEN = {
+    "source_byte_recipe": {
+        "source_record_digest": "blake3:" + "a" * 64,
+        "artifacts": [{"path": "composed.bin", "segments": [
+            {"literal_hex": "000a"}, {"path": "input.bin", "offset": 3, "length": 7},
+        ]}],
+    },
+    "operation_geometry": {
+        "source_lock": None, "source_kind": "ollama", "revision_algorithm": "sha256",
+        "provenance": {"upstream_commit": "a" * 40},
+        "artifacts": [{"path": "weight.safetensors", "size": 256,
+                       "digest_algorithm": "sha256", "validator_template": "sha256:{digest}"}],
+    },
     "error": {
         "code": "PAGE_CORRUPT",
         "object_id": "page:blake3:00ff",
@@ -806,6 +823,15 @@ def test_q31_q33_q50_q57_shapes_are_complete():
 
 def test_malformed_f0_instances_are_rejected():
     """Q6/Q9/Q31/Q33/Q50/Q57/Q77: F0 rejects omissions, types, unknowns, and bounds."""
+    acquisition = {**GOLDEN['request'], 'operation': 'acquire'}
+    selected = {'model_selection_id': 'source-1', 'drive_selection_id': 'drive-1'}
+    geometry = {'operation_geometry': GOLDEN['operation_geometry'], 'drive_selection_id': 'drive-1'}
+    for arguments in (selected, geometry):
+        assert validate('request', {**acquisition, 'arguments': {'acquisition': arguments}}) == []
+    for arguments in ({}, {'unexpected': True}, {**selected, **geometry},
+                      {**selected, 'model_selection_id': True},
+                      {**geometry, 'operation_geometry': []}):
+        assert validate('request', {**acquisition, 'arguments': {'acquisition': arguments}})
     missing = dict(GOLDEN["error"])
     del missing["code"]
     assert any("required field missing" in defect for defect in validate("error", missing))

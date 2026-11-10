@@ -1,0 +1,87 @@
+{
+  "status": "SUPPORTING_WITNESS_AND_METADATA_ONLY_NOT_SOURCE_QUALIFICATION",
+  "date": "2026-10-15",
+  "installed_commit": "141bf342312f7f6f884898524908f4269f81ec56",
+  "authority": [
+    "Q42",
+    "Q43",
+    "Q44",
+    "Q51",
+    "Q53",
+    "Q78"
+  ],
+  "executor_witness": {
+    "status": "PASS_BOUNDED_SYNTHETIC_IO_SHAPE_WITNESS",
+    "implementation": "unchanged installed sources.transfer_header and transfer_artifact",
+    "boundary": "deterministic loopback HTTP; one synthetic model shape and one headerless Git dataset",
+    "storage": "actual authorized external APFS cartridge",
+    "logical_IO_trace_rows": 91,
+    "completed_next_transition_claims": 15,
+    "stages": [
+      "header-fresh",
+      "header-cached",
+      "acquire-initial-pause",
+      "acquire-resume",
+      "acquire-complete-revalidation",
+      "git-fresh"
+    ],
+    "header_json_bytes": 4194321,
+    "artifact_bytes": 8389657,
+    "source_hash_state_characters": {
+      "sha256": 240,
+      "git_blob_tail": 89
+    },
+    "no_internal_method_replacements": true,
+    "all_descriptors_closed": true,
+    "scope_limit": "No frozen-provider bytes, sustained Q42 profile, verified cold measurement or SOURCE_ENTRY_PASS."
+  },
+  "metadata_geometry": {
+    "status": "DRAFT_EXACT_FROZEN_SOURCE_GEOMETRY_NOT_QUALIFIED",
+    "source_selections": 20,
+    "transfer_artifacts": 440,
+    "source_payload_bytes": 2317561823564,
+    "chunks": 552843,
+    "canonical_selection_hashes_rechecked": 20,
+    "includes": "all selected model/dataset artifacts and their acquired metadata assets",
+    "encoding": "Existing source identity/envelope functions; fixed-width hash/state strings and exact decimal field widths. Contents remain placeholders.",
+    "source_payload_read": false
+  },
+  "native_observation_feasibility": {
+    "status": "PASS_READ_ONLY_API_FEASIBILITY_NOT_OPERATION_PROFILE",
+    "thermal_state": "FAIR",
+    "host_memory_bytes": 25769803776,
+    "APIs": {
+      "thermal_and_host_memory": "NSProcessInfo.thermalState and physicalMemory; installed public Foundation API",
+      "own_process": "proc_pid_rusage(RUSAGE_INFO_V2), structure derived from installed SDK sys/resource.h",
+      "rusage_info_v2_bytes": 160,
+      "header_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/usr/include/sys/resource.h"
+    },
+    "operation_interval_coverage": "NOT_RUN"
+  },
+  "uncached_read_research": {
+    "source": "Installed public fcntl(2), NSProcessInfo.h and sys/fcntl.h SDK declarations",
+    "F_NOCACHE": "Disables data caching for subsequent descriptor I/O when enabled; does not itself prove eviction of pre-existing cached pages or device attribution.",
+    "cold_profile": "NOT_RUN"
+  },
+  "retained_failure": "executor-shape-01 selected LICENSE instead of data.json and received HTTP404. The failed log and bound receipt remain; no I/O trace was flushed. It is a harness failure, not production failure. Successor02 selects data.json by exact path.",
+  "next_work": [
+    "Bind every exact frozen identity to measured synthetic I/O geometry without treating it as provider proof.",
+    "Use the existing source executor for profiling; do not add a duplicate checkpoint writer.",
+    "Complete operation-size/cache/sustained/telemetry measurements and exact Ollama plan.",
+    "Seal and verify source-entry graph profiles before any actual header or required payload."
+  ],
+  "independent_review": "NOT_RUN_FOR_THIS_SUPPORTING_WITNESS",
+  "physical_profile": "NOT_RUN",
+  "required_source_acquisition": "NOT_RUN",
+  "SOURCE_ENTRY_PASS": "NOT_RUN",
+  "private_evidence": "/Users/drewwiberg/.codex/reviews/cassette/2026-10-15/full-acquisition-profile-01",
+  "artifact_sha256": {
+    "executor-shape-02.json": "559f784a892c9d62b99b494541bbfaa31fa9f7d2dd80216d2222a347864fc2a8",
+    "frozen-source-shapes-01.json": "bbb03d425b10bac5ad0851e55304f0149e26aced56709e4be8554a1a0a96500d",
+    "native-observation-feasibility-01.json": "93a2b584d6aefc570baef90d5565d4052efa08a4b17f8ff2e05a7701892d27cd",
+    "trace-existing-executor-02.py": "66662591ce7f778ad31ef2b1003001d42b003953c27f53aebc27d5e03a6a145a",
+    "derive-frozen-shapes.py": "2ff2bd71125c4422af64d282b581833e94688340708e3a2743dad912aea86379",
+    "read-native-observations.py": "5d48c15490ec2443273c51ce33bc413eef4b86fb31112fb1e1718dd542f56821"
+  },
+  "recorded_at": "2026-10-15T19:51:16.924438+00:00"
+}

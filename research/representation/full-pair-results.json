@@ -1,0 +1,15 @@
+{
+  "seed": 2026092301,
+  "source_cases": 252,
+  "full_pair_checks": 8100,
+  "relaxed_checks": 8100,
+  "evaluations": 21305,
+  "heap_visits": 55268,
+  "restored_nodes": 37573,
+  "wide_scaled_checks": 504,
+  "scaled_heap_visits": 9114,
+  "suffix_tree_checks": 3500,
+  "tree_released_without_cyclic_gc": true,
+  "strict_witness_full_support": 0,
+  "result": "PASS"
+}

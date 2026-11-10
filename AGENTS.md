@@ -1,4 +1,36 @@
+<!-- drew-collaboration-v1: Repository collaboration authority -->
+## Working with Drew: dependable collaboration
+
+**Be faithful and thorough.** Treat Drew’s clear request as the work to complete. Identify each requested outcome, carry it through, and verify the result. Use judgment to solve the task, keeping choices aligned with what he asked for.
+
+**Treat corrections as a way forward.** Incorporate the correction, adjust the work, and continue toward the original outcome. Acknowledge a meaningful mistake briefly and make the correction visible in the result.
+
+**Communicate like a capable colleague.** Answer the question directly, then provide the context needed to understand the answer or act on it. Use plain, precise adult language. Explain technical terms when they matter, and identify files, components or decisions in terms Drew can follow.
+
+**Be candid and proportionate.** Report what is done, what remains, and any real blocker. Include limitations when they affect the requested result or a decision; keep them specific and concise.
+
+**Take ownership and keep moving.** Make reasonable decisions within Drew’s instructions, carry out the work he has authorized, and keep him informed at meaningful milestones. When something genuinely needs his decision, explain the issue and the smallest decision needed while continuing independent work.
+<!-- /drew-collaboration-v1 -->
+
 # AGENTS.md — Cassette build rules
+
+## Current direction — original August specification
+
+Drew's first-principles instruction restores the specification at August source
+`074f594a0bacc4c08e953acf4539f129eb1f041d` and withdraws later scope additions.
+Read IMPLEMENTATION.md and FIRST_PRINCIPLES.md for the restored queue and status.
+Do not reinstate later campaign graphs, test inventories, reviewer conditions or
+L05–L10 mandates as requirements. Existing implementation may satisfy original
+requirements; its age or test name neither admits nor disqualifies it.
+No new stage, acceptance condition or secondary-agent review is authorized.
+The restoration itself does not resume the build. Keep the worklog in
+FIRST_PRINCIPLES.md and re-read the latest direction before each action.
+
+Work directly in the existing primary LaCie checkout. Do not create or use
+worktrees. Do not delegate the user's primary instruction. Preserve source,
+raw evidence, user content and the independent research roots. Current user
+permissions and protection scopes remain in force; restoring a specification
+does not authorize formatting drives, changing security settings or publication.
 
 Read ORIGINAL_REMIT.md, MATHS.md, research/RESEARCH.md, and research/ACCEPTANCE_MATRIX.yaml before
 writing anything. MATHS.md is binding for every compiler, plan, pager, and compiled-training
@@ -49,7 +81,6 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     lifecycle
   - L2 components: sources.py, compiler.py, pager.py, trainer.py
   - L3 broker.py, adapters/ (generated maps + thin shims)
-  - L4 cli.py — basic product triggers; imports broker and canonical errors only
 - Sibling law: L2 components never import each other. They exchange exactly two things —
   committed store objects (content-addressed, journaled) and broker-dispatched operations.
   Every cross-component interaction is therefore durable, inspectable, and replayable.
@@ -66,8 +97,6 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   | Integrity repair manifests, verified replicas, parity objects, and quarantined extents | `store.py` |
   | Derivative export artifacts, export manifests, and revision-removal tombstones | `store.py` |
   | Canonical broker operation logs, live ownership, and ordered operation events | `broker.py` |
-  | Immutable campaign control records and compare-and-swap heads | `store.py` |
-  | Immutable campaign evidence captures and bounded storage-profile atoms | `store.py` |
 
 - Runtime confinement: mlx imports exist only in pager.py (execution) and trainer.py (autograd),
   through the generated Q30 dispatch table. An mx.* reference anywhere else fails the ledger.
@@ -81,7 +110,6 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   {
     "adapters/__init__.py": ["Q76"],
     "broker.py": ["Q5"],
-    "cli.py": ["Q52"],
     "compiler.py": ["Q58"],
     "errors.py": ["Q6"],
     "pager.py": ["Q19"],
@@ -89,7 +117,6 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
     "store.py": ["Q57"],
     "trainer.py": ["Q21"],
     "tools/capture_fixture.py": ["Q40"],
-    "tools/campaign.py": ["Q80"],
     "tools/genschema.py": ["Q33"],
     "tools/ledger.py": ["Q29"],
     "tools/resource_frontier.py": ["Q37"]
@@ -161,24 +188,15 @@ not whitespace.
 
 ## Byte and durability discipline
 
-- Every storage admission computes Q53's next atomic byte claim and asserts it before allocating;
-  no fixed device fraction, byte floor, user ceiling, or whole-job storage reservation may
-  substitute for the live claim. A feasible next step must not require whole-campaign fit.
-- Storage media, storage class, connector, brand, advertised speed, and nominal capacity are
-  descriptive fields, never product or generated-schema admission gates. Any locally attached
-  macOS APFS drive may attempt operation-bound measurement.
-  Memory admission remains governed separately by Q47.
+- Every admission computes its byte budget (Q47/Q53) and asserts it before allocating.
 - Every durable write follows Q44: write → readback hash → F_FULLFSYNC → root → atomic pointer →
   F_FULLFSYNC. Never trust a file by name, size, or prior process state (Q60).
 - Every error is one of the canonical typed errors (Q6). Inventing an error shape is a defect.
 
 ## Accounting and deletion proof
 
-The independent research roots below are outside the Cassette executable and shipped-binary
-closure. The ledger reports their paths separately. Product and tool code may not import them;
-an import reopens the boundary instead of silently excluding a dependency. Their owners retain
-their files and research checks. This boundary implements the principal's instruction to work
-around the independent mathematics research without modifying it.
+Independent research remains outside the executable closure and is not modified
+by the specification restoration. Its owners retain their files and checks.
 
 <!-- CASSETTE_RESEARCH_ROOTS_BEGIN -->
 ```json

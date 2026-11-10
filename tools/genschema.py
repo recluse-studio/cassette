@@ -2183,20 +2183,33 @@ CONTRACTS: dict[str, dict] = {
                     "connection": record("Source connection", "Q9/Q52", {
                         "source": text(enum=["huggingface", "ollama"]),
                         "endpoint": bounded_text(),
-                        "mode": text(enum=["public", "token"]),
+                        "mode": text(enum=["public", "token", "existing"]),
                         "credential_ref": nullable(bounded_text()),
                     }),
-                    "selection": record("Immutable model selection", "Q5/Q9", {
+                    "selection": record("Immutable source selection", "Q5/Q9", {
                         "connection_id": identifier(), "locator": bounded_text(),
                         "revision": nullable(bounded_text()),
                         "license_acceptance_ref": nullable(bounded_text()),
-                    }),
+                        "artifact_selector": bounded_json_object(),
+                        "preparation": record("Existing generated source preparation", "Q9/Q42/Q60", {
+                            "composition_request": bounded_json_object(),
+                            "geometry_request": bounded_json_object(),
+                        }),
+                    }, optional=("artifact_selector", "preparation")),
                     "drive": record("Mounted drive selection", "Q44/Q49", {
                         "volume_uuid": bounded_text(), "folder": bounded_text(),
                         "cartridge_uuid": nullable(bounded_text()),
                     }),
-                    "acquisition": record("Selected model and destination", "Q5/Q44/Q49", {
-                        "model_selection_id": identifier(), "drive_selection_id": identifier(),
+                    "acquisition": {"anyOf": [
+                        record("Selected model and destination", "Q5/Q44/Q49", {
+                            "model_selection_id": identifier(), "drive_selection_id": identifier(),
+                        }),
+                        record("Unresolved operation geometry and destination", "Q42/Q44/Q49", {
+                            "operation_geometry": ref("operation_geometry"), "drive_selection_id": identifier(),
+                        }),
+                    ]},
+                    "composition": record("Deterministic source byte preparation", "Q6/Q60", {
+                        "acquisition_operation_id": identifier(), "recipe": ref("source_byte_recipe"),
                     }),
                     "checkpoint_root": blake3_digest(),
                     "manifest_digest": blake3_digest(),
@@ -2207,6 +2220,7 @@ CONTRACTS: dict[str, dict] = {
                     "max_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
                     "pixels": array(bounded_json_value(), minimum=1, maximum=1),
                     "context_ref": bounded_text(),
+                    "reconnect_confirmed": {"const": True},
                     "negotiation_id": digest(),
                     "tier": bounded_text(),
                     "delta_digest": blake3_digest(),
@@ -2216,7 +2230,7 @@ CONTRACTS: dict[str, dict] = {
                     ),
                 },
                 optional=(
-                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "context_ref", "negotiation_id", "tier", "delta_digest",
+                    "checkpoint_root", "manifest_digest", "source", "discovery", "connection", "selection", "drive", "acquisition", "composition", "context_ref", "reconnect_confirmed", "negotiation_id", "tier", "delta_digest",
                     "reachability_digest", "target_schema",
                     "messages", "tools", "seed", "temperature", "max_tokens", "pixels",
                 ),
@@ -2327,6 +2341,35 @@ CONTRACTS: dict[str, dict] = {
             "extensions": Q31_EXTENSIONS,
         },
         optional=("extensions",),
+    )),
+    "source_byte_recipe": record(
+        "Verified source byte composition", "Q9/Q33/Q51/Q52",
+        {"source_record_digest": blake3_digest(),
+         "artifacts": array(record("Composed source object", "Q51/Q52", {
+             "path": bounded_text(),
+             "segments": array({"anyOf": [
+                 record("Literal source bytes", "Q33", {
+                     "literal_hex": text(empty=True, maximum=2 * MAX_PAGE_BYTES, pattern=r"^[0-9a-f]*$"),
+                 }),
+                 record("Verified source range", "Q51", {
+                     "path": bounded_text(), "offset": integer(maximum=2**53 - 1),
+                     "length": integer(maximum=2**53 - 1),
+                 }),
+             ]}, minimum=1, maximum=1048576),
+         }), minimum=1, maximum=1048576)},
+    ),
+    "operation_geometry": with_bounded_json(record(
+        "Unresolved source operation geometry", "Q42/Q43",
+        {"source_lock": {"type": "null"},
+         "source_kind": text(enum=["huggingface", "ollama", "tinker"]),
+         "revision_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
+         "source_storage": text(enum=["MEMORY", "CARTRIDGE_RETAINED"]),
+         "provenance": bounded_json_object(),
+         "artifacts": array(record("Planned source object", "Q42", {
+             "path": bounded_text(), "size": integer(maximum=2**63 - 1),
+             "digest_algorithm": text(enum=["blake3", "sha256", "git-sha1"]),
+             "validator_template": bounded_text(),
+         }), minimum=1, maximum=1048576)}, optional=("source_storage",),
     )),
     "source_catalogue": record(
         "Bounded source discovery page", "Q9/Q52",
