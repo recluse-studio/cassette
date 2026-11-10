@@ -8258,7 +8258,32 @@ def _generation_files(cartridge: Path) -> tuple[Path, ...]:
     return tuple(sorted(files, reverse=True))
 
 
+_VERIFIED_DEPENDENCIES: dict[tuple[str, str], tuple] = {}
+
+
+def _dependency_state(paths: tuple[Path, ...]) -> tuple | None:
+    """Identify each file's exact on-disk state; any write, replacement or metadata change alters it."""
+    try:
+        return tuple((item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
+                     for item in (path.stat() for path in paths))
+    except OSError:
+        return None
+
+
 def _verify_dependency_paths(cartridge: Path, root_digest: str) -> tuple[dict, tuple[Path, ...]]:
+    # Q60: every byte is hashed at least once in this process; a later call re-hashes unless every dependency
+    # file is in the identical on-disk state. One generation commit otherwise re-hashed the whole model per step.
+    known = _VERIFIED_DEPENDENCIES.get((str(cartridge), root_digest))
+    if known is not None and _dependency_state(known[1]) == known[2]:
+        return copy.deepcopy(known[0]), known[1]
+    root, paths = _verify_dependency_bytes(cartridge, root_digest)
+    state = _dependency_state(paths)
+    if state is not None:
+        _VERIFIED_DEPENDENCIES[str(cartridge), root_digest] = (copy.deepcopy(root), paths, state)
+    return root, paths
+
+
+def _verify_dependency_bytes(cartridge: Path, root_digest: str) -> tuple[dict, tuple[Path, ...]]:
     root = load_root(cartridge, root_digest)
     locations = _read_index(cartridge, root_digest)
     segment_ids = sorted({location.segment_id for location in locations.values()})

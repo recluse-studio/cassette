@@ -273,5 +273,25 @@ change that requirement or convert completed machine work into live proof.
   `tests/test_s03_schema.py` passes again. `tools/ledger.py` admits the `cli` to `adapters` import.
   Tests passing after this batch: `test_l02_native`, `test_l03_execution`, `test_s03_schema`,
   `test_s16_broker`, `test_s17_broker`, `test_s18_adapters`, `test_l05_entry` (17).
+- 2026-11-10 speed with the drive taken out (REC-404, REC-396). The 160M model was prepared and run
+  on a temporary cartridge on the Mac's internal disk, as a measurement only; the temporary copy
+  was deleted afterwards. Prepare: 102 s including the download. One question, ten tokens, end to
+  end: 61 s. A profile showed the model's arithmetic at about 0.5 s per token and the closing
+  commit at 35 s, because `store._verify_dependency_paths` re-hashed every segment and page of
+  the whole model at each of about thirty journal steps. Repair: each root's dependencies are
+  hashed in full at least once per process, and re-hashed whenever any dependency file's device,
+  inode, size, modification time or change time differs; an unchanged set is not hashed again.
+  This bears on Q60: bytes are still never trusted without a hash in the same process. After the
+  repair the same question takes 6.8 s end to end on internal storage and 98 s on the LaCie
+  cartridge volume (previously over 190 s); the remainder on the LaCie is its flush latency.
+  Tests after the repair: `test_s05`–`test_s08`, `test_s23_failure_rows`, `test_s24`, `test_s25`,
+  `test_l02_native`, `test_l03_execution` pass (143).
+- 2026-11-10 the 1.7B model (REC-398). `HuggingFaceTB/SmolLM-1.7B-Instruct` (git-sha1:e2384271…,
+  3,422,777,952-byte BF16 shard) was downloaded and verified on `/Volumes/CassetteCartridge/Live1700`
+  in 7,011 s, then refused at preparation with MODEL_UNSUPPORTED: zero-copy adoption requires
+  each shard to fit one 1 GiB segment (Q57 bounds a segment at 1 GiB, Q4 forbids a full-copy
+  fallback). Published models commonly use 3–5 GB shards. The verified download is retained.
+  The existing route for larger shards is the source-byte recipe (`qualify-composition`), which
+  has not yet been exercised on this model.
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z
