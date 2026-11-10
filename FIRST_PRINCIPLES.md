@@ -191,5 +191,16 @@ change that requirement or convert completed machine work into live proof.
   `test_s26`, `test_s27`, `test_l04_campaign`, `test_live_stage_acceptance`): the tools and fixtures
   still expect the withdrawn October documents and the pre-amendment matrix. No model, store,
   source, pager, trainer or broker behaviour test fails. The bookkeeping is not yet repaired.
+- 2026-11-10 BF16 weights admitted: `compiler.py` accepts F32 or BF16 native weights and records the
+  precision; `pager.py` widens BF16 exactly to float32. The compiled output-window reader refuses
+  BF16 by name. `HuggingFaceTB/SmolLM-135M-Instruct` (BF16, git-sha1:b5f4b394…) was prepared on
+  `/Volumes/CassetteCartridge/LiveSmol` (root blake3:df33446c…) and answered "The capital of France
+  is Paris, which is the largest city in France and the". That run took 905 s for 16 tokens while
+  the drive was busy with other work; it is a correctness result, not a speed measurement.
+- 2026-11-10 Drew asked for the build story to be updated and for local commits and pushes to the
+  open-source remote when sensible. `BUILD_STORY.md` has the November chapter. Snapshot commit
+  32a107d and history join 53a3a5e were pushed to `origin/main` (previously 2692c30). Research files
+  that existed only on the published branch were restored first; nothing published was deleted.
+  The stale `~/cassette` checkout and its uncommitted October edits were left untouched.
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z
