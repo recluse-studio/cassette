@@ -293,5 +293,23 @@ change that requirement or convert completed machine work into live proof.
   fallback). Published models commonly use 3–5 GB shards. The verified download is retained.
   The existing route for larger shards is the source-byte recipe (`qualify-composition`), which
   has not yet been exercised on this model.
+- 2026-11-10 the 1.7B model runs from the drive (REC-398). Decision bearing on Q57: a verified source
+  shard is adopted by clone as one segment at its published size, up to 64 GiB
+  (`ADOPTED_SEGMENT_BYTES`); segments Cassette assembles itself keep the 1 GiB bound. The existing
+  alternative, re-cutting through a source-byte recipe, copies every byte again, which Q4 argues
+  against and this drive cannot afford. `SmolLM-1.7B-Instruct` was then published on
+  `/Volumes/CassetteCartridge/Live1700` in 1,057 s from the retained download (root
+  blake3:f25168fe…, identity blake3:4bc9bb13…) and answered: "The sky is blue because of the way
+  light interacts with the Earth's atmosphere."; a haiku; and "The capital of France is Paris,
+  which is located in the north-central part of the country."
+  Timing on the LaCie volume, whole request: 583 s, then 483 s after token log entries were kept
+  in memory until the next durable record write (`broker._append(durable=False)`), then 166 s
+  after verification was tracked per segment file and page location instead of per root
+  (`store._VERIFIED_SEGMENTS`): generating takes under a minute including the load; the rest is
+  one full hash of the 3.4 GB segment and the commit's flushes. 141 store, fault-injection and
+  model tests pass after these changes.
+- 2026-11-10 Drew's correction: complete the implementation plan. The speed and convenience work
+  above was not the plan. Work returns to the queue in order: L01, L02, L03, L04, L05, each row
+  executed and recorded PASS or FAIL with its evidence.
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

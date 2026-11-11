@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import base64
 from collections import deque
 from collections.abc import Callable, Mapping
@@ -3257,7 +3258,7 @@ class CanonicalBroker:
                 current_text = decode_native_tokens(cartridge, root_digest, tokens[:index + 1])
                 if not current_text.startswith(previous_text):
                     _reject("CAPABILITY_MISMATCH", operation_id, "source tokenizer cannot emit a stable append-only text delta")
-                record = self._append(record, "output_delta", {
+                record = self._append(record, "output_delta", durable=False, payload={
                     "token_index": index, "token": tokens[index], "committed_root": root_digest,
                     "text": "" if tokens[index] in stops else current_text[len(previous_text):],
                 })
@@ -4373,10 +4374,16 @@ class CanonicalBroker:
             f"cancelled at {record['phase']}",
         )
 
-    def _append(self, record: dict, event_type: str, payload: dict, **changes) -> dict:
+    def _append(self, record: dict, event_type: str, payload: dict, *, durable: bool = True, **changes) -> dict:
         event = self._event(record["operation_id"], len(record["events"]), event_type, payload)
         updated = {**record, **changes, "events": [*record["events"], event]}
-        self._write(updated)
+        if durable:
+            self._write(updated)
+        else:
+            # Q63/Q68: token deltas reach this process's readers at once and the drive with the next durable
+            # record write, which is also when their context is committed; a crash replays them deterministically.
+            self._verify_record(updated, record["operation_id"])
+            self.__dict__.setdefault("_undurable", {})[record["operation_id"]] = copy.deepcopy(updated)
         if updated["state"] in _TERMINAL_STATES or updated["phase"] != "ACQUIRING":
             self._transfer_progress.pop(record["operation_id"], None)
         signal = self._event_signals.get(record["operation_id"])
@@ -4410,6 +4417,9 @@ class CanonicalBroker:
         return self.operation_log / f"{operation_id}.json"
 
     def _load(self, operation_id: str) -> dict:
+        pending = self.__dict__.setdefault("_undurable", {}).get(operation_id)
+        if pending is not None:
+            return copy.deepcopy(pending)
         path = self._path(operation_id)
         try:
             payload = path.read_bytes()
@@ -4433,6 +4443,7 @@ class CanonicalBroker:
     def _write(self, record: dict) -> None:
         operation_id = record["operation_id"]
         self._verify_record(record, operation_id)
+        self.__dict__.setdefault("_undurable", {}).pop(operation_id, None)
         body = canonical_bytes(record)
         payload = canonical_bytes({"digest": digest_bytes(body), "record": record})
         if len(payload) > _MAX_RECORD_BYTES:

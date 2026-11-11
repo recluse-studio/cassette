@@ -84,6 +84,9 @@ _DARWIN_ATTR_VOL_UUID = 0x00040000
 _DRIVE_ROOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 PAGE_BYTES = 4 * 1024 * 1024
 SEGMENT_BYTES = 1024 * 1024 * 1024
+# A verified source shard is adopted by clone as one segment at its published size (Q4: no full copy);
+# segments Cassette itself assembles in memory keep the 1 GiB bound above.
+ADOPTED_SEGMENT_BYTES = 64 * SEGMENT_BYTES
 SAFETENSORS_HEADER_BYTES = 100_000_000
 TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024
 STORAGE_PROFILER_VERSION = '7-retained-source-transfer'
@@ -2543,7 +2546,7 @@ def stage_conversion_extent(
     if (
         type(source_fd) is not int
         or type(target_size) is not int
-        or not 0 < target_size <= SEGMENT_BYTES
+        or not 0 < target_size <= ADOPTED_SEGMENT_BYTES
         or not isinstance(target_digest, str)
         or not isinstance(object_id, str)
         or not object_id
@@ -3434,10 +3437,10 @@ def adopt_safetensors(
             size = descriptor_stat.st_size
             if not stat.S_ISREG(descriptor_stat.st_mode):
                 _q57_reject(object_id, "adopted source descriptor is not a regular file")
-            if size > SEGMENT_BYTES:
+            if size > ADOPTED_SEGMENT_BYTES:
                 _q57_reject(
                     object_id,
-                    "zero-copy adoption requires each first-release SafeTensors shard to fit one 1 GiB segment",
+                    "zero-copy adoption requires each SafeTensors shard to fit one 64 GiB adopted segment",
                     "MODEL_UNSUPPORTED",
                 )
             original_offset = os.lseek(descriptor, 0, os.SEEK_CUR)
@@ -8258,32 +8261,21 @@ def _generation_files(cartridge: Path) -> tuple[Path, ...]:
     return tuple(sorted(files, reverse=True))
 
 
-_VERIFIED_DEPENDENCIES: dict[tuple[str, str], tuple] = {}
+_VERIFIED_SEGMENTS: dict[str, tuple] = {}
 
 
-def _dependency_state(paths: tuple[Path, ...]) -> tuple | None:
-    """Identify each file's exact on-disk state; any write, replacement or metadata change alters it."""
+def _dependency_state(path: Path) -> tuple | None:
+    """Identify one file's exact on-disk state; any write, replacement or metadata change alters it."""
     try:
-        return tuple((item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
-                     for item in (path.stat() for path in paths))
+        item = path.stat()
     except OSError:
         return None
+    return (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
 
 
 def _verify_dependency_paths(cartridge: Path, root_digest: str) -> tuple[dict, tuple[Path, ...]]:
-    # Q60: every byte is hashed at least once in this process; a later call re-hashes unless every dependency
-    # file is in the identical on-disk state. One generation commit otherwise re-hashed the whole model per step.
-    known = _VERIFIED_DEPENDENCIES.get((str(cartridge), root_digest))
-    if known is not None and _dependency_state(known[1]) == known[2]:
-        return copy.deepcopy(known[0]), known[1]
-    root, paths = _verify_dependency_bytes(cartridge, root_digest)
-    state = _dependency_state(paths)
-    if state is not None:
-        _VERIFIED_DEPENDENCIES[str(cartridge), root_digest] = (copy.deepcopy(root), paths, state)
-    return root, paths
-
-
-def _verify_dependency_bytes(cartridge: Path, root_digest: str) -> tuple[dict, tuple[Path, ...]]:
+    # Q60: a segment's bytes and each page location are hashed at least once in this process and again whenever
+    # the segment file's on-disk state differs. One commit otherwise re-hashed the whole model at every step.
     root = load_root(cartridge, root_digest)
     locations = _read_index(cartridge, root_digest)
     segment_ids = sorted({location.segment_id for location in locations.values()})
@@ -8291,15 +8283,30 @@ def _verify_dependency_bytes(cartridge: Path, root_digest: str) -> tuple[dict, t
         cartridge / "segments" / _content_hex(segment_id, segment_id)
         for segment_id in segment_ids
     )
+    verified = {}
     for segment_id, path in zip(segment_ids, segment_paths, strict=True):
+        before = _dependency_state(path)
+        known = _VERIFIED_SEGMENTS.get(str(path))
+        if known is not None and before is not None and known[0] == before:
+            verified[segment_id] = known[1]
+            continue
         try:
             observed = _file_digest(path)
         except OSError as error:
             _q57_reject(segment_id, f"segment is unavailable: {error}", "PAGE_CORRUPT")
         if observed != segment_id:
             _q57_reject(segment_id, "segment bytes do not match their identity", "PAGE_CORRUPT")
+        if before is not None and _dependency_state(path) == before:
+            _VERIFIED_SEGMENTS[str(path)] = (before, set())
+            verified[segment_id] = _VERIFIED_SEGMENTS[str(path)][1]
     for location in sorted(locations.values(), key=lambda item: item.page_digest):
+        pages = verified.get(location.segment_id)
+        key = (location.page_digest, location.offset, location.length)
+        if pages is not None and key in pages:
+            continue
         _read_page(cartridge, location)
+        if pages is not None:
+            pages.add(key)
     return root, (*segment_paths, _index_path(cartridge, root_digest),
                   cartridge / "roots" / _content_hex(root_digest, root_digest))
 
