@@ -311,5 +311,23 @@ change that requirement or convert completed machine work into live proof.
 - 2026-11-10 Drew's correction: complete the implementation plan. The speed and convenience work
   above was not the plan. Work returns to the queue in order: L01, L02, L03, L04, L05, each row
   executed and recorded PASS or FAIL with its evidence.
+- 2026-11-10 ledger cleanup for L05 (REC-405). Removed the withdrawn October campaign tooling:
+  `tools/campaign.py`, `schema/campaign/contract.json`, `tests/test_l04_campaign.py` and
+  `tests/test_live_stage_acceptance.py` (history keeps them). `AGENTS.md` removal map gains
+  `cli.py`; the `cli.py` header names `adapters/`; the ledger's git timeout is 600 s for this
+  drive. Ledger violations went from ten to four, all one stale J report that `--prove-j` must
+  regenerate. 332 tests collect. Still failing: `test_s27` (stale proof set) and
+  `test_s26_machine_gate` (cites the withdrawn `adaptive_capacity_control` matrix block).
+  A batched download checkpoint was tried and reverted: the source-profile verifier recomputes
+  the exact per-chunk write, readback and flush order and rejected it.
+- 2026-11-10 L01 measurement started on `/Volumes/CassetteCartridge`: 26 GiB file, Q42 sweep of six
+  sizes, three patterns, four queue depths, cold and warm reads and durable writes, then 3,700 s
+  sustained. Driver and output: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-plan-20261110.
+  Raw buffered write on the LaCie itself measured 86 MB/s; through the image volume about 30 MB/s.
+- 2026-11-10 L02 sizing from the Hugging Face API at the pinned revisions: Kimi-K3 1,561 GB in 96
+  shards (largest 17 GB), not gated; Llama-4-Scout 217 GB, gated (manual approval; needs the
+  principal's licence acceptance and read token); Qwen3-235B-A22B 470 GB, Apache-2.0; Qwen3-4B
+  8.1 GB, Apache-2.0. Total 2,256 GB against 3.5 TB free. Measured Cassette transfer rate on this
+  volume: 3.42 GB in 7,011 s (0.49 MB/s).
 
 Restoration evidence and the replaced documents: /Volumes/LaCie/drewwiberg-lacie/codex-runtime/cassette-first-principles-20261102T020519Z

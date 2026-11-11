@@ -422,7 +422,7 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess | None:
     """Run git; None means git itself was unavailable or timed out (callers fail closed)."""
     try:
         return subprocess.run(
-            ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30
+            ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=600
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

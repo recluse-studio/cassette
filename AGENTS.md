@@ -110,6 +110,7 @@ traded for fewer lines. After correctness, fewer lines beat everything ranked be
   {
     "adapters/__init__.py": ["Q76"],
     "broker.py": ["Q5"],
+    "cli.py": ["Q52"],
     "compiler.py": ["Q58"],
     "errors.py": ["Q6"],
     "pager.py": ["Q19"],

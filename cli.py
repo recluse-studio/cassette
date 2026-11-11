@@ -1,4 +1,4 @@
-# cli.py — product command triggers for canonical broker operations (Q9/Q31/Q52); depends on adapters/__init__.py, broker.py, errors.py.
+# cli.py — product command triggers for canonical broker operations (Q9/Q31/Q52); depends on adapters/, broker.py, errors.py.
 """Expose implemented Cassette operations without a second lifecycle or writer."""
 
 import argparse
